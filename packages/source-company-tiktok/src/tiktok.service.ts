@@ -1,118 +1,149 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import {
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site,
-  LocationDto, CompensationDto, CompensationInterval,
+  LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient } from '@ever-jobs/common';
+import { BrowserPool } from '@ever-jobs/common';
 
-const API_URL = 'https://api.lifeattiktok.com/api/v1/public/supplier/search/job/posts';
-const PAGE_SIZE = 20;
-const DELAY_MS = 300;
+const SEARCH_URL = 'https://lifeattiktok.com/search';
+const DELAY_MS = 1500;
 
-const TIKTOK_HEADERS: Record<string, string> = {
-  Accept: '*/*',
-  'Accept-Language': 'en-US',
-  'Content-Type': 'application/json',
-  Referer: 'https://lifeattiktok.com/',
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-};
-
-interface TikTokJob {
-  id?: string;
-  title?: string;
-  job_post_info?: {
-    description?: string;
-    city_info?: { name?: string }[];
-    country_info?: { name?: string }[];
-    department?: string;
-    job_category?: string;
-    employment_type_info?: { name?: string };
-    salary_range?: { min?: number; max?: number; currency?: string };
-  };
-  create_time?: number;
-  detail_url?: string;
-}
-
+/**
+ * Scrapes TikTok careers from lifeattiktok.com using headless Chromium.
+ *
+ * The old REST API (api.lifeattiktok.com) was decommissioned — the careers
+ * site is now a client-side rendered Next.js SPA that requires JavaScript
+ * execution to load job listings.
+ */
 @Injectable()
-export class TikTokService implements IScraper {
+export class TikTokService implements IScraper, OnModuleDestroy {
   private readonly logger = new Logger(TikTokService.name);
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
     const jobs: JobPostDto[] = [];
     const maxResults = input.resultsWanted ?? 100;
-    let offset = 0;
 
+    let page;
     try {
-      const client = createHttpClient({
-        proxies: input.proxies,
-        timeout: input.requestTimeout ?? 30,
+      page = await BrowserPool.getPage();
+
+      // 1. Navigate to the search page with optional keyword
+      const url = new URL(SEARCH_URL);
+      if (input.searchTerm) {
+        url.searchParams.set('keyword', input.searchTerm);
+      }
+
+      this.logger.log(`Navigating to ${url.toString()}`);
+      await page.goto(url.toString(), {
+        waitUntil: 'domcontentloaded',
+        timeout: 30_000,
       });
-      client.setHeaders(TIKTOK_HEADERS);
 
-      while (jobs.length < maxResults) {
-        const { data } = await client.post<{
-          data?: { job_post_list?: TikTokJob[]; count?: number };
-        }>(API_URL, {
-          keyword: input.searchTerm ?? '',
-          offset,
-          limit: PAGE_SIZE,
-          category_id_list: [],
-          location_code_list: [],
-          sub_team_id_list: [],
-        });
+      // 2. Wait for client-side hydration (Next.js SPA renders job cards via JS)
+      await this.delay(8_000);
 
-        const list = data?.data?.job_post_list ?? [];
-        if (!list.length) break;
+      // 3. Check for job cards — each card is an <a> linking to /search/{jobId}
+      const jobIdPattern = /\/search\/(\d{10,})/;
+      let cards = await page.$$('a[href*="/search/"]');
+      cards = cards.filter(async (c) => {
+        const href = await c.getAttribute('href');
+        return href && jobIdPattern.test(href);
+      });
 
-        for (const j of list) {
-          if (jobs.length >= maxResults) break;
-          const job = this.mapToJobPost(j);
-          if (job) jobs.push(job);
-        }
+      if (!cards.length) {
+        this.logger.warn('No job cards found on TikTok search page');
+        return { jobs };
+      }
 
-        offset += PAGE_SIZE;
-        const total = data?.data?.count ?? 0;
-        if (offset >= total) break;
+      // 4. Scroll to load more results if needed (infinite scroll)
+      let previousCount = 0;
+      let scrollAttempts = 0;
+      const maxScrollAttempts = Math.ceil(maxResults / 10);
+
+      while (scrollAttempts < maxScrollAttempts) {
+        const allCards = await page.$$('a[href*="/search/"]');
+        const currentCount = allCards.length;
+
+        if (currentCount >= maxResults || currentCount === previousCount) break;
+
+        previousCount = currentCount;
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
         await this.delay(DELAY_MS);
+        scrollAttempts++;
+      }
+
+      // 5. Re-fetch all cards after scrolling
+      const allCards = await page.$$('a[href*="/search/"]');
+      this.logger.log(`Found ${allCards.length} job elements on page`);
+
+      // 6. Extract structured data from each card
+      //    DOM structure per card:
+      //      <a href="/search/{id}">
+      //        <div>
+      //          <span class="...font-bold...">Job Title</span>    (1st span)
+      //          <span class="...tt-text...">City</span>           (2nd span)
+      //          <span class="...tt-text...">Department</span>     (3rd span)
+      //          <span class="...tt-text...">Employment Type</span>(4th span)
+      for (const el of allCards) {
+        if (jobs.length >= maxResults) break;
+
+        try {
+          const href = await el.getAttribute('href');
+          const match = href?.match(jobIdPattern);
+          if (!match) continue;
+
+          const jobId = match[1];
+
+          // Extract text from span children in order: title, city, department, type
+          const spans = await el.$$('span');
+          const texts: string[] = [];
+          for (const span of spans) {
+            const t = ((await span.textContent()) ?? '').trim();
+            if (t) texts.push(t);
+          }
+
+          const title = texts[0] || null;
+          if (!title) continue;
+
+          const city = texts[1] || null;
+          const department = texts[2] || undefined;
+          const employmentType = texts[3] || undefined;
+
+          const jobUrl = href?.startsWith('http')
+            ? href
+            : `${SEARCH_URL}/${jobId}`;
+
+          jobs.push(new JobPostDto({
+            id: jobId,
+            site: Site.TIKTOK,
+            title,
+            companyName: 'TikTok',
+            jobUrl,
+            location: new LocationDto({ city, country: null }),
+            department,
+            employmentType,
+          }));
+        } catch (err: any) {
+          this.logger.debug(`Failed to parse job card: ${err.message}`);
+        }
       }
 
       this.logger.log(`TikTok: scraped ${jobs.length} jobs`);
     } catch (err: any) {
       this.logger.error(`TikTok scrape failed: ${err.message}`);
+    } finally {
+      if (page) {
+        const context = page.context();
+        await page.close().catch(() => {});
+        await context.close().catch(() => {});
+      }
     }
 
     return { jobs };
   }
 
-  private mapToJobPost(j: TikTokJob): JobPostDto | null {
-    if (!j.title) return null;
-    const info = j.job_post_info;
-    const city = info?.city_info?.[0]?.name ?? null;
-    const country = info?.country_info?.[0]?.name ?? null;
-    const sal = info?.salary_range;
-
-    return new JobPostDto({
-      id: j.id ?? undefined,
-      site: Site.TIKTOK,
-      title: j.title,
-      companyName: 'TikTok',
-      jobUrl: j.detail_url ?? undefined,
-      location: new LocationDto({ city, country }),
-      description: info?.description ?? null,
-      department: info?.department ?? info?.job_category ?? undefined,
-      employmentType: info?.employment_type_info?.name ?? undefined,
-      datePosted: j.create_time
-        ? new Date(j.create_time * 1000).toISOString().split('T')[0]
-        : undefined,
-      compensation: sal?.min != null
-        ? new CompensationDto({
-            interval: CompensationInterval.YEARLY,
-            minAmount: sal.min,
-            maxAmount: sal.max ?? undefined,
-            currency: sal.currency ?? 'USD',
-          })
-        : undefined,
-    });
+  async onModuleDestroy(): Promise<void> {
+    await BrowserPool.close();
   }
 
   private delay(ms: number): Promise<void> {
