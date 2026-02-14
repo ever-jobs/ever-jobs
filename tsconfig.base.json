@@ -46,7 +46,15 @@
       "@ever-jobs/source-company-nvidia": ["packages/source-company-nvidia/src/index.ts"],
       "@ever-jobs/source-company-tiktok": ["packages/source-company-tiktok/src/index.ts"],
       "@ever-jobs/source-company-uber": ["packages/source-company-uber/src/index.ts"],
-      "@ever-jobs/source-company-cursor": ["packages/source-company-cursor/src/index.ts"]
+      "@ever-jobs/source-company-cursor": ["packages/source-company-cursor/src/index.ts"],
+      "@ever-jobs/source-remoteok": ["packages/source-remoteok/src/index.ts"],
+      "@ever-jobs/source-remotive": ["packages/source-remotive/src/index.ts"],
+      "@ever-jobs/source-jobicy": ["packages/source-jobicy/src/index.ts"],
+      "@ever-jobs/source-himalayas": ["packages/source-himalayas/src/index.ts"],
+      "@ever-jobs/source-arbeitnow": ["packages/source-arbeitnow/src/index.ts"],
+      "@ever-jobs/source-weworkremotely": ["packages/source-weworkremotely/src/index.ts"],
+      "@ever-jobs/source-ats-recruitee": ["packages/source-ats-recruitee/src/index.ts"],
+      "@ever-jobs/source-ats-teamtailor": ["packages/source-ats-teamtailor/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "dist"]

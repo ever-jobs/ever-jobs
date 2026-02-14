@@ -24,6 +24,14 @@ import { NvidiaModule } from '@ever-jobs/source-company-nvidia';
 import { TikTokModule } from '@ever-jobs/source-company-tiktok';
 import { UberModule } from '@ever-jobs/source-company-uber';
 import { CursorModule } from '@ever-jobs/source-company-cursor';
+import { RemoteOkModule } from '@ever-jobs/source-remoteok';
+import { RemotiveModule } from '@ever-jobs/source-remotive';
+import { JobicyModule } from '@ever-jobs/source-jobicy';
+import { HimalayasModule } from '@ever-jobs/source-himalayas';
+import { ArbeitnowModule } from '@ever-jobs/source-arbeitnow';
+import { WeWorkRemotelyModule } from '@ever-jobs/source-weworkremotely';
+import { RecruiteeModule } from '@ever-jobs/source-ats-recruitee';
+import { TeamtailorModule } from '@ever-jobs/source-ats-teamtailor';
 import { AnalyticsModule } from '@ever-jobs/analytics';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
@@ -55,6 +63,14 @@ import { JobsService } from './jobs.service';
     TikTokModule,
     UberModule,
     CursorModule,
+    RemoteOkModule,
+    RemotiveModule,
+    JobicyModule,
+    HimalayasModule,
+    ArbeitnowModule,
+    WeWorkRemotelyModule,
+    RecruiteeModule,
+    TeamtailorModule,
     AnalyticsModule,
   ],
   controllers: [JobsController],

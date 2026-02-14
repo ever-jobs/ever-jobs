@@ -24,6 +24,14 @@ export enum Site {
   TIKTOK = 'tiktok',
   UBER = 'uber',
   CURSOR = 'cursor',
+  JOBICY = 'jobicy',
+  HIMALAYAS = 'himalayas',
+  REMOTEOK = 'remoteok',
+  REMOTIVE = 'remotive',
+  RECRUITEE = 'recruitee',
+  TEAMTAILOR = 'teamtailor',
+  ARBEITNOW = 'arbeitnow',
+  WEWORKREMOTELY = 'weworkremotely',
 }
 
 /**

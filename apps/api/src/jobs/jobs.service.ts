@@ -29,6 +29,14 @@ import { NvidiaService } from '@ever-jobs/source-company-nvidia';
 import { TikTokService } from '@ever-jobs/source-company-tiktok';
 import { UberService } from '@ever-jobs/source-company-uber';
 import { CursorService } from '@ever-jobs/source-company-cursor';
+import { RemoteOkService } from '@ever-jobs/source-remoteok';
+import { RemotiveService } from '@ever-jobs/source-remotive';
+import { JobicyService } from '@ever-jobs/source-jobicy';
+import { HimalayasService } from '@ever-jobs/source-himalayas';
+import { ArbeitnowService } from '@ever-jobs/source-arbeitnow';
+import { WeWorkRemotelyService } from '@ever-jobs/source-weworkremotely';
+import { RecruiteeService } from '@ever-jobs/source-ats-recruitee';
+import { TeamtailorService } from '@ever-jobs/source-ats-teamtailor';
 
 @Injectable()
 export class JobsService {
@@ -61,6 +69,14 @@ export class JobsService {
     private readonly tiktokService: TikTokService,
     private readonly uberService: UberService,
     private readonly cursorService: CursorService,
+    private readonly remoteOkService: RemoteOkService,
+    private readonly remotiveService: RemotiveService,
+    private readonly jobicyService: JobicyService,
+    private readonly himalayasService: HimalayasService,
+    private readonly arbeitnowService: ArbeitnowService,
+    private readonly weWorkRemotelyService: WeWorkRemotelyService,
+    private readonly recruiteeService: RecruiteeService,
+    private readonly teamtailorService: TeamtailorService,
   ) {
     this.scraperMap = new Map<Site, IScraper>([
       [Site.LINKEDIN, this.linkedInService],
@@ -88,6 +104,14 @@ export class JobsService {
       [Site.TIKTOK, this.tiktokService],
       [Site.UBER, this.uberService],
       [Site.CURSOR, this.cursorService],
+      [Site.REMOTEOK, this.remoteOkService],
+      [Site.REMOTIVE, this.remotiveService],
+      [Site.JOBICY, this.jobicyService],
+      [Site.HIMALAYAS, this.himalayasService],
+      [Site.ARBEITNOW, this.arbeitnowService],
+      [Site.WEWORKREMOTELY, this.weWorkRemotelyService],
+      [Site.RECRUITEE, this.recruiteeService],
+      [Site.TEAMTAILOR, this.teamtailorService],
     ]);
   }
 
@@ -101,6 +125,8 @@ export class JobsService {
     Site.SMARTRECRUITERS,
     Site.RIPPLING,
     Site.WORKDAY,
+    Site.RECRUITEE,
+    Site.TEAMTAILOR,
   ]);
 
   /** Company scrapers target a single company's career API directly */
