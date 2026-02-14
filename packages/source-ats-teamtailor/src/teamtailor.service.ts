@@ -11,6 +11,7 @@ import {
 import {
   createHttpClient,
   htmlToPlainText,
+  markdownConverter,
   extractEmails,
 } from '@ever-jobs/common';
 import { TEAMTAILOR_API_URL, TEAMTAILOR_HEADERS } from './teamtailor.constants';
@@ -86,6 +87,8 @@ export class TeamtailorService implements IScraper {
     if (attrs.body) {
       if (format === DescriptionFormat.HTML) {
         description = attrs.body;
+      } else if (format === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(attrs.body) ?? attrs.body;
       } else {
         description = htmlToPlainText(attrs.body);
       }

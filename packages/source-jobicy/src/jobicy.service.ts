@@ -13,6 +13,7 @@ import {
 import {
   createHttpClient,
   htmlToPlainText,
+  markdownConverter,
   extractEmails,
 } from '@ever-jobs/common';
 import { JOBICY_API_URL, JOBICY_HEADERS } from './jobicy.constants';
@@ -74,14 +75,14 @@ export class JobicyService implements IScraper {
   private mapJob(raw: JobicyJob, descriptionFormat?: DescriptionFormat): JobPostDto | null {
     if (!raw.jobTitle || !raw.url) return null;
 
-    // Process description
+    // Process description (Jobicy returns HTML)
     let description: string | null = raw.jobDescription ?? null;
     if (description) {
       if (descriptionFormat === DescriptionFormat.PLAIN) {
         description = htmlToPlainText(description);
+      } else if (descriptionFormat === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(description) ?? description;
       }
-      // HTML is kept as-is for HTML format; for MARKDOWN we also convert
-      // (Jobicy returns HTML, so plain-text strip is a safe default for non-HTML)
     }
 
     // Build compensation

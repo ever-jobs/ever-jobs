@@ -11,7 +11,7 @@ import {
   CompensationInterval,
   JobType,
 } from '@ever-jobs/models';
-import { createHttpClient, htmlToPlainText, extractEmails } from '@ever-jobs/common';
+import { createHttpClient, htmlToPlainText, markdownConverter, extractEmails } from '@ever-jobs/common';
 import { REMOTIVE_API_URL, REMOTIVE_HEADERS } from './remotive.constants';
 import { RemotiveApiResponse, RemotiveJob } from './remotive.types';
 
@@ -27,8 +27,12 @@ const JOB_TYPE_MAP: Record<string, JobType> = {
   other: JobType.OTHER,
 };
 
-/** Regex to parse salary strings like "$60,000 - $80,000". */
-const SALARY_REGEX = /\$?([\d,]+)\s*[-\u2013]\s*\$?([\d,]+)/;
+/**
+ * Regex to parse salary strings like "$60,000 - $80,000".
+ * Uses non-overlapping number pattern (\d{1,3}(?:,\d{3})*|\d+) instead of
+ * [\d,]+ to prevent super-linear backtracking (ReDoS).
+ */
+const SALARY_REGEX = /\$?(\d{1,3}(?:,\d{3})*|\d+)\s*[-\u2013]\s*\$?(\d{1,3}(?:,\d{3})*|\d+)/;
 
 @Injectable()
 export class RemotiveService implements IScraper {
@@ -102,17 +106,13 @@ export class RemotiveService implements IScraper {
       return null;
     }
 
-    // Process description
+    // Process description (Remotive returns HTML)
     let description: string | null = entry.description ?? null;
     if (description) {
-      if (
-        descriptionFormat === DescriptionFormat.PLAIN ||
-        descriptionFormat === undefined
-      ) {
+      if (descriptionFormat === DescriptionFormat.PLAIN) {
         description = htmlToPlainText(description);
-      }
-      if (descriptionFormat === DescriptionFormat.MARKDOWN) {
-        description = htmlToPlainText(description);
+      } else if (descriptionFormat === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(description) ?? description;
       }
     }
 

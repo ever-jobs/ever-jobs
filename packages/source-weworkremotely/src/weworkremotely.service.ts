@@ -14,6 +14,7 @@ import {
 import {
   createHttpClient,
   htmlToPlainText,
+  markdownConverter,
   extractEmails,
 } from '@ever-jobs/common';
 import { WWR_RSS_URL, WWR_HEADERS } from './weworkremotely.constants';
@@ -162,10 +163,14 @@ export class WeWorkRemotelyService implements IScraper {
       jobTitle = item.title.substring(separatorIndex + 2).trim();
     }
 
-    // Process description (HTML from RSS)
+    // Process description (WeWorkRemotely RSS returns HTML)
     let description: string | null = item.description ?? null;
-    if (description && descriptionFormat === DescriptionFormat.PLAIN) {
-      description = htmlToPlainText(description);
+    if (description) {
+      if (descriptionFormat === DescriptionFormat.PLAIN) {
+        description = htmlToPlainText(description);
+      } else if (descriptionFormat === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(description) ?? description;
+      }
     }
 
     // Build location

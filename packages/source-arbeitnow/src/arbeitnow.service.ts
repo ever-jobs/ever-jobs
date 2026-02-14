@@ -14,6 +14,7 @@ import {
 import {
   createHttpClient,
   htmlToPlainText,
+  markdownConverter,
   extractEmails,
 } from '@ever-jobs/common';
 import { ARBEITNOW_API_URL, ARBEITNOW_HEADERS } from './arbeitnow.constants';
@@ -115,10 +116,14 @@ export class ArbeitnowService implements IScraper {
   ): JobPostDto | null {
     if (!raw.title || !raw.url) return null;
 
-    // Process description (HTML from API)
+    // Process description (Arbeitnow returns HTML)
     let description: string | null = raw.description ?? null;
-    if (description && descriptionFormat === DescriptionFormat.PLAIN) {
-      description = htmlToPlainText(description);
+    if (description) {
+      if (descriptionFormat === DescriptionFormat.PLAIN) {
+        description = htmlToPlainText(description);
+      } else if (descriptionFormat === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(description) ?? description;
+      }
     }
 
     // Build location

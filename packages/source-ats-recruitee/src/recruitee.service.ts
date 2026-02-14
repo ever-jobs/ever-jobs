@@ -13,6 +13,7 @@ import {
 import {
   createHttpClient,
   htmlToPlainText,
+  markdownConverter,
   extractEmails,
 } from '@ever-jobs/common';
 import { RECRUITEE_HEADERS } from './recruitee.constants';
@@ -82,6 +83,8 @@ export class RecruiteeService implements IScraper {
     if (offer.description) {
       if (format === DescriptionFormat.HTML) {
         description = offer.description;
+      } else if (format === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(offer.description) ?? offer.description;
       } else {
         description = htmlToPlainText(offer.description);
       }

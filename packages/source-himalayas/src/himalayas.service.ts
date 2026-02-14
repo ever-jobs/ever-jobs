@@ -13,6 +13,7 @@ import {
 import {
   createHttpClient,
   htmlToPlainText,
+  markdownConverter,
   extractEmails,
 } from '@ever-jobs/common';
 import { HIMALAYAS_API_URL, HIMALAYAS_HEADERS, HIMALAYAS_PAGE_SIZE } from './himalayas.constants';
@@ -83,13 +84,15 @@ export class HimalayasService implements IScraper {
   }
 
   private mapJob(raw: HimalayasJob, descriptionFormat?: DescriptionFormat): JobPostDto | null {
-    if (!raw.title) return null;
+    if (!raw.title || !raw.applicationLink) return null;
 
-    // Process description
+    // Process description (Himalayas returns HTML)
     let description: string | null = raw.description ?? null;
     if (description) {
       if (descriptionFormat === DescriptionFormat.PLAIN) {
         description = htmlToPlainText(description);
+      } else if (descriptionFormat === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(description) ?? description;
       }
     }
 
@@ -126,8 +129,8 @@ export class HimalayasService implements IScraper {
       title: raw.title,
       companyName: raw.companyName ?? null,
       companyLogo: raw.companyLogo ?? null,
-      jobUrl: raw.applicationLink ?? null,
-      applyUrl: raw.applicationLink ?? null,
+      jobUrl: raw.applicationLink,
+      applyUrl: raw.applicationLink,
       location,
       description,
       compensation,

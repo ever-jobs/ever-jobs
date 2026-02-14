@@ -10,7 +10,7 @@ import {
   DescriptionFormat,
   CompensationInterval,
 } from '@ever-jobs/models';
-import { createHttpClient, htmlToPlainText, extractEmails } from '@ever-jobs/common';
+import { createHttpClient, htmlToPlainText, markdownConverter, extractEmails } from '@ever-jobs/common';
 import { REMOTEOK_API_URL, REMOTEOK_HEADERS } from './remoteok.constants';
 import { RemoteOkJob } from './remoteok.types';
 
@@ -99,19 +99,13 @@ export class RemoteOkService implements IScraper {
       return null;
     }
 
-    // Process description
+    // Process description (RemoteOK returns HTML)
     let description: string | null = entry.description ?? null;
     if (description) {
-      if (
-        descriptionFormat === DescriptionFormat.PLAIN ||
-        descriptionFormat === undefined
-      ) {
+      if (descriptionFormat === DescriptionFormat.PLAIN) {
         description = htmlToPlainText(description);
-      }
-      // For HTML format, keep as-is; for MARKDOWN, also use plain text
-      // since we don't have a full markdown converter for arbitrary HTML here
-      if (descriptionFormat === DescriptionFormat.MARKDOWN) {
-        description = htmlToPlainText(description);
+      } else if (descriptionFormat === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(description) ?? description;
       }
     }
 
