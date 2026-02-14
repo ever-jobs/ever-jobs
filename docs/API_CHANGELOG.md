@@ -1,5 +1,21 @@
 # API Changelog
 
+## [0.1.1] — 2026-02-14
+
+### New Sources (8)
+
+Added 8 new job source integrations (Tier 1 — public APIs/RSS, no auth required):
+
+- **Job Boards (6):** RemoteOK, Remotive, Jobicy, Himalayas, Arbeitnow, We Work Remotely
+- **ATS (2):** Recruitee, Teamtailor
+
+Total sources expanded from 26 to 34.
+
+### New `siteType` Values
+
+- `remoteok`, `remotive`, `jobicy`, `himalayas`, `arbeitnow`, `weworkremotely` — search-based job boards (included in default searches)
+- `recruitee`, `teamtailor` — ATS sources (require `companySlug` parameter)
+
 ## [0.1.0] — 2026-02-08
 
 ### New Endpoints

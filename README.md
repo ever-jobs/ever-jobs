@@ -9,25 +9,31 @@
 
 ## ⭐️ Overview
 
-**Ever Jobs** searches job postings from **25 sources** concurrently and returns aggregated, normalized results through a single REST API **or CLI**. Sources span search-based job boards, ATS (Applicant Tracking System) boards, and company-specific career APIs. Each source is an independent, reusable NestJS package — making it easy to add new sources, consume individual packages in other projects, or deploy the full API.
+**Ever Jobs** searches job postings from **34 sources** concurrently and returns aggregated, normalized results through a single REST API **or CLI**. Sources span search-based job boards, ATS (Applicant Tracking System) boards, and company-specific career APIs. Each source is an independent, reusable NestJS package — making it easy to add new sources, consume individual packages in other projects, or deploy the full API.
 
-### Search-Based Job Boards (11)
+### Search-Based Job Boards (17)
 
-| Source           | Method                 | Region                      |
-| ---------------- | ---------------------- | --------------------------- |
-| **LinkedIn**     | HTML parsing (Cheerio) | Global                      |
-| **Indeed**       | GraphQL API            | 65+ countries               |
-| **Glassdoor**    | GraphQL API + CSRF     | 25+ countries               |
-| **ZipRecruiter** | REST API               | US / Canada                 |
-| **Google Jobs**  | Search page parsing    | Global                      |
-| **Bayt**         | HTML parsing (Cheerio) | Middle East / International |
-| **Naukri**       | REST API               | India                       |
-| **BDJobs**       | HTML parsing (Cheerio) | Bangladesh                  |
-| **Internshala**  | HTML parsing (Cheerio) | India (internships & jobs)  |
-| **Exa**          | Exa AI search API      | Global                      |
-| **Upwork**       | GraphQL API (OAuth2)   | Global (freelance)          |
+| Source                 | Method                 | Region                      |
+| ---------------------- | ---------------------- | --------------------------- |
+| **LinkedIn**           | HTML parsing (Cheerio) | Global                      |
+| **Indeed**             | GraphQL API            | 65+ countries               |
+| **Glassdoor**          | GraphQL API + CSRF     | 25+ countries               |
+| **ZipRecruiter**       | REST API               | US / Canada                 |
+| **Google Jobs**        | Search page parsing    | Global                      |
+| **Bayt**               | HTML parsing (Cheerio) | Middle East / International |
+| **Naukri**             | REST API               | India                       |
+| **BDJobs**             | HTML parsing (Cheerio) | Bangladesh                  |
+| **Internshala**        | HTML parsing (Cheerio) | India (internships & jobs)  |
+| **Exa**                | Exa AI search API      | Global                      |
+| **Upwork**             | GraphQL API (OAuth2)   | Global (freelance)          |
+| **RemoteOK**           | REST API (JSON)        | Global (remote)             |
+| **Remotive**           | REST API (JSON)        | Global (remote)             |
+| **Jobicy**             | REST API (JSON)        | Global (remote)             |
+| **Himalayas**          | REST API (JSON)        | Global (remote)             |
+| **Arbeitnow**          | REST API (JSON)        | Europe                      |
+| **We Work Remotely**   | RSS feed               | Global (remote)             |
 
-### ATS Job Boards (7)
+### ATS Job Boards (9)
 
 ATS scrapers require a `companySlug` to target a specific company's job board.
 
@@ -40,6 +46,8 @@ ATS scrapers require a `companySlug` to target a specific company's job board.
 | **SmartRecruiters** | SmartRecruiters | REST API    |
 | **Rippling**        | Rippling        | REST API    |
 | **Workday**         | Workday         | REST API    |
+| **Recruitee**       | Recruitee       | REST API    |
+| **Teamtailor**      | Teamtailor      | REST API    |
 
 ### Company-Specific Scrapers (7)
 
@@ -59,7 +67,7 @@ Direct integrations with major tech companies' career APIs.
 
 ## ✨ Features
 
-- 🔍 **Multi-source aggregation** — Search 1 or all 25 sources concurrently
+- 🔍 **Multi-source aggregation** — Search 1 or all 34 sources concurrently
 - 🖥️ **CLI & API** — Use via REST API or command-line with JSON, CSV, table, or summary output
 - 🌐 **Country-aware** — Indeed & Glassdoor support 65+ countries with automatic domain resolution
 - 🔄 **Proxy rotation** — Built-in rotating proxy support (HTTP, HTTPS, SOCKS5)
@@ -304,7 +312,7 @@ All parameters are optional. When `siteType` is omitted, search + company scrape
 
 | Parameter                  | Type       | Default    | Description                                                                                                                                                                                                                                                                                                                             |
 | -------------------------- | ---------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `siteType`                 | `string[]` | all        | Sites to search. **Search**: `linkedin`, `indeed`, `zip_recruiter`, `glassdoor`, `google`, `bayt`, `naukri`, `bdjobs`, `internshala`, `exa`, `upwork`. **ATS**: `ashby`, `greenhouse`, `lever`, `workable`, `smartrecruiters`, `rippling`, `workday`. **Company**: `amazon`, `apple`, `microsoft`, `nvidia`, `tiktok`, `uber`, `cursor` |
+| `siteType`                 | `string[]` | all        | Sites to search. **Search**: `linkedin`, `indeed`, `zip_recruiter`, `glassdoor`, `google`, `bayt`, `naukri`, `bdjobs`, `internshala`, `exa`, `upwork`, `remoteok`, `remotive`, `jobicy`, `himalayas`, `arbeitnow`, `weworkremotely`. **ATS**: `ashby`, `greenhouse`, `lever`, `workable`, `smartrecruiters`, `rippling`, `workday`, `recruitee`, `teamtailor`. **Company**: `amazon`, `apple`, `microsoft`, `nvidia`, `tiktok`, `uber`, `cursor` |
 | `companySlug`              | `string`   | —          | Company identifier for ATS scrapers (e.g. `stripe`, `notion`). When set without `siteType`, only ATS scrapers run                                                                                                                                                                                                                       |
 | `searchTerm`               | `string`   | —          | Job search keywords                                                                                                                                                                                                                                                                                                                     |
 | `googleSearchTerm`         | `string`   | —          | Google-specific search query override                                                                                                                                                                                                                                                                                                   |
@@ -417,8 +425,8 @@ ever-jobs/
 │   ├── models/                       @ever-jobs/models
 │   ├── common/                       @ever-jobs/common (HttpClient, converters, utils)
 │   ├── analytics/                    @ever-jobs/analytics
-│   ├── source-*/                     Search source modules (×11)
-│   ├── source-ats-*/                 ATS source modules (×7)
+│   ├── source-*/                     Search source modules (×17)
+│   ├── source-ats-*/                 ATS source modules (×9)
 │   └── source-company-*/             Company-specific source modules (×7)
 │
 ├── .github/
@@ -577,6 +585,38 @@ Global freelance marketplace. Uses the official [Upwork SDK](https://github.com/
 Get API credentials at [developers.upwork.com](https://developers.upwork.com). Without credentials, Upwork searches gracefully return empty results.
 
 Credentials can also be passed per-request via the `auth.upwork` field in the request body, which overrides env vars. See [Authentication docs](docs/AUTHENTICATION.md) for details.
+
+### RemoteOK
+
+Global remote job board with free JSON API (`remoteok.com/api`). Returns salary data when available. No authentication required.
+
+### Remotive
+
+Remote job board with free JSON API (`remotive.com/api/remote-jobs`). Supports category and search filters. Jobs are delayed 24 hours. No authentication required.
+
+### Jobicy
+
+Remote job board with free JSON API (`jobicy.com/api/v2/remote-jobs`). Provides annual salary data and supports region/industry/tag filtering. Returns up to 50 jobs per request. No authentication required.
+
+### Himalayas
+
+Remote job board with free JSON API (`himalayas.app/jobs/api`). Supports offset-based pagination (max 20 per page). No authentication required.
+
+### Arbeitnow
+
+European-focused job board with free JSON API (`arbeitnow.com/api/job-board-api`). Supports page-based pagination. No authentication required.
+
+### We Work Remotely
+
+Popular remote job board. Uses RSS feed (`weworkremotely.com/remote-jobs.rss`) — parsed without external XML libraries. Category-specific feeds also available. No authentication required.
+
+### Recruitee (ATS)
+
+Recruitee ATS integration. Per-company public API at `{slug}.recruitee.com/api/offers`. Provides salary data when available. Requires `companySlug` parameter.
+
+### Teamtailor (ATS)
+
+Teamtailor ATS integration. Per-company career page API. Requires `companySlug` parameter.
 
 ---
 
