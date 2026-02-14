@@ -1,5 +1,13 @@
 import { Logger } from '@nestjs/common';
-import type { Browser, Page, LaunchOptions } from 'playwright';
+import type { Browser, Page, LaunchOptions, BrowserContextOptions } from 'playwright';
+
+/** Options passed to `BrowserPool.getPage()`. */
+export interface BrowserPageOptions {
+  /** Proxy server URL (e.g. `http://proxy:8080` or `socks5://proxy:1080`). */
+  proxy?: string;
+  /** Navigation timeout in seconds (used by the caller, not the pool). */
+  timeout?: number;
+}
 
 /**
  * Shared singleton browser pool for headless Chromium scraping.
@@ -41,14 +49,19 @@ export class BrowserPool {
     if (this.launching) return this.launching;
 
     this.launching = (async () => {
-      this.logger.log('Launching headless Chromium…');
-      // Dynamic import — playwright may not be installed in all environments
-      const { chromium } = await import('playwright');
-      const browser = await chromium.launch(this.DEFAULT_OPTS);
-      this.browser = browser;
-      this.launching = null;
-      this.logger.log('Chromium launched');
-      return browser;
+      try {
+        this.logger.log('Launching headless Chromium…');
+        // Dynamic import — playwright may not be installed in all environments
+        const { chromium } = await import('playwright');
+        const browser = await chromium.launch(this.DEFAULT_OPTS);
+        this.browser = browser;
+        this.logger.log('Chromium launched');
+        return browser;
+      } catch (err) {
+        // Reset the guard so subsequent calls can retry the launch
+        this.launching = null;
+        throw err;
+      }
     })();
 
     return this.launching;
@@ -57,16 +70,24 @@ export class BrowserPool {
   /**
    * Create a fresh page with stealth-like defaults.
    * The caller is responsible for closing the page when done.
+   *
+   * @param opts.proxy  — route all traffic through this proxy server
    */
-  static async getPage(): Promise<Page> {
+  static async getPage(opts?: BrowserPageOptions): Promise<Page> {
     const browser = await this.getBrowser();
-    const context = await browser.newContext({
+    const ctxOpts: BrowserContextOptions = {
       userAgent: this.USER_AGENT,
       viewport: { width: 1440, height: 900 },
       locale: 'en-US',
       timezoneId: 'America/New_York',
       javaScriptEnabled: true,
-    });
+    };
+
+    if (opts?.proxy) {
+      ctxOpts.proxy = { server: opts.proxy };
+    }
+
+    const context = await browser.newContext(ctxOpts);
     return context.newPage();
   }
 

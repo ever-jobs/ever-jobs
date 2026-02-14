@@ -25,7 +25,9 @@ export class TikTokService implements IScraper, OnModuleDestroy {
 
     let page;
     try {
-      page = await BrowserPool.getPage();
+      // Pick first proxy if available (BrowserPool applies it at context level)
+      const proxy = input.proxies?.[0] ?? undefined;
+      page = await BrowserPool.getPage({ proxy });
 
       // 1. Navigate to the search page with optional keyword
       const url = new URL(SEARCH_URL);
@@ -33,10 +35,12 @@ export class TikTokService implements IScraper, OnModuleDestroy {
         url.searchParams.set('keyword', input.searchTerm);
       }
 
-      this.logger.log(`Navigating to ${url.toString()}`);
+      const timeoutMs = ((input.requestTimeout ?? 30) * 1000);
+
+      this.logger.log(`Navigating to ${url.toString()} (timeout=${timeoutMs}ms)`);
       await page.goto(url.toString(), {
         waitUntil: 'domcontentloaded',
-        timeout: 30_000,
+        timeout: timeoutMs,
       });
 
       // 2. Wait for client-side hydration (Next.js SPA renders job cards via JS)
