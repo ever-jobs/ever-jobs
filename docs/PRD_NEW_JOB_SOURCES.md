@@ -2,14 +2,14 @@
 
 **Author:** AI Assistant
 **Date:** 2026-02-14
-**Status:** In Progress
+**Status:** Phase 2 Complete
 **Epic:** Source Expansion
 
 ---
 
 ## 1. Overview
 
-Expand ever-jobs from **26 sources** to **34+ sources** by adding new job boards and ATS integrations. This PRD covers the first tier of easy-to-integrate sources that have public APIs or RSS feeds requiring no authentication.
+Expand ever-jobs from **26 sources** to **39 sources** by adding new job boards and ATS integrations. Phase 1 added 8 public API/RSS sources (Tier 1), Phase 2 added 5 API-key sources (Tier 1.5).
 
 ### Current Sources (26)
 
@@ -232,7 +232,7 @@ API Request
 
 | Phase | Sources | Status |
 |-------|---------|--------|
-| **Phase 1 (Tier 1)** | RemoteOK, Remotive, Jobicy, Himalayas, Arbeitnow, WeWorkRemotely, Recruitee, Teamtailor | **In Progress** |
-| **Phase 2 (Tier 1.5)** | USAJobs, Adzuna, Reed, Jooble, CareerJet | Planned |
+| **Phase 1 (Tier 1)** | RemoteOK, Remotive, Jobicy, Himalayas, Arbeitnow, WeWorkRemotely, Recruitee, Teamtailor | ✅ **Complete** |
+| **Phase 2 (Tier 1.5)** | USAJobs, Adzuna, Reed, Jooble, CareerJet | ✅ **Complete** |
 | **Phase 3 (Tier 2)** | Wellfound, StepStone, Dice, SimplyHired, JazzHR, Personio, BambooHR | Planned |
 | **Phase 4 (Tier 3)** | Monster, CareerBuilder, iCIMS, Taleo, SuccessFactors | Planned |

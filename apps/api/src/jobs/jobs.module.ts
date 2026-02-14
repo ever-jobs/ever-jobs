@@ -32,6 +32,11 @@ import { ArbeitnowModule } from '@ever-jobs/source-arbeitnow';
 import { WeWorkRemotelyModule } from '@ever-jobs/source-weworkremotely';
 import { RecruiteeModule } from '@ever-jobs/source-ats-recruitee';
 import { TeamtailorModule } from '@ever-jobs/source-ats-teamtailor';
+import { UsajobsModule } from '@ever-jobs/source-usajobs';
+import { AdzunaModule } from '@ever-jobs/source-adzuna';
+import { ReedModule } from '@ever-jobs/source-reed';
+import { JoobleModule } from '@ever-jobs/source-jooble';
+import { CareerJetModule } from '@ever-jobs/source-careerjet';
 import { AnalyticsModule } from '@ever-jobs/analytics';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
@@ -71,6 +76,11 @@ import { JobsService } from './jobs.service';
     WeWorkRemotelyModule,
     RecruiteeModule,
     TeamtailorModule,
+    UsajobsModule,
+    AdzunaModule,
+    ReedModule,
+    JoobleModule,
+    CareerJetModule,
     AnalyticsModule,
   ],
   controllers: [JobsController],

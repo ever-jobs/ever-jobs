@@ -104,6 +104,11 @@ export class ScraperInputDto {
   @IsString()
   userAgent?: string;
 
+  @ApiPropertyOptional({ description: 'Client IP address for sources that require it (e.g. CareerJet). Also useful for proxy rotation.' })
+  @IsOptional()
+  @IsString()
+  clientIp?: string;
+
   @ApiPropertyOptional({ description: 'Convert all wages to annual salary equivalent', default: false })
   @IsOptional()
   @IsBoolean()

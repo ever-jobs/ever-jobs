@@ -1,8 +1,8 @@
 # Roadmap
 
-## Current (v0.1.x)
+## Current (v0.2.x)
 
-- ✅ Multi-source job searching (34 sources)
+- ✅ Multi-source job searching (39 sources)
 - ✅ API key authentication
 - ✅ Rate limiting
 - ✅ In-memory caching
@@ -14,17 +14,18 @@
 - ✅ ATS integrations (Ashby, Greenhouse, Lever, Workable, SmartRecruiters, Rippling, Workday, Recruitee, Teamtailor)
 - ✅ Company-specific scrapers (Amazon, Apple, Microsoft, Nvidia, TikTok, Uber, Cursor)
 - ✅ Remote job boards (RemoteOK, Remotive, Jobicy, Himalayas, Arbeitnow, We Work Remotely)
+- ✅ API-key sources (USAJobs, Adzuna, Reed, Jooble, CareerJet — Tier 1.5)
+- ✅ Client IP forwarding for proxy rotation strategies
 
-## Planned (v0.2.0)
+## Planned (v0.3.0)
 
-- Additional sources: USAJobs, Adzuna, Reed, Jooble, CareerJet (Tier 1.5 — free API key required)
 - Redis-backed caching (scalable, persistent)
 - WebSocket / SSE support for real-time search progress
 - Job deduplication across sources
 - Configurable retry policies per source
 - Prometheus metrics endpoint (`/metrics`)
 
-## Future Considerations (v0.3.0+)
+## Future Considerations (v0.4.0+)
 
 - Tier 2 sources: Wellfound (AngelList), StepStone, Dice, SimplyHired, JazzHR, Personio, BambooHR
 - Tier 3 sources: Monster, CareerBuilder, iCIMS, Oracle Taleo, SAP SuccessFactors

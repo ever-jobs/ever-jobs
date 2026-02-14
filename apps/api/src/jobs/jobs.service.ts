@@ -37,6 +37,11 @@ import { ArbeitnowService } from '@ever-jobs/source-arbeitnow';
 import { WeWorkRemotelyService } from '@ever-jobs/source-weworkremotely';
 import { RecruiteeService } from '@ever-jobs/source-ats-recruitee';
 import { TeamtailorService } from '@ever-jobs/source-ats-teamtailor';
+import { UsajobsService } from '@ever-jobs/source-usajobs';
+import { AdzunaService } from '@ever-jobs/source-adzuna';
+import { ReedService } from '@ever-jobs/source-reed';
+import { JoobleService } from '@ever-jobs/source-jooble';
+import { CareerJetService } from '@ever-jobs/source-careerjet';
 
 @Injectable()
 export class JobsService {
@@ -77,6 +82,11 @@ export class JobsService {
     private readonly weWorkRemotelyService: WeWorkRemotelyService,
     private readonly recruiteeService: RecruiteeService,
     private readonly teamtailorService: TeamtailorService,
+    private readonly usajobsService: UsajobsService,
+    private readonly adzunaService: AdzunaService,
+    private readonly reedService: ReedService,
+    private readonly joobleService: JoobleService,
+    private readonly careerJetService: CareerJetService,
   ) {
     this.scraperMap = new Map<Site, IScraper>([
       [Site.LINKEDIN, this.linkedInService],
@@ -112,6 +122,11 @@ export class JobsService {
       [Site.WEWORKREMOTELY, this.weWorkRemotelyService],
       [Site.RECRUITEE, this.recruiteeService],
       [Site.TEAMTAILOR, this.teamtailorService],
+      [Site.USAJOBS, this.usajobsService],
+      [Site.ADZUNA, this.adzunaService],
+      [Site.REED, this.reedService],
+      [Site.JOOBLE, this.joobleService],
+      [Site.CAREERJET, this.careerJetService],
     ]);
   }
 

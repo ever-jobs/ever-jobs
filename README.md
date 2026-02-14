@@ -9,9 +9,9 @@
 
 ## ⭐️ Overview
 
-**Ever Jobs** searches job postings from **34 sources** concurrently and returns aggregated, normalized results through a single REST API **or CLI**. Sources span search-based job boards, ATS (Applicant Tracking System) boards, and company-specific career APIs. Each source is an independent, reusable NestJS package — making it easy to add new sources, consume individual packages in other projects, or deploy the full API.
+**Ever Jobs** searches job postings from **39 sources** concurrently and returns aggregated, normalized results through a single REST API **or CLI**. Sources span search-based job boards, ATS (Applicant Tracking System) boards, and company-specific career APIs. Each source is an independent, reusable NestJS package — making it easy to add new sources, consume individual packages in other projects, or deploy the full API.
 
-### Search-Based Job Boards (17)
+### Search-Based Job Boards (22)
 
 | Source                 | Method                 | Region                      |
 | ---------------------- | ---------------------- | --------------------------- |
@@ -32,6 +32,11 @@
 | **Himalayas**          | REST API (JSON)        | Global (remote)             |
 | **Arbeitnow**          | REST API (JSON)        | Europe                      |
 | **We Work Remotely**   | RSS feed               | Global (remote)             |
+| **USAJobs**            | REST API (API key)     | US (government jobs)        |
+| **Adzuna**             | REST API (API key)     | 12+ countries               |
+| **Reed**               | REST API (API key)     | UK                          |
+| **Jooble**             | REST API (API key)     | 70+ countries               |
+| **CareerJet**          | REST API (affiliate)   | 80+ countries               |
 
 ### ATS Job Boards (9)
 
@@ -67,7 +72,7 @@ Direct integrations with major tech companies' career APIs.
 
 ## ✨ Features
 
-- 🔍 **Multi-source aggregation** — Search 1 or all 34 sources concurrently
+- 🔍 **Multi-source aggregation** — Search 1 or all 39 sources concurrently
 - 🖥️ **CLI & API** — Use via REST API or command-line with JSON, CSV, table, or summary output
 - 🌐 **Country-aware** — Indeed & Glassdoor support 65+ countries with automatic domain resolution
 - 🔄 **Proxy rotation** — Built-in rotating proxy support (HTTP, HTTPS, SOCKS5)
@@ -312,7 +317,7 @@ All parameters are optional. When `siteType` is omitted, search + company scrape
 
 | Parameter                  | Type       | Default    | Description                                                                                                                                                                                                                                                                                                                             |
 | -------------------------- | ---------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `siteType`                 | `string[]` | all        | Sites to search. **Search**: `linkedin`, `indeed`, `zip_recruiter`, `glassdoor`, `google`, `bayt`, `naukri`, `bdjobs`, `internshala`, `exa`, `upwork`, `remoteok`, `remotive`, `jobicy`, `himalayas`, `arbeitnow`, `weworkremotely`. **ATS**: `ashby`, `greenhouse`, `lever`, `workable`, `smartrecruiters`, `rippling`, `workday`, `recruitee`, `teamtailor`. **Company**: `amazon`, `apple`, `microsoft`, `nvidia`, `tiktok`, `uber`, `cursor` |
+| `siteType`                 | `string[]` | all        | Sites to search. **Search**: `linkedin`, `indeed`, `zip_recruiter`, `glassdoor`, `google`, `bayt`, `naukri`, `bdjobs`, `internshala`, `exa`, `upwork`, `remoteok`, `remotive`, `jobicy`, `himalayas`, `arbeitnow`, `weworkremotely`, `usajobs`, `adzuna`, `reed`, `jooble`, `careerjet`. **ATS**: `ashby`, `greenhouse`, `lever`, `workable`, `smartrecruiters`, `rippling`, `workday`, `recruitee`, `teamtailor`. **Company**: `amazon`, `apple`, `microsoft`, `nvidia`, `tiktok`, `uber`, `cursor` |
 | `companySlug`              | `string`   | —          | Company identifier for ATS scrapers (e.g. `stripe`, `notion`). When set without `siteType`, only ATS scrapers run                                                                                                                                                                                                                       |
 | `searchTerm`               | `string`   | —          | Job search keywords                                                                                                                                                                                                                                                                                                                     |
 | `googleSearchTerm`         | `string`   | —          | Google-specific search query override                                                                                                                                                                                                                                                                                                   |
@@ -335,6 +340,7 @@ All parameters are optional. When `siteType` is omitted, search + company scrape
 | `proxies`                  | `string[]` | —          | Proxy URLs for rotation (`host:port` or `user:pass@host:port`)                                                                                                                                                                                                                                                                          |
 | `caCert`                   | `string`   | —          | Path to CA certificate for proxies                                                                                                                                                                                                                                                                                                      |
 | `userAgent`                | `string`   | —          | Custom User-Agent string                                                                                                                                                                                                                                                                                                                |
+| `clientIp`                 | `string`   | —          | Client IP address for sources that require it (e.g. CareerJet). Also useful for proxy rotation strategies                                                                                                                                                                                                                                |
 
 ---
 
@@ -425,7 +431,7 @@ ever-jobs/
 │   ├── models/                       @ever-jobs/models
 │   ├── common/                       @ever-jobs/common (HttpClient, converters, utils)
 │   ├── analytics/                    @ever-jobs/analytics
-│   ├── source-*/                     Search source modules (×17)
+│   ├── source-*/                     Search source modules (×22)
 │   ├── source-ats-*/                 ATS source modules (×9)
 │   └── source-company-*/             Company-specific source modules (×7)
 │
@@ -617,6 +623,26 @@ Recruitee ATS integration. Per-company public API at `{slug}.recruitee.com/api/o
 ### Teamtailor (ATS)
 
 Teamtailor ATS integration. Per-company career page API. Requires `companySlug` parameter.
+
+### USAJobs
+
+US government job board with free API. Requires `USAJOBS_API_KEY` and `USAJOBS_EMAIL` environment variables. Register at [developer.usajobs.gov](https://developer.usajobs.gov/APIRequest/Index). Returns full descriptions with salary data from position remuneration fields.
+
+### Adzuna
+
+Multi-country job aggregator covering 12+ countries. Requires `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` environment variables. Register at [developer.adzuna.com](https://developer.adzuna.com/signup). Free tier limited to 25 requests/min and 250 requests/day. Uses the `country` parameter to select the appropriate API endpoint.
+
+### Reed
+
+UK-focused job board. Requires `REED_API_KEY` environment variable. Register at [reed.co.uk/developers](https://www.reed.co.uk/developers). Uses HTTP Basic Auth. Provides salary data in GBP.
+
+### Jooble
+
+Job aggregator covering 70+ countries. Requires `JOOBLE_API_KEY` environment variable. Register at [jooble.org/api/about](https://jooble.org/api/about). Uses POST requests with the API key in the URL path. Salary data parsed from string format.
+
+### CareerJet
+
+Job aggregator covering 80+ countries with locale-based searches. Requires `CAREERJET_AFFID` environment variable. Register at [careerjet.com/partners](https://www.careerjet.com/partners/). Requires `clientIp` parameter for proper operation (falls back to `127.0.0.1`). Supports the `proxies` parameter for residential IP rotation.
 
 ---
 

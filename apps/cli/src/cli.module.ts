@@ -24,6 +24,19 @@ import { NvidiaModule } from '@ever-jobs/source-company-nvidia';
 import { TikTokModule } from '@ever-jobs/source-company-tiktok';
 import { UberModule } from '@ever-jobs/source-company-uber';
 import { CursorModule } from '@ever-jobs/source-company-cursor';
+import { RemoteOkModule } from '@ever-jobs/source-remoteok';
+import { RemotiveModule } from '@ever-jobs/source-remotive';
+import { JobicyModule } from '@ever-jobs/source-jobicy';
+import { HimalayasModule } from '@ever-jobs/source-himalayas';
+import { ArbeitnowModule } from '@ever-jobs/source-arbeitnow';
+import { WeWorkRemotelyModule } from '@ever-jobs/source-weworkremotely';
+import { RecruiteeModule } from '@ever-jobs/source-ats-recruitee';
+import { TeamtailorModule } from '@ever-jobs/source-ats-teamtailor';
+import { UsajobsModule } from '@ever-jobs/source-usajobs';
+import { AdzunaModule } from '@ever-jobs/source-adzuna';
+import { ReedModule } from '@ever-jobs/source-reed';
+import { JoobleModule } from '@ever-jobs/source-jooble';
+import { CareerJetModule } from '@ever-jobs/source-careerjet';
 import { AnalyticsModule } from '@ever-jobs/analytics';
 import { JobsService } from '../../api/src/jobs/jobs.service';
 import { SearchCommand } from './commands/search.command';
@@ -59,6 +72,22 @@ import { CompareCommand } from './commands/compare.command';
     TikTokModule,
     UberModule,
     CursorModule,
+    // Remote job boards
+    RemoteOkModule,
+    RemotiveModule,
+    JobicyModule,
+    HimalayasModule,
+    ArbeitnowModule,
+    WeWorkRemotelyModule,
+    // Additional ATS sources
+    RecruiteeModule,
+    TeamtailorModule,
+    // API-key sources (Tier 1.5)
+    UsajobsModule,
+    AdzunaModule,
+    ReedModule,
+    JoobleModule,
+    CareerJetModule,
     // Analytics
     AnalyticsModule,
   ],

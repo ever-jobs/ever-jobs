@@ -32,6 +32,11 @@ export enum Site {
   TEAMTAILOR = 'teamtailor',
   ARBEITNOW = 'arbeitnow',
   WEWORKREMOTELY = 'weworkremotely',
+  USAJOBS = 'usajobs',
+  ADZUNA = 'adzuna',
+  REED = 'reed',
+  JOOBLE = 'jooble',
+  CAREERJET = 'careerjet',
 }
 
 /**

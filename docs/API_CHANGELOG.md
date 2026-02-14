@@ -1,5 +1,27 @@
 # API Changelog
 
+## [0.2.0] — 2026-02-14
+
+### New Sources (5)
+
+Added 5 new job source integrations (Tier 1.5 — free API key required):
+
+- **USAJobs** — US government job board (`USAJOBS_API_KEY` + `USAJOBS_EMAIL`)
+- **Adzuna** — Multi-country aggregator, 12+ countries (`ADZUNA_APP_ID` + `ADZUNA_APP_KEY`)
+- **Reed** — UK-focused job board (`REED_API_KEY`)
+- **Jooble** — 70+ country aggregator (`JOOBLE_API_KEY`)
+- **CareerJet** — 80+ country aggregator (`CAREERJET_AFFID`)
+
+Total sources expanded from 34 to 39.
+
+### New `siteType` Values
+
+- `usajobs`, `adzuna`, `reed`, `jooble`, `careerjet` — search-based job sources (included in default searches when API keys are configured)
+
+### New Input Field
+
+- `clientIp` — Optional client IP address for sources that require it (e.g. CareerJet). Also useful for residential proxy rotation strategies. Combined with the existing `proxies` array for multi-IP support.
+
 ## [0.1.1] — 2026-02-14
 
 ### New Sources (8)

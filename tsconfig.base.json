@@ -54,7 +54,12 @@
       "@ever-jobs/source-arbeitnow": ["packages/source-arbeitnow/src/index.ts"],
       "@ever-jobs/source-weworkremotely": ["packages/source-weworkremotely/src/index.ts"],
       "@ever-jobs/source-ats-recruitee": ["packages/source-ats-recruitee/src/index.ts"],
-      "@ever-jobs/source-ats-teamtailor": ["packages/source-ats-teamtailor/src/index.ts"]
+      "@ever-jobs/source-ats-teamtailor": ["packages/source-ats-teamtailor/src/index.ts"],
+      "@ever-jobs/source-usajobs": ["packages/source-usajobs/src/index.ts"],
+      "@ever-jobs/source-adzuna": ["packages/source-adzuna/src/index.ts"],
+      "@ever-jobs/source-reed": ["packages/source-reed/src/index.ts"],
+      "@ever-jobs/source-jooble": ["packages/source-jooble/src/index.ts"],
+      "@ever-jobs/source-careerjet": ["packages/source-careerjet/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "dist"]
