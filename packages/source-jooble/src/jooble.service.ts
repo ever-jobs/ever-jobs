@@ -30,26 +30,29 @@ const SALARY_RANGE_REGEX = /\$?(\d{1,3}(?:,\d{3})*|\d+)\s*[-\u2013]\s*\$?(\d{1,3
 @Injectable()
 export class JoobleService implements IScraper {
   private readonly logger = new Logger(JoobleService.name);
-  private readonly apiKey: string | null;
+  private readonly defaultApiKey: string | null;
 
   constructor() {
-    this.apiKey = process.env.JOOBLE_API_KEY ?? null;
-    if (!this.apiKey) {
+    this.defaultApiKey = process.env.JOOBLE_API_KEY ?? null;
+    if (!this.defaultApiKey) {
       this.logger.warn(
-        'JOOBLE_API_KEY is not set. Jooble searches will return empty results. ' +
+        'JOOBLE_API_KEY is not set. Jooble searches will return empty results ' +
+          'unless per-request auth is provided via input.auth.jooble. ' +
           'Get your key at https://jooble.org/api/about',
       );
     }
   }
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
-    if (!this.apiKey) {
+    const apiKey = input.auth?.jooble?.apiKey ?? this.defaultApiKey;
+
+    if (!apiKey) {
       this.logger.warn('Skipping Jooble search — API key not configured');
       return new JobResponseDto([]);
     }
 
     const resultsWanted = input.resultsWanted ?? JOOBLE_DEFAULT_RESULTS;
-    const apiUrl = `${JOOBLE_API_BASE_URL}/${this.apiKey}`;
+    const apiUrl = `${JOOBLE_API_BASE_URL}/${apiKey}`;
 
     const client = createHttpClient({
       proxies: input.proxies,

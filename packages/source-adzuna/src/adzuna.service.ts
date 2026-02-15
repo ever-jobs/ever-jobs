@@ -41,23 +41,27 @@ const CONTRACT_TIME_MAP: Record<string, JobType> = {
 @Injectable()
 export class AdzunaService implements IScraper {
   private readonly logger = new Logger(AdzunaService.name);
-  private readonly appId: string | null;
-  private readonly appKey: string | null;
+  private readonly defaultAppId: string | null;
+  private readonly defaultAppKey: string | null;
   private requestCount = 0;
 
   constructor() {
-    this.appId = process.env.ADZUNA_APP_ID ?? null;
-    this.appKey = process.env.ADZUNA_APP_KEY ?? null;
-    if (!this.appId || !this.appKey) {
+    this.defaultAppId = process.env.ADZUNA_APP_ID ?? null;
+    this.defaultAppKey = process.env.ADZUNA_APP_KEY ?? null;
+    if (!this.defaultAppId || !this.defaultAppKey) {
       this.logger.warn(
-        'ADZUNA_APP_ID or ADZUNA_APP_KEY not set. Adzuna searches will return empty results. ' +
+        'ADZUNA_APP_ID or ADZUNA_APP_KEY not set. Adzuna searches will return empty results ' +
+          'unless per-request auth is provided via input.auth.adzuna. ' +
           'Sign up at https://developer.adzuna.com/signup',
       );
     }
   }
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
-    if (!this.appId || !this.appKey) {
+    const appId = input.auth?.adzuna?.appId ?? this.defaultAppId;
+    const appKey = input.auth?.adzuna?.appKey ?? this.defaultAppKey;
+
+    if (!appId || !appKey) {
       this.logger.warn('Skipping Adzuna search — credentials not configured');
       return new JobResponseDto([]);
     }
@@ -92,8 +96,8 @@ export class AdzunaService implements IScraper {
       const url = `${ADZUNA_API_BASE_URL}/${countryCode}/search/${page}`;
 
       const params: Record<string, string | number> = {
-        app_id: this.appId,
-        app_key: this.appKey,
+        app_id: appId,
+        app_key: appKey,
         results_per_page: pageSize,
         sort_by: 'date',
       };

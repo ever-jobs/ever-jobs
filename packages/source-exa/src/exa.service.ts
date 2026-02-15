@@ -23,28 +23,41 @@ import {
 @Injectable()
 export class ExaService implements IScraper {
   private readonly logger = new Logger(ExaService.name);
-  private readonly exa: Exa | null;
+  private readonly defaultExa: Exa | null;
 
   constructor() {
     const apiKey = process.env.EXA_API_KEY;
     if (!apiKey) {
       this.logger.warn(
-        'EXA_API_KEY is not set. Exa searches will return empty results. ' +
+        'EXA_API_KEY is not set. Exa searches will return empty results ' +
+          'unless per-request auth is provided via input.auth.exa. ' +
           'Get your key at https://dashboard.exa.ai',
       );
-      this.exa = null;
+      this.defaultExa = null;
       return;
     }
     try {
-      this.exa = new Exa(apiKey);
+      this.defaultExa = new Exa(apiKey);
     } catch (err: any) {
       this.logger.error(`Failed to initialise Exa client: ${err.message}`);
-      this.exa = null;
+      this.defaultExa = null;
     }
   }
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
-    if (!this.exa) {
+    // Resolve Exa client: per-request API key creates a fresh client
+    let exa = this.defaultExa;
+    const requestApiKey = input.auth?.exa?.apiKey;
+    if (requestApiKey) {
+      try {
+        exa = new Exa(requestApiKey);
+      } catch (err: any) {
+        this.logger.error(`Failed to create Exa client from per-request key: ${err.message}`);
+        return new JobResponseDto([]);
+      }
+    }
+
+    if (!exa) {
       this.logger.warn('Skipping Exa search — client not initialised');
       return new JobResponseDto([]);
     }
@@ -69,7 +82,7 @@ export class ExaService implements IScraper {
         startPublishedDate = since.toISOString().split('T')[0];
       }
 
-      const response = await this.exa.searchAndContents(query, {
+      const response = await exa.searchAndContents(query, {
         numResults,
         type: DEFAULT_SEARCH_TYPE,
         includeDomains: DEFAULT_JOB_DOMAINS,

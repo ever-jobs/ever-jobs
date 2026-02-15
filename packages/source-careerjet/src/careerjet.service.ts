@@ -25,19 +25,23 @@ const SALARY_TYPE_MAP: Record<string, CompensationInterval> = {
 @Injectable()
 export class CareerJetService implements IScraper {
   private readonly logger = new Logger(CareerJetService.name);
-  private readonly affId: string | null;
+  private readonly defaultAffId: string | null;
 
   constructor() {
-    this.affId = process.env.CAREERJET_AFFID ?? null;
-    if (!this.affId) {
+    this.defaultAffId = process.env.CAREERJET_AFFID ?? null;
+    if (!this.defaultAffId) {
       this.logger.warn(
-        'CAREERJET_AFFID is not set. CareerJet searches will return empty results. Sign up at https://www.careerjet.com/partners/',
+        'CAREERJET_AFFID is not set. CareerJet searches will return empty results ' +
+          'unless per-request auth is provided via input.auth.careerjet. ' +
+          'Sign up at https://www.careerjet.com/partners/',
       );
     }
   }
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
-    if (!this.affId) {
+    const affId = input.auth?.careerjet?.affId ?? this.defaultAffId;
+
+    if (!affId) {
       return new JobResponseDto([]);
     }
 
@@ -65,7 +69,7 @@ export class CareerJetService implements IScraper {
 
       try {
         const params: Record<string, any> = {
-          affid: this.affId,
+          affid: affId,
           user_ip: userIp,
           user_agent: userAgent,
           locale_code: locale,

@@ -38,22 +38,26 @@ const RATE_INTERVAL_MAP: Record<string, CompensationInterval> = {
 @Injectable()
 export class UsajobsService implements IScraper {
   private readonly logger = new Logger(UsajobsService.name);
-  private readonly apiKey: string | null;
-  private readonly email: string | null;
+  private readonly defaultApiKey: string | null;
+  private readonly defaultEmail: string | null;
 
   constructor() {
-    this.apiKey = process.env.USAJOBS_API_KEY ?? null;
-    this.email = process.env.USAJOBS_EMAIL ?? null;
-    if (!this.apiKey || !this.email) {
+    this.defaultApiKey = process.env.USAJOBS_API_KEY ?? null;
+    this.defaultEmail = process.env.USAJOBS_EMAIL ?? null;
+    if (!this.defaultApiKey || !this.defaultEmail) {
       this.logger.warn(
-        'USAJOBS_API_KEY or USAJOBS_EMAIL not set. USAJobs searches will return empty results. ' +
+        'USAJOBS_API_KEY or USAJOBS_EMAIL not set. USAJobs searches will return empty results ' +
+          'unless per-request auth is provided via input.auth.usajobs. ' +
           'Get your key at https://developer.usajobs.gov/APIRequest/Index',
       );
     }
   }
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
-    if (!this.apiKey || !this.email) {
+    const apiKey = input.auth?.usajobs?.apiKey ?? this.defaultApiKey;
+    const email = input.auth?.usajobs?.email ?? this.defaultEmail;
+
+    if (!apiKey || !email) {
       this.logger.warn('Skipping USAJobs search — credentials not configured');
       return new JobResponseDto([]);
     }
@@ -68,8 +72,8 @@ export class UsajobsService implements IScraper {
     });
     client.setHeaders({
       ...USAJOBS_HEADERS,
-      'Authorization-Key': this.apiKey,
-      'User-Agent': this.email,
+      'Authorization-Key': apiKey,
+      'User-Agent': email,
     });
 
     const jobs: JobPostDto[] = [];

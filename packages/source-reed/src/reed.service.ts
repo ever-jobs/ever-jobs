@@ -27,26 +27,29 @@ import { ReedSearchResponse, ReedJob } from './reed.types';
 @Injectable()
 export class ReedService implements IScraper {
   private readonly logger = new Logger(ReedService.name);
-  private readonly apiKey: string | null;
+  private readonly defaultApiKey: string | null;
 
   constructor() {
-    this.apiKey = process.env.REED_API_KEY ?? null;
-    if (!this.apiKey) {
+    this.defaultApiKey = process.env.REED_API_KEY ?? null;
+    if (!this.defaultApiKey) {
       this.logger.warn(
-        'REED_API_KEY is not set. Reed searches will return empty results. ' +
+        'REED_API_KEY is not set. Reed searches will return empty results ' +
+          'unless per-request auth is provided via input.auth.reed. ' +
           'Get your key at https://www.reed.co.uk/developers',
       );
     }
   }
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
-    if (!this.apiKey) {
+    const apiKey = input.auth?.reed?.apiKey ?? this.defaultApiKey;
+
+    if (!apiKey) {
       this.logger.warn('Skipping Reed search — API key not configured');
       return new JobResponseDto([]);
     }
 
     const resultsWanted = input.resultsWanted ?? REED_DEFAULT_RESULTS;
-    const authHeader = `Basic ${Buffer.from(this.apiKey + ':').toString('base64')}`;
+    const authHeader = `Basic ${Buffer.from(apiKey + ':').toString('base64')}`;
 
     const client = createHttpClient({
       proxies: input.proxies,
