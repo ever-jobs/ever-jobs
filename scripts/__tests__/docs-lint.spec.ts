@@ -286,6 +286,80 @@ describe('lintDocs', () => {
     expect(elapsed).toBeLessThan(5000);
     expect(r.ok).toBe(true);
   });
+
+  it('passes when every spec number falls in a registered band', async () => {
+    tempRoot = await makeRepo({
+      'docs/index.md':
+        '# Index\n[s](../.specify/specs/5008-foo/spec.md)\n[p](../.specify/specs/5008-foo/plan.md)\n[t](../.specify/specs/5008-foo/tasks.md)\n',
+      '.specify/ranges.json': JSON.stringify({
+        ranges: [
+          { fork: 'ever-jobs', repo: 'ever-jobs/ever-jobs', start: 1, end: 4999 },
+          { fork: 'makedeeply', repo: 'MakeDeeply/ever-jobs', start: 5000, end: 5999 },
+        ],
+      }),
+      '.specify/specs/5008-foo/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/5008-foo/plan.md':
+        '# Plan\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/5008-foo/tasks.md': '# Tasks\n- [ ] do it\n',
+    });
+    const r = await lintDocs(tempRoot);
+    expect(r.outOfBandSpecs).toEqual([]);
+    expect(r.overlappingRanges).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
+  it('flags a spec number outside every registered band', async () => {
+    tempRoot = await makeRepo({
+      'docs/index.md':
+        '# Index\n[s](../.specify/specs/9001-foo/spec.md)\n[p](../.specify/specs/9001-foo/plan.md)\n[t](../.specify/specs/9001-foo/tasks.md)\n',
+      '.specify/ranges.json': JSON.stringify({
+        ranges: [
+          { fork: 'makedeeply', repo: 'MakeDeeply/ever-jobs', start: 5000, end: 5999 },
+        ],
+      }),
+      '.specify/specs/9001-foo/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/9001-foo/plan.md':
+        '# Plan\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/9001-foo/tasks.md': '# Tasks\n- [ ] do it\n',
+    });
+    const r = await lintDocs(tempRoot);
+    expect(r.outOfBandSpecs).toHaveLength(1);
+    expect(r.outOfBandSpecs[0]).toContain('9001-foo');
+    expect(r.ok).toBe(false);
+  });
+
+  it('flags overlapping bands in ranges.json', async () => {
+    tempRoot = await makeRepo({
+      'docs/index.md': '# Index\n',
+      '.specify/ranges.json': JSON.stringify({
+        ranges: [
+          { fork: 'a', repo: 'a/x', start: 1, end: 5000 },
+          { fork: 'b', repo: 'b/x', start: 5000, end: 5999 },
+        ],
+      }),
+    });
+    const r = await lintDocs(tempRoot);
+    expect(r.overlappingRanges).toHaveLength(1);
+    expect(r.ok).toBe(false);
+  });
+
+  it('skips the band checks entirely when ranges.json is absent', async () => {
+    tempRoot = await makeRepo({
+      'docs/index.md':
+        '# Index\n[s](../.specify/specs/9001-foo/spec.md)\n[p](../.specify/specs/9001-foo/plan.md)\n[t](../.specify/specs/9001-foo/tasks.md)\n',
+      '.specify/specs/9001-foo/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/9001-foo/plan.md':
+        '# Plan\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/9001-foo/tasks.md': '# Tasks\n- [ ] do it\n',
+    });
+    const r = await lintDocs(tempRoot);
+    expect(r.outOfBandSpecs).toEqual([]);
+    expect(r.overlappingRanges).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
 });
 
 describe('formatResult', () => {
@@ -296,6 +370,8 @@ describe('formatResult', () => {
       duplicateLogEntries: [],
       outOfOrderLogEntries: [],
       missingFrontmatter: [],
+      overlappingRanges: [],
+      outOfBandSpecs: [],
       ok: true,
     });
     expect(out).toContain('Doc-lint passed');
@@ -310,6 +386,8 @@ describe('formatResult', () => {
         'docs/log.md:8 (2026-04-26#2) is newer than line 5 (2026-04-26#3) — newest must be at top',
       ],
       missingFrontmatter: ['.specify/specs/006-foo/spec.md'],
+      overlappingRanges: ['range "a" [1-5000] overlaps "b" [5000-5999]'],
+      outOfBandSpecs: ['9001-foo (number 9001 is outside every reserved band)'],
       ok: false,
     });
     expect(out).toContain('1 broken link(s)');
@@ -317,5 +395,7 @@ describe('formatResult', () => {
     expect(out).toContain('1 duplicate log entry');
     expect(out).toContain('newest-at-top');
     expect(out).toContain('missing H1 + metadata table');
+    expect(out).toContain('overlapping fork range');
+    expect(out).toContain('outside every reserved range');
   });
 });

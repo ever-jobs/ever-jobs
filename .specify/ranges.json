@@ -1,0 +1,7 @@
+{
+  "$schema-note": "Shared, append-only registry of reserved spec-number ranges. One row per fork, keyed by its origin repo. A fork reserves a band by opening a PR that appends one row; rows never overlap. Tooling (scripts/next-spec-number.ts) and scripts/docs-lint.ts read this file so each fork only ever mints spec numbers inside its own band.",
+  "ranges": [
+    { "fork": "ever-jobs", "repo": "ever-jobs/ever-jobs", "start": 1, "end": 4999 },
+    { "fork": "makedeeply", "repo": "MakeDeeply/ever-jobs", "start": 5000, "end": 5999 }
+  ]
+}

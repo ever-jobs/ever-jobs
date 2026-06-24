@@ -10,6 +10,9 @@
  *   4. `docs/log.md` entries are ordered newest-first.
  *   5. Every `spec.md` / `plan.md` / `tasks.md` under `.specify/specs/`
  *      starts with an H1 and a metadata table.
+ *   6. (when `.specify/ranges.json` exists) the reserved fork bands are
+ *      pairwise non-overlapping, and every spec number falls inside some
+ *      registered band — so no fork mints a number outside a reserved lane.
  *
  * Zero runtime deps — small regex parser. See Q-011 in `docs/questions.md`
  * for the trade-off vs `remark-parse` + `unified`.
@@ -17,6 +20,13 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
+
+import {
+  extractSpecNumber,
+  findOverlaps,
+  loadRanges,
+  rangeForNumber,
+} from './spec-ranges';
 
 export interface BrokenLink {
   from: string;
@@ -29,6 +39,8 @@ export interface DocLintResult {
   duplicateLogEntries: string[];
   outOfOrderLogEntries: string[];
   missingFrontmatter: string[];
+  overlappingRanges: string[];
+  outOfBandSpecs: string[];
   ok: boolean;
 }
 
@@ -264,6 +276,8 @@ export async function lintDocs(repoRoot: string): Promise<DocLintResult> {
     duplicateLogEntries: [],
     outOfOrderLogEntries: [],
     missingFrontmatter: [],
+    overlappingRanges: [],
+    outOfBandSpecs: [],
     ok: true,
   };
 
@@ -337,12 +351,33 @@ export async function lintDocs(repoRoot: string): Promise<DocLintResult> {
   }
   result.missingFrontmatter.sort();
 
+  // 6. Fork range-registry checks (only when .specify/ranges.json exists).
+  const ranges = await loadRanges(repoRoot);
+  if (ranges && ranges.length > 0) {
+    result.overlappingRanges = findOverlaps(ranges);
+    const specDirs = await fs
+      .readdir(path.join(repoRoot, '.specify', 'specs'), { withFileTypes: true })
+      .catch(() => [] as import('fs').Dirent[]);
+    const offenders = new Set<string>();
+    for (const e of specDirs) {
+      if (!e.isDirectory()) continue;
+      const n = extractSpecNumber(e.name);
+      if (n === null) continue;
+      if (!rangeForNumber(ranges, n)) {
+        offenders.add(`${e.name} (number ${n} is outside every reserved band)`);
+      }
+    }
+    result.outOfBandSpecs = [...offenders].sort();
+  }
+
   result.ok =
     result.brokenLinks.length === 0 &&
     result.unindexedDocs.length === 0 &&
     result.duplicateLogEntries.length === 0 &&
     result.outOfOrderLogEntries.length === 0 &&
-    result.missingFrontmatter.length === 0;
+    result.missingFrontmatter.length === 0 &&
+    result.overlappingRanges.length === 0 &&
+    result.outOfBandSpecs.length === 0;
 
   return result;
 }
@@ -374,6 +409,18 @@ export function formatResult(result: DocLintResult): string {
       `✗ ${result.missingFrontmatter.length} spec file(s) missing H1 + metadata table:`,
     );
     for (const m of result.missingFrontmatter) lines.push(`    ${m}`);
+  }
+  if (result.overlappingRanges.length) {
+    lines.push(
+      `✗ ${result.overlappingRanges.length} overlapping fork range(s) in .specify/ranges.json:`,
+    );
+    for (const o of result.overlappingRanges) lines.push(`    ${o}`);
+  }
+  if (result.outOfBandSpecs.length) {
+    lines.push(
+      `✗ ${result.outOfBandSpecs.length} spec(s) outside every reserved range:`,
+    );
+    for (const s of result.outOfBandSpecs) lines.push(`    ${s}`);
   }
   if (result.ok) lines.push('✓ Doc-lint passed — no issues.');
   return lines.join('\n');
