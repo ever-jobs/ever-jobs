@@ -629,6 +629,7 @@
       "@ever-jobs/source-dribbble": ["packages/plugins/source-dribbble/src/index.ts"],
       "@ever-jobs/source-ats-manatal": ["packages/plugins/source-ats-manatal/src/index.ts"],
       "@ever-jobs/source-ats-paylocity": ["packages/plugins/source-ats-paylocity/src/index.ts"],
+      "@ever-jobs/source-ats-workatastartup": ["packages/plugins/source-ats-workatastartup/src/index.ts"],
       "@ever-jobs/source-ats-freshteam": ["packages/plugins/source-ats-freshteam/src/index.ts"],
       "@ever-jobs/source-ats-bullhorn": ["packages/plugins/source-ats-bullhorn/src/index.ts"],
       "@ever-jobs/source-ats-trakstar": ["packages/plugins/source-ats-trakstar/src/index.ts"],

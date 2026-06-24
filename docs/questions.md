@@ -10,6 +10,38 @@
 
 ---
 
+## Q-072 — workatastartup: harvest the YC public mirror or the canonical WaaS board?
+
+**Context:** Spec 5023. YC Work at a Startup exposes the same board at two URL
+shapes: the canonical `workatastartup.com/companies/{slug}` (thin, auth-gated —
+the full job list and apply flow sit behind a login) and the public YC mirror
+`ycombinator.com/companies/{slug}/jobs` (server-renders an Inertia `data-page`
+blob enumerating every opening, plus per-job detail pages with schema.org
+`JobPosting` ld+json). Note the URL shapes are **not** interchangeable: the
+canonical host 404s if you append `/jobs`, and the mirror needs the `/jobs`
+suffix.
+
+**Options:**
+
+- **A. Harvest the YC mirror (current).** Public, unauthenticated, fully
+  structured (Inertia list spine + ld+json detail). `companyUrl` still points at
+  the canonical `workatastartup.com` board for correctness. No auth, no
+  Playwright; matches how fetch1 detection already classifies these domains.
+- **B. Harvest the canonical `workatastartup.com` board.** Authoritative host,
+  but the job list/apply data is auth-gated, so it needs a logged-in session
+  (Playwright + credentials) — heavy, brittle, and out of scope for a public
+  source plugin.
+- **C. Try canonical first, fall back to the mirror.** Extra fetch + redirect
+  handling for no data gain, since the mirror already carries everything.
+
+**Default (proceeding):** **A.** The YC mirror is the only public, fully
+structured surface; `companyUrl` records the canonical WaaS board so downstream
+URL semantics stay correct.
+
+**Resolution:** _pending review._
+
+---
+
 ## Q-071 — source-jsonld: how should the generic JSON-LD harvester enumerate jobs from a single page?
 
 **Context:** Spec 5022. The generic `source-jsonld` plugin is a last-resort

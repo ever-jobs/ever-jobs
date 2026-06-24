@@ -15,6 +15,51 @@
 
 ---
 
+## 2026-06-24 — Run #459 — Spec 5023 — `source-ats-workatastartup` plugin
+
+**Scope:** YC Work at a Startup (WaaS) was newly detected in fetch1 (both the
+canonical `workatastartup.com/companies/{slug}` and the public YC mirror
+`ycombinator.com/companies/{slug}/jobs`) but had no ever-jobs harvester. Adds a
+new `source-ats-workatastartup` plugin that harvests the YC public mirror.
+
+**New plugin (`packages/plugins/source-ats-workatastartup/`):**
+
+- `workatastartup.constants.ts` — base hosts + URL builders
+  (`waasCompanyJobsUrl` = YC mirror list, `waasDetailUrl` = YC mirror detail,
+  `waasCanonicalCompanyUrl` = canonical WaaS board), browser headers,
+  `WAAS_DETAIL_CONCURRENCY=5`, `WAAS_MAX_RESULTS=200`.
+- `workatastartup.types.ts` — Inertia `data-page` shapes (`WaasInertiaPage`,
+  `WaasPageProps`, `WaasCompany`, `WaasJobPosting`); all fields optional
+  (untrusted external payload).
+- `workatastartup.service.ts` — `@SourcePlugin`/`@Injectable` `IScraper`.
+  `extractInertiaPage` regexes the `data-page` attribute, HTML-unescapes, and
+  `JSON.parse`s defensively (never throws). The list spine is
+  `props.jobPostings[]`; the detail overlay (`fetchDetails`, bounded
+  concurrency, `Promise.allSettled`, isolated failures) parses each detail
+  page's schema.org `JobPosting` ld+json via the Spec 5022 `parseJobPostingLd`
+  helper, with the detail `props.job.description` markdown as a description
+  fallback. `processJob` applies the ATS checklist: structured-first ld+json
+  baseSalary → min/max via `resolveCompensation` with list `salaryRange` text
+  fallback; jobType from list `type` + ld `employmentType`; multi-location from
+  ld `jobLocation` (`parseLocationList`, semicolon-joined) with list `location`
+  fallback; isRemote/workFromHomeType; datePosted; description HTML/markdown/
+  plain; emails; `companyUrl`=canonical WaaS, `jobUrl`=YC detail,
+  `applyUrl`=apply target; `atsType='workatastartup'`. Never fabricates absent
+  fields.
+
+**Registration (4 places):** `Site.WORKATASTARTUP='workatastartup'`,
+`ALL_SOURCE_MODULES`, `tsconfig.base.json` path, `jest.config.js` mapper.
+
+**Tests:** 5 real captured fixtures (diode list + 2 details, loombotic list + 1
+detail). 12 unit tests cover list parse, detail overlay (datePosted/
+employmentType/jobType), structured compensation, single + multi-location,
+description format, detail-fetch failure fallback (list-only + text salary),
+resultsWanted cap, and empty/error robustness. `build` + suite green.
+
+**Docs:** `docs/index.md` row added; Q-072 recorded.
+
+---
+
 ## 2026-06-24 — Run #458 — Spec 5022 — Shared schema.org JobPosting (JSON-LD) extraction
 
 **Scope:** schema.org `JobPosting` JSON-LD parsing was duplicated/private in

@@ -71,6 +71,8 @@ export enum Site {
   // Phase 8: ATS Expansion
   MANATAL = 'manatal',
   PAYLOCITY = 'paylocity',
+  // YC Work at a Startup — multi-tenant ATS (harvested via the YC mirror).
+  WORKATASTARTUP = 'workatastartup',
   FRESHTEAM = 'freshteam',
   BULLHORN = 'bullhorn',
   TRAKSTAR = 'trakstar',

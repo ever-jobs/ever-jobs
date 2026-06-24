@@ -41,6 +41,7 @@ import { ManatalModule } from './source-ats-manatal';
 import { MercorModule } from './source-ats-mercor';
 import { OracleModule } from './source-ats-oracle';
 import { PaylocityModule } from './source-ats-paylocity';
+import { WorkAtAStartupModule } from './source-ats-workatastartup';
 import { PersonioModule } from './source-ats-personio';
 import { PhenomModule } from './source-ats-phenom';
 import { EightfoldModule } from './source-ats-eightfold';
@@ -965,6 +966,7 @@ export const ALL_SOURCE_MODULES = [
   MercorModule,
   OracleModule,
   PaylocityModule,
+  WorkAtAStartupModule,
   PersonioModule,
   PhenomModule,
   EightfoldModule,

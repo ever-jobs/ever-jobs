@@ -614,6 +614,7 @@ module.exports = {
     '^@ever-jobs/source-dribbble$': '<rootDir>/packages/plugins/source-dribbble/src/index.ts',
     '^@ever-jobs/source-ats-manatal$': '<rootDir>/packages/plugins/source-ats-manatal/src/index.ts',
     '^@ever-jobs/source-ats-paylocity$': '<rootDir>/packages/plugins/source-ats-paylocity/src/index.ts',
+    '^@ever-jobs/source-ats-workatastartup$': '<rootDir>/packages/plugins/source-ats-workatastartup/src/index.ts',
     '^@ever-jobs/source-ats-freshteam$': '<rootDir>/packages/plugins/source-ats-freshteam/src/index.ts',
     '^@ever-jobs/source-ats-bullhorn$': '<rootDir>/packages/plugins/source-ats-bullhorn/src/index.ts',
     '^@ever-jobs/source-ats-trakstar$': '<rootDir>/packages/plugins/source-ats-trakstar/src/index.ts',
