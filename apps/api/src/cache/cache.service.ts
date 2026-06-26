@@ -86,7 +86,8 @@ export class CacheService {
   /** Clear all cached data. */
   async clear(): Promise<void> {
     try {
-      await this.cacheManager.reset();
+      // cache-manager v6+ (Keyv-based) replaced `reset()` with `clear()`.
+      await this.cacheManager.clear();
     } catch (err: any) {
       this.logger.warn(`Cache clear error: ${err.message}`);
     }

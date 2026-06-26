@@ -1,6 +1,8 @@
 import { Global, Module } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import Keyv from 'keyv';
+import { CacheableMemory } from 'cacheable';
 import { CacheService } from './cache.service';
 
 /**
@@ -27,16 +29,26 @@ import { CacheService } from './cache.service';
         const max = config.get<number>('cache.maxItems', 500);
 
         if (redisUrl) {
-          // Dynamically import Redis store only when needed
-          const { redisStore } = await import('cache-manager-redis-yet');
+          // Dynamically import the Redis (Keyv) store only when needed.
+          // cache-manager v6+ is Keyv-based — `cache-manager-redis-yet`
+          // (the old `redisStore`) is replaced by `@keyv/redis`.
+          const { default: KeyvRedis } = await import('@keyv/redis');
+          // `as any`: keyv ships dual CJS/ESM builds whose `Keyv` types differ
+          // by a private `_ttl`, so our `Keyv[]` doesn't structurally match the
+          // copy @nestjs/cache-manager resolves. Runtime is identical.
           return {
-            store: await redisStore({ url: redisUrl, ttl }),
+            stores: [new Keyv({ store: new KeyvRedis(redisUrl), ttl })] as any,
             ttl,
           };
         }
 
-        // Default: in-memory store
-        return { ttl, max };
+        // Default: bounded in-memory store (LRU-capped at `max`).
+        return {
+          stores: [
+            new Keyv({ store: new CacheableMemory({ ttl, lruSize: max }) }),
+          ] as any,
+          ttl,
+        };
       },
     }),
   ],

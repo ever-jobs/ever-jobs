@@ -63,7 +63,12 @@ const ACTIVE_STORE = resolveStoreBootstrap();
       useFactory: (config: ConfigService) => ({
         autoSchemaFile: true,
         sortSchema: true,
-        playground: config.get<boolean>('graphql.playground', true),
+        // Apollo Server 5 removed the bundled GraphQL Playground (the old
+        // `playground: true` pulled the deprecated, unmaintained
+        // `@apollo/server-plugin-landing-page-graphql-playground`). @nestjs/apollo
+        // v13 serves the modern Apollo Sandbox landing page by default, so no
+        // explicit landing-page plugin is configured here — adding one throws
+        // "Only one plugin can implement renderLandingPage" at startup.
         path: config.get<string>('graphql.path', 'graphql'),
         introspection: true,
         // Disable GraphQL module entirely if env var is set
