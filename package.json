@@ -45,7 +45,7 @@
     "@apollo/server": "^4.11.0",
     "@scalar/nestjs-api-reference": "^1.0.23",
     "@upwork/node-upwork-oauth2": "^2.3.0",
-    "axios": "^1.7.0",
+    "axios": "^1.16.0",
     "better-sqlite3": "^12.9.0",
     "cache-manager": "^5.7.0",
     "cache-manager-redis-yet": "^5.1.0",
@@ -91,5 +91,62 @@
     "ts-node": "^10.9.0",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.5.0"
+  },
+  "overrides": {
+    "lodash": "4.18.1",
+    "multer": "2.2.0",
+    "qs": "6.15.2",
+    "webpack": "5.106.2",
+    "request": {
+      "form-data": "2.5.6"
+    },
+    "external-editor": {
+      "tmp": "0.2.7"
+    },
+    "openai": {
+      "ws": "8.21.0"
+    },
+    "@nestjs/graphql": {
+      "ws": "8.21.0"
+    },
+    "@nestjs/cli": {
+      "glob": "10.5.0"
+    },
+    "archiver-utils": {
+      "glob": "10.5.0"
+    },
+    "nx": {
+      "minimatch": "9.0.7"
+    },
+    "@angular-devkit/core": {
+      "picomatch": "4.0.4"
+    },
+    "testcontainers": {
+      "undici": "6.27.0"
+    },
+    "express": {
+      "body-parser": "1.20.5"
+    },
+    "@nestjs/platform-express": {
+      "body-parser": "1.20.5"
+    },
+    "dockerode": {
+      "uuid": "11.1.1"
+    },
+    "@apollo/server": {
+      "uuid": "11.1.1"
+    },
+    "@eslint/eslintrc": {
+      "js-yaml": "4.2.0"
+    },
+    "@nestjs/swagger": {
+      "js-yaml": "4.2.0"
+    },
+    "cosmiconfig": {
+      "js-yaml": "4.2.0"
+    },
+    "eslint": {
+      "js-yaml": "4.2.0"
+    }
   }
 }
