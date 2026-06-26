@@ -1,0 +1,474 @@
+# Instincts generated from https://github.com/ever-jobs/ever-jobs
+# Generated: 2026-06-26T12:54:57.929Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: ever-jobs-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/ever-jobs/ever-jobs
+---
+
+# Ever Jobs Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat
+
+## Evidence
+
+- 1 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat(plugin/source-ats-workatastartup): harvest YC Work at a Startup boards (Spec 5023)
+
+---
+id: ever-jobs-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/ever-jobs/ever-jobs
+---
+
+# Ever Jobs Commit Length
+
+## Action
+
+Write moderate-length commit messages (~87 characters)
+
+## Evidence
+
+- Average commit message length: 87 chars
+- Based on 1 commits
+
+---
+id: ever-jobs-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/ever-jobs/ever-jobs
+---
+
+# Ever Jobs Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: ever-jobs-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/ever-jobs/ever-jobs
+---
+
+# Ever Jobs Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: ever-jobs-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/ever-jobs/ever-jobs
+---
+
+# Ever Jobs Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: ever-jobs-test-framework
+trigger: "when writing tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/ever-jobs/ever-jobs
+---
+
+# Ever Jobs Test Framework
+
+## Action
+
+Use jest as the test framework
+
+## Evidence
+
+- Test framework detected: jest
+- File pattern: *.spec.ts
+
+---
+id: ever-jobs-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/ever-jobs/ever-jobs
+---
+
+# Ever Jobs Test Naming
+
+## Action
+
+Name test files using the pattern: *.spec.ts
+
+## Evidence
+
+- File pattern: *.spec.ts
+- Consistent across test files
+
+---
+id: ever-jobs-test-mocking
+trigger: "when mocking dependencies in tests"
+confidence: 0.75
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/ever-jobs/ever-jobs
+---
+
+# Ever Jobs Test Mocking
+
+## Action
+
+Use jest.mock for mocking
+
+## Evidence
+
+- Mocking pattern detected: jest.mock
+- Consistent across test files
+
+---
+id: ever-jobs-instinct-camelcase-files
+trigger: "When creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Camelcase Files
+
+## Action
+
+Name the file using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.files: camelCase
+
+---
+id: ever-jobs-instinct-camelcase-functions
+trigger: "When defining a function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Camelcase Functions
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.functions: camelCase
+
+---
+id: ever-jobs-instinct-pascalcase-classes
+trigger: "When defining a class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Pascalcase Classes
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in namingConventions.classes: PascalCase
+
+---
+id: ever-jobs-instinct-screaming-constants
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Screaming Constants
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Pattern in namingConventions.constants: SCREAMING_SNAKE_CASE
+
+---
+id: ever-jobs-instinct-relative-imports
+trigger: "When importing modules"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Relative Imports
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle: relative
+
+---
+id: ever-jobs-instinct-named-exports
+trigger: "When exporting modules or functions"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Named Exports
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: ever-jobs-instinct-jest-spec-pattern
+trigger: "When creating a test file"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Jest Spec Pattern
+
+## Action
+
+Name the file with the pattern *.spec.ts
+
+## Evidence
+
+- Pattern in testing.filePattern: *.spec.ts
+
+---
+id: ever-jobs-instinct-jest-mock
+trigger: "When mocking dependencies in tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Jest Mock
+
+## Action
+
+Use jest.mock for mocking
+
+## Evidence
+
+- Pattern in testing.mockingStyle: jest.mock
+
+---
+id: ever-jobs-instinct-unit-tests
+trigger: "When writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Unit Tests
+
+## Action
+
+Write unit tests
+
+## Evidence
+
+- Pattern in testing.testTypes: unit
+
+---
+id: ever-jobs-instinct-jest-framework
+trigger: "When configuring or running tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Jest Framework
+
+## Action
+
+Use Jest as the testing framework
+
+## Evidence
+
+- Pattern in testing.framework: jest
+- Presence of jest.config.js
+
+---
+id: ever-jobs-instinct-no-coverage-config
+trigger: "When configuring test coverage"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct No Coverage Config
+
+## Action
+
+Do not add or expect coverage configuration
+
+## Evidence
+
+- Pattern in testing.coverageConfig: false
+
+---
+id: ever-jobs-instinct-try-catch-errors
+trigger: "When handling errors in code"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Try Catch Errors
+
+## Action
+
+Use try-catch blocks for error handling
+
+## Evidence
+
+- Pattern in errorHandling.style: try-catch
+
+---
+id: ever-jobs-instinct-no-custom-errors
+trigger: "When considering custom error classes"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct No Custom Errors
+
+## Action
+
+Do not define custom error classes
+
+## Evidence
+
+- Pattern in errorHandling.customErrorClasses: false
+
+---
+id: ever-jobs-instinct-conventional-commits-feat
+trigger: "When committing a new feature"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Conventional Commits Feat
+
+## Action
+
+Prefix the commit message with feat
+
+## Evidence
+
+- Pattern in commits.prefixes: feat
+- Example: feat(plugin/source-ats-workatastartup): harvest YC Work at a Startup boards (Spec 5023)
+
+---
+id: ever-jobs-instinct-conventional-commits-format
+trigger: "When writing a commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Conventional Commits Format
+
+## Action
+
+Use the format <type>(<scope>): <description>
+
+## Evidence
+
+- Pattern in commits.type: conventional
+- Example: feat(plugin/source-ats-workatastartup): harvest YC Work at a Startup boards (Spec 5023)
+
+---
+id: ever-jobs-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: ever-jobs/ever-jobs
+---
+
+# Ever Jobs Instinct Commit Length
+
+## Action
+
+Aim for commit messages around 87 characters on average
+
+## Evidence
+
+- Pattern in commits.averageLength: 87
+
