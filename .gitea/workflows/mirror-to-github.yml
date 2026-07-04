@@ -1,0 +1,39 @@
+name: Mirror to GitHub
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "fix/**"
+      - "feature/**"
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-to-github-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push branch and tags to GitHub mirror
+        env:
+          GH_MIRROR_TOKEN: ${{ secrets.GITHUBPAT }}
+          GH_MIRROR_REPO: fgrosswig/ever-jobs
+        run: |
+          set -eu
+          if [ -z "${GH_MIRROR_TOKEN}" ]; then
+            echo "GITHUBPAT secret is required"
+            exit 1
+          fi
+
+          BRANCH="${GITHUB_REF_NAME:-${GITHUB_REF#refs/heads/}}"
+          git remote add github-mirror "https://x-access-token:${GH_MIRROR_TOKEN}@github.com/${GH_MIRROR_REPO}.git"
+          git push github-mirror "HEAD:${BRANCH}"
+          git push github-mirror --tags

@@ -1,7 +1,7 @@
 name: Build and Publish Ever Jobs Image
 
 # Builds the Ever Jobs container (API; MCP shares the image) and pushes it to GHCR
-# (ghcr.io/ever-jobs/ever-jobs) using the built-in GITHUB_TOKEN. The k8s-gauzy cluster
+# under the current repository owner using the built-in GITHUB_TOKEN. The k8s-gauzy cluster
 # pulls this image for the INTERNAL (ClusterIP-only) Ever Jobs deployment.
 on:
   push:
@@ -49,9 +49,9 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/ever-jobs/ever-jobs:latest
-            ghcr.io/ever-jobs/ever-jobs:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/ever-jobs/ever-jobs:latest
+            ghcr.io/${{ github.repository_owner }}/ever-jobs:latest
+            ghcr.io/${{ github.repository_owner }}/ever-jobs:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/ever-jobs:latest
           cache-to: type=inline
 
   build-mcp:
@@ -75,7 +75,7 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/ever-jobs/ever-jobs-mcp:latest
-            ghcr.io/ever-jobs/ever-jobs-mcp:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/ever-jobs/ever-jobs-mcp:latest
+            ghcr.io/${{ github.repository_owner }}/ever-jobs-mcp:latest
+            ghcr.io/${{ github.repository_owner }}/ever-jobs-mcp:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/ever-jobs-mcp:latest
           cache-to: type=inline
