@@ -1,12 +1,20 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe, Logger, LogLevel } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 
+function resolveLogLevels(): LogLevel[] {
+  // LOG_LEVEL kumulativ auf den Nest-Logger anwenden (Env wurde bisher gelesen, nie genutzt).
+  const order: LogLevel[] = ['error', 'warn', 'log', 'debug', 'verbose'];
+  const map: Record<string, number> = { error: 0, warn: 1, info: 2, log: 2, debug: 3, verbose: 4 };
+  const idx = map[(process.env.LOG_LEVEL || 'info').toLowerCase()] ?? 2;
+  return order.slice(0, idx + 1);
+}
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { logger: resolveLogLevels() });
   const config = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
