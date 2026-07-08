@@ -7,7 +7,7 @@ import {
   LocationDto, DescriptionFormat, Site,
 } from '@ever-jobs/models';
 import {
-  createHttpClient, markdownConverter, plainConverter, randomSleep, extractEmails,
+  HttpClient, createHttpClient, markdownConverter, plainConverter, randomSleep, extractEmails,
 } from '@ever-jobs/common';
 
 /** Internshala base URLs and selectors */
@@ -82,8 +82,41 @@ export class InternshalaService implements IScraper {
       this.logger.error(`Internshala scrape error: ${err.message}`);
     }
 
+    // Listing cards never carry the real job description (only stipend/duration/
+    // apply-by snippets) — fetch each job's own detail page for the full body.
+    for (const job of jobList) {
+      try {
+        const fullDescription = await this.fetchDescription(client, job.jobUrl, input.descriptionFormat);
+        if (fullDescription) {
+          job.description = job.description ? `${fullDescription}\n\n${job.description}` : fullDescription;
+          job.emails = extractEmails(job.description) ?? job.emails;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Error fetching description for ${job.jobUrl}: ${err.message}`);
+      }
+      await randomSleep(this.delay * 1000, (this.delay + this.bandDelay) * 1000);
+    }
+
     this.logger.log(`Internshala: found ${jobList.length} jobs/internships`);
     return new JobResponseDto(jobList);
+  }
+
+  private async fetchDescription(
+    client: HttpClient,
+    jobUrl: string,
+    format?: DescriptionFormat,
+  ): Promise<string | null> {
+    const resp = await client.get(jobUrl);
+    const $ = cheerio.load(resp.data);
+
+    const el = $('.internship_details .text-container, .detail_view').first();
+    if (!el.length) return null;
+
+    const html = el.html() ?? '';
+    if (format === DescriptionFormat.PLAIN) {
+      return plainConverter(html);
+    }
+    return markdownConverter(html);
   }
 
   private buildSearchUrl(searchTerm: string, input: ScraperInputDto, page: number): string {
@@ -120,9 +153,13 @@ export class InternshalaService implements IScraper {
       || $card.find('a').first().text().trim();
     if (!title) return null;
 
-    // Extract company
-    const companyName = $card.find('.company-name, .company_name, .link_display_like_text').first().text().trim()
-      || $card.find('p.company-name a').text().trim();
+    // Extract company. `.company-name` (the inner <p>) holds just the clean name;
+    // the wrapping `.company_name` div also matches an "Actively hiring" badge
+    // as a child, so it must only be a fallback, never tried first.
+    let companyEl = $card.find('.company-name').first();
+    if (!companyEl.length) companyEl = $card.find('.company_name, .link_display_like_text').first();
+    companyEl.find('.actively-hiring-badge').remove();
+    const companyName = companyEl.text().trim() || $card.find('p.company-name a').text().trim();
 
     // Extract URL
     let jobUrl = $card.find('a.job-title-href, a.view_detail_button, h3 a, a').first().attr('href') ?? '';
@@ -135,8 +172,8 @@ export class InternshalaService implements IScraper {
     const id = `is-${urlHash}`;
 
     // Extract location
-    const locationText = $card.find('.location_link, .individual_location_name, .ic-16-map-marker + span, #location_names span').first().text().trim()
-      || $card.find('.locations').text().trim();
+    const locationText = ($card.find('.location_link, .individual_location_name, .ic-16-map-marker + span, #location_names span').first().text().trim()
+      || $card.find('.locations').text().trim()).replace(/\s+/g, ' ').trim();
 
     const location = new LocationDto({
       city: locationText || undefined,
