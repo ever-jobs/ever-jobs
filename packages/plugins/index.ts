@@ -420,6 +420,7 @@ import { HimalayasModule } from './source-himalayas';
 import { IcrunchdataModule } from './source-icrunchdata';
 import { IndeedModule } from './source-indeed';
 import { InfoJobsModule } from './source-infojobs';
+import { InternshalaModule } from './source-internshala';
 import { IosdevjobsModule } from './source-iosdevjobs';
 import { JobDataApiModule } from './source-jobdataapi';
 import { JsonLdModule } from './source-jsonld';
@@ -2229,6 +2230,7 @@ export const ALL_SOURCE_MODULES = [
   IcrunchdataModule,
   IndeedModule,
   InfoJobsModule,
+  InternshalaModule,
   IosdevjobsModule,
   JobDataApiModule,
   JobicyModule,
