@@ -243,7 +243,12 @@ export class SimplyHiredService implements IScraper, OnModuleDestroy {
   ): Promise<JobPostDto[]> {
     const enriched: JobPostDto[] = [];
 
-    for (const job of jobs) {
+    for (const [index, job] of jobs.entries()) {
+      // Throttle detail-page fetches the same way the SERP loop does (anti-bot / rate-limit
+      // safety) — sleep before every request except the first.
+      if (index > 0) {
+        await randomSleep(SIMPLYHIRED_DELAY_MIN, SIMPLYHIRED_DELAY_MAX);
+      }
       try {
         const response = await client.get<string>(job.jobUrl);
         const detail = this.parseDetailHtml(response.data ?? '', format);
