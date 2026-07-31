@@ -62,6 +62,39 @@ export default () => {
       maxItems: parseInt(process.env.CACHE_MAX_ITEMS, 500),
     },
 
+    // Search fan-out bounds (Spec 5026)
+    search: {
+      /**
+       * Max sources dispatched simultaneously by `JobsService.searchJobs`.
+       * Peak memory is O(concurrency), not O(selected sources).
+       */
+      concurrency: parseInt(process.env.EVER_JOBS_SEARCH_CONCURRENCY, 64),
+      /**
+       * Wall-clock budget for one fan-out, ms. Once exceeded, no further
+       * sources are STARTED (in-flight ones finish). `0` disables.
+       * Defaults to the Hust client's own 120 s abort.
+       */
+      deadlineMs: parseInt(process.env.EVER_JOBS_SEARCH_DEADLINE_MS, 120_000),
+    },
+    // Persistence (Spec 5024 — bounded retention on the interactive path)
+    store: {
+      /**
+       * Persist the post-dedup canonical corpus on every `/api/jobs/search`
+       * (and the GraphQL equivalent). Defaults to `true` — the historical
+       * behaviour. Operators running the `memory` backend SHOULD set
+       * `EVER_JOBS_PERSIST_SEARCH=false`: with an in-process store the write
+       * is a pure sink (nothing in `apps/api` reads the corpus back) and it
+       * pins every job description for the process lifetime.
+       */
+      persistSearch: parseBool(process.env.EVER_JOBS_PERSIST_SEARCH, true),
+      /**
+       * Hard ceiling on rows retained by an in-process store backend.
+       * Bounds RSS regardless of {@link persistSearch}; see
+       * `packages/plugins/store-memory`.
+       */
+      maxRows: parseInt(process.env.EVER_JOBS_STORE_MAX_ROWS, 50_000),
+    },
+
     // Retry policies
     retry: {
       defaultRetries: parseInt(process.env.RETRY_DEFAULT_RETRIES, 3),

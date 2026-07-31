@@ -7,6 +7,14 @@ function createMockCacheManager() {
   return {
     get: jest.fn(async (key: string) => store.get(key) ?? null),
     set: jest.fn(async (key: string, value: any) => { store.set(key, value); }),
+    // cache-manager v6+ (Keyv-based) renamed `reset()` → `clear()`, and
+    // `CacheService.clear()` calls `clear()`. This mock only defined `reset()`,
+    // so the real call hit `undefined`, threw, and was swallowed by the
+    // service's try/catch — making "should clear all entries" fail on a clean
+    // checkout and, worse, implying a production bug that does not exist.
+    // `Cache.clear()` is present in `cache-manager@7`'s type surface
+    // (`dist/index.d.cts`); `reset?()` is the optional legacy alias.
+    clear: jest.fn(async () => { store.clear(); }),
     reset: jest.fn(async () => { store.clear(); }),
     del: jest.fn(async (key: string) => { store.delete(key); }),
     _store: store,

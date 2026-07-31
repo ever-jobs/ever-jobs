@@ -26,6 +26,7 @@ import {
   type ILegitimacyChecker,
   type LegitimacyInput,
 } from '@ever-jobs/models';
+import { ConfigService } from '@nestjs/config';
 import { JobsService } from './jobs.service';
 import { JobsAggregator } from './jobs.aggregator';
 import { AnalyticsService } from '@ever-jobs/analytics';
@@ -41,6 +42,7 @@ export class JobsController {
     private readonly aggregator: JobsAggregator,
     private readonly analyticsService: AnalyticsService,
     private readonly cacheService: CacheService,
+    private readonly configService: ConfigService,
     // Spec 740 — opt-in corpus signals. Optional so the controller boots even if a checker
     // module isn't wired; enrichment is simply skipped when the binding is absent.
     @Optional()
@@ -129,44 +131,69 @@ export class JobsController {
 
     // ── Dedup (Spec 003 / FR-1) ───────────
     const dedup = parseBoolWithDefault(dedupRaw, true);
-    const aggregated = await this.aggregator.aggregateRaw(rawJobs, { dedup });
+    // Spec 5024 — persistence on the interactive path is opt-out via
+    // `EVER_JOBS_PERSIST_SEARCH`. Default stays `true` (historical
+    // behaviour); deployments on the in-process `memory` backend should
+    // disable it, since nothing in `apps/api` reads the corpus back.
+    const persist = this.configService.get<boolean>('store.persistSearch', true);
+    const aggregated = await this.aggregator.aggregateRaw(rawJobs, { dedup, persist });
     const jobs = aggregated.jobs;
 
     this.logger.log(
       `Returning ${jobs.length} jobs (raw=${aggregated.rawCount}, deduped=${aggregated.deduped}, cached=${fromCache})`,
     );
 
-    // ── Corpus signals (Spec 740) — opt-in; zero work on the default path ──
+    // ── Output window (Spec 5025) ─────────
+    // Resolved BEFORE enrichment so corpus signals are computed only for the
+    // records we actually return. Previously the pagination slice happened
+    // *after* `enrichLiveness`, so a `?paginate=true&page_size=25` request over
+    // a 16 000-job corpus issued 16 000 outbound liveness probes and then threw
+    // 15 975 of the verdicts away — minutes to tens of minutes of work, and the
+    // whole corpus pinned in memory for the duration, per request.
+    //
+    // CSV returns the full set, so it keeps the full-corpus window.
+    const isCsv = format?.toLowerCase() === 'csv';
+    const paginate = !isCsv && parseBool(paginateRaw);
+
+    let page = 1;
+    let pageSize = 0;
+    let totalPages = 0;
+    let outputJobs = jobs;
+
+    if (paginate) {
+      page = Math.max(1, parseNum(pageRaw) ?? 1);
+      pageSize = Math.min(100, Math.max(1, parseNum(pageSizeRaw) ?? 10));
+      totalPages = Math.ceil(jobs.length / pageSize);
+      const start = (page - 1) * pageSize;
+      outputJobs = jobs.slice(start, start + pageSize);
+    }
+
+    // ── Corpus signals (Spec 740; scoped by Spec 5025) — opt-in ──
+    // Order matters: legitimacy folds in liveness's off-platform redirect
+    // signal (`job.liveness?.state === 'expired'`), so liveness runs first.
     if (parseBool(livenessRaw) && this.livenessChecker) {
-      await this.enrichLiveness(jobs);
+      await this.enrichLiveness(outputJobs);
     }
     if (parseBool(legitimacyRaw) && this.legitimacyChecker) {
-      this.enrichLegitimacy(jobs);
+      this.enrichLegitimacy(outputJobs);
     }
 
     // ── CSV output ────────────────────────
-    if (format?.toLowerCase() === 'csv') {
-      const csvLines = this.jobsToCsv(jobs);
+    if (isCsv) {
+      const csvLines = this.jobsToCsv(outputJobs);
       res!.setHeader('Content-Type', 'text/csv');
       res!.setHeader('Content-Disposition', 'attachment; filename=jobs.csv');
       return new StreamableFile(Buffer.from(csvLines, 'utf-8'));
     }
 
     // ── Pagination ────────────────────────
-    const paginate = parseBool(paginateRaw);
     if (paginate) {
-      const page = Math.max(1, parseNum(pageRaw) ?? 1);
-      const pageSize = Math.min(100, Math.max(1, parseNum(pageSizeRaw) ?? 10));
-      const totalPages = Math.ceil(jobs.length / pageSize);
-      const start = (page - 1) * pageSize;
-      const pageJobs = jobs.slice(start, start + pageSize);
-
       return {
         count: jobs.length,
         total_pages: totalPages,
         current_page: page,
         page_size: pageSize,
-        jobs: pageJobs,
+        jobs: outputJobs,
         cached: fromCache,
         deduped: aggregated.deduped,
         raw_count: aggregated.rawCount,
@@ -177,9 +204,12 @@ export class JobsController {
     }
 
     // ── Standard JSON ─────────────────────
+    // `outputJobs === jobs` on this path (no pagination window was applied);
+    // referencing it keeps the "enriched set is exactly the returned set"
+    // invariant visible at every exit.
     return {
       count: jobs.length,
-      jobs,
+      jobs: outputJobs,
       cached: fromCache,
       deduped: aggregated.deduped,
       raw_count: aggregated.rawCount,

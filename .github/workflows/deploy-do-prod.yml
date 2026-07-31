@@ -1,0 +1,131 @@
+name: Deploy Ever Jobs to DigitalOcean (Prod)
+
+# Applies `.deploy/k8s/k8s-manifest.prod.yaml` to the k8s-gauzy cluster and rolls
+# the deployment, after the prod image build completes.
+#
+# WHY THIS EXISTS
+# ---------------
+# Until now `docker-build-publish.yml` only pushed the image to GHCR — nothing
+# ever applied the manifest or restarted the pods. The Deployment pins
+# `image: ghcr.io/ever-jobs/ever-jobs:latest` with `imagePullPolicy: Always`, so
+# a freshly-pushed image only reached production when the pod happened to
+# restart — in practice, when it was OOMKilled. That meant:
+#   * manifest changes (env vars, resource limits, NODE_OPTIONS) NEVER applied
+#     without someone running kubectl by hand, and
+#   * code fixes shipped on an unpredictable schedule driven by crashes.
+# Mirrors ever-hust's `deploy-do-prod.yml`, minus the Ingress/TLS and DB-migration
+# steps (Ever Jobs is ClusterIP-only and stateless).
+#
+# REQUIRED SECRET
+# ---------------
+#   EVER_JOBS_KUBECONFIG — full kubeconfig for the do-sfo2-k8s-gauzy cluster,
+#   the same cluster ever-hust reaches via its own HUST_KUBECONFIG secret.
+#   Repo-level OR `prod`-environment-level both resolve here, e.g.:
+#     doctl kubernetes cluster kubeconfig show do-sfo2-k8s-gauzy \
+#       | gh secret set EVER_JOBS_KUBECONFIG -R ever-jobs/ever-jobs
+# When the secret is absent the job exits 0 with a clear notice instead of
+# failing, so the pipeline stays green until an operator provisions it.
+#
+# TWO SEMANTICS WORTH KNOWING
+# ---------------------------
+# 1. `workflow_run` reads its definition from the DEFAULT branch (`develop`),
+#    not from the branch being built. This file therefore only becomes active
+#    once it is merged to `develop` — merging it to `main` alone would do
+#    nothing.
+# 2. `environment: prod` does not exist on this repo yet (ever-hust has one,
+#    ever-jobs does not). GitHub auto-creates it on first run with no
+#    protection rules; add reviewers there later if prod deploys should gate on
+#    a human.
+
+on:
+  workflow_run:
+    # MUST match `name:` in docker-build-publish.yml exactly, or the trigger
+    # silently never fires.
+    workflows: ["Build and Publish Ever Jobs Image"]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # Prod deploys ONLY from main. The workflow_run `branches: [main]` filter
+    # already restricts the trigger; this guard makes the intent explicit and
+    # survives any future change to the build trigger.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for kubeconfig secret
+        id: guard
+        env:
+          KUBECONFIG_SECRET: ${{ secrets.EVER_JOBS_KUBECONFIG }}
+        run: |
+          if [ -z "$KUBECONFIG_SECRET" ]; then
+            echo "::notice::EVER_JOBS_KUBECONFIG is not set — skipping deploy."
+            echo "::notice::Add it (kubeconfig for do-sfo2-k8s-gauzy) to enable automatic rollout."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure kubeconfig
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          EVER_JOBS_KUBECONFIG: ${{ secrets.EVER_JOBS_KUBECONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$EVER_JOBS_KUBECONFIG" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+          kubectl version --client
+          kubectl get deployment ever-jobs-api -o name
+
+      - name: Apply k8s manifest
+        if: steps.guard.outputs.ready == 'true'
+        run: kubectl apply -f .deploy/k8s/k8s-manifest.prod.yaml
+
+      # `kubectl apply` alone will NOT pull a new image when the tag is unchanged
+      # (`:latest`), so the rollout has to be forced explicitly.
+      - name: Roll the deployment
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          kubectl rollout restart deployment/ever-jobs-api
+          kubectl rollout restart deployment/ever-jobs-mcp
+          kubectl rollout status deployment/ever-jobs-api --timeout=300s
+          kubectl rollout status deployment/ever-jobs-mcp --timeout=180s
+
+      # Post-deploy proof, not just "the rollout reported ready". Surfaces the
+      # resolved memory settings so an operator can confirm the manifest actually
+      # took effect, and prints restart/OOM history for the new pod.
+      - name: Verify
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          echo "--- pod state ---"
+          kubectl get pods -l app=ever-jobs-api -o wide
+
+          echo "--- effective memory config ---"
+          kubectl get deployment ever-jobs-api -o jsonpath=\
+          '{.spec.template.spec.containers[0].resources}{"\n"}'
+          kubectl get deployment ever-jobs-api -o jsonpath=\
+          '{range .spec.template.spec.containers[0].env[?(@.name=="NODE_OPTIONS")]}{.value}{"\n"}{end}'
+
+          echo "--- health ---"
+          kubectl exec deploy/ever-jobs-api -- \
+            curl -sS --max-time 10 localhost:3001/health || {
+              echo "::error::/health did not respond after rollout"
+              kubectl logs deploy/ever-jobs-api --tail=100
+              exit 1
+            }
+
+          echo "--- restart history (0 expected on a fresh roll) ---"
+          kubectl get pod -l app=ever-jobs-api -o jsonpath=\
+          '{range .items[*]}{.metadata.name}{" restarts="}{.status.containerStatuses[0].restartCount}{" lastReason="}{.status.containerStatuses[0].lastState.terminated.reason}{"\n"}{end}'

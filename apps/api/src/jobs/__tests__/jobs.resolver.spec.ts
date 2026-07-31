@@ -42,7 +42,14 @@ function createResolver(opts: { jobs?: JobPostDto[]; cachedValue?: any; aggregat
   const jobsService = makeJobsService(opts.jobs ?? []);
   const cacheService = makeCacheService(opts.cachedValue);
   const aggregator = opts.aggregator ?? makePassthroughAggregator();
-  const resolver = new JobsResolver(jobsService as any, aggregator as any, cacheService as any);
+  // Spec 5024 — ConfigService seam (see jobs.controller.spec.ts).
+  const configService = { get: (_key: string, def?: unknown) => def };
+  const resolver = new JobsResolver(
+    jobsService as any,
+    aggregator as any,
+    cacheService as any,
+    configService as any,
+  );
   return { resolver, jobsService, cacheService, aggregator };
 }
 
@@ -140,7 +147,7 @@ describe('JobsResolver', () => {
 
       await resolver.searchJobs(makeInput());
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true });
     });
 
     it('honours dedup: false explicitly', async () => {
@@ -149,7 +156,7 @@ describe('JobsResolver', () => {
 
       await resolver.searchJobs(makeInput({ dedup: false }));
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false, persist: true });
     });
 
     it('honours dedup: true explicitly', async () => {
@@ -158,7 +165,7 @@ describe('JobsResolver', () => {
 
       await resolver.searchJobs(makeInput({ dedup: true }));
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true });
     });
 
     it('runs dedup on cached responses too', async () => {
@@ -168,7 +175,7 @@ describe('JobsResolver', () => {
       await resolver.searchJobs(makeInput());
 
       expect(jobsService.searchJobs).not.toHaveBeenCalled();
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(cachedJobs, { dedup: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(cachedJobs, { dedup: true, persist: true });
     });
 
     it('surfaces dedupMetrics + collapsed count when the engine ran', async () => {

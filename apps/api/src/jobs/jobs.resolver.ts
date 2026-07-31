@@ -1,5 +1,6 @@
 import { Resolver, Query, Args } from '@nestjs/graphql';
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JobPostDto, Site } from '@ever-jobs/models';
 import { JobsService } from './jobs.service';
 import { JobsAggregator } from './jobs.aggregator';
@@ -39,6 +40,7 @@ export class JobsResolver {
     private readonly jobsService: JobsService,
     private readonly aggregator: JobsAggregator,
     private readonly cacheService: CacheService,
+    private readonly configService: ConfigService,
   ) {}
 
   @Query(() => SearchJobsResult, {
@@ -81,7 +83,9 @@ export class JobsResolver {
       await this.cacheService.set(cacheParams, rawJobs);
     }
 
-    const aggregated = await this.aggregator.aggregateRaw(rawJobs, { dedup });
+    // Spec 5024 — same opt-out as the REST path (`EVER_JOBS_PERSIST_SEARCH`).
+    const persist = this.configService.get<boolean>('store.persistSearch', true);
+    const aggregated = await this.aggregator.aggregateRaw(rawJobs, { dedup, persist });
 
     this.logger.log(
       `GraphQL searchJobs: returning ${aggregated.jobs.length} jobs (raw=${aggregated.rawCount}, deduped=${aggregated.deduped}, cached=${fromCache})`,

@@ -52,6 +52,52 @@ export const STORE_MEMORY_DESCRIPTION =
 export const DEFAULT_SNAPSHOT_CAP = 360_000;
 
 /**
+ * Default ceiling for the canonical-job / observation maps (Spec 5024).
+ *
+ * The snapshot ring has been capped since Spec 005 / T09, but `canonicals`
+ * and `observations` were not — and because `JobsAggregator.maybePersist`
+ * defaults `persist` to `true`, every `/api/jobs/search` upserted its whole
+ * post-dedup corpus into them. Each `CanonicalJob` holds its source job's
+ * `description` **by reference**, so an uncapped map pins every job
+ * description ever returned for the lifetime of the process. On a
+ * 4Gi container that is an OOMKill on a timer.
+ *
+ * 50 000 rows × ~3–4 KB/row (markdown descriptions, per Spec 004 / NFR-3's
+ * ≤ 2 KB/job budget plus provenance) ≈ **150–200 MB** worst case — a
+ * defensible ceiling for a backend whose own contract is "dev / tests, no
+ * persistence", and small enough to leave headroom under a 4Gi limit.
+ *
+ * Override per-deployment with `EVER_JOBS_STORE_MAX_ROWS`, or per-instance
+ * via {@link InMemoryJobStore.setRowCap}.
+ */
+export const DEFAULT_ROW_CAP = 50_000;
+
+/**
+ * Environment variable read at construction time for {@link DEFAULT_ROW_CAP}.
+ * Kept as a plugin-local env read (rather than an injected `ConfigService`)
+ * because `StoreModule.forActive` instantiates the backend class directly
+ * with no constructor arguments — the same reason `DEFAULT_SNAPSHOT_CAP`
+ * uses a constant + a setter seam instead of DI.
+ */
+export const STORE_MAX_ROWS_ENV_VAR = 'EVER_JOBS_STORE_MAX_ROWS';
+
+/**
+ * Resolve the row cap from the environment, falling back to
+ * {@link DEFAULT_ROW_CAP} for unset / non-numeric / non-positive values.
+ * Exported for the unit tests, which drive it with a synthetic env map
+ * rather than mutating `process.env`.
+ */
+export function resolveRowCap(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env[STORE_MAX_ROWS_ENV_VAR];
+  if (raw === undefined || raw.trim() === '') return DEFAULT_ROW_CAP;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_ROW_CAP;
+  return Math.floor(n);
+}
+
+/**
  * Stable opaque-cursor envelope (base64-encoded JSON).
  *
  * In-memory backend uses a logical row offset because the dataset is
@@ -209,6 +255,12 @@ export class InMemoryJobStore
    */
   private readonly snapshots: { ts: Date; health: SourceHealth }[] = [];
   private snapshotCap: number = DEFAULT_SNAPSHOT_CAP;
+  /**
+   * Ceiling on {@link canonicals} (and, by cascade, {@link observations}).
+   * Spec 5024. Resolved from `EVER_JOBS_STORE_MAX_ROWS` at construction;
+   * override per-instance with {@link setRowCap}.
+   */
+  private rowCap: number = resolveRowCap();
 
   // ----------------------------------------------------------------------
   // IJobStore
@@ -216,6 +268,7 @@ export class InMemoryJobStore
 
   async upsert(job: CanonicalJob): Promise<CanonicalJob> {
     this.canonicals.set(job.canonicalJobId, job);
+    this.trimRows();
     return job;
   }
 
@@ -232,7 +285,53 @@ export class InMemoryJobStore
       }
       this.canonicals.set(job.canonicalJobId, job);
     }
+    // Trim ONCE after the whole batch, not per row: a single search can
+    // upsert tens of thousands of canonicals, and trimming inside the loop
+    // would be O(n²) against the Map iterator.
+    this.trimRows();
     return { inserted, updated };
+  }
+
+  /**
+   * Enforce {@link rowCap} on {@link canonicals}, cascading into
+   * {@link observations} (Spec 5024).
+   *
+   * Eviction order is **first-insert-first-out, not LRU** — `Map.set` on an
+   * existing key does not move it to the back of the iteration order, so a
+   * hot row that keeps being re-upserted still ages out on its original
+   * insertion position. That is deliberate: this is a safety valve against
+   * unbounded growth on a backend documented as "dev / tests, no
+   * persistence", not a cache eviction policy. Callers that need real
+   * recency semantics should use a durable backend.
+   *
+   * The cascade into `observations` is load-bearing: `putAll` stores a
+   * shallow `.slice()` of the observation array, so dropping a canonical
+   * without dropping its observations would free almost nothing.
+   *
+   * Uses a `while` loop rather than a single `if`, because `upsertMany`
+   * can push the map past the cap by an arbitrary amount in one call.
+   */
+  private trimRows(): void {
+    while (this.canonicals.size > this.rowCap) {
+      const oldest = this.canonicals.keys().next().value;
+      if (oldest === undefined) break;
+      this.canonicals.delete(oldest);
+      this.observations.delete(oldest);
+    }
+
+    // `observations` must ALSO be bounded on its own, not only via the
+    // cascade above. `JobsAggregator.maybePersist` calls `upsertMany(batch)`
+    // and then `putAll(id, …)` for **every** id in that batch — so when a
+    // batch is larger than the cap, the ids `upsertMany` just evicted get
+    // their observations written straight back by the following `putAll`
+    // loop. Those orphans have no canonical to cascade from, so a
+    // cascade-only trim would let `observations` grow without limit and
+    // simply relocate the leak this cap exists to close.
+    while (this.observations.size > this.rowCap) {
+      const oldest = this.observations.keys().next().value;
+      if (oldest === undefined) break;
+      this.observations.delete(oldest);
+    }
   }
 
   async getById(id: string): Promise<CanonicalJob | null> {
@@ -310,6 +409,10 @@ export class InMemoryJobStore
     // (and vice-versa). The dedup engine is the single writer per
     // Spec 003 / FR-1, but defensive copy is cheap (~N pointers).
     this.observations.set(canonicalJobId, observations.slice());
+    // Spec 5024 — `putAll` is a write path into an unbounded Map, so it has to
+    // respect the cap too. See `trimRows()` for why the cascade alone is not
+    // enough when a persisted batch exceeds the cap.
+    this.trimRows();
   }
 
   async listByCanonicalId(
@@ -472,6 +575,40 @@ export class InMemoryJobStore
    * the current ring exceeds the new cap so callers can verify
    * trim-on-overflow behaviour with smaller, faster fixtures.
    */
+  /**
+   * Current row ceiling. Diagnostic seam so an admin endpoint / test can
+   * assert the resolved `EVER_JOBS_STORE_MAX_ROWS` without re-reading env.
+   */
+  get rowCapacity(): number {
+    return this.rowCap;
+  }
+
+  /**
+   * Number of canonical ids currently holding an observation array.
+   * Diagnostic-only seam — `observations` is bounded independently of
+   * `canonicals` (see {@link trimRows}), so it needs its own counter to be
+   * observable.
+   */
+  get observationCount(): number {
+    return this.observations.size;
+  }
+
+  /**
+   * Override the canonical-row cap (Spec 5024). Test seam and escape hatch;
+   * production resolves {@link DEFAULT_ROW_CAP} / `EVER_JOBS_STORE_MAX_ROWS`
+   * at construction. Trims immediately so callers can verify
+   * trim-on-overflow with small fixtures.
+   */
+  setRowCap(cap: number): void {
+    if (typeof cap !== 'number' || !Number.isFinite(cap) || cap <= 0) {
+      throw new RangeError(
+        `setRowCap requires a positive finite number (got ${String(cap)})`,
+      );
+    }
+    this.rowCap = Math.floor(cap);
+    this.trimRows();
+  }
+
   setSnapshotCap(cap: number): void {
     if (typeof cap !== 'number' || !Number.isFinite(cap) || cap <= 0) {
       throw new RangeError(

@@ -9,7 +9,10 @@ import {
 } from '@ever-jobs/models';
 import { runStoreConformance } from '../../../plugin/src/store/__tests__/conformance';
 import {
+  DEFAULT_ROW_CAP,
   InMemoryJobStore,
+  resolveRowCap,
+  STORE_MAX_ROWS_ENV_VAR,
   STORE_MEMORY_DESCRIPTION,
   STORE_MEMORY_ID,
   StoreMemoryModule,
@@ -225,6 +228,133 @@ describe('store-memory plugin (Spec 004 / T06)', () => {
       expect(await store.listByCanonicalId('a')).toHaveLength(1);
       store.clear();
       expect(await store.listByCanonicalId('a')).toEqual([]);
+    });
+  });
+
+  // ----------------------------------------------------------------------
+  // Spec 5024 — bounded canonical/observation retention
+  // ----------------------------------------------------------------------
+
+  describe('row cap (Spec 5024)', () => {
+    const job = (id: string) => ({
+      canonicalJobId: id,
+      title: `title-${id}`,
+      company: 'c',
+      location: 'l',
+      url: `https://example.com/${id}`,
+      sources: [],
+      fields: {},
+      mergedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    it('defaults to DEFAULT_ROW_CAP when the env var is unset', () => {
+      expect(resolveRowCap({})).toBe(DEFAULT_ROW_CAP);
+      expect(resolveRowCap({ [STORE_MAX_ROWS_ENV_VAR]: '' })).toBe(DEFAULT_ROW_CAP);
+      expect(new InMemoryJobStore().rowCapacity).toBe(DEFAULT_ROW_CAP);
+    });
+
+    it('honours EVER_JOBS_STORE_MAX_ROWS and rejects junk values', () => {
+      expect(resolveRowCap({ [STORE_MAX_ROWS_ENV_VAR]: '250' })).toBe(250);
+      expect(resolveRowCap({ [STORE_MAX_ROWS_ENV_VAR]: '250.9' })).toBe(250);
+      expect(resolveRowCap({ [STORE_MAX_ROWS_ENV_VAR]: 'nope' })).toBe(DEFAULT_ROW_CAP);
+      expect(resolveRowCap({ [STORE_MAX_ROWS_ENV_VAR]: '0' })).toBe(DEFAULT_ROW_CAP);
+      expect(resolveRowCap({ [STORE_MAX_ROWS_ENV_VAR]: '-5' })).toBe(DEFAULT_ROW_CAP);
+    });
+
+    it('upsert trims oldest-first once the cap is exceeded', async () => {
+      const store = new InMemoryJobStore();
+      store.setRowCap(3);
+      for (const id of ['a', 'b', 'c', 'd']) await store.upsert(job(id));
+
+      expect(store.size).toBe(3);
+      expect(await store.getById('a')).toBeNull();
+      expect(await store.getById('d')).not.toBeNull();
+    });
+
+    it('upsertMany trims a whole over-cap batch, not just one row', async () => {
+      const store = new InMemoryJobStore();
+      store.setRowCap(2);
+      // A single batch pushes 5 rows past a cap of 2 — an `if` instead of a
+      // `while` would leave 4 rows resident. This is the regression guard.
+      await store.upsertMany(['a', 'b', 'c', 'd', 'e'].map(job));
+
+      expect(store.size).toBe(2);
+      expect(await store.getById('d')).not.toBeNull();
+      expect(await store.getById('e')).not.toBeNull();
+      expect(await store.getById('a')).toBeNull();
+    });
+
+    it('trimming cascades into observations (dropping a canonical alone frees nothing)', async () => {
+      const store = new InMemoryJobStore();
+      store.setRowCap(1);
+      await store.upsert(job('a'));
+      await store.putAll('a', [
+        {
+          site: Site.LINKEDIN,
+          sourceJobId: 's1',
+          url: 'https://example.com/s1',
+          observedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ]);
+      expect(await store.listByCanonicalId('a')).toHaveLength(1);
+
+      await store.upsert(job('b'));
+
+      expect(await store.getById('a')).toBeNull();
+      expect(await store.listByCanonicalId('a')).toEqual([]);
+    });
+
+    it('setRowCap trims immediately and rejects non-positive / non-finite values', async () => {
+      const store = new InMemoryJobStore();
+      await store.upsertMany(['a', 'b', 'c', 'd'].map(job));
+      expect(store.size).toBe(4);
+
+      store.setRowCap(2);
+      expect(store.size).toBe(2);
+      expect(store.rowCapacity).toBe(2);
+
+      expect(() => store.setRowCap(0)).toThrow(RangeError);
+      expect(() => store.setRowCap(-1)).toThrow(RangeError);
+      expect(() => store.setRowCap(Number.NaN)).toThrow(RangeError);
+    });
+
+    it('observations stay bounded when a batch exceeds the cap (orphan write-back)', async () => {
+      // Regression guard for the exact JobsAggregator.maybePersist sequence:
+      //   upsertMany(batch)  → evicts the oldest ids in the batch
+      //   putAll(id, …) for EVERY id in the batch → writes the evicted ids
+      //                                             straight back
+      // A cascade-only trim would let `observations` grow without limit and
+      // just relocate the leak the cap exists to close.
+      const store = new InMemoryJobStore();
+      store.setRowCap(10);
+
+      const observation = (id: string) => ({
+        site: Site.LINKEDIN,
+        sourceJobId: `s-${id}`,
+        url: `https://example.com/${id}`,
+        observedAt: '2026-01-01T00:00:00.000Z',
+      });
+
+      for (let round = 0; round < 5; round++) {
+        const batch = Array.from({ length: 100 }, (_, i) => job(`r${round}-j${i}`));
+        await store.upsertMany(batch);
+        // The aggregator does not filter by what survived the upsert.
+        for (const c of batch) {
+          await store.putAll(c.canonicalJobId, [observation(c.canonicalJobId)]);
+        }
+      }
+
+      expect(store.size).toBeLessThanOrEqual(10);
+      expect(store.observationCount).toBeLessThanOrEqual(10);
+    });
+
+    it('re-upserting an existing id does not grow the map past the cap', async () => {
+      const store = new InMemoryJobStore();
+      store.setRowCap(2);
+      await store.upsertMany([job('a'), job('b')]);
+      await store.upsertMany([job('a'), job('a'), job('b')]);
+
+      expect(store.size).toBe(2);
     });
   });
 
