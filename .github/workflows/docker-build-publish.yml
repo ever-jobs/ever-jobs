@@ -58,11 +58,19 @@ jobs:
           file: ./Dockerfile
           push: true
           platforms: linux/amd64
+          # `:latest` tracks PRODUCTION only.
+          # It used to be pushed from EVERY branch, so it floated to whichever
+          # environment happened to build last — a dev build would silently
+          # claim `:latest`. Nothing on ever-k8s consumes it (all three envs pin
+          # :dev/:stage/:prod, resolved to a digest by ArgoCD Image Updater), but
+          # a floating `:latest` is how mcpserver.ever.works ended up serving a
+          # six-week-old dev image for weeks.
           tags: |
-            ghcr.io/ever-jobs/ever-jobs:latest
             ghcr.io/ever-jobs/ever-jobs:${{ steps.envtag.outputs.tag }}
             ghcr.io/ever-jobs/ever-jobs:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/ever-jobs/ever-jobs:latest
+            ${{ github.ref_name == 'main' && 'ghcr.io/ever-jobs/ever-jobs:latest' || '' }}
+          # Warm from THIS environment's own tag, not the floating `:latest`.
+          cache-from: type=registry,ref=ghcr.io/ever-jobs/ever-jobs:${{ steps.envtag.outputs.tag }}
           cache-to: type=inline
 
   build-mcp:
@@ -95,9 +103,11 @@ jobs:
           file: ./.deploy/mcp/Dockerfile
           push: true
           platforms: linux/amd64
+          # `:latest` tracks PRODUCTION only — see the note on the API image above.
           tags: |
-            ghcr.io/ever-jobs/ever-jobs-mcp:latest
             ghcr.io/ever-jobs/ever-jobs-mcp:${{ steps.envtag.outputs.tag }}
             ghcr.io/ever-jobs/ever-jobs-mcp:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/ever-jobs/ever-jobs-mcp:latest
+            ${{ github.ref_name == 'main' && 'ghcr.io/ever-jobs/ever-jobs-mcp:latest' || '' }}
+          # Warm from THIS environment's own tag, not the floating `:latest`.
+          cache-from: type=registry,ref=ghcr.io/ever-jobs/ever-jobs-mcp:${{ steps.envtag.outputs.tag }}
           cache-to: type=inline
