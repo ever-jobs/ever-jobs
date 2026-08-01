@@ -52,9 +52,35 @@ spec:
               value: "production"
             - name: PORT
               value: "3001"
-            # Raise V8 heap — aggregating 160+ sources per search builds a large heap.
+            # V8 old-space ceiling. MUST leave headroom under `limits.memory` below.
+            #
+            # This was 3584 MiB against a 4096 MiB cgroup limit — 87.5%, leaving only
+            # ~512 MiB for everything V8's old space does NOT account for: the young
+            # generation, code/metadata space, and (dominant here) EXTERNAL memory —
+            # the HTTP response Buffers held by a wide scraper fan-out are off-heap.
+            #
+            # The practical consequence was that RSS crossed 4096 MiB while old space
+            # was still under 3584 MiB, so the kernel SIGKILLed the container (exit
+            # 137) before V8 ever felt enough pressure to run an emergency full GC.
+            # That is why the OOM presented as a silent restart with no
+            # `JavaScript heap out of memory` stack in the logs.
+            #
+            # 2560 MiB + young gen + ~400 MiB external ≈ 3.1 GiB, comfortably under
+            # 4 GiB → V8 now hits ITS limit first, so an OOM produces a real
+            # `FATAL ERROR: JavaScript heap out of memory` in the logs instead of a
+            # silent exit-137 SIGKILL.
+            #
+            # `--heapsnapshot-near-heap-limit=1` was considered and deliberately
+            # NOT enabled: it writes a multi-hundred-MB snapshot into the
+            # container's writable layer at the exact moment of memory pressure.
+            # That layer has no `ephemeral-storage` request/limit and no volume,
+            # so the write counts against the node's disk, can trigger
+            # disk-pressure eviction, and is destroyed on restart anyway — a
+            # diagnostic that makes the failure worse and then loses its own
+            # output. If a snapshot is ever needed, add an emptyDir mount plus
+            # ephemeral-storage bounds and point the flag at it deliberately.
             - name: NODE_OPTIONS
-              value: "--max-old-space-size=3584"
+              value: "--max-old-space-size=2560"
             # Cluster-internal only (ClusterIP, no ingress) → no API-key auth / rate limit needed.
             - name: ENABLE_API_KEY_AUTH
               value: "false"
@@ -62,6 +88,25 @@ spec:
               value: "false"
             - name: ENABLE_CACHE
               value: "true"
+            # ── Store retention (Spec 5024) ──────────────────────────────
+            # `EVER_JOBS_STORE` is unset, which resolves to the `memory` backend —
+            # documented as "dev / tests, no persistence". Combined with
+            # `JobsAggregator.maybePersist` defaulting `persist` to true, every
+            # search was upserting its whole post-dedup corpus into two Maps that
+            # nothing evicted, pinning a full markdown description per row for the
+            # process lifetime. Nothing in apps/api ever reads the corpus back
+            # (`listByQuery` / `getById` / `findByCanonicalId` have no non-test
+            # callers), so this is a pure write-only sink.
+            #
+            # Turn the interactive write off, and keep an explicit cap as the
+            # belt-and-braces bound for any other writer.
+            #
+            # NOTE: both vars are no-ops until Spec 5024 ships (unknown env vars are
+            # simply ignored), so this manifest is safe to apply in either order.
+            - name: EVER_JOBS_PERSIST_SEARCH
+              value: "false"
+            - name: EVER_JOBS_STORE_MAX_ROWS
+              value: "50000"
             - name: LOG_LEVEL
               value: "info"
             - name: CORS_ORIGINS
@@ -69,8 +114,14 @@ spec:
           resources:
             requests:
               cpu: "200m"
-              memory: "1Gi"
-            # Aggregating 160+ sources builds a large V8 heap — generous ceiling (matches NODE_OPTIONS).
+              # Raised 1Gi → 2Gi. A 1Gi request against a 4Gi limit puts this pod
+              # deep in Burstable QoS, making it an early eviction candidate under
+              # node memory pressure — a second, differently-shaped restart path
+              # that muddies OOM triage. The steady-state floor (1 816 plugin
+              # modules + Nest DI + prom-client) is already ~300-400 MiB before a
+              # single request, so 1Gi was under-requesting regardless.
+              memory: "2Gi"
+            # Ceiling stays 4Gi; NODE_OPTIONS above now leaves real headroom under it.
             limits:
               memory: "4Gi"
           readinessProbe:

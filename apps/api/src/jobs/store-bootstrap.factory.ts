@@ -1,4 +1,4 @@
-import { Type } from '@nestjs/common';
+import { Logger, Type } from '@nestjs/common';
 import { ERR_STORE_NOT_FOUND, IJobStore } from '@ever-jobs/models';
 import { StoreRegistryError } from '@ever-jobs/plugin';
 import { InMemoryJobStore } from '@ever-jobs/store-memory';
@@ -152,6 +152,26 @@ export function resolveStoreBootstrap(
         `Known ids: [${KNOWN_STORE_IDS.join(', ')}]. ` +
         `Set ${EVER_JOBS_STORE_ENV_VAR} to one of those, or unset it to use the default ('${DEFAULT_STORE_ID}').`,
       ERR_STORE_NOT_FOUND,
+    );
+  }
+
+  // Spec 5024 — the `memory` backend is documented as "dev / tests, no
+  // persistence" and retains every persisted row in-process. Reaching it by
+  // *omission* in a production deployment is almost always an accident, and
+  // it presents as a slow OOMKill rather than an obvious failure. Warn loudly
+  // at bootstrap so it shows up in startup logs instead of in a post-mortem.
+  // Deliberately a warning, not a throw: `memory` is a legitimate choice for
+  // a stateless deployment that also sets `EVER_JOBS_PERSIST_SEARCH=false`.
+  if (id === DEFAULT_STORE_ID && env.NODE_ENV === 'production') {
+    const explicit = trimmed.length > 0;
+    new Logger('StoreBootstrap').warn(
+      `${EVER_JOBS_STORE_ENV_VAR} resolved to '${DEFAULT_STORE_ID}'` +
+        `${explicit ? '' : ` (unset — defaulted)`} while NODE_ENV=production. ` +
+        `The in-memory backend keeps every persisted canonical job and observation ` +
+        `in the process heap for its lifetime. Set EVER_JOBS_PERSIST_SEARCH=false ` +
+        `to stop the interactive search path writing to it, bound it with ` +
+        `EVER_JOBS_STORE_MAX_ROWS, or select a durable backend via ` +
+        `${EVER_JOBS_STORE_ENV_VAR}.`,
     );
   }
 

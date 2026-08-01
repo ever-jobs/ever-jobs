@@ -56,11 +56,15 @@ function createController(opts: { jobs?: JobPostDto[]; cachedValue?: any; aggreg
   const analyticsService = makeAnalyticsService();
   const cacheService = makeCacheService(opts.cachedValue);
   const aggregator = opts.aggregator ?? makePassthroughAggregator();
+  // Spec 5024 — ConfigService seam. Returning the caller's default keeps
+  // `store.persistSearch` at its `true` default for these cases.
+  const configService = { get: (_key: string, def?: unknown) => def };
   const controller = new JobsController(
     jobsService as any,
     aggregator as any,
     analyticsService as any,
     cacheService as any,
+    configService as any,
   );
   return { controller, jobsService, cacheService, analyticsService, aggregator };
 }
@@ -209,6 +213,8 @@ describe('JobsController', () => {
         undefined,
         undefined,
         undefined,    // dedup
+        undefined,    // liveness  (Spec 740)
+        undefined,    // legitimacy (Spec 740)
         mockRes as any,
       );
 
@@ -222,6 +228,71 @@ describe('JobsController', () => {
     });
   });
 
+  describe('POST /search — persist flag (Spec 5024)', () => {
+    /** Build a controller whose ConfigService reports a given store.persistSearch. */
+    function createWithPersist(persistSearch: boolean, jobs: JobPostDto[]) {
+      const jobsService = makeJobsService(jobs);
+      const analyticsService = makeAnalyticsService();
+      const cacheService = makeCacheService(undefined);
+      const aggregator = makePassthroughAggregator();
+      const configService = {
+        get: (key: string, def?: unknown) =>
+          key === 'store.persistSearch' ? persistSearch : def,
+      };
+      const controller = new JobsController(
+        jobsService as any,
+        aggregator as any,
+        analyticsService as any,
+        cacheService as any,
+        configService as any,
+      );
+      return { controller, aggregator };
+    }
+
+    it('passes persist=true by default (historical behaviour)', async () => {
+      const jobs = [makeJob()];
+      const { controller, aggregator } = createWithPersist(true, jobs);
+
+      await controller.searchJobs(new ScraperInputDto({ searchTerm: 'engineer' }));
+
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, {
+        dedup: true,
+        persist: true,
+      });
+    });
+
+    it('passes persist=false when EVER_JOBS_PERSIST_SEARCH is disabled', async () => {
+      const jobs = [makeJob()];
+      const { controller, aggregator } = createWithPersist(false, jobs);
+
+      await controller.searchJobs(new ScraperInputDto({ searchTerm: 'engineer' }));
+
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, {
+        dedup: true,
+        persist: false,
+      });
+    });
+
+    it('the persist flag is independent of the dedup flag', async () => {
+      const jobs = [makeJob()];
+      const { controller, aggregator } = createWithPersist(false, jobs);
+
+      await controller.searchJobs(
+        new ScraperInputDto({ searchTerm: 'engineer' }),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'false', // dedup=false
+      );
+
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, {
+        dedup: false,
+        persist: false,
+      });
+    });
+  });
+
   describe('POST /search — dedup flag (Spec 003 / T14)', () => {
     it('defaults dedup=true when query param is absent', async () => {
       const jobs = [makeJob()];
@@ -231,7 +302,7 @@ describe('JobsController', () => {
         new ScraperInputDto({ searchTerm: 'node' }),
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true });
     });
 
     it('honours dedup=false explicitly', async () => {
@@ -247,7 +318,7 @@ describe('JobsController', () => {
         'false',      // dedup
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false, persist: true });
     });
 
     it('honours dedup=0 explicitly', async () => {
@@ -263,7 +334,7 @@ describe('JobsController', () => {
         '0',
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false, persist: true });
     });
 
     it('honours dedup=true explicitly', async () => {
@@ -279,7 +350,7 @@ describe('JobsController', () => {
         'true',
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true });
     });
 
     it('falls back to dedup=true on garbage values', async () => {
@@ -295,7 +366,7 @@ describe('JobsController', () => {
         'not-a-bool',
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true });
     });
 
     it('runs dedup on cached responses too', async () => {
@@ -307,7 +378,7 @@ describe('JobsController', () => {
       );
 
       expect(jobsService.searchJobs).not.toHaveBeenCalled();
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(cachedJobs, { dedup: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(cachedJobs, { dedup: true, persist: true });
     });
 
     it('caches RAW jobs (pre-dedup) so cache invalidation is independent of engine version', async () => {

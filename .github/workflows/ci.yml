@@ -181,14 +181,34 @@ jobs:
       - name: Verify Docker health
         run: |
           docker run -d --name ever-jobs-test -p 3001:3001 ever-jobs-api:ci
-          sleep 10
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/health || true)
-          docker logs ever-jobs-test
-          docker stop ever-jobs-test
-          docker rm ever-jobs-test
+
+          # Poll instead of a flat `sleep 10`. Bootstrap instantiates ~1,800
+          # plugin modules and (at DEBUG) logs one line per source, which on a
+          # slower runner takes well over 10s — the old fixed sleep raced that
+          # and failed with HTTP 000 (connection refused, i.e. not listening
+          # yet) rather than a real health failure. This flake gets strictly
+          # worse with every plugin batch we add.
+          STATUS=000
+          for i in $(seq 1 45); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/health || true)
+            [ "$STATUS" = "200" ] && break
+            # Fail fast if the container died — no point polling a corpse.
+            if [ "$(docker inspect -f '{{.State.Running}}' ever-jobs-test 2>/dev/null)" != "true" ]; then
+              echo "Container exited during startup"
+              break
+            fi
+            sleep 2
+          done
+
           if [ "$STATUS" = "200" ]; then
-            echo "Health check passed (HTTP $STATUS)"
+            echo "Health check passed (HTTP $STATUS) after ~$((i * 2))s"
           else
             echo "Health check failed (HTTP $STATUS)"
-            exit 1
+            echo "--- container logs ---"
+            docker logs ever-jobs-test
           fi
+
+          docker stop ever-jobs-test >/dev/null 2>&1 || true
+          docker rm ever-jobs-test >/dev/null 2>&1 || true
+
+          [ "$STATUS" = "200" ] || exit 1
