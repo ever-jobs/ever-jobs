@@ -3,6 +3,29 @@ name: Deploy Ever Jobs to DigitalOcean (Prod)
 # Applies `.deploy/k8s/k8s-manifest.prod.yaml` to the k8s-gauzy cluster and rolls
 # the deployment, after the prod image build completes.
 #
+# 🛑 GATED OFF — THIS IS NOT HOW EVER JOBS DEPLOYS TODAY (2026-08-01)
+# -------------------------------------------------------------------
+# The DigitalOcean cluster this targets NO LONGER EXISTS. Both recorded
+# endpoints resolve NXDOMAIN and the DO account is locked:
+#   24ade94c-….k8s.ondigitalocean.com (gauzy)   → NXDOMAIN
+#   47bfa4a3-….k8s.ondigitalocean.com (ever)    → NXDOMAIN
+#
+# Ever Jobs now runs on the SELF-HOSTED `ever-k8s` cluster in namespaces
+# ever-jobs-{dev,stage,prod}, deployed by ArgoCD from `ever-co/k8s-gitops`
+# (path `apps/ever-jobs-*`, automated sync + selfHeal). The image is rolled by
+# ArgoCD Image Updater, which resolves the `:dev`/`:stage`/`:prod` tag to a
+# digest and writes it back to Git. So:
+#   * to change config → edit `ever-co/k8s-gitops`, NOT this manifest;
+#   * to ship code     → merge to develop/stage/main and let
+#                        `docker-build-publish.yml` push the tag.
+# `.deploy/k8s/k8s-manifest.prod.yaml` is retained as the DO-era reference but
+# is NOT applied anywhere.
+#
+# Retained rather than deleted (no-removal rule): if a DigitalOcean target ever
+# comes back, set repo/org variable DO_ENABLED=true and provision
+# EVER_JOBS_KUBECONFIG. This mirrors how ever-hust gates its own
+# deploy-do-{prod,stage}.yml.
+#
 # WHY THIS EXISTS
 # ---------------
 # Until now `docker-build-publish.yml` only pushed the image to GHCR — nothing
@@ -55,11 +78,14 @@ permissions:
 
 jobs:
   deploy:
+    # `vars.DO_ENABLED == 'true'` is the kill switch: the DigitalOcean cluster is
+    # gone, so without it this job would keep reporting GREEN while deploying
+    # nothing — a skip that reads like a success is worse than a failure.
     # Prod deploys ONLY from main. The workflow_run `branches: [main]` filter
     # already restricts the trigger; this guard makes the intent explicit and
     # survives any future change to the build trigger.
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
-    runs-on: ubuntu-latest
+    if: ${{ vars.DO_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')) }}
+    runs-on: ${{ vars.RUNNER_LINUX_X64_4 || 'ubuntu-latest' }}
     environment: prod
     steps:
       - name: Checkout
