@@ -13,6 +13,7 @@ import {
 } from '@ever-jobs/models';
 import { canonicalJobId, canonicalKey, normalizeCompany, normalizeLocation, normalizeTitle } from '@ever-jobs/common';
 
+import { YieldBudget, yieldToEventLoop } from './cooperative';
 import { HashStrategy } from './strategies/hash-strategy';
 import { MinHashStrategy } from './strategies/minhash-strategy';
 import { ClusterPartition, DedupHybridOptions, IDedupStrategy, PreparedJob } from './types';
@@ -34,6 +35,20 @@ import { UnionFind } from './union-find';
  *  - emits one `CanonicalJob` per cluster, picking the first observation as
  *    the field winner (replaced by `IMergeResolver` when Phase 4 lands)
  *  - returns a `DedupResult` envelope with assignments + metrics
+ *
+ * ## Cooperative scheduling
+ *
+ * Every pass below hands the event loop back once it has held it for
+ * `DEFAULT_YIELD_BUDGET_MS` (see `./cooperative`). Without that, a ~6 900-job
+ * batch is ~10.6 s of uninterrupted synchronous CPU on the same thread that
+ * serves `GET /health`, which is what made Kubernetes' liveness probe kill the
+ * pod. The yields change no output — every structure the passes touch is local
+ * to the call.
+ *
+ * 🛑 `DedupMetrics.elapsedMs` is, and remains, **wall clock**. With yields it
+ * now also counts the time the loop spent serving other requests, so under
+ * concurrency it reads *higher* than the CPU the pass actually consumed. Read
+ * it as "how long the caller waited", not "how much CPU dedup burned".
  */
 @Injectable()
 export class DedupHybridService implements IDedupEngine {
@@ -51,10 +66,19 @@ export class DedupHybridService implements IDedupEngine {
     const errors: DedupInputError[] = [];
     const prepared: PreparedJob[] = [];
     const inputCount = jobs.length;
+    const budget = new YieldBudget();
 
     // Pass 1 — validate + prepare. We keep `prepared` indices contiguous so
     // strategies can use a typed-array Union-Find later.
     for (let i = 0; i < inputCount; i++) {
+      // Yield checkpoint — `canonicalKey` + `canonicalJobId` normalise three
+      // fields twice and sha-256 the result: ~25 us per input, i.e. ~175 ms
+      // for a 6 900-job batch. Well under the probe timeout on its own, but
+      // free to slice and it keeps every pass under one bound.
+      if (budget.expired) {
+        await yieldToEventLoop();
+        budget.renew();
+      }
       const raw = jobs[i];
       if (!raw || !raw.title || !raw.companyName) {
         if (this.options.rejectInvalid) {
@@ -87,7 +111,14 @@ export class DedupHybridService implements IDedupEngine {
       indexToPos.set(prepared[pos].index, pos);
     }
     for (const strategy of this.strategies) {
-      const partition: ClusterPartition = strategy.cluster(prepared);
+      // Prefer the cooperative variant when a strategy offers one. `HashStrategy`
+      // does not (its pass is O(N) map inserts, ~1 ms for 7 K inputs);
+      // `MinHashStrategy` does, and it is the ~10 s pass this whole mechanism
+      // exists for.
+      const partition: ClusterPartition = strategy.clusterAsync
+        ? await strategy.clusterAsync(prepared)
+        : strategy.cluster(prepared);
+      budget.renew();
       for (const cluster of partition.clusters) {
         if (cluster.length < 2) continue;
         const headPos = indexToPos.get(cluster[0]);
@@ -106,6 +137,13 @@ export class DedupHybridService implements IDedupEngine {
     const assignments: (string | null)[] = new Array(inputCount).fill(null);
 
     for (const cluster of clusters) {
+      // Yield checkpoint — materialisation re-normalises title/company/location
+      // per cluster head (~10 us) and allocates a `CanonicalJob`; a
+      // mostly-unique 7 K batch emits ~7 K of them.
+      if (budget.expired) {
+        await yieldToEventLoop();
+        budget.renew();
+      }
       const observations: SourceObservation[] = [];
       const head = prepared[cluster[0]];
       const fields: Record<string, FieldWithProvenance<unknown>> = {};
