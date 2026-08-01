@@ -61,7 +61,55 @@ export class DedupHybridService implements IDedupEngine {
     rejectInvalid: true,
   };
 
+  /**
+   * Tail of the serialisation chain — see {@link dedup}. Never rejects: each
+   * link is resolved from a `finally`, so one failed pass cannot wedge the
+   * queue for every later caller.
+   */
+  private tail: Promise<void> = Promise.resolve();
+
+  /**
+   * Deduplicate a fan-out result. **Passes are serialised.**
+   *
+   * 🛑 The serialisation is load-bearing and exists *because* of the yields.
+   * Before them, a pass held the thread start-to-finish, so two concurrent
+   * `dedup()` calls were serialised by the runtime and only ever one working
+   * set (`slots`, `buckets`, signatures) was live. Yielding removes that
+   * accidental mutual exclusion: without this gate, K concurrent passes keep K
+   * working sets resident simultaneously — measured +17 % peak heap at K=4 and
+   * +67 % (+117 MB) at K=8 on a 2 500-job batch, and production batches are
+   * ~10x that.
+   *
+   * This service runs with `--max-old-space-size=2560` in a 4Gi container and
+   * has already aborted with `FATAL ERROR: Reached heap limit` (exit 139), so
+   * trading peak heap for concurrency is exactly the wrong trade here. The
+   * gate restores the old memory profile while keeping the win that motivated
+   * the yields: the pass that holds the gate still hands the event loop back
+   * every `DEFAULT_YIELD_BUDGET_MS`, so `GET /health` — and every other
+   * request — is served throughout.
+   *
+   * Queuing cost is negligible in practice: this endpoint serves a handful of
+   * searches an hour and the fan-out that produces the input already takes
+   * ~150 s, dwarfing any wait here.
+   */
   async dedup(jobs: ReadonlyArray<JobPostDto>): Promise<DedupResult> {
+    const prior = this.tail;
+    let release!: () => void;
+    this.tail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // `prior` can never reject (see `tail`), but stay defensive: a poisoned
+    // chain would turn a single bad batch into a permanent outage.
+    await prior.catch(() => undefined);
+    try {
+      return await this.dedupExclusive(jobs);
+    } finally {
+      release();
+    }
+  }
+
+  /** The pass itself. Only ever entered by one caller at a time — see {@link dedup}. */
+  private async dedupExclusive(jobs: ReadonlyArray<JobPostDto>): Promise<DedupResult> {
     const start = Date.now();
     const errors: DedupInputError[] = [];
     const prepared: PreparedJob[] = [];

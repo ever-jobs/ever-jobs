@@ -67,17 +67,50 @@ function description(seed: number): string {
   return `${words.join(" ")} req-${seed}`;
 }
 
+/** Size of each near-duplicate group: one head + `CLUSTER_SPAN - 1` members. */
+const CLUSTER_SPAN = 5;
+
+/**
+ * A near-duplicate of `head`'s description: the same prose with ~4 % of its
+ * tokens swapped, which lands well inside the MinHash similarity threshold.
+ *
+ * 🛑 Load-bearing for tests 2 and 3. An earlier version of this fixture drew
+ * every token at random, so NO two postings were near-duplicates, `cluster()`
+ * returned `{clusters: []}`, and the equality/determinism assertions compared
+ * an empty partition to itself — they passed against a `clusterAsync` that
+ * unconditionally returned `{clusters: []}`. With real clusters those tests
+ * exercise the LSH pair loop and the component-emit path, which are exactly
+ * the checkpoints the cooperative pass adds. `expect(...clusters.length)` in
+ * test 2 is the guard that stops this silently regressing again.
+ */
+function nearDuplicate(headSeed: number, variant: number): string {
+  const base = description(headSeed).split(" ");
+  const rnd = mulberry32(headSeed * 1000 + variant);
+  const swaps = Math.max(1, Math.floor(base.length * 0.04));
+  for (let s = 0; s < swaps; s++) {
+    base[Math.floor(rnd() * base.length)] =
+      VOCAB[Math.floor(rnd() * VOCAB.length)];
+  }
+  return base.join(" ");
+}
+
 function buildBatch(size: number): JobPostDto[] {
   const out: JobPostDto[] = [];
   for (let i = 0; i < size; i++) {
+    const headSeed = i - (i % CLUSTER_SPAN);
+    const variant = i % CLUSTER_SPAN;
     out.push(
       new JobPostDto({
         id: String(i),
-        title: `Engineer ${i}`,
-        companyName: `Company ${i}`,
+        title: `Engineer ${headSeed}`,
+        companyName: `Company ${headSeed}`,
         jobUrl: `https://e.test/${i}`,
         site: i % 2 === 0 ? Site.GREENHOUSE : Site.LINKEDIN,
-        description: description(i),
+        // Heads keep a wholly distinct description so the batch stays
+        // signature-dominated (that is what makes the pass slow); members are
+        // near-duplicates of their head so real clusters actually form.
+        description:
+          variant === 0 ? description(i) : nearDuplicate(headSeed, variant),
         location: new LocationDto({
           city: "Remote",
           state: "",
@@ -167,7 +200,74 @@ describe("dedup — event-loop liveness", () => {
     const sync = strategy.cluster(input);
     const cooperative = await strategy.clusterAsync(input);
 
+    // 🛑 ANTI-VACUITY GUARD — assert BEFORE the equality, or this test is
+    // worthless. With a fixture of wholly-distinct descriptions both sides are
+    // `{clusters: []}` and the comparison passes against a `clusterAsync` that
+    // returns a hard-coded empty partition (verified by mutation). Real
+    // clusters are what force the LSH pair loop and the component-emit path —
+    // the two checkpoints nothing else in the suite reaches.
+    expect(sync.clusters.length).toBeGreaterThan(10);
+    expect(sync.clusters.some((c) => c.length >= 2)).toBe(true);
+
     expect(JSON.stringify(cooperative)).toEqual(JSON.stringify(sync));
+  }, 60_000);
+
+  it("serialises concurrent passes so only one working set is ever resident", async () => {
+    // The yields removed the accidental mutual exclusion a fully synchronous
+    // pass used to provide, so dedup() gates itself. Without the gate K
+    // concurrent passes hold K working sets (slots, buckets, signatures) live
+    // at once - measured +67% peak heap at K=8 - which is the wrong trade for a
+    // service that has aborted with "Reached heap limit".
+    //
+    // Counting callers of dedup() would prove nothing: they all enter, then
+    // queue. What matters is concurrent occupancy of the CLUSTERING pass, which
+    // is what actually holds the memory, so that is what this counts.
+    const realClusterAsync = MinHashStrategy.prototype.clusterAsync;
+    let inside = 0;
+    let maxInside = 0;
+    const spy = jest
+      .spyOn(MinHashStrategy.prototype, "clusterAsync")
+      .mockImplementation(async function (
+        this: MinHashStrategy,
+        input: ReadonlyArray<PreparedJob>,
+      ) {
+        inside++;
+        if (inside > maxInside) maxInside = inside;
+        try {
+          return await realClusterAsync.call(this, input);
+        } finally {
+          inside--;
+        }
+      });
+
+    try {
+      const service = new DedupHybridService();
+      const batch = buildBatch(200);
+      await Promise.all([
+        service.dedup(batch),
+        service.dedup(batch),
+        service.dedup(batch),
+        service.dedup(batch),
+      ]);
+
+      // 4 without the gate, 1 with it.
+      expect(maxInside).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
+  }, 120_000);
+
+  it("a failing pass does not wedge the queue for later callers", async () => {
+    // The gate is a promise chain; if a rejected link were awaited unguarded,
+    // one bad batch would deadlock every later search for the pod's lifetime.
+    const service = new DedupHybridService();
+
+    await expect(
+      service.dedup(undefined as unknown as ReadonlyArray<JobPostDto>),
+    ).rejects.toBeDefined();
+
+    const after = await service.dedup(buildBatch(20));
+    expect(after.metrics.inputCount).toBe(20);
   }, 60_000);
 
   it("a cooperative pass is still deterministic when interleaved with another", async () => {
@@ -182,6 +282,10 @@ describe("dedup — event-loop liveness", () => {
       service.dedup(batch),
       service.dedup(batch),
     ]);
+
+    // Anti-vacuity: the batch must actually merge, or "deterministic" is
+    // trivially true for three empty results.
+    expect(solo.metrics.outputCount).toBeLessThan(batch.length);
 
     expect(a.assignments).toEqual(solo.assignments);
     expect(b.assignments).toEqual(solo.assignments);
