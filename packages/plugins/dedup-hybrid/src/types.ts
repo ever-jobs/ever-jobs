@@ -32,6 +32,22 @@ export interface ClusterPartition {
 export interface IDedupStrategy {
   readonly name: string;
   cluster(input: ReadonlyArray<PreparedJob>): ClusterPartition;
+  /**
+   * Optional cooperative variant of {@link cluster}: **identical output**, but
+   * it hands the event loop back (`setImmediate`) roughly every
+   * `DEFAULT_YIELD_BUDGET_MS` of CPU so the process keeps answering
+   * `GET /health` while a large batch clusters.
+   *
+   * `DedupHybridService` calls this when a strategy provides it and falls back
+   * to the synchronous {@link cluster} otherwise, so implementing it is
+   * strictly opt-in — a strategy whose pass is already short (e.g.
+   * `HashStrategy`, O(N) map inserts) has no reason to.
+   *
+   * Implementations MUST return the same partition as `cluster` for the same
+   * input; the intended shape is one generator body driven by both entry
+   * points, so there is no second copy of the algorithm to drift.
+   */
+  clusterAsync?(input: ReadonlyArray<PreparedJob>): Promise<ClusterPartition>;
 }
 
 /**

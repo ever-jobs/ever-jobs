@@ -13,6 +13,7 @@ import {
 } from '@ever-jobs/models';
 import { canonicalJobId, canonicalKey, normalizeCompany, normalizeLocation, normalizeTitle } from '@ever-jobs/common';
 
+import { YieldBudget, yieldToEventLoop } from './cooperative';
 import { HashStrategy } from './strategies/hash-strategy';
 import { MinHashStrategy } from './strategies/minhash-strategy';
 import { ClusterPartition, DedupHybridOptions, IDedupStrategy, PreparedJob } from './types';
@@ -34,6 +35,20 @@ import { UnionFind } from './union-find';
  *  - emits one `CanonicalJob` per cluster, picking the first observation as
  *    the field winner (replaced by `IMergeResolver` when Phase 4 lands)
  *  - returns a `DedupResult` envelope with assignments + metrics
+ *
+ * ## Cooperative scheduling
+ *
+ * Every pass below hands the event loop back once it has held it for
+ * `DEFAULT_YIELD_BUDGET_MS` (see `./cooperative`). Without that, a ~6 900-job
+ * batch is ~10.6 s of uninterrupted synchronous CPU on the same thread that
+ * serves `GET /health`, which is what made Kubernetes' liveness probe kill the
+ * pod. The yields change no output — every structure the passes touch is local
+ * to the call.
+ *
+ * 🛑 `DedupMetrics.elapsedMs` is, and remains, **wall clock**. With yields it
+ * now also counts the time the loop spent serving other requests, so under
+ * concurrency it reads *higher* than the CPU the pass actually consumed. Read
+ * it as "how long the caller waited", not "how much CPU dedup burned".
  */
 @Injectable()
 export class DedupHybridService implements IDedupEngine {
@@ -46,15 +61,72 @@ export class DedupHybridService implements IDedupEngine {
     rejectInvalid: true,
   };
 
+  /**
+   * Tail of the serialisation chain — see {@link dedup}. Never rejects: each
+   * link is resolved from a `finally`, so one failed pass cannot wedge the
+   * queue for every later caller.
+   */
+  private tail: Promise<void> = Promise.resolve();
+
+  /**
+   * Deduplicate a fan-out result. **Passes are serialised.**
+   *
+   * 🛑 The serialisation is load-bearing and exists *because* of the yields.
+   * Before them, a pass held the thread start-to-finish, so two concurrent
+   * `dedup()` calls were serialised by the runtime and only ever one working
+   * set (`slots`, `buckets`, signatures) was live. Yielding removes that
+   * accidental mutual exclusion: without this gate, K concurrent passes keep K
+   * working sets resident simultaneously — measured +17 % peak heap at K=4 and
+   * +67 % (+117 MB) at K=8 on a 2 500-job batch, and production batches are
+   * ~10x that.
+   *
+   * This service runs with `--max-old-space-size=2560` in a 4Gi container and
+   * has already aborted with `FATAL ERROR: Reached heap limit` (exit 139), so
+   * trading peak heap for concurrency is exactly the wrong trade here. The
+   * gate restores the old memory profile while keeping the win that motivated
+   * the yields: the pass that holds the gate still hands the event loop back
+   * every `DEFAULT_YIELD_BUDGET_MS`, so `GET /health` — and every other
+   * request — is served throughout.
+   *
+   * Queuing cost is negligible in practice: this endpoint serves a handful of
+   * searches an hour and the fan-out that produces the input already takes
+   * ~150 s, dwarfing any wait here.
+   */
   async dedup(jobs: ReadonlyArray<JobPostDto>): Promise<DedupResult> {
+    const prior = this.tail;
+    let release!: () => void;
+    this.tail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // `prior` can never reject (see `tail`), but stay defensive: a poisoned
+    // chain would turn a single bad batch into a permanent outage.
+    await prior.catch(() => undefined);
+    try {
+      return await this.dedupExclusive(jobs);
+    } finally {
+      release();
+    }
+  }
+
+  /** The pass itself. Only ever entered by one caller at a time — see {@link dedup}. */
+  private async dedupExclusive(jobs: ReadonlyArray<JobPostDto>): Promise<DedupResult> {
     const start = Date.now();
     const errors: DedupInputError[] = [];
     const prepared: PreparedJob[] = [];
     const inputCount = jobs.length;
+    const budget = new YieldBudget();
 
     // Pass 1 — validate + prepare. We keep `prepared` indices contiguous so
     // strategies can use a typed-array Union-Find later.
     for (let i = 0; i < inputCount; i++) {
+      // Yield checkpoint — `canonicalKey` + `canonicalJobId` normalise three
+      // fields twice and sha-256 the result: ~25 us per input, i.e. ~175 ms
+      // for a 6 900-job batch. Well under the probe timeout on its own, but
+      // free to slice and it keeps every pass under one bound.
+      if (budget.expired) {
+        await yieldToEventLoop();
+        budget.renew();
+      }
       const raw = jobs[i];
       if (!raw || !raw.title || !raw.companyName) {
         if (this.options.rejectInvalid) {
@@ -87,7 +159,14 @@ export class DedupHybridService implements IDedupEngine {
       indexToPos.set(prepared[pos].index, pos);
     }
     for (const strategy of this.strategies) {
-      const partition: ClusterPartition = strategy.cluster(prepared);
+      // Prefer the cooperative variant when a strategy offers one. `HashStrategy`
+      // does not (its pass is O(N) map inserts, ~1 ms for 7 K inputs);
+      // `MinHashStrategy` does, and it is the ~10 s pass this whole mechanism
+      // exists for.
+      const partition: ClusterPartition = strategy.clusterAsync
+        ? await strategy.clusterAsync(prepared)
+        : strategy.cluster(prepared);
+      budget.renew();
       for (const cluster of partition.clusters) {
         if (cluster.length < 2) continue;
         const headPos = indexToPos.get(cluster[0]);
@@ -106,6 +185,13 @@ export class DedupHybridService implements IDedupEngine {
     const assignments: (string | null)[] = new Array(inputCount).fill(null);
 
     for (const cluster of clusters) {
+      // Yield checkpoint — materialisation re-normalises title/company/location
+      // per cluster head (~10 us) and allocates a `CanonicalJob`; a
+      // mostly-unique 7 K batch emits ~7 K of them.
+      if (budget.expired) {
+        await yieldToEventLoop();
+        budget.renew();
+      }
       const observations: SourceObservation[] = [];
       const head = prepared[cluster[0]];
       const fields: Record<string, FieldWithProvenance<unknown>> = {};
