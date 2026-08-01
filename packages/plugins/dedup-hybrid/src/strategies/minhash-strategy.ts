@@ -1,3 +1,4 @@
+import { YieldBudget, yieldToEventLoop } from '../cooperative';
 import { MinHasher, lshBandKeys, signatureSimilarity } from '../minhash';
 import { ClusterPartition, IDedupStrategy, PreparedJob } from '../types';
 import { UnionFind } from '../union-find';
@@ -98,6 +99,13 @@ interface SignatureSlot {
  * the same inputs and options: member order follows input order and component
  * order follows first-touch order (FR-7). Allocation-light: signatures are
  * typed arrays; bucket maps are cleared once the partition is materialised.
+ *
+ * Step 1 dominates: `MinHasher.signature()` runs `signatureSize x |shingles|`
+ * inner iterations, i.e. `128 x (tokens - 2)` per distinct text — ~160 M
+ * iterations for 1 000 postings of 800 tokens. That is why the pass has two
+ * entry points: {@link cluster} (synchronous, unchanged) and
+ * {@link clusterAsync} (same body, driven with `setImmediate` yields so the
+ * event loop — and therefore `GET /health` — stays alive).
  */
 export class MinHashStrategy implements IDedupStrategy {
   readonly name = 'minhash';
@@ -127,13 +135,71 @@ export class MinHashStrategy implements IDedupStrategy {
     });
   }
 
+  /**
+   * Synchronous entry point — unchanged semantics and unchanged timings.
+   * Drives {@link clusterSteps} with no budget, so the generator never
+   * suspends and the whole pass runs in one turn (exactly what it did before
+   * the split).
+   */
   cluster(input: ReadonlyArray<PreparedJob>): ClusterPartition {
+    const steps = this.clusterSteps(input, null);
+    let step = steps.next();
+    while (!step.done) step = steps.next();
+    return step.value;
+  }
+
+  /**
+   * Cooperative entry point — byte-identical output to {@link cluster},
+   * because it drives the *same* generator body; the only difference is that
+   * it parks on `setImmediate` at each checkpoint whose budget has expired.
+   *
+   * Safe to interleave with other requests: every structure the body touches
+   * (`slotByText`, `slots`, `buckets`, `uf`, `seenPairs`, `clusters`) is a
+   * local of this call, and the only instance state it reads
+   * (`minTextLength`, `hasher`, `bands`, `maxBucketSize`,
+   * `similarityThreshold`) is `readonly` and assigned once in the constructor.
+   * Two concurrent calls therefore share nothing mutable.
+   */
+  async clusterAsync(input: ReadonlyArray<PreparedJob>): Promise<ClusterPartition> {
+    const budget = new YieldBudget();
+    const steps = this.clusterSteps(input, budget);
+    let step = steps.next();
+    while (!step.done) {
+      await yieldToEventLoop();
+      budget.renew();
+      step = steps.next();
+    }
+    return step.value;
+  }
+
+  /**
+   * The clustering pass itself, expressed once as a generator so both entry
+   * points share a single implementation.
+   *
+   * `yield` marks a point where the pass is safe to suspend — all state is
+   * local and internally consistent at every checkpoint. With `budget === null`
+   * no checkpoint ever fires and the generator returns on the first `next()`.
+   *
+   * A generator rather than a plain `async` body on purpose: measured on Node
+   * 24, putting an `await` inside the candidate-pair loop costs ~45 %
+   * throughput (V8's async-function resumable transform), while the same loop
+   * inside a generator costs ~1-4 %.
+   */
+  private *clusterSteps(
+    input: ReadonlyArray<PreparedJob>,
+    budget: YieldBudget | null,
+  ): Generator<void, ClusterPartition, void> {
     if (input.length < 2) return { clusters: [] };
 
     // Group identical texts into slots — one signature per distinct text.
     const slotByText = new Map<string, number>();
     const slots: SignatureSlot[] = [];
     for (let i = 0; i < input.length; i++) {
+      // Checkpoint — THE dominant loop. One `signature()` call is 0.16 ms
+      // (200-token text) to 0.61 ms (800 tokens) of straight-line CPU, so the
+      // budget is checked once per input: ~0.10 us of clock read against
+      // ~0.3 ms of work, and 10 ms of budget lands every ~16-60 inputs.
+      if (budget !== null && budget.expired) yield;
       const job = input[i];
       const text = pickText(job);
       if (text.length < this.minTextLength) continue;
@@ -152,6 +218,10 @@ export class MinHashStrategy implements IDedupStrategy {
     // LSH bucketing — slot indices stored per band-key.
     const buckets = new Map<string, number[]>();
     for (let i = 0; i < slots.length; i++) {
+      // Checkpoint — `lshBandKeys` renders `signatureSize` hex rows into
+      // `bands` strings per slot (~25 us at the 128/16 default), so ~400 slots
+      // per 10 ms slice.
+      if (budget !== null && budget.expired) yield;
       const keys = lshBandKeys(slots[i].signature, this.bands);
       for (const key of keys) {
         const bucket = buckets.get(key);
@@ -167,8 +237,17 @@ export class MinHashStrategy implements IDedupStrategy {
     const uf = new UnionFind(slots.length);
     const seenPairs = new Set<number>();
 
-    buckets.forEach((bucket) => {
-      if (bucket.length < 2) return;
+    // `Map` iteration order is insertion order, identical to what `forEach`
+    // visited before — the partition is unchanged. Iterating (rather than
+    // `forEach`) is what makes the checkpoint below expressible.
+    for (const bucket of buckets.values()) {
+      if (bucket.length < 2) continue;
+      // Checkpoint — per bucket, not per pair. One bucket is capped at
+      // `maxBucketSize` members, so it evaluates at most
+      // 200*199/2 = 19 900 pairs at ~0.2 us each ≈ 4 ms: a per-bucket check
+      // already bounds the block at budget + ~4 ms, and costs one clock read
+      // instead of one per pair.
+      if (budget !== null && budget.expired) yield;
       const cap = Math.min(bucket.length, this.maxBucketSize);
       for (let i = 0; i < cap; i++) {
         for (let j = i + 1; j < cap; j++) {
@@ -189,13 +268,16 @@ export class MinHashStrategy implements IDedupStrategy {
           }
         }
       }
-    });
+    }
 
     // Emit each connected component — expanded from slots back to job
     // indices — as one cluster. Single-slot components still emit when the
     // slot holds ≥ 2 identical-text members (FR-5).
     const clusters: number[][] = [];
     for (const component of uf.toClusters()) {
+      // Checkpoint — cheap per component, but a duplicate-heavy batch can emit
+      // thousands and each sorts its member list.
+      if (budget !== null && budget.expired) yield;
       let size = 0;
       for (const slot of component) size += slots[slot].members.length;
       if (size < 2) continue;
