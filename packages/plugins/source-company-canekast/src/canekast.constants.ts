@@ -42,3 +42,29 @@ export const CANEKAST_PDF_HREF_RE = /\/wp-content\/uploads\/[^"'\s]+\.pdf(?:[?#]
  */
 export const canekastLetterheadRe = (): RegExp =>
   /\d{1,6}\s+[A-Za-z0-9 .'-]+?\s+([A-Za-z.'-]+),\s*([A-Z]{2})\s+\d{5}(?:\s*Phone\s*[\d().+\-\s]{7,16})?/g;
+
+/**
+ * Hard ceiling on a single job-description PDF, in bytes.
+ *
+ * 🛑 MEMORY — the fetch buffers the whole response as an ArrayBuffer, then
+ * `toPlainUint8Array` copies it again, then unpdf (pdf.js) allocates more
+ * while parsing. So the peak cost of one PDF is a multiple of its wire size.
+ * This API runs with `--max-old-space-size=2560` inside a 4Gi container and
+ * has aborted twice with `FATAL ERROR: Reached heap limit`, where RSS — not
+ * heap — was the binding constraint. An unbounded read of a remote file we do
+ * not control is exactly the shape that reproduces that.
+ *
+ * 8 MiB is ~10x the largest observed posting PDF; anything above it is not a
+ * job description.
+ */
+export const CANEKAST_PDF_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Max PDFs fetched+parsed at once.
+ *
+ * 🛑 Bounds PEAK residency, which the per-file cap alone does not: an
+ * unbounded `Promise.allSettled` over the listing holds EVERY decoded PDF in
+ * memory simultaneously, so a page with 40 openings peaks at 40x. With this
+ * cap the worst case is CANEKAST_PDF_MAX_BYTES x this number.
+ */
+export const CANEKAST_PDF_CONCURRENCY = 4;

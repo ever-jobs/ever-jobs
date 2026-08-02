@@ -30,7 +30,13 @@ export const DESKTOPMETAL_DEFAULT_RESULTS = 50;
 /** Default per-request timeout (seconds). */
 export const DESKTOPMETAL_DEFAULT_TIMEOUT_SECONDS = 30;
 
-/** Bounded concurrency for the per-role PDF fetches. */
+/**
+ * Bounded concurrency for the per-role PDF fetches.
+ *
+ * Declared by the plugin author but left unwired — the fan-out was an
+ * unbounded `Promise.allSettled` over every opening. Now actually enforced by
+ * the worker pool in `desktopmetal.service.ts`, at the value they chose.
+ */
 export const DESKTOPMETAL_PDF_CONCURRENCY = 4;
 
 /**
@@ -50,3 +56,20 @@ export const DESKTOPMETAL_PAY_INTERVALS: ReadonlyArray<
     CompensationInterval.YEARLY,
   ],
 ];
+
+/**
+ * Hard ceiling on a single job-description PDF, in bytes.
+ *
+ * 🛑 MEMORY — the fetch buffers the whole response as an ArrayBuffer, then
+ * `toPlainUint8Array` copies it again, then unpdf (pdf.js) allocates more
+ * while parsing. So the peak cost of one PDF is a multiple of its wire size.
+ * This API runs with `--max-old-space-size=2560` inside a 4Gi container and
+ * has aborted twice with `FATAL ERROR: Reached heap limit`, where RSS — not
+ * heap — was the binding constraint. An unbounded read of a remote file we do
+ * not control is exactly the shape that reproduces that.
+ *
+ * 8 MiB is ~10x the largest observed posting PDF; anything above it is not a
+ * job description.
+ */
+export const DESKTOPMETAL_PDF_MAX_BYTES = 8 * 1024 * 1024;
+

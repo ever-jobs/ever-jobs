@@ -27,6 +27,48 @@
 /** Host suffix — every tenant board lives at `{slug}.submit4jobs.com`. */
 export const SUBMIT4JOBS_HOST_SUFFIX = '.submit4jobs.com';
 
+/**
+ * Domains the discovered `apiHost` is allowed to live on.
+ *
+ * 🛑 SECURITY — this is an SSRF gate, not tidiness. `apiHost` is capture group 1
+ * of {@link SUBMIT4JOBS_EMBED_REGEX}, i.e. it comes from the *scraped tenant
+ * board's own HTML*, and it is then interpolated into the URLs that
+ * `primeSession` and `getJobs` request — carrying the ColdFusion session
+ * cookies. The regex only constrains the SHAPE of the host (`[a-z0-9.-]+`), so
+ * without this check anyone able to edit a `*.submit4jobs.com` board page could
+ * point our scraper at an arbitrary host: an internal cluster address, a
+ * link-local metadata endpoint, or their own collector.
+ *
+ * Both entries are required. Observed pairs are `apps.submit4jobs.com`/`magneto`
+ * AND `devapps.pereless.com`/`magnetolive` — Pereless Systems is the upstream
+ * vendor that white-labels these boards, so allowlisting only `submit4jobs.com`
+ * would silently break every tenant served from the `pereless.com` host.
+ */
+export const SUBMIT4JOBS_ALLOWED_API_HOST_SUFFIXES: readonly string[] = [
+  '.submit4jobs.com',
+  '.pereless.com',
+];
+
+/**
+ * `true` when `host` is a bare hostname on one of
+ * {@link SUBMIT4JOBS_ALLOWED_API_HOST_SUFFIXES}.
+ *
+ * Rejects anything carrying credentials, a port, a path, or an IP literal — an
+ * embed URL never needs them, and each is a way to slip past a naive
+ * `endsWith` (`evil.com/x.submit4jobs.com`, `10.0.0.1:80`,
+ * `user@evil.com#.submit4jobs.com`).
+ */
+export function isAllowedSubmit4jobsApiHost(host: string): boolean {
+  if (!host) return false;
+  const h = host.trim().toLowerCase();
+  // Bare hostname only: letters/digits/dot/hyphen, no `@`, `:`, `/`, `#`, `?`.
+  if (!/^[a-z0-9.-]+$/.test(h)) return false;
+  if (h.includes('..') || h.startsWith('.') || h.startsWith('-')) return false;
+  return SUBMIT4JOBS_ALLOWED_API_HOST_SUFFIXES.some((suffix) =>
+    h.endsWith(suffix),
+  );
+}
+
 /** Default results cap when the caller omits `resultsWanted`. */
 export const SUBMIT4JOBS_DEFAULT_RESULTS = 100;
 

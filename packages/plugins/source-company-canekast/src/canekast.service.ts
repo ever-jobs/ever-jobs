@@ -16,6 +16,8 @@ import {
   CANEKAST_COMPANY_NAME,
   CANEKAST_DEFAULT_RESULTS,
   CANEKAST_DEFAULT_TIMEOUT_SECONDS,
+  CANEKAST_PDF_MAX_BYTES,
+  CANEKAST_PDF_CONCURRENCY,
   CANEKAST_ORIGIN,
   CANEKAST_PDF_HREF_RE,
   canekastLetterheadRe,
@@ -47,26 +49,46 @@ export class CanekastService implements IScraper {
         return new JobResponseDto([]);
       }
 
-      const settled = await Promise.allSettled(
-        openings.map(async (opening) => {
+      // Bounded worker pool. The previous `Promise.allSettled(openings.map(...))`
+      // fetched and decoded EVERY PDF simultaneously, so peak memory scaled with
+      // the size of the listing rather than with anything we control. Workers
+      // pull from a shared cursor, so at most CANEKAST_PDF_CONCURRENCY PDFs are
+      // resident at once. Results are written by index, so ordering is
+      // identical to the previous implementation.
+      const collected: (JobPostDto | undefined)[] = new Array(openings.length);
+      let cursor = 0;
+      const worker = async (): Promise<void> => {
+        for (let i = cursor++; i < openings.length; i = cursor++) {
+          const opening = openings[i];
           let text = '';
           try {
             text = await this.fetchPdfText(client, opening.pdfUrl);
           } catch (error: unknown) {
+            // Unchanged semantics: a failed fetch still yields a post, just
+            // without the description body.
             this.logger.warn(
               `CaneKast: PDF fetch/parse failed for ${opening.pdfUrl} (${this.errorLabel(error)})`,
             );
           }
-          return this.toJobPost(opening, text);
-        }),
+          try {
+            collected[i] = this.toJobPost(opening, text);
+          } catch (error: unknown) {
+            // Matches the old `.filter(status === 'fulfilled')`: a posting that
+            // cannot be mapped is dropped rather than failing the whole scrape.
+            this.logger.warn(
+              `CaneKast: could not map ${opening.pdfUrl} (${this.errorLabel(error)})`,
+            );
+          }
+        }
+      };
+      await Promise.all(
+        Array.from(
+          { length: Math.min(CANEKAST_PDF_CONCURRENCY, openings.length) },
+          () => worker(),
+        ),
       );
 
-      const jobs = settled
-        .filter(
-          (s): s is PromiseFulfilledResult<JobPostDto> =>
-            s.status === 'fulfilled',
-        )
-        .map((s) => s.value);
+      const jobs = collected.filter((j): j is JobPostDto => j !== undefined);
 
       const out = this.applyInput(jobs, input);
       this.logger.log(`CaneKast: scraped ${out.length} jobs`);
@@ -101,6 +123,10 @@ export class CanekastService implements IScraper {
   ): Promise<string> {
     const res = await client.get<ArrayBuffer | Uint8Array>(url, {
       responseType: 'arraybuffer',
+      // Refuse an oversized PDF at the transport layer, not after the whole
+      // body is already resident. See CANEKAST_PDF_MAX_BYTES.
+      maxContentLength: CANEKAST_PDF_MAX_BYTES,
+      maxBodyLength: CANEKAST_PDF_MAX_BYTES,
     });
     return extractPdfText(res.data);
   }

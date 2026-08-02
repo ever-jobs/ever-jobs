@@ -28,6 +28,7 @@ import {
   SUBMIT4JOBS_SESSION_COOKIES,
   SUBMIT4JOBS_HEADERS,
   SUBMIT4JOBS_EMBED_REGEX,
+  isAllowedSubmit4jobsApiHost,
   SUBMIT4JOBS_SALARY_TYPE_MAP,
   submit4jobsBoardUrl,
   submit4jobsJobUrl,
@@ -150,7 +151,23 @@ export class Submit4jobsService implements IScraper {
     if (!html) return null;
     const match = SUBMIT4JOBS_EMBED_REGEX.exec(html);
     if (!match) return null;
-    return { apiHost: match[1], template: match[2], cid: match[3] };
+    const [, apiHost, template, cid] = match;
+
+    // 🛑 SSRF gate. `apiHost` is read out of the tenant board's own HTML and is
+    // about to be interpolated into the URLs we request WITH the ColdFusion
+    // session cookies attached. The embed regex only constrains the host's
+    // shape, so without this check a tenant who can edit their board page could
+    // redirect our scraper at an internal address or their own collector.
+    // Fail closed: an unrecognised host yields no coordinates, so the scrape
+    // returns [] exactly as it does for a board with no embed at all.
+    if (!isAllowedSubmit4jobsApiHost(apiHost)) {
+      this.logger.warn(
+        `Submit4Jobs: refusing embed API host \`${apiHost}\` for ${slug} — not on an allowed domain`,
+      );
+      return null;
+    }
+
+    return { apiHost, template, cid };
   }
 
   /**
