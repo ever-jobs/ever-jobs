@@ -25,6 +25,7 @@ jest.mock('@ever-jobs/common', () => {
 
 import {
   ORACLE_DEFAULT_FACETS,
+  ORACLE_DEFAULT_HOST_SEGMENT,
   ORACLE_DEFAULT_SITE_NUMBER,
   ORACLE_RECORDS_PER_PAGE,
   OracleJobsResponse,
@@ -290,6 +291,156 @@ describe('OracleService (Spec 013 / T03 + T04 — REST + finder-string)', () => 
       expect(calledUrl).toContain(',facetsList=');
       // First-page request: offset= absent (matches upstream Python).
       expect(calledUrl).not.toContain('offset=');
+    });
+  });
+
+  describe('colon-slug parsing (Spec 5037)', () => {
+    it('full-host colon slug uses host verbatim and extracts siteNumber', async () => {
+      mockGet.mockResolvedValueOnce({ data: EMPTY_PAGE });
+
+      const service = new OracleService();
+      const input: ScraperInputDto = {
+        siteType: [Site.ORACLE],
+        companySlug: 'fa-esbv-saasfaprod1.fa.ocs.oraclecloud.com:CX_1',
+      } as ScraperInputDto;
+
+      await service.scrape(input);
+
+      const calledUrl = mockGet.mock.calls[0]?.[0] as string;
+      expect(calledUrl).toContain(
+        'https://fa-esbv-saasfaprod1.fa.ocs.oraclecloud.com/hcmRestApi',
+      );
+      expect(calledUrl).toContain('siteNumber=CX_1');
+      expect(calledUrl).not.toContain(ORACLE_DEFAULT_SITE_NUMBER);
+    });
+
+    it('bare-subdomain colon slug composes host with default ocs segment', async () => {
+      mockGet.mockResolvedValueOnce({ data: EMPTY_PAGE });
+
+      const service = new OracleService();
+      const input: ScraperInputDto = {
+        siteType: [Site.ORACLE],
+        companySlug: 'fa-esbv-saasfaprod1:CX_1',
+      } as ScraperInputDto;
+
+      await service.scrape(input);
+
+      const calledUrl = mockGet.mock.calls[0]?.[0] as string;
+      expect(calledUrl).toContain(
+        `https://fa-esbv-saasfaprod1.fa.${ORACLE_DEFAULT_HOST_SEGMENT}.oraclecloud.com/hcmRestApi`,
+      );
+      expect(calledUrl).toContain('siteNumber=CX_1');
+    });
+
+    it('region-code full-host slug preserves the real region (us8)', async () => {
+      mockGet.mockResolvedValueOnce({ data: EMPTY_PAGE });
+
+      const service = new OracleService();
+      const input: ScraperInputDto = {
+        siteType: [Site.ORACLE],
+        companySlug: 'ewvl.fa.us8.oraclecloud.com:CX_1',
+      } as ScraperInputDto;
+
+      await service.scrape(input);
+
+      const calledUrl = mockGet.mock.calls[0]?.[0] as string;
+      expect(calledUrl).toContain(
+        'https://ewvl.fa.us8.oraclecloud.com/hcmRestApi',
+      );
+      expect(calledUrl).toContain('siteNumber=CX_1');
+    });
+
+    it('input.siteNumber overrides slug-derived siteNumber', async () => {
+      mockGet.mockResolvedValueOnce({ data: EMPTY_PAGE });
+
+      const service = new OracleService();
+      const input: ScraperInputDto = {
+        siteType: [Site.ORACLE],
+        companySlug: 'fa-esbv-saasfaprod1.fa.ocs.oraclecloud.com:CX_1',
+        siteNumber: 'CX_OVERRIDE',
+      } as ScraperInputDto;
+
+      await service.scrape(input);
+
+      const calledUrl = mockGet.mock.calls[0]?.[0] as string;
+      expect(calledUrl).toContain('siteNumber=CX_OVERRIDE');
+      expect(calledUrl).not.toContain('siteNumber=CX_1');
+    });
+  });
+
+  describe('siteNumber from companyUrl path (Spec 5037)', () => {
+    it('extracts siteNumber from /sites/{CX} in the URL', async () => {
+      mockGet.mockResolvedValueOnce({ data: EMPTY_PAGE });
+
+      const service = new OracleService();
+      const input: ScraperInputDto = {
+        siteType: [Site.ORACLE],
+        companyUrl:
+          'https://fa-esbv-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/jobs',
+      } as ScraperInputDto;
+
+      await service.scrape(input);
+
+      const calledUrl = mockGet.mock.calls[0]?.[0] as string;
+      expect(calledUrl).toContain('siteNumber=CX_1');
+      expect(calledUrl).not.toContain(ORACLE_DEFAULT_SITE_NUMBER);
+    });
+  });
+
+  describe('pagination: short mid-pages (Spec 5037)', () => {
+    function buildPage(
+      count: number,
+      startId: number,
+      total: number,
+    ): OracleJobsResponse {
+      const requisitionList = Array.from({ length: count }, (_, i) => ({
+        Id: String(startId + i),
+        Title: `Job ${startId + i}`,
+        PrimaryLocation: 'Location',
+        PostedDate: '2025-12-01',
+        EmployerName: 'Acme',
+      }));
+      return { items: [{ TotalJobsCount: total, requisitionList }] };
+    }
+
+    it('does not stop on a short mid-page; paginates to TotalJobsCount', async () => {
+      // Simulate Oracle returning 100, 99, 45 (total 244).
+      mockGet
+        .mockResolvedValueOnce({ data: buildPage(100, 1, 244) })
+        .mockResolvedValueOnce({ data: buildPage(99, 101, 244) })
+        .mockResolvedValueOnce({ data: buildPage(45, 200, 244) })
+        .mockResolvedValueOnce({ data: { items: [{ TotalJobsCount: 244, requisitionList: [] }] } });
+
+      const service = new OracleService();
+      const input: ScraperInputDto = {
+        siteType: [Site.ORACLE],
+        companySlug: 'eeho-us2',
+        resultsWanted: 9999,
+      } as ScraperInputDto;
+
+      const result = await service.scrape(input);
+      // 100 + 99 + 45 = 244 total — the third page reaches TotalJobsCount.
+      expect(result.jobs).toHaveLength(244);
+      expect(mockGet).toHaveBeenCalledTimes(3);
+    });
+
+    it('old behaviour (short page = stop) would have returned only 199', async () => {
+      // Same setup but cap at 199 → proves the fix actually changed behaviour.
+      mockGet
+        .mockResolvedValueOnce({ data: buildPage(100, 1, 244) })
+        .mockResolvedValueOnce({ data: buildPage(99, 101, 244) })
+        .mockResolvedValueOnce({ data: buildPage(45, 200, 244) });
+
+      const service = new OracleService();
+      const input: ScraperInputDto = {
+        siteType: [Site.ORACLE],
+        companySlug: 'eeho-us2',
+        resultsWanted: 199,
+      } as ScraperInputDto;
+
+      const result = await service.scrape(input);
+      expect(result.jobs).toHaveLength(199);
+      expect(mockGet).toHaveBeenCalledTimes(2);
     });
   });
 });

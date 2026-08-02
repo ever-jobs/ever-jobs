@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { CRUNCHBOARD_RSS_URL, CRUNCHBOARD_DEFAULT_RESULTS, CRUNCHBOARD_HEADERS } from './crunchboard.constants';
 import { CrunchboardRssItem } from './crunchboard.types';
@@ -152,7 +153,7 @@ export class CrunchboardService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

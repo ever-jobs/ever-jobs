@@ -16,6 +16,7 @@ import {
   markdownConverter,
   extractEmails,
   randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   PHENOM_BASE_URL_TEMPLATE,
@@ -252,13 +253,13 @@ export class PhenomService implements IScraper {
       if (typeof value === 'number') {
         // Epoch in milliseconds (13 digits) vs seconds (10 digits)
         const ms = value > 1e12 ? value : value * 1000;
-        return new Date(ms).toISOString().split('T')[0];
+        return toDateOnly(ms);
       }
 
       if (typeof value === 'string') {
         const parsed = new Date(value);
         if (!isNaN(parsed.getTime())) {
-          return parsed.toISOString().split('T')[0];
+          return toDateOnly(value);
         }
       }
     } catch {

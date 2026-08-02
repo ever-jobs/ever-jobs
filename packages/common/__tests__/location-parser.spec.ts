@@ -157,3 +157,55 @@ describe('parseLocationList', () => {
     });
   });
 });
+
+describe('allowBareStateProvince opt-in', () => {
+  it('is OFF by default: a bare US state name/code stays in the city field', () => {
+    expect(parseLocationText('Virginia').location).toMatchObject({ city: 'Virginia' });
+    expect(parseLocationText('Virginia').location?.state).toBeUndefined();
+    expect(parseLocationText('VA').location).toMatchObject({ city: 'VA' });
+    expect(parseLocationList(['Virginia']).location).toMatchObject({ city: 'Virginia' });
+  });
+
+  it('classifies a bare US state name as a state-only location when enabled', () => {
+    const parsed = parseLocationText('Virginia', { allowBareStateProvince: true });
+    expect(parsed.location).toMatchObject({ state: 'VA' });
+    expect(parsed.location?.city).toBeUndefined();
+    expect(parsed.location?.displayLocation()).toBe('VA');
+  });
+
+  it('classifies a bare US state code (any case) as a state-only location when enabled', () => {
+    expect(
+      parseLocationText('va', { allowBareStateProvince: true }).location,
+    ).toMatchObject({ state: 'VA' });
+    expect(
+      parseLocationText('  Rhode Island  ', { allowBareStateProvince: true })
+        .location,
+    ).toMatchObject({ state: 'RI' });
+    expect(
+      parseLocationList(['Virginia'], { allowBareStateProvince: true }).location,
+    ).toMatchObject({ state: 'VA' });
+  });
+
+  it('leaves a City, ST pair unchanged even when enabled (no regression)', () => {
+    expect(
+      parseLocationText('Richmond, VA', { allowBareStateProvince: true }).location,
+    ).toMatchObject({ city: 'Richmond', state: 'VA' });
+  });
+
+  it('does not promote a non-state token or a comma-bearing label when enabled', () => {
+    // Not a US state → stays a city.
+    expect(
+      parseLocationText('Springfield', { allowBareStateProvince: true }).location,
+    ).toMatchObject({ city: 'Springfield' });
+    // Canadian province is out of scope for the US-only map → stays a city.
+    expect(
+      parseLocationText('Ontario', { allowBareStateProvince: true }).location,
+    ).toMatchObject({ city: 'Ontario' });
+    // A comma-bearing unsafe label is not a bare token → unchanged.
+    expect(
+      parseLocationText('Atlanta / Savannah, GA', {
+        allowBareStateProvince: true,
+      }).location,
+    ).toMatchObject({ city: 'Atlanta / Savannah, GA' });
+  });
+});

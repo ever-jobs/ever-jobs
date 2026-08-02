@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JOBSPRESSO_RSS_URL, JOBSPRESSO_HEADERS } from './jobspresso.constants';
 import { JobspressoRssItem } from './jobspresso.types';
@@ -164,7 +165,7 @@ export class JobspressoService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

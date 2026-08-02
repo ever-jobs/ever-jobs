@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { UNDPJOBS_RSS_URL, UNDPJOBS_DEFAULT_RESULTS, UNDPJOBS_HEADERS } from './undpjobs.constants';
 import { UndpJobsRssItem } from './undpjobs.types';
@@ -147,7 +148,7 @@ export class UndpJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.dcDate) {
       try {
-        datePosted = new Date(item.dcDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.dcDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

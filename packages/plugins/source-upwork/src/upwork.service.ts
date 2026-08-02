@@ -17,6 +17,7 @@ import {
   markdownConverter,
   plainConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   JOB_SEARCH_QUERY,
@@ -24,11 +25,26 @@ import {
   DEFAULT_SORT_FIELD,
 } from './upwork.constants';
 
-// The SDK uses CommonJS exports; import the constructor and Graphql router
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const UpworkApi = require('@upwork/node-upwork-oauth2');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { Graphql } = require('@upwork/node-upwork-oauth2/lib/routers/graphql');
+// The Upwork SDK (`@upwork/node-upwork-oauth2`) pulls in the deprecated `request`
+// stack (request/tough-cookie/uuid) with unpatchable advisories. This fork does
+// not use Upwork, so the dependency is removed from package.json and the SDK is
+// loaded lazily — only if a caller actually configures Upwork credentials.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function loadUpworkSdk(): { UpworkApi: any; Graphql: any } {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const UpworkApi = require('@upwork/node-upwork-oauth2');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Graphql } = require('@upwork/node-upwork-oauth2/lib/routers/graphql');
+    return { UpworkApi, Graphql };
+  } catch {
+    throw new Error(
+      'Upwork source is disabled in this fork: the @upwork/node-upwork-oauth2 ' +
+        'dependency was removed for security (deprecated request/tough-cookie/uuid). ' +
+        'Reinstall it to re-enable Upwork.',
+    );
+  }
+}
 
 /**
  * Upwork job search service using the official Upwork Node.js SDK.
@@ -62,9 +78,14 @@ export class UpworkService implements IScraper {
   constructor() {
     const envAuth = this.readEnvAuth();
     if (envAuth) {
-      this.defaultApi = this.createApiClient(envAuth);
-      this.defaultGrantType = this.inferGrantType(envAuth);
-      this.defaultIsConfigured = true;
+      try {
+        this.defaultApi = this.createApiClient(envAuth);
+        this.defaultGrantType = this.inferGrantType(envAuth);
+        this.defaultIsConfigured = true;
+      } catch (err: any) {
+        // SDK not installed in this fork — degrade instead of crashing DI startup.
+        this.logger.warn(err.message);
+      }
     } else {
       this.logger.warn(
         'Upwork credentials not configured via env vars. ' +
@@ -99,6 +120,7 @@ export class UpworkService implements IScraper {
         await this.setAccessToken(api);
       }
 
+      const { Graphql } = loadUpworkSdk();
       const graphql = new Graphql(api);
 
       const variables = {
@@ -217,6 +239,7 @@ export class UpworkService implements IScraper {
       config.refreshToken = auth.refreshToken;
     }
 
+    const { UpworkApi } = loadUpworkSdk();
     return new UpworkApi(config);
   }
 
@@ -325,7 +348,7 @@ export class UpworkService implements IScraper {
 
     // Parse date
     const datePosted = node.createdDateTime
-      ? new Date(node.createdDateTime).toISOString().split('T')[0]
+      ? toDateOnly(node.createdDateTime)
       : null;
 
     // Detect remote from title or description

@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { HOMERUN_API_URL, HOMERUN_HEADERS } from './homerun.constants';
 import { HomerunJob, HomerunResponse } from './homerun.types';
@@ -132,7 +133,7 @@ export class HomerunService implements IScraper {
 
     // Date posted
     const datePosted = job.created_at
-      ? new Date(job.created_at).toISOString().split('T')[0]
+      ? toDateOnly(job.created_at)
       : null;
 
     return new JobPostDto({

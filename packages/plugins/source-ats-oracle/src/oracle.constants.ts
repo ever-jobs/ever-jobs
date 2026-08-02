@@ -12,6 +12,17 @@
 /** Default `siteNumber` finder parameter (Spec 013 / Q-030 / FR-4). */
 export const ORACLE_DEFAULT_SITE_NUMBER = 'CX_45001';
 
+/**
+ * Middle host segment used when composing a base URL from a bare pod
+ * subdomain (the colon-slug form `{subdomain}:{siteNumber}` — Spec 5037).
+ * Modern Oracle SaaS pods live under `…fa.ocs.oraclecloud.com` (the pod
+ * identity is baked into the subdomain). Older tenants use a region code
+ * (`us2`, `us6`, `us8`, …) here instead — those MUST be addressed by the
+ * full-host slug form, since the region is not recoverable from the
+ * subdomain alone. See `parseSlug`.
+ */
+export const ORACLE_DEFAULT_HOST_SEGMENT = 'ocs';
+
 /** Page size for `recruitingCEJobRequisitions` pagination. Matches FR-2. */
 export const ORACLE_RECORDS_PER_PAGE = 100;
 

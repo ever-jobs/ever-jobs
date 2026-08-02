@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   CONNEXYS_ROOT_DOMAIN,
@@ -421,7 +422,7 @@ export class ConnexysService implements IScraper {
     const candidate = eu ? `${eu[3]}-${eu[2].padStart(2, '0')}-${eu[1].padStart(2, '0')}` : cleaned;
     try {
       const parsed = new Date(candidate);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(candidate);
     } catch {
       // ignore
     }

@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { PYTHONJOBS_RSS_URL, PYTHONJOBS_HEADERS } from './pythonjobs.constants';
 import { PythonJobsRssItem } from './pythonjobs.types';
@@ -152,7 +153,7 @@ export class PythonJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

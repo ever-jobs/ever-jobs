@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JOBSINJAPAN_RSS_URL, JOBSINJAPAN_HEADERS } from './jobsinjapan.constants';
 import { JobsInJapanRssItem } from './jobsinjapan.types';
@@ -180,7 +181,7 @@ export class JobsInJapanService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

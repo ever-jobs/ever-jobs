@@ -466,6 +466,16 @@ export interface ExtractSalaryOptions {
   hourlyThreshold?: number;
   monthlyThreshold?: number;
   enforceAnnualSalary?: boolean;
+  /**
+   * Spec 5045 — explicit pay period for the parsed range. When set, the
+   * interval is taken from this hint instead of being guessed from the
+   * amount's magnitude, and the range is annualized with the period's factor
+   * for the bounds check. Callers that know the unit (e.g. a `"$35/hr"` token
+   * parsed from the source) pass it so an authoritative signal is never lost
+   * to the magnitude heuristic (`$28,000/yr` → yearly, not monthly;
+   * `$1,200/wk` → weekly, which magnitude cannot represent at all).
+   */
+  interval?: CompensationInterval;
   /** Spec 012 / T03 — country hint for currency / locale resolution. */
   country?: Country;
   /**
@@ -700,6 +710,107 @@ function buildSalaryRegexBare(numSrc: string): RegExp {
 }
 
 /**
+ * Spec 5045 — annualization factor per pay period, used only for the
+ * bounds check when an explicit {@link ExtractSalaryOptions.interval} hint is
+ * supplied (hourly = 40h × 52w; daily = 5d × 52w; weekly = 52w; monthly = 12m).
+ */
+const ANNUALIZATION_FACTORS: Record<CompensationInterval, number> = {
+  [CompensationInterval.HOURLY]: 2080,
+  [CompensationInterval.DAILY]: 260,
+  [CompensationInterval.WEEKLY]: 52,
+  [CompensationInterval.MONTHLY]: 12,
+  [CompensationInterval.YEARLY]: 1,
+};
+
+/**
+ * Spec 5058 — directional keyword / suffix vocabulary that marks a SINGLE
+ * stated salary bound (as opposed to a two-ended `min – max` range). A `lower`
+ * marker opens an unbounded-above band ("from $X", "$X+", "at least $X"); an
+ * `upper` marker opens an unbounded-below band ("up to $Y", "$Y or less").
+ *
+ * The vocabulary is English-only by design: the anchored single-bound matcher
+ * still REQUIRES a currency symbol / ISO code on the amount itself (via
+ * `symbolAlt`), so a bare prose number like `"at least 5 years"` never matches
+ * regardless of the keyword. Extending to non-English lead-ins / symbol-less
+ * amounts is deferred (see Q-090).
+ */
+const SALARY_LOWER_LEADINS =
+  'from|starting\\s+(?:at|from)|starts\\s+(?:at|from)|starting|at\\s+least|minimum(?:\\s+of)?|min(?:\\s+of)?';
+const SALARY_UPPER_LEADINS =
+  'up\\s+to|upto|no\\s+more\\s+than|maximum(?:\\s+of)?|max(?:\\s+of)?';
+const SALARY_LOWER_TRAILERS =
+  '\\+|and\\s+up|and\\s+above|or\\s+more|or\\s+higher|or\\s+above|or\\s+greater';
+const SALARY_UPPER_TRAILERS =
+  'or\\s+less|or\\s+lower|or\\s+under|or\\s+below|and\\s+under|and\\s+below';
+
+/**
+ * Scale words that must NOT follow the captured amount — guards the
+ * single-bound matcher against lifting `"$5"` out of `"from $5 million"`
+ * (which would synthesise a bogus $5 floor). Spelled-out scales only; the
+ * ambiguous single-letter `m`/`b` are left out to avoid colliding with
+ * `"month"` etc.
+ */
+const SALARY_SCALE_LOOKAHEAD = '(?!\\s*(?:million|billion|mln|bln|trillion))';
+
+interface SingleBoundSalaryMatch {
+  bound: 'min' | 'max';
+  raw: string;
+  kSuffix: string;
+}
+
+/**
+ * Spec 5058 — match a single stated salary bound (lower-only or upper-only)
+ * when the two-ended range cascade in {@link extractSalary} misses. The amount
+ * MUST carry a currency symbol / ISO code (prefix `$100k` or suffix `100k €`);
+ * bare numbers are rejected so plain prose ("at least 5 years") cannot match.
+ *
+ * Ordered so keyword-led shapes ("from $X" / "up to $Y") win over the terser
+ * trailer shapes ("$X+" / "$Y or less"). Returns `null` when no single-bound
+ * shape is present.
+ */
+function matchSingleBoundSalary(
+  salaryStr: string,
+  symbolAlt: string,
+  numSrc: string,
+): SingleBoundSalaryMatch | null {
+  // Force the number to match maximally: without this, JS backtracking would
+  // let `numSrc` stop mid-thousands (e.g. capture `100` out of `100,000`) so
+  // the range-tail guard below could be sidestepped. The class holds only the
+  // intra-number separators (comma / period / apostrophe / U+00A0), never a
+  // regular space, so a legitimate `"$48,000 per year"` still ends cleanly.
+  const numBoundary = "(?![\\d,.'\\u00A0])";
+  const amtPrefix =
+    `(?:${symbolAlt})\\s*(${numSrc})${numBoundary}\\s*([kK]?\\b)${SALARY_SCALE_LOOKAHEAD}`;
+  const amtSuffix =
+    `(${numSrc})${numBoundary}\\s*([kK]?\\b)${SALARY_SCALE_LOOKAHEAD}\\s*(?:${symbolAlt})`;
+
+  // Negative lookahead rejecting a two-ended range dressed in a lower-leadin —
+  // e.g. "from $100,000 to $150,000" is a range, not a floor, so we must NOT
+  // truncate it to a min-only. The range cascade upstream only recognises
+  // dash separators, so this guard leaves such "to"-ranges as no-match (their
+  // prior behaviour) rather than silently dropping the ceiling.
+  const rangeTail =
+    `(?!\\s*(?:to|through|[-–—])\\s*(?:${symbolAlt})?\\s*${numSrc})`;
+
+  const candidates: ReadonlyArray<{ re: RegExp; bound: 'min' | 'max' }> = [
+    { re: new RegExp(`\\b(?:${SALARY_LOWER_LEADINS})\\b[\\s:]*${amtPrefix}${rangeTail}`, 'i'), bound: 'min' },
+    { re: new RegExp(`\\b(?:${SALARY_LOWER_LEADINS})\\b[\\s:]*${amtSuffix}${rangeTail}`, 'i'), bound: 'min' },
+    { re: new RegExp(`\\b(?:${SALARY_UPPER_LEADINS})\\b[\\s:]*${amtPrefix}`, 'i'), bound: 'max' },
+    { re: new RegExp(`\\b(?:${SALARY_UPPER_LEADINS})\\b[\\s:]*${amtSuffix}`, 'i'), bound: 'max' },
+    { re: new RegExp(`${amtPrefix}${rangeTail}\\s*(?:${SALARY_LOWER_TRAILERS})`, 'i'), bound: 'min' },
+    { re: new RegExp(`${amtSuffix}${rangeTail}\\s*(?:${SALARY_LOWER_TRAILERS})`, 'i'), bound: 'min' },
+    { re: new RegExp(`${amtPrefix}${rangeTail}\\s*(?:${SALARY_UPPER_TRAILERS})`, 'i'), bound: 'max' },
+    { re: new RegExp(`${amtSuffix}${rangeTail}\\s*(?:${SALARY_UPPER_TRAILERS})`, 'i'), bound: 'max' },
+  ];
+
+  for (const { re, bound } of candidates) {
+    const m = salaryStr.match(re);
+    if (m) return { bound, raw: m[1], kSuffix: m[2] };
+  }
+  return null;
+}
+
+/**
  * Extract salary information from a free-form description string.
  *
  * Spec 012 / T03 — multi-currency, locale-aware dispatcher. Resolves
@@ -715,7 +826,9 @@ function buildSalaryRegexBare(numSrc: string): RegExp {
  * Returns the same `{ interval, minAmount, maxAmount, currency }`
  * envelope; `currency` is now an ISO 4217 string rather than a
  * hard-coded `'USD'`. Returns the all-`null` envelope on any
- * failure (no throws — preserves prior contract).
+ * failure (no throws — preserves prior contract). Spec 5045 — when
+ * {@link ExtractSalaryOptions.interval} is set, the interval is taken from
+ * that hint rather than inferred from the amount's magnitude.
  */
 export function extractSalary(
   salaryStr: string | null,
@@ -779,7 +892,44 @@ export function extractSalary(
     match = salaryStr.match(barePattern);
     if (match) matchedFromBare = true;
   }
-  if (!match) return result;
+  // Spec 5058 — no two-ended range matched. Before giving up, try a single
+  // stated bound (lower-only "from $X" / "$X+", upper-only "up to $Y" /
+  // "$Y or less"). Ranges always match the cascade above first, so this path
+  // never alters range behaviour; it only rescues a genuinely one-sided figure
+  // the employer published (which would otherwise be dropped).
+  if (!match) {
+    const single = matchSingleBoundSalary(salaryStr, symbolAlt, numSrc);
+    if (!single) return result;
+
+    let value = parseSalaryNumber(single.raw, locale);
+    if (value === null) return result;
+    if (single.kSuffix.toLowerCase() === 'k') value *= 1000;
+
+    let interval: string;
+    let annual: number;
+    if (options?.interval) {
+      interval = options.interval;
+      annual = value * ANNUALIZATION_FACTORS[options.interval];
+    } else if (value < hourlyThreshold) {
+      interval = CompensationInterval.HOURLY;
+      annual = value * 2080;
+    } else if (value < monthlyThreshold) {
+      interval = CompensationInterval.MONTHLY;
+      annual = value * 12;
+    } else {
+      interval = CompensationInterval.YEARLY;
+      annual = value;
+    }
+
+    if (annual < lowerLimit || annual > upperLimit) return result;
+
+    const amount = enforceAnnualSalary ? annual : value;
+    result.interval = interval;
+    result.currency = detected.code;
+    if (single.bound === 'min') result.minAmount = amount;
+    else result.maxAmount = amount;
+    return result;
+  }
 
   let minSalary = parseSalaryNumber(match[1], locale);
   let maxSalary = parseSalaryNumber(match[3], locale);
@@ -823,7 +973,16 @@ export function extractSalary(
   let annualMinSalary: number;
   let annualMaxSalary: number | null = null;
 
-  if (minSalary < hourlyThreshold) {
+  if (options?.interval) {
+    // Spec 5045 — trust the caller's explicit pay period over the magnitude
+    // heuristic; annualize both ends with the period's factor for the bounds
+    // check (never `null`, so a genuine range is not dropped by the crossing
+    // guard the magnitude branches use).
+    interval = options.interval;
+    const factor = ANNUALIZATION_FACTORS[options.interval];
+    annualMinSalary = minSalary * factor;
+    annualMaxSalary = maxSalary * factor;
+  } else if (minSalary < hourlyThreshold) {
     interval = CompensationInterval.HOURLY;
     annualMinSalary = minSalary * 2080;
     annualMaxSalary = maxSalary < hourlyThreshold ? maxSalary * 2080 : null;

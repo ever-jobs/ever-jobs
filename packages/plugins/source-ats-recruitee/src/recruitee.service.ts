@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { RECRUITEE_HEADERS, RECRUITEE_OFFICIAL_API_BASE } from './recruitee.constants';
 import { RecruiteeOffer, RecruiteeResponse } from './recruitee.types';
@@ -187,7 +188,7 @@ export class RecruiteeService implements IScraper {
 
     // Date posted
     const datePosted = offer.created_at
-      ? new Date(offer.created_at).toISOString().split('T')[0]
+      ? toDateOnly(offer.created_at)
       : null;
 
     return new JobPostDto({

@@ -18,6 +18,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { FOUNTAIN_API_URL, FOUNTAIN_HEADERS } from './fountain.constants';
 import { FountainOpening, FountainResponse } from './fountain.types';
@@ -135,7 +136,7 @@ export class FountainService implements IScraper {
 
     // Date posted
     const datePosted = opening.created_at
-      ? new Date(opening.created_at).toISOString().split('T')[0]
+      ? toDateOnly(opening.created_at)
       : null;
 
     return new JobPostDto({

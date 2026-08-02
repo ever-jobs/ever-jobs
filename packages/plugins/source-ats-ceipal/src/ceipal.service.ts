@@ -16,6 +16,7 @@ import {
   markdownConverter,
   extractEmails,
   randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   CEIPAL_API_BASE,
@@ -463,7 +464,7 @@ export class CeipalService implements IScraper {
       // Normalise "YYYY-MM-DD HH:mm:ss" → ISO by swapping the space.
       const normalised = /^\d{4}-\d{2}-\d{2} /.test(raw) ? raw.replace(' ', 'T') : raw;
       const parsed = new Date(normalised);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(normalised);
     } catch {
       // ignore
     }

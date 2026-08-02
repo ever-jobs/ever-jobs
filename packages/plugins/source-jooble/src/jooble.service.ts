@@ -17,6 +17,7 @@ import {
 import {
   createHttpClient,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   JOOBLE_API_BASE_URL,
@@ -168,7 +169,7 @@ export class JoobleService implements IScraper {
     let datePosted: string | null = null;
     if (raw.updated) {
       try {
-        datePosted = new Date(raw.updated).toISOString().split('T')[0];
+        datePosted = toDateOnly(raw.updated);
       } catch {
         datePosted = null;
       }

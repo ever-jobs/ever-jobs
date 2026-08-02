@@ -81,6 +81,8 @@ export interface AshbyJob {
     address?: AshbyAddress | null;
   }> | null;
   isRemote?: boolean | null;
+  /** Structured workplace signal: `OnSite` | `Hybrid` | `Remote`. */
+  workplaceType?: string | null;
   /** Public job-board name (ISO timestamp). */
   publishedAt?: string | null;
   /** Authenticated Posting API name. */

@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { BERLINSTARTUPJOBS_RSS_URL, BERLINSTARTUPJOBS_DEFAULT_RESULTS, BERLINSTARTUPJOBS_HEADERS } from './berlinstartupjobs.constants';
 import { BerlinStartupJobsRssItem } from './berlinstartupjobs.types';
@@ -150,7 +151,7 @@ export class BerlinStartupJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

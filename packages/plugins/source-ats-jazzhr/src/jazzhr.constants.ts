@@ -1,7 +1,19 @@
-/** JazzHR public career page URL (slug interpolated at runtime) */
-export const JAZZHR_CAREERS_URL = 'https://{slug}.applytojob.com/apply/jobs/';
+/** JazzHR public career board URL (slug interpolated at runtime). */
+export const jazzhrBoardUrl = (slug: string): string =>
+  `https://${encodeURIComponent(slug)}.applytojob.com/apply/jobs/`;
 
-/** Default headers for JazzHR career page requests */
+/** JazzHR public job detail page URL for a board code. */
+export const jazzhrDetailUrl = (slug: string, code: string): string =>
+  `https://${encodeURIComponent(slug)}.applytojob.com/apply/jobs/details/${encodeURIComponent(code)}`;
+
+/** Authenticated Resumator REST endpoint for open jobs. */
+export const jazzhrApiUrl = (apiKey: string): string =>
+  `https://api.resumatorapi.com/v1/jobs/status/open?apikey=${encodeURIComponent(apiKey)}`;
+
+/** Bounded concurrency for per-job detail fetches. */
+export const JAZZHR_DETAIL_CONCURRENCY = 5;
+
+/** Default headers for JazzHR career page requests. */
 export const JAZZHR_HEADERS: Record<string, string> = {
   Accept: 'text/html',
   'User-Agent':

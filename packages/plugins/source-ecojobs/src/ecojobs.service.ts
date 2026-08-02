@@ -14,6 +14,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { ECOJOBS_RSS_URL, ECOJOBS_HEADERS } from './ecojobs.constants';
 import { EcojobsRssItem } from './ecojobs.types';
@@ -162,7 +163,7 @@ export class EcojobsService implements IScraper {
     let datePosted: string | null = null;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate);
       } catch {
         datePosted = null;
       }

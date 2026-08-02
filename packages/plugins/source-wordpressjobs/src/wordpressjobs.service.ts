@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { WORDPRESSJOBS_RSS_URL, WORDPRESSJOBS_HEADERS } from './wordpressjobs.constants';
 import { WordPressJobsRssItem } from './wordpressjobs.types';
@@ -152,7 +153,7 @@ export class WordPressJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

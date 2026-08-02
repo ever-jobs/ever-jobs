@@ -1,58 +1,57 @@
 /**
- * iCIMS is a JS-rendered SPA that requires Playwright for reliable scraping.
+ * iCIMS candidate-experience boards are server-rendered HTML.
  *
- * Company slug format: subdomain (e.g., `facebook`)
- * Search URL: https://{company}.icims.com/jobs/search?ss=1&searchKeyword={term}&searchLocation={location}
- * Gateway JSON URL: https://{company}.icims.com/jobs/search?pr=0&schemaId=&o={offset}&mode=job&iis=Internet
- * Page size: 20
- * Delay: 3000-5000ms
+ * Every tenant lives on a subdomain of `icims.com` (the slug is usually
+ * `careers-{company}`). The listings page is reachable directly — without a
+ * browser — by requesting the board in its embeddable ("iframe") form:
+ *
+ *   https://{subdomain}.icims.com/jobs/search?ss=1&in_iframe=1&pr={page}
+ *
+ * `in_iframe=1` returns the inner iCIMS board even when the tenant wraps it in
+ * a custom career site, so the same request shape works for every tenant.
+ * `pr` is a **0-based page index** (not a record offset); each page holds up to
+ * `ICIMS_PAGE_SIZE` job cards and the board reports "Page X of N".
  */
 
-/** Default page size for iCIMS pagination */
+/** iCIMS tenant host suffix. */
+export const ICIMS_ROOT_DOMAIN = '.icims.com';
+
+/** Job cards per board page. */
 export const ICIMS_PAGE_SIZE = 20;
 
-/** Minimum delay between iCIMS requests (ms) */
-export const ICIMS_DELAY_MIN = 3000;
+/** Default cap on jobs returned when the caller does not specify one. */
+export const ICIMS_DEFAULT_RESULTS = 1000;
 
-/** Maximum delay between iCIMS requests (ms) */
-export const ICIMS_DELAY_MAX = 5000;
+/** Safety cap on pages walked, independent of resultsWanted. */
+export const ICIMS_MAX_PAGES = 500;
 
-/** Default headers for iCIMS gateway requests */
+/** Default headers for iCIMS board requests. */
 export const ICIMS_HEADERS: Record<string, string> = {
-  Accept: 'application/json, text/html, */*',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
   'User-Agent':
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
 };
 
-/**
- * Build the iCIMS search page URL (used for Playwright fallback).
- */
-export function buildIcimsSearchUrl(
-  company: string,
-  keyword?: string,
-  location?: string,
-  page?: number,
-): string {
-  const base = `https://${company}.icims.com/jobs/search`;
-  const params = new URLSearchParams();
-  params.set('ss', '1');
-  if (keyword) params.set('searchKeyword', keyword);
-  if (location) params.set('searchLocation', location);
-  if (page && page > 1) {
-    params.set('pr', String((page - 1) * ICIMS_PAGE_SIZE));
-  }
-  return `${base}?${params.toString()}`;
-}
+/** Matches "remote" as a whole word (location text or title). */
+export const ICIMS_REMOTE_REGEX = /\bremote\b/i;
+
+/** Pulls the total page count out of a board's "Page X of N" pager. */
+export const ICIMS_PAGE_OF_REGEX = /Page\s+\d+\s+of\s+(\d+)/i;
+
+/** Pulls the company display name out of "Job Listings at {Company}". */
+export const ICIMS_TITLE_COMPANY_REGEX = /Job Listings at\s+(.+?)\s*$/i;
+
+/** Numeric job id embedded in a `/jobs/{id}/{slug}/job` board URL. */
+export const ICIMS_JOB_ID_REGEX = /\/jobs\/(\d+)\//;
 
 /**
- * Build the iCIMS gateway JSON endpoint URL (tried first before Playwright).
+ * Build a board listings URL for a tenant subdomain + 0-based page index.
  */
-export function buildIcimsGatewayUrl(company: string, offset: number): string {
+export function buildIcimsBoardUrl(subdomain: string, page: number): string {
   const params = new URLSearchParams();
-  params.set('pr', String(offset));
-  params.set('schemaId', '');
-  params.set('o', String(offset));
-  params.set('mode', 'job');
-  params.set('iis', 'Internet');
-  return `https://${company}.icims.com/jobs/search?${params.toString()}`;
+  params.set('ss', '1');
+  params.set('in_iframe', '1');
+  if (page > 0) params.set('pr', String(page));
+  return `https://${subdomain}${ICIMS_ROOT_DOMAIN}/jobs/search?${params.toString()}`;
 }

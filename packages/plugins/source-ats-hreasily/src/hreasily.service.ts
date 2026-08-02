@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import * as cheerio from 'cheerio';
 import {
@@ -737,7 +738,7 @@ export class HReasilyService implements IScraper {
     if (!cleaned) return null;
     try {
       const parsed = new Date(cleaned);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(cleaned);
     } catch {
       // ignore
     }

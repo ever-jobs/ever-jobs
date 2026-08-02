@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JOBSCORE_BASE_URL, JOBSCORE_HEADERS } from './jobscore.constants';
 import { JobScoreJob } from './jobscore.types';
@@ -134,7 +135,7 @@ export class JobScoreService implements IScraper {
 
     // Date posted
     const datePosted = job.created_at
-      ? new Date(job.created_at).toISOString().split('T')[0]
+      ? toDateOnly(job.created_at)
       : null;
 
     return new JobPostDto({

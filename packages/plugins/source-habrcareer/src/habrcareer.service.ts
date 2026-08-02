@@ -18,6 +18,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   HABRCAREER_API_URL,
@@ -195,9 +196,7 @@ export class HabrcareerService implements IScraper {
     let datePosted: string | null = null;
     if (raw.publishedDate?.date) {
       try {
-        datePosted = new Date(raw.publishedDate.date)
-          .toISOString()
-          .split('T')[0];
+        datePosted = toDateOnly(raw.publishedDate.date);
       } catch {
         datePosted = null;
       }

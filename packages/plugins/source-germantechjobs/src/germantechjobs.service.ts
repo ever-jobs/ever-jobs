@@ -18,6 +18,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { GERMANTECHJOBS_RSS_URL, GERMANTECHJOBS_HEADERS } from './germantechjobs.constants';
 import { GermantechjobsRssItem } from './germantechjobs.types';
@@ -198,7 +199,7 @@ export class GermantechjobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

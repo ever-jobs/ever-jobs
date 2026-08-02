@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   PERSONIO_XML_URL_DE,
@@ -267,7 +268,7 @@ export class PersonioService implements IScraper {
     const jobUrl = `https://${encodeURIComponent(companySlug)}.jobs.personio.de/job/${pos.id}`;
 
     const datePosted = attrs.created_at
-      ? new Date(attrs.created_at).toISOString().split('T')[0]
+      ? toDateOnly(attrs.created_at)
       : null;
 
     const skills =
@@ -361,7 +362,7 @@ export class PersonioService implements IScraper {
     const jobUrl = `https://${encodeURIComponent(companySlug)}.jobs.personio.${tld}/job/${pos.id}`;
 
     const datePosted = pos.createdAt
-      ? new Date(pos.createdAt).toISOString().split('T')[0]
+      ? toDateOnly(pos.createdAt)
       : null;
 
     const skills = pos.keywords

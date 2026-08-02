@@ -15,8 +15,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DoverModule, DoverService } from '@ever-jobs/source-ats-dover';
 import { ScraperInputDto, Site, DescriptionFormat } from '@ever-jobs/models';
 
-// Public Dover-powered candidate board (Dover's own board — confirmed 2026-06-03).
-const KNOWN_TENANT = 'dover';
+// Public Dover-powered candidate board (slug confirmed resolvable 2026-06-28).
+const KNOWN_TENANT = 'gradientrobotics';
 
 describe('DoverService (E2E)', () => {
   let service: DoverService;

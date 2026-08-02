@@ -14,6 +14,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { CLOJUREJOBS_RSS_URL, CLOJUREJOBS_HEADERS } from './clojurejobs.constants';
 import { ClojurejobsRssItem } from './clojurejobs.types';
@@ -161,7 +162,7 @@ export class ClojurejobsService implements IScraper {
     let datePosted: string | null = null;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate);
       } catch {
         datePosted = null;
       }

@@ -14,6 +14,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { REMOTEFIRSTJOBS_RSS_URL, REMOTEFIRSTJOBS_HEADERS } from './remotefirstjobs.constants';
 import { RemotefirstjobsRssItem } from './remotefirstjobs.types';
@@ -161,7 +162,7 @@ export class RemotefirstjobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

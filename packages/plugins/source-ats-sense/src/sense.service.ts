@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   SENSE_ROOT_DOMAIN,
@@ -466,7 +467,7 @@ export class SenseService implements IScraper {
     if (ms === null || !Number.isFinite(ms) || ms <= 0) return null;
     try {
       const parsed = new Date(ms);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(ms);
     } catch {
       // ignore
     }

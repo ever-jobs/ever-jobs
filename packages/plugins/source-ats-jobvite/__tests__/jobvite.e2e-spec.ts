@@ -1,8 +1,9 @@
 /**
  * E2E test for the Jobvite scraper.
  *
- * Tests both public scraping and authenticated API paths.
- * To run authenticated tests, set JOBVITE_API_KEY and JOBVITE_API_SECRET env vars.
+ * Exercises the live public board over the network (server-rendered
+ * `/{slug}/jobs` list + per-role JSON-LD detail). Network-dependent, so it
+ * asserts shape rather than exact counts.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { JobviteModule, JobviteService } from '@ever-jobs/source-ats-jobvite';
@@ -19,10 +20,10 @@ describe('JobviteService (E2E)', () => {
     service = module.get<JobviteService>(JobviteService);
   });
 
-  it('should return job results via public scraping', async () => {
+  it('should return job results from a live public board', async () => {
     const input = new ScraperInputDto({
       siteType: [Site.JOBVITE],
-      companySlug: 'jobvite',
+      companySlug: 'nuscale-power',
       resultsWanted: 5,
       descriptionFormat: DescriptionFormat.MARKDOWN,
     });
@@ -39,27 +40,22 @@ describe('JobviteService (E2E)', () => {
       expect(typeof job.title).toBe('string');
       expect(job.site).toBe(Site.JOBVITE);
       expect(job.atsType).toBe('jobvite');
+      expect(job.jobUrl).toContain('jobs.jobvite.com');
     }
   });
 
-  it('should fall back to public scraping when API credentials are invalid', async () => {
+  it('should return empty results for a tenant that has moved off Jobvite', async () => {
     const input = new ScraperInputDto({
       siteType: [Site.JOBVITE],
-      companySlug: 'jobvite',
+      companySlug: 'opentrons',
       resultsWanted: 3,
-      auth: {
-        jobvite: {
-          apiKey: 'invalid-key',
-          apiSecret: 'invalid-secret',
-        },
-      },
     });
 
     const response = await service.scrape(input);
 
     expect(response).toBeDefined();
-    expect(response.jobs).toBeDefined();
     expect(Array.isArray(response.jobs)).toBe(true);
+    expect(response.jobs.length).toBe(0);
   });
 
   it('should return empty results when no companySlug provided', async () => {

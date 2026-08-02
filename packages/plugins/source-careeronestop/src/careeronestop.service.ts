@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   CAREERONESTOP_API_URL,
@@ -150,7 +151,7 @@ export class CareerOneStopService implements IScraper {
     let datePosted: string | null = null;
     if (entry.DatePosted) {
       try {
-        datePosted = new Date(entry.DatePosted).toISOString().split('T')[0];
+        datePosted = toDateOnly(entry.DatePosted);
       } catch {
         datePosted = null;
       }

@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { RECRUITERFLOW_BASE_URL, RECRUITERFLOW_HEADERS } from './recruiterflow.constants';
 import { RecruiterflowJob, RecruiterflowApiResponse } from './recruiterflow.types';
@@ -132,7 +133,7 @@ export class RecruiterflowService implements IScraper {
 
     // Date posted
     const datePosted = job.created_at
-      ? new Date(job.created_at).toISOString().split('T')[0]
+      ? toDateOnly(job.created_at)
       : null;
 
     return new JobPostDto({

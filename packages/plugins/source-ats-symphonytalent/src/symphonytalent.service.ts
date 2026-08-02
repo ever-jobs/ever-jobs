@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   SYMPHONYTALENT_API_HOST,
@@ -450,7 +451,7 @@ export class SymphonyTalentService implements IScraper {
     if (!cleaned) return null;
     try {
       const parsed = new Date(cleaned);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(cleaned);
     } catch {
       // ignore
     }

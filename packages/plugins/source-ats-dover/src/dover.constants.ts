@@ -2,51 +2,40 @@
  * Constants for the Dover recruiting-automation ATS careers platform.
  *
  * Dover (dover.com) is a modern recruiting-automation ATS whose candidate-facing
- * product is a no-code, hosted/embeddable careers page. Every customer tenant
- * publishes a branded, public, unauthenticated job board on Dover's application
- * host (`app.dover.com`) under one of two addressing forms:
+ * product is a no-code, hosted/embeddable careers board on `app.dover.com`. Each
+ * tenant's board is addressed by one of:
  *
- *   1. The short board slug form (the most common; used for embeds):
+ *   1. Short board slug:        https://app.dover.com/jobs/{slug}
+ *   2. Company + careers UUID:  https://app.dover.com/{company}/careers/{uuid}
+ *   3. Apply form (name form):  https://app.dover.com/apply/{Company Name}
  *
- *        https://app.dover.com/jobs/{slug}
- *          e.g. https://app.dover.com/jobs/dover
- *               https://app.dover.com/jobs/beimpact
+ * The boards are client-rendered SPAs; the stable public surface is the REST API
+ * the SPA calls (unauthenticated). Reading a tenant's roles is a three-step flow:
  *
- *   2. The company + careers-page UUID form:
+ *   1. Resolve the board slug to a careers-page client id:
+ *        GET /api/v1/careers-page-slug/{slug}   → { id, name, slug }
+ *      (or, when the identifier is already a careers-page UUID:
+ *        GET /api/v1/careers-page/{id}          → { id, name, slug })
+ *   2. List the tenant's open roles:
+ *        GET /api/v1/careers-page/{clientId}/jobs
+ *          → { count, next, results: [ { id, title, locations, workplace_type,
+ *                                        is_published, is_sample } ] }
+ *   3. Overlay each role's rich detail:
+ *        GET /api/v1/inbound/application-portal-job/{jobId}
+ *          → { title, client_name, user_provided_description, locations,
+ *              workplace_type, created, compensation: { lower_bound, upper_bound,
+ *              currency_code, salary_range_type, employment_type } }
  *
- *        https://app.dover.com/{company}/careers/{careersPageId}
- *          e.g. https://app.dover.com/dover/careers/733c3162-cbbd-6558-9866-1d6b8561f8b9
+ * NOTE — the previous adapter called `GET /api/v1/careers-page/{slug}` (slug, not
+ * client id) which 404s for every tenant, so it returned zero jobs everywhere.
+ * Spec 5033 replaces that surface with the real resolve → list → detail flow.
  *
- * Both views are client-rendered single-page apps, so the board HTML carries no
- * server-side job links. The stable public surface is the careers SPA's backing
- * JSON endpoint, served unauthenticated from Dover's API host so the hosted board
- * (and any embed) can render it client-side:
- *
- *   GET https://app.dover.com/api/v1/careers-page/{slug}
- *     → { jobs: [ { id, title, location, ... }, ... ] }  (the public board feed)
- *
- * The feed returns every open role for the tenant in one document (no server-side
- * pagination of the job set), so we slice client-side to honour `resultsWanted`.
- * As a defensive fallback — and because Dover pre-renders each board for
- * Google-for-Jobs — the adapter also scans the board HTML for any embedded
- * `application/ld+json` schema.org `JobPosting` blocks, so a markup/endpoint shift
- * still yields roles rather than an empty result.
- *
- * An unknown slug (HTTP 404 / 4xx), a missing feed, a malformed page, or a
- * non-JSON payload degrades to an empty (graceful) result rather than throwing, so
- * a single bad tenant never breaks a batch run.
- *
- * Surface confidence (researched 2026-06-03, no authentication):
- *  - Confirmed the platform + the two tenant board URL forms
- *    (`app.dover.com/jobs/{slug}` and `app.dover.com/{company}/careers/{uuid}`) and
- *    real, named tenants on it: `dover` (Dover), `beimpact`, `unthread` (Unthread),
- *    `backbone` (Backbone), `paces` (Paces), `daysheets` (Daysheets).
- *  - The boards are JS-rendered SPAs, so an unauthenticated no-JS fetch returns
- *    only the app shell; the careers feed JSON's exact byte-level shape could NOT
- *    be confirmed via a no-JS fetch. Dover documents a public "list all jobs"
- *    careers surface, so the parser is written defensively around it
- *    (verified=false).
+ * An unknown slug (HTTP 404 / 4xx), a missing feed, or a malformed payload
+ * degrades to an empty (graceful) result rather than throwing, so a single bad
+ * tenant never breaks a batch run.
  */
+
+import { getCompensationInterval, CompensationInterval } from '@ever-jobs/models';
 
 /** Dover application host that serves the hosted/embedded careers boards. */
 export const DOVER_HOST = 'https://app.dover.com';
@@ -54,15 +43,34 @@ export const DOVER_HOST = 'https://app.dover.com';
 /** Root domain — used to recognise board hosts passed via `companyUrl`. */
 export const DOVER_ROOT_DOMAIN = 'dover.com';
 
-/**
- * Public, unauthenticated careers-page JSON feed that enumerates a tenant's open
- * roles. `{slug}` is the board slug (the `/jobs/{slug}` label, or the company
- * label of a `/{company}/careers/{uuid}` URL).
- */
-export const DOVER_CAREERS_API_TEMPLATE = 'https://app.dover.com/api/v1/careers-page/{slug}';
+/** API origin for the public, unauthenticated careers REST surface. */
+export const DOVER_API_ORIGIN = 'https://app.dover.com';
 
-/** Short board URL template (`/jobs/{slug}`) — used to fetch the board HTML fallback. */
+/** Resolve a board slug → careers-page `{ id, name, slug }`. */
+export const DOVER_SLUG_API_TEMPLATE =
+  'https://app.dover.com/api/v1/careers-page-slug/{slug}';
+
+/** Resolve a careers-page UUID → careers-page `{ id, name, slug }`. */
+export const DOVER_CAREERS_PAGE_API_TEMPLATE =
+  'https://app.dover.com/api/v1/careers-page/{id}';
+
+/** List a tenant's open roles by careers-page client id. */
+export const DOVER_JOBS_API_TEMPLATE =
+  'https://app.dover.com/api/v1/careers-page/{id}/jobs';
+
+/**
+ * Per-role detail overlay. `application-portal-job` is preferred over the
+ * cross-tenant `job-board/jobs/{id}` surface because the latter 404s for roles
+ * not published to Dover's shared board, while this one is reliable per-tenant.
+ */
+export const DOVER_DETAIL_API_TEMPLATE =
+  'https://app.dover.com/api/v1/inbound/application-portal-job/{id}';
+
+/** Short board URL template (`/jobs/{slug}`) — used to build a role's `jobUrl`. */
 export const DOVER_BOARD_URL_TEMPLATE = 'https://app.dover.com/jobs/{slug}';
+
+/** Careers-board URL by client id, when no slug is known. */
+export const DOVER_CAREERS_URL_TEMPLATE = 'https://app.dover.com/careers/{id}';
 
 /**
  * Default internal results cap. Mirrors the sibling ATS adapters: the public DTO
@@ -73,28 +81,37 @@ export const DOVER_DEFAULT_RESULTS = 100;
 
 /** Default request headers. The board host expects a browser-like UA. */
 export const DOVER_HEADERS: Record<string, string> = {
-  Accept: 'application/json,text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+  Accept: 'application/json,text/plain,*/*',
   'User-Agent':
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129 Safari/537.36',
   'Accept-Language': 'en-US,en;q=0.9',
 };
 
-/**
- * Matches a Dover board path, capturing the tenant slug. Both `/jobs/{slug}` and
- * `/{company}/careers/{uuid}` forms are recognised; the first path segment (or the
- * `/jobs/` label) is the tenant slug used to address the careers feed.
- */
-export const DOVER_BOARD_PATH_REGEX = /^\/(?:jobs\/([^/?#]+)|([^/?#]+)\/careers(?:\/|$))/i;
+/** Recognises a v4 UUID (the careers-page id form of the identifier). */
+export const DOVER_UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Extracts every `<script type="application/ld+json">…</script>` block's inner
- * JSON text from a board page. A page may carry several JSON-LD blocks
- * (Organization, BreadcrumbList, JobPosting); we scan them all for `JobPosting`
- * objects.
+ * Matches a Dover board path, capturing the tenant token. `/jobs/{slug}`,
+ * `/apply/{name}`, and `/{company}/careers/{uuid}` forms are recognised.
  */
-export const DOVER_JSONLD_REGEX =
-  /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+export const DOVER_BOARD_PATH_REGEX =
+  /^\/(?:jobs\/([^/?#]+)|apply\/([^/?#]+)|([^/?#]+)\/careers(?:\/|$))/i;
 
-/** Detects remote / distributed roles across the title, location, and body text. */
+/** `workplace_type` value that marks a fully-remote role. */
+export const DOVER_REMOTE_WORKPLACE = 'REMOTE';
+
+/** Detects remote / distributed roles across the title and location text. */
 export const DOVER_REMOTE_REGEX =
   /\b(remote|distributed|work\s*from\s*home|wfh|telecommute|fully\s*remote|anywhere)\b/i;
+
+/**
+ * Map Dover's `salary_range_type` (e.g. `YEARLY`, `HOURLY`) to a
+ * `CompensationInterval`. Reuses the shared resolver so the mapping lands once.
+ */
+export function doverCompensationInterval(
+  salaryRangeType: string | null | undefined,
+): CompensationInterval | null {
+  if (!salaryRangeType) return null;
+  return getCompensationInterval(salaryRangeType);
+}

@@ -95,8 +95,53 @@ query JobBoardList($boardId: String!) {
 }
 `;
 
+/**
+ * `ExternalJobPostingQuery` GraphQL query — fetches the per-posting
+ * detail by `extId`. The list op (`oatsExternalJobPostings`) carries
+ * no body/posted-date/pay, so each posting kept after the
+ * `resultsWanted` cap is overlaid with this detail:
+ *   - `descriptionHtml` — the full authored body (HTML).
+ *   - `firstPublishedTsSec` — first-published Unix timestamp (seconds)
+ *     → `datePosted`; `startDateTs` is a fallback.
+ *   - `compensationHtml` — free-text pay block (e.g.
+ *     "$170,000 – $200,000 per year"); Gem exposes no structured
+ *     bounds, so this is parsed via the shared salary extractor.
+ */
+export const GEM_JOB_BOARD_DETAIL_QUERY = `
+query ExternalJobPostingQuery($boardId: String!, $extId: String!) {
+  oatsExternalJobPosting(boardId: $boardId, extId: $extId) {
+    descriptionHtml
+    firstPublishedTsSec
+    startDateTs
+    compensationHtml
+    __typename
+  }
+}
+`;
+
 /** Default `resultsWanted` cap when caller doesn't supply one. Matches AvatureService precedent. */
 export const GEM_DEFAULT_RESULTS_WANTED = 100;
+
+/** Max parallel detail fetches per board (bounded concurrency for the overlay). */
+export const GEM_DETAIL_CONCURRENCY = 6;
+
+/**
+ * Gem `job.employmentType` enum → human-readable label. The list op
+ * carries the enum (e.g. `FULL_TIME`); the label feeds `JobPostDto`
+ * (`employmentType`) and `getJobTypeFromString` (which keys on the
+ * de-spaced label, so `Full-time` → `JobType.FULL_TIME`). Unknown
+ * values pass through verbatim.
+ */
+export const GEM_EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
+  FULL_TIME: 'Full-time',
+  PART_TIME: 'Part-time',
+  CONTRACT: 'Contract',
+  CONTRACTOR: 'Contract',
+  INTERN: 'Internship',
+  INTERNSHIP: 'Internship',
+  TEMPORARY: 'Temporary',
+  SEASONAL: 'Seasonal',
+};
 
 /**
  * Headers Gem expects on every request. `batch: 'true'` is the

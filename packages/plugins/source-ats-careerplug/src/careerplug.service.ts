@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   CAREERPLUG_HOST_TEMPLATE,
@@ -476,7 +477,7 @@ export class CareerPlugService implements IScraper {
     if (!value) return null;
     try {
       const parsed = new Date(value.trim());
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(value.trim());
     } catch {
       // ignore
     }

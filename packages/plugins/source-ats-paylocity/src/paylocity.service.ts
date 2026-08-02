@@ -17,8 +17,10 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  jobPostingLdToCompensation,
   parseJobPostingLd,
   resolveCompensation,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   PAYLOCITY_DETAIL_CONCURRENCY,
@@ -75,7 +77,7 @@ export class PaylocityService implements IScraper {
       return new JobResponseDto([]);
     }
 
-    const companyName = pageData?.ModuleTitle?.trim() || guid;
+    const companyName = this.cleanCompanyName(pageData?.ModuleTitle) || guid;
     const resultsWanted = input.resultsWanted ?? 100;
     const wanted = jobs.slice(0, resultsWanted);
 
@@ -183,23 +185,32 @@ export class PaylocityService implements IScraper {
   }
 
   /**
-   * Parse a job's detail page. The description is taken JSON-LD-first — the
-   * embedded schema.org `JobPosting` carries the full body in one clean field —
-   * and falls back to scraping the `job-listing-header` sections when no usable
-   * ld+json description is present. `Job Type` only ever appears in the HTML
-   * header sections (the ld+json omits `employmentType`), so it is always
-   * parsed from HTML.
+   * Parse a job's detail page.
+   *
+   * Description is the **full visible body**: every `job-listing-header`
+   * section (Description, Salary Description, Requirements, …) concatenated.
+   * The embedded schema.org `JobPosting.description` carries only the
+   * "Description" section, so it is used solely as a fallback when the HTML
+   * sections cannot be parsed — preferring it would silently drop every other
+   * visible section. `Job Type` only ever appears in the HTML header sections
+   * (the ld+json omits `employmentType`), so it is always parsed from HTML.
+   *
+   * Structured pay is read from the ld+json `baseSalary` (the robust,
+   * format-independent source) for compensation resolution downstream.
    */
   private parseDetail(html: string): PaylocityJobDetail {
     const htmlParsed = this.parseDetailHtml(html);
+    const postings = parseJobPostingLd(html);
 
-    const ldDescription = parseJobPostingLd(html)
+    const ldDescription = postings
       .map((p) => p.description)
       .find((d): d is string => !!d && d.trim().length > 0);
+    const baseSalary = postings.map((p) => p.baseSalary).find((s) => !!s);
 
     return {
-      description: ldDescription ?? htmlParsed.description,
+      description: htmlParsed.description ?? ldDescription ?? null,
       jobType: htmlParsed.jobType,
+      baseSalary: baseSalary ?? null,
     };
   }
 
@@ -208,7 +219,9 @@ export class PaylocityService implements IScraper {
    * the employment type; every other section (Description, Requirements, …) is
    * concatenated into the description body.
    */
-  private parseDetailHtml(html: string): PaylocityJobDetail {
+  private parseDetailHtml(
+    html: string,
+  ): Pick<PaylocityJobDetail, 'description' | 'jobType'> {
     let jobType: string | null = null;
     const parts: string[] = [];
 
@@ -271,6 +284,17 @@ export class PaylocityService implements IScraper {
       .replace(/&nbsp;/g, ' ');
   }
 
+  /**
+   * `ModuleTitle` is the company display name with the Paylocity module id
+   * appended in brackets, e.g. `"SendCutSend Inc [175255]"`. The bracketed id
+   * is not part of the company name, so strip a trailing ` [\d+]`.
+   */
+  private cleanCompanyName(title: string | null | undefined): string | null {
+    const trimmed = title?.trim();
+    if (!trimmed) return null;
+    return trimmed.replace(/\s*\[\d+\]\s*$/, '').trim() || null;
+  }
+
   private processJob(
     job: PaylocityListJob,
     detail: PaylocityJobDetail | null,
@@ -288,16 +312,21 @@ export class PaylocityService implements IScraper {
     const location = this.buildLocation(job, isRemote);
 
     const compensation: CompensationDto | null = resolveCompensation({
-      structured: null,
+      structured: jobPostingLdToCompensation(detail?.baseSalary),
       text: description,
     });
+    const salarySource = detail?.baseSalary
+      ? 'structured'
+      : compensation
+        ? 'description'
+        : null;
 
     const mappedJobType = detail?.jobType
       ? getJobTypeFromString(detail.jobType)
       : null;
 
     const datePosted = job.PublishedDate
-      ? new Date(job.PublishedDate).toISOString().split('T')[0]
+      ? toDateOnly(job.PublishedDate)
       : null;
 
     return new JobPostDto({
@@ -312,7 +341,7 @@ export class PaylocityService implements IScraper {
       ...(workFromHomeType ? { workFromHomeType } : {}),
       ...(mappedJobType ? { jobType: [mappedJobType] } : {}),
       ...(detail?.jobType ? { employmentType: detail.jobType } : {}),
-      ...(compensation ? { compensation, salarySource: 'description' } : {}),
+      ...(compensation ? { compensation, salarySource } : {}),
       emails: extractEmails(description),
       site: Site.PAYLOCITY,
       atsId: String(job.JobId),

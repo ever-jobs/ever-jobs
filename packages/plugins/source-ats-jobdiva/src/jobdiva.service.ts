@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   JOBDIVA_DEFAULT_HOST,
@@ -474,10 +475,10 @@ export class JobDivaService implements IScraper {
       if (/^\d{10,13}$/.test(trimmed)) {
         const ms = trimmed.length <= 10 ? Number(trimmed) * 1000 : Number(trimmed);
         const d = new Date(ms);
-        if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+        if (!isNaN(d.getTime())) return toDateOnly(ms);
       }
       const parsed = new Date(trimmed);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(trimmed);
     } catch {
       // ignore
     }

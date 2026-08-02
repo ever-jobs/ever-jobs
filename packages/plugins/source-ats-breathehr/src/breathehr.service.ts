@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   BREATHEHR_ROOT_DOMAIN,
@@ -520,7 +521,7 @@ export class BreatheHrService implements IScraper {
     }
     // Fall back to a permissive parse for any other absolute date shape.
     const parsed = new Date(cleaned);
-    if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+    if (!isNaN(parsed.getTime())) return toDateOnly(cleaned);
     return null;
   }
 

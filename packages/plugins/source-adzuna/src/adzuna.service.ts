@@ -19,6 +19,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   ADZUNA_API_BASE_URL,
@@ -223,7 +224,7 @@ export class AdzunaService implements IScraper {
     let datePosted: string | null = null;
     if (raw.created) {
       try {
-        datePosted = new Date(raw.created).toISOString().split('T')[0];
+        datePosted = toDateOnly(raw.created);
       } catch {
         datePosted = null;
       }

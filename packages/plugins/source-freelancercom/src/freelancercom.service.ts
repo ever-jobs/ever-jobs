@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { FREELANCERCOM_API_URL, FREELANCERCOM_HEADERS, FREELANCERCOM_DEFAULT_RESULTS, FREELANCERCOM_MAX_RESULTS } from './freelancercom.constants';
 import { FreelancerComResponse, FreelancerComProject } from './freelancercom.types';
@@ -130,7 +131,7 @@ export class FreelancerComService implements IScraper {
     let datePosted: string | null = null;
     if (project.time_submitted) {
       try {
-        datePosted = new Date(project.time_submitted * 1000).toISOString().split('T')[0];
+        datePosted = toDateOnly(project.time_submitted * 1000);
       } catch {
         datePosted = null;
       }

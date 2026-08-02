@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   resolveCompensation,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   WORKABLE_API_URL,
@@ -87,6 +88,10 @@ export class WorkableService implements IScraper {
       const data: WorkableResponse = response.data ?? { jobs: [] };
       const jobs = data.jobs ?? [];
 
+      // The widget response carries the display name at the top-level `name`;
+      // the slug is not the company name.
+      const companyName = data.name?.trim() || companySlug;
+
       this.logger.log(`Workable: found ${jobs.length} raw jobs for ${companySlug}`);
 
       const resultsWanted = input.resultsWanted ?? 100;
@@ -102,6 +107,7 @@ export class WorkableService implements IScraper {
           const post = this.processJob(
             job,
             companySlug,
+            companyName,
             input.descriptionFormat,
             details[index],
           );
@@ -233,7 +239,7 @@ export class WorkableService implements IScraper {
         `https://apply.workable.com/${companySlug}/j/${job.shortcode}`,
       location,
       datePosted: datePosted
-        ? new Date(datePosted).toISOString().split('T')[0]
+        ? toDateOnly(datePosted)
         : null,
       isRemote,
       jobType,
@@ -250,6 +256,7 @@ export class WorkableService implements IScraper {
   private processJob(
     job: WorkableJob,
     companySlug: string,
+    companyName: string,
     format?: DescriptionFormat,
     detail?: WorkableJobDetail | null,
   ): JobPostDto | null {
@@ -293,13 +300,13 @@ export class WorkableService implements IScraper {
     return new JobPostDto({
       id: `workable-${job.shortcode}`,
       title,
-      companyName: companySlug,
+      companyName,
       jobUrl: job.url ?? job.shortlink ?? `https://apply.workable.com/${companySlug}/j/${job.shortcode}`,
       location,
       description,
       ...(compensation ? { compensation } : {}),
       datePosted: datePosted
-        ? new Date(datePosted).toISOString().split('T')[0]
+        ? toDateOnly(datePosted)
         : null,
       isRemote,
       jobType,

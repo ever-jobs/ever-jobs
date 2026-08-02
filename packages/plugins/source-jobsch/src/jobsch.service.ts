@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JOBSCH_API_URL, JOBSCH_DEFAULT_RESULTS, JOBSCH_HEADERS } from './jobsch.constants';
 import { JobsChDocument, JobsChApiResponse } from './jobsch.types';
@@ -123,7 +124,7 @@ export class JobsChService implements IScraper {
     let datePosted: string | null = null;
     if (doc.publication_date) {
       try {
-        datePosted = new Date(doc.publication_date).toISOString().split('T')[0];
+        datePosted = toDateOnly(doc.publication_date);
       } catch {
         datePosted = null;
       }

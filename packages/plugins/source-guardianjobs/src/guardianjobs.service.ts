@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { GUARDIANJOBS_RSS_URL, GUARDIANJOBS_HEADERS } from './guardianjobs.constants';
 import { GuardianjobsRssItem } from './guardianjobs.types';
@@ -171,7 +172,7 @@ export class GuardianjobsService implements IScraper {
     let datePosted: string | null = null;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate);
       } catch {
         datePosted = null;
       }

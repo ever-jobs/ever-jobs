@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { UKG_API_URL, UKG_HEADERS } from './ukg.constants';
 import { UkgResponse, UkgJob } from './ukg.types';
@@ -129,7 +130,7 @@ export class UkgService implements IScraper {
       location,
       description,
       datePosted: job.postedDate
-        ? new Date(job.postedDate).toISOString().split('T')[0]
+        ? toDateOnly(job.postedDate)
         : null,
       isRemote,
       emails: extractEmails(description),

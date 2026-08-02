@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   LANDINGJOBS_API_URL,
@@ -161,9 +162,7 @@ export class LandingJobsService implements IScraper {
     let datePosted: string | null = null;
     if (raw.published_at) {
       try {
-        datePosted = new Date(raw.published_at)
-          .toISOString()
-          .split('T')[0];
+        datePosted = toDateOnly(raw.published_at);
       } catch {
         datePosted = null;
       }

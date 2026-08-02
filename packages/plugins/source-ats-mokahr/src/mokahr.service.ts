@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   MOKAHR_ROOT_DOMAIN,
@@ -560,13 +561,13 @@ export class MokaHrService implements IScraper {
       // MokaHR may emit epoch millis (13 digits) or seconds (10 digits).
       const ms = value > 1e12 ? value : value * 1000;
       const parsed = new Date(ms);
-      return isNaN(parsed.getTime()) ? null : parsed.toISOString().split('T')[0];
+      return isNaN(parsed.getTime()) ? null : toDateOnly(ms);
     }
     const cleaned = this.cleanText(typeof value === 'string' ? value : null);
     if (!cleaned) return null;
     try {
       const parsed = new Date(cleaned);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(cleaned);
     } catch {
       // ignore
     }

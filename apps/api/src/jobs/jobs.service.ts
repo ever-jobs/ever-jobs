@@ -1,10 +1,10 @@
-import { OnModuleInit, Injectable, Logger, Optional } from '@nestjs/common';
+import { OnModuleInit, Injectable, Logger, Optional, BadRequestException } from '@nestjs/common';
 import {
   Site, ScraperInputDto, JobPostDto, JobResponseDto, IScraper,
   Country, SalarySource, CompensationDto,
   ERR_SOURCE_CIRCUIT_OPEN,
 } from '@ever-jobs/models';
-import { extractSalary, convertToAnnual } from '@ever-jobs/common';
+import { extractSalary, convertToAnnual, siteFromDomain, deriveSiteToken } from '@ever-jobs/common';
 import { ConfigService } from '@nestjs/config';
 import { PluginRegistry, CircuitBreakerInterceptor } from '@ever-jobs/plugin';
 import { MetricsService } from '../metrics/metrics.service';
@@ -144,21 +144,23 @@ export class JobsService implements OnModuleInit {
    * Orchestrates concurrent searching across selected sites.
    * Runs all selected source modules in parallel via Promise.allSettled.
    *
-   * Routing rules (when no explicit siteType is provided):
+   * Routing rules (when no explicit siteType or companyDomain is provided):
    * - If `companySlug` provided → only ATS scrapers run (they need a slug)
    * - Otherwise → search + company scrapers run (ATS scrapers skipped)
    *
-   * When `siteType` is explicitly provided, the filter is always respected
-   * regardless of `companySlug`.
+   * When `siteType` or `companyDomain` is provided, the resolved set is used
+   * regardless of `companySlug`. `companyDomain` values are mapped to `Site`
+   * tokens via `siteFromDomain`; unresolved domains throw `BadRequestException`.
    */
   async searchJobs(input: ScraperInputDto): Promise<JobPostDto[]> {
-    const explicitSites = input.siteType;
     const atsSites = new Set<Site>(this.registry.listAtsSites());
+    const resolvedSites = this.resolveCompanyDomains(input.companyDomain);
+    const effectiveSites = this.buildEffectiveSites(input.siteType, resolvedSites);
     let sites: Site[];
 
-    if (explicitSites?.length) {
-      // Explicit site selection — respect exactly what was requested
-      sites = explicitSites;
+    if (effectiveSites.length) {
+      // Explicit site selection (from siteType and/or companyDomain) — respect it
+      sites = effectiveSites;
     } else if (input.companySlug) {
       // companySlug provided but no explicit sites → ATS scrapers only
       sites = [...atsSites];
@@ -364,6 +366,61 @@ export class JobsService implements OnModuleInit {
       }
       throw err;
     }
+  }
+
+  /**
+   * Resolves `companyDomain` values to registered `Site` tokens.
+   * Throws `BadRequestException` for any domain that cannot be resolved,
+   * naming the domain and the derived token so the fix is obvious.
+   */
+  private resolveCompanyDomains(domains: string[] | undefined): Set<Site> {
+    const resolved = new Set<Site>();
+    if (!domains?.length) {
+      return resolved;
+    }
+
+    const unresolved: { domain: string; token: string }[] = [];
+    for (const raw of domains) {
+      const trimmed = raw?.trim();
+      if (!trimmed) {
+        continue;
+      }
+      const site = siteFromDomain(trimmed);
+      if (site) {
+        resolved.add(site);
+      } else {
+        unresolved.push({ domain: trimmed, token: deriveSiteToken(trimmed) });
+      }
+    }
+
+    if (unresolved.length) {
+      const messages = unresolved.map(
+        (u) => `domain \`${u.domain}\` → token \`${u.token}\` is not a registered plugin`,
+      );
+      throw new BadRequestException(messages.join('; '));
+    }
+
+    return resolved;
+  }
+
+  /**
+   * Builds the effective list of sites from explicit `siteType` values and
+   * resolved `companyDomain` values, deduplicated while preserving order.
+   */
+  private buildEffectiveSites(
+    explicitSites: Site[] | undefined,
+    resolvedSites: Set<Site>,
+  ): Site[] {
+    const effective = new Set<Site>();
+    if (explicitSites?.length) {
+      for (const site of explicitSites) {
+        effective.add(site);
+      }
+    }
+    for (const site of resolvedSites) {
+      effective.add(site);
+    }
+    return Array.from(effective);
   }
 
   /**

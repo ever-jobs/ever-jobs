@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   SMARTRECRUITERS_API_URL,
@@ -249,7 +250,7 @@ export class SmartRecruitersService implements IScraper {
       location,
       description,
       datePosted: datePosted
-        ? new Date(datePosted).toISOString().split('T')[0]
+        ? toDateOnly(datePosted)
         : null,
       isRemote,
       emails: extractEmails(description),

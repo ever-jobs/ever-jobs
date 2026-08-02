@@ -104,8 +104,8 @@ export interface JobPostingLd {
 
 ## Non-goals
 
-- **Not** a fetch1 change — the detection-signal use of JSON-LD is a separate
-  fetch1 spec (`docs_fetch1/json-ld-detection-signal-SPEC.md`).
+- **Not** a detection-signal change — the detection-signal use of JSON-LD is
+  tracked separately upstream.
 - **Not** delegating paylocity wholesale to `source-jsonld` — paylocity's board
   page enumerates jobs and carries location/remote/department that the per-job
   ld+json lacks, so it cannot be replaced by a single-URL harvester.

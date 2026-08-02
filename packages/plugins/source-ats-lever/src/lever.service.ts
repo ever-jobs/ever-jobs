@@ -20,6 +20,7 @@ import {
   regionNameFromCode,
   randomSleep,
   resolveCompensation,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { LEVER_API_URL, LEVER_HEADERS, LEVER_DELAY_MS } from './lever.constants';
 import { LeverJob } from './lever.types';
@@ -217,7 +218,7 @@ export class LeverService implements IScraper {
         text: description,
       }),
       datePosted: job.createdAt
-        ? new Date(job.createdAt).toISOString().split('T')[0]
+        ? toDateOnly(job.createdAt)
         : null,
       isRemote,
       workFromHomeType,

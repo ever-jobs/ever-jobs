@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { COROFLOT_RSS_URL, COROFLOT_DEFAULT_RESULTS, COROFLOT_HEADERS } from './coroflot.constants';
 import { CoroflotRssItem } from './coroflot.types';
@@ -156,7 +157,7 @@ export class CoroflotService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

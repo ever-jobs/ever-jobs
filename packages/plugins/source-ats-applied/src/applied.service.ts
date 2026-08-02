@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   APPLIED_BASE_URL,
@@ -584,12 +585,12 @@ export class AppliedService implements IScraper {
         const year = parseInt(dateMatch[3], 10);
         const parsed = new Date(`${month} ${day} ${year}`);
         if (!isNaN(parsed.getTime())) {
-          return parsed.toISOString().split('T')[0];
+          return toDateOnly(`${month} ${day} ${year}`);
         }
       }
 
       const parsed = new Date(cleaned);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(cleaned);
     } catch {
       // Silently ignore parse errors.
     }

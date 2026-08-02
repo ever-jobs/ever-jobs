@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   EXACTHIRE_HOST_TEMPLATE,
@@ -547,7 +548,7 @@ export class ExactHireService implements IScraper {
     if (value == null || value === '') return null;
     try {
       const parsed = new Date(value);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(value);
     } catch {
       // ignore
     }

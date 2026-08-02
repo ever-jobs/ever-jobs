@@ -14,6 +14,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { FOSSJOBS_RSS_URL, FOSSJOBS_HEADERS } from './fossjobs.constants';
 import { FossJobsRssItem } from './fossjobs.types';
@@ -163,7 +164,7 @@ export class FossJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

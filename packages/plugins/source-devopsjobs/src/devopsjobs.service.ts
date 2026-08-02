@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { DEVOPSJOBS_RSS_URL, DEVOPSJOBS_HEADERS } from './devopsjobs.constants';
 import { DevopsjobsRssItem } from './devopsjobs.types';
@@ -167,7 +168,7 @@ export class DevopsjobsService implements IScraper {
     let datePosted: string | null = null;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate);
       } catch {
         datePosted = null;
       }

@@ -18,6 +18,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { WWR_RSS_URL, WWR_HEADERS } from './weworkremotely.constants';
 import { WwrRssItem } from './weworkremotely.types';
@@ -191,7 +192,7 @@ export class WeWorkRemotelyService implements IScraper {
     let datePosted: string | null = null;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate);
       } catch {
         datePosted = null;
       }

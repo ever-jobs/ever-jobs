@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { HIMALAYAS_API_URL, HIMALAYAS_HEADERS, HIMALAYAS_PAGE_SIZE } from './himalayas.constants';
 import { HimalayasJob, HimalayasApiResponse } from './himalayas.types';
@@ -125,7 +126,7 @@ export class HimalayasService implements IScraper {
     let datePosted: string | null = null;
     if (raw.pubDate) {
       try {
-        datePosted = new Date(raw.pubDate * 1000).toISOString().split('T')[0];
+        datePosted = toDateOnly(raw.pubDate * 1000);
       } catch {
         datePosted = null;
       }

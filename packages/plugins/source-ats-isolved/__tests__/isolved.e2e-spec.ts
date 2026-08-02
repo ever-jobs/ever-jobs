@@ -2,14 +2,14 @@
  * E2E test for the isolved Hire ATS scraper.
  *
  * No authentication required — isolved Hire tenants publish a public candidate-facing
- * career board at `https://{tenant}.isolvedhire.com/`. The adapter reads the per-tenant
- * job sitemap (`/job_site_map.xml`), which enumerates every open role as a
- * `/jobs/{jobId}.html` detail URL, then fans out to each detail page and parses its
- * embedded JSON-LD `JobPosting`. The adapter resolves the tenant from a `companySlug`
- * (the sub-domain label, e.g. `americavotes`) or a full `companyUrl`. Tests run against a
- * known isolved-Hire-powered tenant but tolerate upstream changes / empty boards by
- * treating zero results as acceptable; the shape assertions only run when jobs are
- * actually returned.
+ * career board at `https://{tenant}.isolvedhire.com/`. The adapter reads the board HTML
+ * shell for the `domainId`, calls the board's own JSON API
+ * (`/core/jobs/{domainId}`) for all open roles with structured fields, then fans out to
+ * each `/jobs/{jobId}.html` detail page for the JSON-LD description body. The adapter
+ * resolves the tenant from a `companySlug` (the sub-domain label, e.g. `americavotes`)
+ * or a full `companyUrl`. Tests run against a known isolved-Hire-powered tenant but
+ * tolerate upstream changes / empty boards by treating zero results as acceptable; the
+ * shape assertions only run when jobs are actually returned.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { IsolvedModule, IsolvedService } from '@ever-jobs/source-ats-isolved';

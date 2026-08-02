@@ -16,6 +16,7 @@ import {
   markdownConverter,
   extractEmails,
   randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   TRIBEPAD_GRO_HOST_TEMPLATE,
@@ -517,11 +518,11 @@ export class TribepadService implements IScraper {
         const [, dd, mm, yy] = match;
         const fullYear = yy.length === 2 ? `20${yy}` : yy;
         const d = new Date(`${fullYear}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T00:00:00Z`);
-        if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+        if (!isNaN(d.getTime())) return toDateOnly(`${fullYear}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T00:00:00Z`);
       }
       // Attempt generic Date parse as fallback.
       const parsed = new Date(value);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(value);
     } catch {
       // ignore
     }

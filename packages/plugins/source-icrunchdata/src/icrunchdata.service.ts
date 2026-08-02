@@ -14,6 +14,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { ICRUNCHDATA_RSS_URL, ICRUNCHDATA_HEADERS } from './icrunchdata.constants';
 import { IcrunchdataRssItem } from './icrunchdata.types';
@@ -164,7 +165,7 @@ export class IcrunchdataService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

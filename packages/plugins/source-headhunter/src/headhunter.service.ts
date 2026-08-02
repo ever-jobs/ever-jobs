@@ -15,6 +15,7 @@ import {
 import {
   createHttpClient,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   HEADHUNTER_API_URL,
@@ -114,7 +115,7 @@ export class HeadhunterService implements IScraper {
     let datePosted: string | undefined;
     if (vacancy.published_at) {
       try {
-        datePosted = new Date(vacancy.published_at).toISOString().split('T')[0];
+        datePosted = toDateOnly(vacancy.published_at) ?? undefined;
       } catch {
         datePosted = undefined;
       }

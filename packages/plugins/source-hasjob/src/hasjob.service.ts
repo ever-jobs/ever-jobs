@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { HASJOB_FEED_URL, HASJOB_DEFAULT_RESULTS, HASJOB_HEADERS } from './hasjob.constants';
 import { HasJobAtomEntry } from './hasjob.types';
@@ -189,7 +190,7 @@ export class HasJobService implements IScraper {
     let datePosted: string | undefined;
     if (entry.published) {
       try {
-        datePosted = new Date(entry.published).toISOString().split('T')[0];
+        datePosted = toDateOnly(entry.published) ?? undefined;
       } catch {
         datePosted = undefined;
       }

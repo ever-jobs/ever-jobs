@@ -34,6 +34,8 @@ export interface WorkableJob {
 }
 
 export interface WorkableResponse {
+  /** Company display name (e.g. "Shift Robotics"); not the slug. */
+  name?: string | null;
   jobs: WorkableJob[];
 }
 

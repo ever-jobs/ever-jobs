@@ -215,11 +215,14 @@ export class WorkdayService implements IScraper {
     // `locationsText` is sometimes a bare "N Locations" count rather than a
     // place; drop it so the parser doesn't treat the count as a location.
     const summaryText = listing.locationsText?.trim();
+    // Workday sometimes emits slugified location labels with underscores
+    // (e.g. "Remote_USA"); the underscore is a word character that defeats the
+    // shared parser's `\bremote\b` boundary check, so normalize "_" to spaces.
     const locationLabels = [
       info?.location,
       ...(info?.additionalLocations ?? []),
       summaryText && !/^\d+\s+locations?$/i.test(summaryText) ? summaryText : null,
-    ];
+    ].map((label) => label?.replace(/_/g, ' ').replace(/\s+/g, ' ').trim() || null);
     const parsedLocations = parseLocationList(locationLabels);
     const location = this.applyCountry(
       parsedLocations.location,

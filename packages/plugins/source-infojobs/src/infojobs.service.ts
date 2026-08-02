@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { INFOJOBS_API_URL, INFOJOBS_HEADERS, INFOJOBS_DEFAULT_RESULTS } from './infojobs.constants';
 import { InfoJobsApiResponse, InfoJobsOffer } from './infojobs.types';
@@ -163,7 +164,7 @@ export class InfoJobsService implements IScraper {
     let datePosted: string | null = null;
     if (raw.published) {
       try {
-        datePosted = new Date(raw.published).toISOString().split('T')[0];
+        datePosted = toDateOnly(raw.published);
       } catch {
         datePosted = null;
       }

@@ -16,6 +16,7 @@ import {
   markdownConverter,
   extractEmails,
   randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   PCRECRUITER_BOARD_BASE,
@@ -688,7 +689,7 @@ export class PCRecruiterService implements IScraper {
       // ISO "YYYY-MM-DD".
       if (/^\d{4}-\d{2}-\d{2}/.test(v)) {
         const parsed = new Date(v);
-        if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+        if (!isNaN(parsed.getTime())) return toDateOnly(v);
       }
       // US "M/D/YYYY".
       const us = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
@@ -696,11 +697,11 @@ export class PCRecruiterService implements IScraper {
         const [, mm, dd, yy] = us;
         const fullYear = yy.length === 2 ? `20${yy}` : yy;
         const d = new Date(`${fullYear}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T00:00:00Z`);
-        if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+        if (!isNaN(d.getTime())) return toDateOnly(`${fullYear}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T00:00:00Z`);
       }
       // Generic fallback.
       const parsed = new Date(v);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(v);
     } catch {
       // ignore
     }

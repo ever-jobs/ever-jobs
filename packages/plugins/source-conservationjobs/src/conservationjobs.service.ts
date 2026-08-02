@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { CONSERVATIONJOBS_RSS_URL, CONSERVATIONJOBS_DEFAULT_RESULTS, CONSERVATIONJOBS_HEADERS } from './conservationjobs.constants';
 import { ConservationJobsRssItem } from './conservationjobs.types';
@@ -140,7 +141,7 @@ export class ConservationJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

@@ -9,6 +9,7 @@ import {
 import {
   createHttpClient, markdownConverter, plainConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   CAREERJET_API_URL, CAREERJET_HEADERS, COUNTRY_TO_LOCALE,
@@ -156,7 +157,7 @@ export class CareerJetService implements IScraper {
       try {
         const parsed = new Date(job.date);
         if (!isNaN(parsed.getTime())) {
-          datePosted = parsed.toISOString().split('T')[0];
+          datePosted = toDateOnly(job.date);
         }
       } catch {
         datePosted = job.date;

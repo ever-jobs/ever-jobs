@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  CompensationInterval,
   DescriptionFormat,
   JobType,
   ScraperInputDto,
@@ -116,7 +117,7 @@ describe('PaylocityService', () => {
     expect(remote!.workFromHomeType).toBe('Remote');
   });
 
-  it('extracts compensation from the description via the text fallback', async () => {
+  it('prefers structured ld+json baseSalary over description text, and strips the module id from companyName', async () => {
     mockBoard('board-sendcutsend.html', {
       '4272751': 'detail-sendcutsend-4272751.html',
     });
@@ -128,7 +129,10 @@ describe('PaylocityService', () => {
     );
 
     expect(res.jobs).toHaveLength(7);
-    expect(res.jobs[0].companyName).toContain('SendCutSend');
+    // ModuleTitle is "SendCutSend Inc [175255]" — the bracketed module id is
+    // not part of the company name.
+    expect(res.jobs[0].companyName).toBe('SendCutSend Inc');
+    expect(res.jobs[0].companyName).not.toContain('[');
 
     const tech = res.jobs.find((j) => j.atsId === '4272751');
     expect(tech).toBeDefined();
@@ -136,7 +140,9 @@ describe('PaylocityService', () => {
     expect(tech!.compensation).toBeDefined();
     expect(tech!.compensation!.minAmount).toBe(22);
     expect(tech!.compensation!.maxAmount).toBe(40);
-    expect(tech!.salarySource).toBe('description');
+    expect(tech!.compensation!.interval).toBe(CompensationInterval.HOURLY);
+    // Pay is taken from the structured baseSalary, not text-parsed.
+    expect(tech!.salarySource).toBe('structured');
   });
 
   it('still maps a job when its detail fetch fails (fail-safe)', async () => {
@@ -180,5 +186,90 @@ describe('PaylocityService', () => {
     mockGet.mockRejectedValue(new Error('network down'));
     const res = await service.scrape(input());
     expect(res.jobs).toHaveLength(0);
+  });
+
+  /** Build a board page with one job for a synthetic detail page. */
+  function synthBoard(moduleTitle: string): string {
+    const pageData = {
+      ModuleTitle: moduleTitle,
+      Jobs: [
+        {
+          JobId: 1,
+          JobTitle: 'Engineer',
+          JobLocation: { City: 'Reno', State: 'NV', Country: 'USA' },
+          PublishedDate: '2026-06-11T10:00:00-05:00',
+        },
+      ],
+    };
+    return `<html><body><script>window.pageData = ${JSON.stringify(
+      pageData,
+    )};</script></body></html>`;
+  }
+
+  function mockSynth(boardHtml: string, detailHtml: string) {
+    mockGet.mockImplementation((url: string) =>
+      url.includes('/jobs/All/')
+        ? Promise.resolve({ data: boardHtml })
+        : Promise.resolve({ data: detailHtml }),
+    );
+  }
+
+  it('builds description from all visible sections, not just the ld+json Description', async () => {
+    // ld+json description carries only the "Description" section; the
+    // "Salary Description" section is visible on the page but absent from it.
+    const detail = `<html><head>
+      <script type="application/ld+json">${JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'JobPosting',
+        title: 'Engineer',
+        description: '<p>Build things.</p>',
+        baseSalary: {
+          '@type': 'MonetaryAmount',
+          currency: 'USD',
+          value: {
+            '@type': 'QuantitativeValue',
+            minValue: 100000,
+            maxValue: 130000,
+            unitText: 'YEAR',
+          },
+        },
+      })}</script></head><body>
+      <div class="job-listing-header">Job Type</div><div>Full-time</div>
+      <div class="job-listing-header">Description</div><div><p>Build things.</p></div>
+      <div class="job-listing-header">Salary Description</div><div><p>$100,000 - $130,000 per year plus generous equity.</p></div>
+      </body></html>`;
+    mockSynth(synthBoard('Acme Inc [99]'), detail);
+
+    const res = await service.scrape(
+      input({ companySlug: SCS_GUID, descriptionFormat: DescriptionFormat.PLAIN }),
+    );
+
+    const job = res.jobs[0];
+    expect(job.companyName).toBe('Acme Inc');
+    // The "Salary Description" section (absent from ld+json) is in the body.
+    expect(job.description).toContain('Build things.');
+    expect(job.description).toContain('equity');
+    // Pay comes from the structured baseSalary, not text.
+    expect(job.compensation!.minAmount).toBe(100000);
+    expect(job.compensation!.maxAmount).toBe(130000);
+    expect(job.compensation!.interval).toBe(CompensationInterval.YEARLY);
+    expect(job.salarySource).toBe('structured');
+  });
+
+  it('falls back to description text for pay when ld+json has no baseSalary', async () => {
+    const detail = `<html><body>
+      <div class="job-listing-header">Description</div><div><p>Operate the laser. Compensation: $30.00 - $45.00/hour.</p></div>
+      </body></html>`;
+    mockSynth(synthBoard('Acme Inc'), detail);
+
+    const res = await service.scrape(
+      input({ companySlug: SCS_GUID, descriptionFormat: DescriptionFormat.PLAIN }),
+    );
+
+    const job = res.jobs[0];
+    expect(job.compensation!.minAmount).toBe(30);
+    expect(job.compensation!.maxAmount).toBe(45);
+    expect(job.compensation!.interval).toBe(CompensationInterval.HOURLY);
+    expect(job.salarySource).toBe('description');
   });
 });

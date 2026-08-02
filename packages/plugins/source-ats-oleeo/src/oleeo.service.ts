@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   OLEEO_ROOT_DOMAIN,
@@ -580,7 +581,7 @@ export class OleeoService implements IScraper {
     if (/\bago\b/i.test(cleaned)) return null; // relative, not an absolute date
     try {
       const parsed = new Date(cleaned);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(cleaned);
     } catch {
       // ignore
     }

@@ -16,6 +16,7 @@ import {
   markdownConverter,
   extractEmails,
   randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   PRESCREEN_HOST_TEMPLATE,
@@ -558,7 +559,7 @@ export class PrescreenService implements IScraper {
       const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
       if (isoMatch) return isoMatch[1];
       const parsed = new Date(trimmed);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(trimmed);
     } catch {
       // ignore
     }

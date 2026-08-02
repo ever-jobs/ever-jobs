@@ -18,6 +18,7 @@ import {
   markdownConverter,
   extractEmails,
   salaryToCompensation,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   BAMBOOHR_DETAIL_CONCURRENCY,
@@ -223,7 +224,7 @@ export class BambooHRService implements IScraper {
       atsType: 'bamboohr',
       department: opening.department?.label ?? null,
       datePosted: opening.dateCreated
-        ? new Date(opening.dateCreated).toISOString().split('T')[0]
+        ? toDateOnly(opening.dateCreated)
         : null,
     });
   }

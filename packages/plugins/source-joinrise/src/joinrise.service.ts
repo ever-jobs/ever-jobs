@@ -15,6 +15,7 @@ import {
 import {
   createHttpClient,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JOINRISE_API_URL, JOINRISE_HEADERS, JOINRISE_DEFAULT_RESULTS, JOINRISE_MAX_RESULTS } from './joinrise.constants';
 import { JoinRiseResponse, JoinRiseJob } from './joinrise.types';
@@ -129,7 +130,7 @@ export class JoinRiseService implements IScraper {
     let datePosted: string | null = null;
     if (raw.createdAt) {
       try {
-        datePosted = new Date(raw.createdAt).toISOString().split('T')[0];
+        datePosted = toDateOnly(raw.createdAt);
       } catch {
         datePosted = null;
       }

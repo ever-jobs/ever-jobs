@@ -14,6 +14,7 @@ import { AndroidjobsModule } from './source-androidjobs';
 import { ArbeitnowModule } from './source-arbeitnow';
 import { ArbeitsagenturModule } from './source-arbeitsagentur';
 import { AdpModule } from './source-ats-adp';
+import { ApponeModule } from './source-ats-appone';
 import { AshbyModule } from './source-ats-ashby';
 import { AvatureModule } from './source-ats-avature';
 import { BambooHRModule } from './source-ats-bamboohr';
@@ -41,6 +42,7 @@ import { ManatalModule } from './source-ats-manatal';
 import { MercorModule } from './source-ats-mercor';
 import { OracleModule } from './source-ats-oracle';
 import { PaylocityModule } from './source-ats-paylocity';
+import { PrismhrModule } from './source-ats-prismhr';
 import { WorkAtAStartupModule } from './source-ats-workatastartup';
 import { PersonioModule } from './source-ats-personio';
 import { PhenomModule } from './source-ats-phenom';
@@ -1117,6 +1119,28 @@ import { WildlifeStudiosModule } from './source-company-wildlifestudios';
 import { WizModule } from './source-company-wizinc';
 import { WurlModule } from './source-company-wurljobs';
 import { ZyngaModule } from './source-company-zyngacareers';
+import { TerraformIndustriesModule } from './source-company-terraformindustries';
+import { Submit4jobsModule } from './source-ats-submit4jobs';
+import { NotionPagesModule } from './source-notion-pages';
+import { BuildcoverModule } from './source-company-buildcover';
+import { NanonuclearenergyModule } from './source-company-nanonuclearenergy';
+import { DesktopmetalModule } from './source-company-desktopmetal';
+import { AvalanchefusionModule } from './source-company-avalanchefusion';
+import { SpikeaerospaceModule } from './source-company-spikeaerospace';
+import { CanekastModule } from './source-company-canekast';
+import { VelontraModule } from './source-company-velontra';
+import { SolideonModule } from './source-company-solideon';
+import { GaladyneIoModule } from './source-company-galadyne_io';
+import { GustoHostedModule } from './source-ats-gusto-hosted';
+import { ReelementtechModule } from './source-company-reelementtech';
+import { FlymotionusModule } from './source-company-flymotionus';
+import { IperionxModule } from './source-company-iperionx';
+import { HylIoModule } from './source-company-hyl_io';
+import { TrueMetalSupplyModule } from './source-company-truemetalsupply';
+import { FrameworkCoModule } from './source-company-framework_co';
+import { TerminusIndustrialsModule } from './source-company-terminusindustrials';
+import { MaraIncModule } from './source-company-mara_inc';
+import { VightaeroModule } from './source-company-vightaero';
 import { AirwallexModule } from './source-company-airwallex';
 import { RenuityModule } from './source-company-renuity';
 import { EnpalModule } from './source-company-enpal';
@@ -1823,6 +1847,7 @@ export const ALL_SOURCE_MODULES = [
   ArbeitnowModule,
   ArbeitsagenturModule,
   AdpModule,
+  ApponeModule,
   AshbyModule,
   AvatureModule,
   BambooHRModule,
@@ -1851,6 +1876,7 @@ export const ALL_SOURCE_MODULES = [
   MercorModule,
   OracleModule,
   PaylocityModule,
+  PrismhrModule,
   WorkAtAStartupModule,
   PersonioModule,
   PhenomModule,
@@ -2925,6 +2951,28 @@ export const ALL_SOURCE_MODULES = [
   WizModule,
   WurlModule,
   ZyngaModule,
+  TerraformIndustriesModule,
+  Submit4jobsModule,
+  NotionPagesModule,
+  BuildcoverModule,
+  NanonuclearenergyModule,
+  DesktopmetalModule,
+  AvalanchefusionModule,
+  SpikeaerospaceModule,
+  CanekastModule,
+  VelontraModule,
+  SolideonModule,
+  GaladyneIoModule,
+  GustoHostedModule,
+  ReelementtechModule,
+  FlymotionusModule,
+  IperionxModule,
+  HylIoModule,
+  TrueMetalSupplyModule,
+  FrameworkCoModule,
+  TerminusIndustrialsModule,
+  MaraIncModule,
+  VightaeroModule,
   AirwallexModule,
   RenuityModule,
   EnpalModule,

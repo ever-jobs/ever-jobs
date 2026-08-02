@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { TALENTLYFT_API_URL, TALENTLYFT_HEADERS } from './talentlyft.constants';
 import { TalentLyftJob, TalentLyftResponse } from './talentlyft.types';
@@ -134,7 +135,7 @@ export class TalentLyftService implements IScraper {
 
     // Date posted
     const datePosted = job.CreatedAt
-      ? new Date(job.CreatedAt).toISOString().split('T')[0]
+      ? toDateOnly(job.CreatedAt)
       : null;
 
     return new JobPostDto({

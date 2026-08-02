@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { TRAKSTAR_HEADERS } from './trakstar.constants';
 import { TrakstarJob } from './trakstar.types';
@@ -150,7 +151,7 @@ export class TrakstarService implements IScraper {
 
     // Date posted
     const datePosted = job.created_at
-      ? new Date(job.created_at).toISOString().split('T')[0]
+      ? toDateOnly(job.created_at)
       : null;
 
     return new JobPostDto({

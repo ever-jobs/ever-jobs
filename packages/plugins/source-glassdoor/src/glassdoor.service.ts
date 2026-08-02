@@ -8,6 +8,7 @@ import {
 import {
   createHttpClient, GlassdoorException, markdownConverter, plainConverter,
   extractEmails, randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { GLASSDOOR_HEADERS, FALLBACK_CSRF_TOKEN, GD_JOB_SEARCH_QUERY } from './glassdoor.constants';
 import { parseCompensation, getCursorForPage, parseLocation } from './glassdoor.utils';
@@ -118,7 +119,7 @@ export class GlassdoorService implements IScraper {
             location,
             compensation,
             datePosted: header.ageInDays != null
-              ? new Date(Date.now() - header.ageInDays * 86400000).toISOString().split('T')[0]
+              ? toDateOnly(Date.now() - header.ageInDays * 86400000)
               : null,
             isRemote: header.locationType === 'S' || false,
             description,

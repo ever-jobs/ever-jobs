@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { ANDROIDJOBS_RSS_URL, ANDROIDJOBS_HEADERS } from './androidjobs.constants';
 import { AndroidjobsRssItem } from './androidjobs.types';
@@ -167,7 +168,7 @@ export class AndroidjobsService implements IScraper {
     let datePosted: string | null = null;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate);
       } catch {
         datePosted = null;
       }

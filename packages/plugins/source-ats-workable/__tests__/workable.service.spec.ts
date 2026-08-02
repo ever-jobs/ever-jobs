@@ -56,9 +56,13 @@ function detail(overrides: Record<string, unknown> = {}) {
 }
 
 /** Route mocked GETs to the widget list or the per-job detail by URL. */
-function routeGet(jobs: unknown[], details: Record<string, unknown>) {
+function routeGet(
+  jobs: unknown[],
+  details: Record<string, unknown>,
+  widget: Record<string, unknown> = {},
+) {
   mockGet.mockImplementation(async (url: string) => {
-    if (url.includes(WIDGET)) return { data: { jobs } };
+    if (url.includes(WIDGET)) return { data: { ...widget, jobs } };
     if (url.includes(DETAIL)) {
       const code = url.split('/jobs/')[1];
       return { data: details[code] ?? null };
@@ -151,6 +155,30 @@ describe('WorkableService public path', () => {
   it('leaves compensation undefined when the detail fetch yields nothing (Spec 5018)', async () => {
     const post = await scrapeOne({ detail: null });
     expect(post.compensation).toBeUndefined();
+  });
+
+  it('uses the widget display name as companyName, not the slug (Spec 5031)', async () => {
+    const job = widgetJob();
+    routeGet([job], { [job.shortcode]: detail() }, { name: 'Shift Robotics' });
+    const res = await new WorkableService().scrape({
+      companySlug: 'shift-robotics',
+      siteType: [Site.WORKABLE],
+      resultsWanted: 10,
+    } as ScraperInputDto);
+    expect(res.jobs[0].companyName).toBe('Shift Robotics');
+    // Slug-derived fields are unchanged.
+    expect(res.jobs[0].atsId).toBe('CE4DD737B9');
+  });
+
+  it('falls back to the slug when the widget has no name (Spec 5031)', async () => {
+    const job = widgetJob();
+    routeGet([job], { [job.shortcode]: detail() });
+    const res = await new WorkableService().scrape({
+      companySlug: 'shift-robotics',
+      siteType: [Site.WORKABLE],
+      resultsWanted: 10,
+    } as ScraperInputDto);
+    expect(res.jobs[0].companyName).toBe('shift-robotics');
   });
 
   it('returns empty results when no companySlug is provided', async () => {

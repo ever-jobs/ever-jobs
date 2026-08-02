@@ -14,6 +14,7 @@ import {
   createHttpClient,
   randomSleep,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   TALEO_HEADERS,
@@ -155,7 +156,7 @@ export class TaleoService implements IScraper {
     const datePosted = rawDate
       ? (() => {
           try {
-            return new Date(rawDate).toISOString().split('T')[0];
+            return toDateOnly(rawDate);
           } catch {
             return rawDate;
           }

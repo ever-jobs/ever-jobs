@@ -1,5 +1,17 @@
 # API Changelog
 
+### [v0.7.0-alpha] - 2026-07-27
+
+#### Added
+
+- **`companyDomain` parameter on `POST /api/jobs/search` and `POST /api/jobs/analyze`**: optional array of company domains that are resolved to registered `Site` tokens using the Spec 5069 domain-to-token rule. Unresolved domains now return HTTP 400 with the domain and derived token in the error message.
+
+#### Changed
+
+- `siteType` no longer defaults to all registered sources in `ScraperInputDto`; omitting both `siteType` and `companyDomain` still falls back to search + company scrapers (ATS scrapers skipped unless `companySlug` is provided).
+
+---
+
 ### [v0.6.0-alpha] - 2026-02-25
 
 #### Added

@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { TECHCAREERS_SEARCH_URL, TECHCAREERS_HEADERS } from './techcareers.constants';
 import { TechcareersJob } from './techcareers.types';
@@ -188,7 +189,7 @@ export class TechcareersService implements IScraper {
     let datePosted: string | null = null;
     if (item.datePosted) {
       try {
-        datePosted = new Date(item.datePosted).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.datePosted);
       } catch {
         datePosted = null;
       }

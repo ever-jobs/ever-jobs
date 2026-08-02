@@ -22,6 +22,7 @@ import {
   plainConverter,
   extractEmails,
   randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { LINKEDIN_HEADERS } from './linkedin.constants';
 import { jobTypeCode, parseJobType, parseJobLevel, parseCompanyIndustry, isJobRemote } from './linkedin.utils';
@@ -189,7 +190,7 @@ export class LinkedInService implements IScraper {
       jobUrl,
       location,
       compensation,
-      datePosted: datePosted ? new Date(datePosted).toISOString().split('T')[0] : null,
+      datePosted: datePosted ? toDateOnly(datePosted) : null,
       isRemote: remote,
       site: Site.LINKEDIN,
     });

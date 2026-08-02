@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   TURBOHIRE_API_BASE,
@@ -464,7 +465,7 @@ export class TurboHireService implements IScraper {
     if (value == null || value === '') return null;
     try {
       const parsed = new Date(value);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(value);
     } catch {
       // ignore
     }

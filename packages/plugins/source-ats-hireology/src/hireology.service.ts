@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   HIREOLOGY_CAREERS_HOST,
@@ -347,10 +348,10 @@ export class HireologyService implements IScraper {
     try {
       if (typeof value === 'number') {
         const ms = value > 1e12 ? value : value > 1e10 ? value : value * 1000;
-        return new Date(ms).toISOString().split('T')[0];
+        return toDateOnly(ms);
       }
       const parsed = new Date(value);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(value);
     } catch {
       // ignore
     }

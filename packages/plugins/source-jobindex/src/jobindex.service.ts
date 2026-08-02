@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JOBINDEX_BASE_URL, JOBINDEX_HEADERS } from './jobindex.constants';
 import { JobindexRssItem } from './jobindex.types';
@@ -139,7 +140,7 @@ export class JobindexService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

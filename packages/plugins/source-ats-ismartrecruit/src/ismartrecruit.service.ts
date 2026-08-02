@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { ISMARTRECRUIT_BASE_URL, ISMARTRECRUIT_HEADERS } from './ismartrecruit.constants';
 import { ISmartRecruitJob } from './ismartrecruit.types';
@@ -139,7 +140,7 @@ export class ISmartRecruitService implements IScraper {
 
     // Date posted
     const datePosted = job.datePosted
-      ? new Date(job.datePosted).toISOString().split('T')[0]
+      ? toDateOnly(job.datePosted)
       : null;
 
     return new JobPostDto({
