@@ -24,30 +24,20 @@ import {
   DEFAULT_NUM_RESULTS,
   DEFAULT_SORT_FIELD,
 } from './upwork.constants';
-
-// The Upwork SDK (`@upwork/node-upwork-oauth2`) pulls in the deprecated `request`
-// stack (request/tough-cookie/uuid) with unpatchable advisories. This fork does
-// not use Upwork, so the dependency is removed from package.json and the SDK is
-// loaded lazily — only if a caller actually configures Upwork credentials.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function loadUpworkSdk(): { UpworkApi: any; Graphql: any } {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const UpworkApi = require('@upwork/node-upwork-oauth2');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Graphql } = require('@upwork/node-upwork-oauth2/lib/routers/graphql');
-    return { UpworkApi, Graphql };
-  } catch {
-    throw new Error(
-      'Upwork source is disabled in this fork: the @upwork/node-upwork-oauth2 ' +
-        'dependency was removed for security (deprecated request/tough-cookie/uuid). ' +
-        'Reinstall it to re-enable Upwork.',
-    );
-  }
-}
+import {
+  UpworkTokenProvider,
+  executeUpworkGraphql,
+  UpworkApiError,
+} from './upwork.client';
 
 /**
- * Upwork job search service using the official Upwork Node.js SDK.
+ * Upwork job search service.
+ *
+ * Talks to Upwork's OAuth2 + GraphQL endpoints directly via
+ * {@link UpworkTokenProvider} / {@link executeUpworkGraphql}. The official
+ * `@upwork/node-upwork-oauth2` SDK is deliberately NOT used: its latest
+ * release (2.3.0, 2024-11-27) still pins `request@2.88.2`, whose advisories
+ * have no upstream fix. See `upwork.client.ts` for the full rationale.
  *
  * Supports two OAuth2 grant types:
  *   - `client_credentials`  — server-to-server (clientId + clientSecret only)
@@ -71,7 +61,7 @@ function loadUpworkSdk(): { UpworkApi: any; Graphql: any } {
 @Injectable()
 export class UpworkService implements IScraper {
   private readonly logger = new Logger(UpworkService.name);
-  private defaultApi: any;
+  private defaultTokens?: UpworkTokenProvider;
   private defaultIsConfigured = false;
   private defaultGrantType: UpworkGrantType = UpworkGrantType.CLIENT_CREDENTIALS;
 
@@ -79,12 +69,16 @@ export class UpworkService implements IScraper {
     const envAuth = this.readEnvAuth();
     if (envAuth) {
       try {
-        this.defaultApi = this.createApiClient(envAuth);
         this.defaultGrantType = this.inferGrantType(envAuth);
+        this.defaultTokens = new UpworkTokenProvider(
+          envAuth,
+          this.defaultGrantType,
+        );
         this.defaultIsConfigured = true;
       } catch (err: any) {
-        // SDK not installed in this fork — degrade instead of crashing DI startup.
-        this.logger.warn(err.message);
+        // Never let a credential problem crash DI startup — degrade to "no
+        // Upwork" exactly as an unconfigured deployment does.
+        this.logger.warn(`Upwork credentials rejected at startup: ${err.message}`);
       }
     } else {
       this.logger.warn(
@@ -98,9 +92,9 @@ export class UpworkService implements IScraper {
   }
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
-    const { api, grantType } = this.resolveApi(input);
+    const { tokens, grantType } = this.resolveTokens(input);
 
-    if (!api) {
+    if (!tokens) {
       this.logger.warn('Skipping Upwork scrape — no credentials available');
       return new JobResponseDto([]);
     }
@@ -113,29 +107,25 @@ export class UpworkService implements IScraper {
     );
 
     try {
-      // Authenticate based on grant type
-      if (grantType === UpworkGrantType.CLIENT_CREDENTIALS) {
-        await this.obtainClientCredentialsToken(api);
-      } else {
-        await this.setAccessToken(api);
-      }
-
-      const { Graphql } = loadUpworkSdk();
-      const graphql = new Graphql(api);
-
+      // The token provider handles both grants and caches the result, so a
+      // fan-out of searches costs one token request rather than one per search.
       const variables = {
         searchTerm: searchTerm || '',
         first: numResults,
         sortField: DEFAULT_SORT_FIELD,
       };
 
-      const data = await this.executeGraphql(graphql, {
-        query: JOB_SEARCH_QUERY,
-        variables: JSON.stringify(variables),
-      });
+      const data = await executeUpworkGraphql<{
+        marketplaceJobPostings?: { edges?: { node: any }[] };
+      }>(
+        tokens,
+        { query: JOB_SEARCH_QUERY, variables: JSON.stringify(variables) },
+        this.logger,
+      );
 
-      const edges =
-        data?.data?.marketplaceJobPostings?.edges ?? [];
+      // `executeUpworkGraphql` already unwraps the GraphQL envelope's `data`,
+      // so this reads one level shallower than the SDK path did.
+      const edges = data?.marketplaceJobPostings?.edges ?? [];
       this.logger.log(`Upwork returned ${edges.length} results`);
 
       const jobs: JobPostDto[] = [];
@@ -151,7 +141,20 @@ export class UpworkService implements IScraper {
 
       return new JobResponseDto(jobs);
     } catch (err: any) {
-      this.logger.error(`Upwork scrape error: ${err.message}`);
+      // Distinguish "Upwork said no" from an unexpected fault. A 401 here means
+      // the credentials are wrong or revoked (the client already retried once
+      // with a refreshed token), which is operator-actionable; anything else is
+      // a bug or a transient network failure.
+      if (err instanceof UpworkApiError) {
+        this.logger.error(
+          err.status === 401
+            ? 'Upwork rejected the credentials (HTTP 401) even after refreshing — check UPWORK_CLIENT_ID/SECRET and any refresh token'
+            : `Upwork API error: ${err.message}`,
+        );
+      } else {
+        this.logger.error(`Upwork scrape error: ${err.message}`);
+      }
+      // Graceful degradation: a failing source must never fail the fan-out.
       return new JobResponseDto([]);
     }
   }
@@ -188,23 +191,28 @@ export class UpworkService implements IScraper {
   }
 
   /**
-   * Resolve which API client and grant type to use for this request.
+   * Resolve which token provider and grant type to use for this request.
    * Per-request auth (`input.auth.upwork`) takes precedence over env-var defaults.
+   *
+   * A per-request provider is built fresh each time (credentials differ per
+   * caller); the env-var provider is a singleton so its token cache is shared.
    */
-  private resolveApi(input: ScraperInputDto): { api: any; grantType: UpworkGrantType } {
+  private resolveTokens(input: ScraperInputDto): {
+    tokens: UpworkTokenProvider | null;
+    grantType: UpworkGrantType;
+  } {
     const requestAuth = input.auth?.upwork;
 
     if (requestAuth?.clientId && requestAuth?.clientSecret) {
       const grantType = this.inferGrantType(requestAuth);
-      const api = this.createApiClient(requestAuth);
-      return { api, grantType };
+      return { tokens: new UpworkTokenProvider(requestAuth, grantType), grantType };
     }
 
-    if (this.defaultIsConfigured && this.defaultApi) {
-      return { api: this.defaultApi, grantType: this.defaultGrantType };
+    if (this.defaultIsConfigured && this.defaultTokens) {
+      return { tokens: this.defaultTokens, grantType: this.defaultGrantType };
     }
 
-    return { api: null, grantType: UpworkGrantType.CLIENT_CREDENTIALS };
+    return { tokens: null, grantType: UpworkGrantType.CLIENT_CREDENTIALS };
   }
 
   /**
@@ -220,81 +228,6 @@ export class UpworkService implements IScraper {
     return (auth.accessToken && auth.refreshToken)
       ? UpworkGrantType.AUTHORIZATION_CODE
       : UpworkGrantType.CLIENT_CREDENTIALS;
-  }
-
-  /**
-   * Create a new UpworkApi SDK instance from auth credentials.
-   */
-  private createApiClient(auth: UpworkAuthDto): any {
-    const grantType = this.inferGrantType(auth);
-    const config: any = {
-      clientId: auth.clientId,
-      clientSecret: auth.clientSecret,
-    };
-
-    if (grantType === UpworkGrantType.CLIENT_CREDENTIALS) {
-      config.grantType = 'client_credentials';
-    } else {
-      config.accessToken = auth.accessToken;
-      config.refreshToken = auth.refreshToken;
-    }
-
-    const { UpworkApi } = loadUpworkSdk();
-    return new UpworkApi(config);
-  }
-
-  /**
-   * Obtain an access token via the client_credentials grant.
-   */
-  private obtainClientCredentialsToken(api: any): Promise<any> {
-    return new Promise((resolve, reject) => {
-      api.getToken(null, (error: any, tokenPair: any) => {
-        if (error) {
-          reject(new Error(`Upwork client_credentials token failed: ${error}`));
-        } else {
-          resolve(tokenPair);
-        }
-      });
-    });
-  }
-
-  /**
-   * Set up access token on the API instance (authorization_code flow).
-   * The SDK automatically refreshes expired tokens.
-   */
-  private setAccessToken(api: any): Promise<any> {
-    return new Promise((resolve, reject) => {
-      api.setAccessToken((error: any, tokenPair: any) => {
-        if (error) {
-          reject(new Error(`Upwork token setup failed: ${error}`));
-        } else {
-          resolve(tokenPair);
-        }
-      });
-    });
-  }
-
-  // ── GraphQL ───────────────────────────────────────────────
-
-  /**
-   * Execute a GraphQL request via the Upwork SDK.
-   */
-  private executeGraphql(graphql: any, params: any): Promise<any> {
-    return new Promise((resolve, reject) => {
-      graphql.execute(params, (error: any, httpStatus: number, data: any) => {
-        if (error) {
-          reject(new Error(`Upwork GraphQL error: ${error}`));
-        } else if (httpStatus >= 400) {
-          reject(
-            new Error(
-              `Upwork API returned HTTP ${httpStatus}: ${JSON.stringify(data)}`,
-            ),
-          );
-        } else {
-          resolve(data);
-        }
-      });
-    });
   }
 
   // ── Result processing ─────────────────────────────────────
