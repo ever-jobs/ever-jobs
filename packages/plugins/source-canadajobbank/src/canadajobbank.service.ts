@@ -15,6 +15,7 @@ import {
 import {
   createHttpClient,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   CANADAJOBBANK_API_URL,
@@ -141,7 +142,7 @@ export class CanadaJobBankService implements IScraper {
     let datePosted: string | null = null;
     if (record['First Posting Date']) {
       try {
-        datePosted = new Date(record['First Posting Date']).toISOString().split('T')[0];
+        datePosted = toDateOnly(record['First Posting Date']);
       } catch {
         datePosted = null;
       }

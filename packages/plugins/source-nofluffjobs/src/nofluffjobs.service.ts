@@ -15,6 +15,7 @@ import {
 import {
   createHttpClient,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   NOFLUFFJOBS_API_URL,
@@ -114,7 +115,7 @@ export class NoFluffJobsService implements IScraper {
     let datePosted: string | undefined;
     if (posting.posted) {
       try {
-        datePosted = new Date(posting.posted).toISOString().split('T')[0];
+        datePosted = toDateOnly(posting.posted) ?? undefined;
       } catch {
         datePosted = undefined;
       }

@@ -16,6 +16,7 @@ import {
   markdownConverter,
   extractEmails,
   randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   JOBADDER_HOST,
@@ -431,12 +432,12 @@ export class JobAdderService implements IScraper {
     try {
       if (typeof value === 'number') {
         const ms = value > 1e12 ? value : value > 1e10 ? value : value * 1000;
-        return new Date(ms).toISOString().split('T')[0];
+        return toDateOnly(ms);
       }
       // Strip ordinal suffixes (1st, 2nd, 3rd, 20th) before parsing.
       const normalized = value.replace(/(\d+)(st|nd|rd|th)/gi, '$1');
       const parsed = new Date(normalized);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(normalized);
     } catch {
       // ignore
     }

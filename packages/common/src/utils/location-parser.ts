@@ -135,6 +135,18 @@ export interface ParsedLocationList {
   workFromHomeType: WorkFromHomeType | null;
 }
 
+export interface ParseLocationOptions {
+  /**
+   * When true, a lone token that carries no city (no comma) but exactly matches
+   * a known US state/territory **name** or **2-letter code** is classified as a
+   * state-only location (e.g. `"Virginia"` / `"VA"` → `{ state: 'VA' }`) instead
+   * of falling through to the `city` field. Off by default, so every existing
+   * caller is unaffected. Named generically (state/province) so the opt-in can
+   * later cover non-US subdivisions without another signature change.
+   */
+  allowBareStateProvince?: boolean;
+}
+
 /**
  * Conservatively split a plain US `City, ST` label.
  *
@@ -144,6 +156,7 @@ export interface ParsedLocationList {
  */
 export function parseLocationText(
   raw: string | null | undefined,
+  options?: ParseLocationOptions,
 ): ParsedLocationText {
   const normalized = raw?.replace(/\s+/g, ' ').trim() ?? '';
   if (!normalized) {
@@ -198,6 +211,17 @@ export function parseLocationText(
     };
   }
 
+  if (options?.allowBareStateProvince && !geographicText.includes(',')) {
+    const bareState = normalizeUsState(geographicText);
+    if (bareState) {
+      return {
+        location: new LocationDto({ state: bareState }),
+        remoteMentioned,
+        workFromHomeType,
+      };
+    }
+  }
+
   return {
     location: new LocationDto({ city: normalized }),
     remoteMentioned,
@@ -212,6 +236,7 @@ export function parseLocationText(
  */
 export function parseLocationList(
   rawLocations: Array<string | null | undefined>,
+  options?: ParseLocationOptions,
 ): ParsedLocationList {
   const concrete: Array<{ location: LocationDto; label: string; key: string }> = [];
   const seen = new Set<string>();
@@ -223,7 +248,7 @@ export function parseLocationList(
     const normalized = raw?.replace(/\s+/g, ' ').trim() ?? '';
     if (!normalized) continue;
 
-    const parsed = parseLocationText(normalized);
+    const parsed = parseLocationText(normalized, options);
     remoteMentioned = remoteMentioned || parsed.remoteMentioned;
     workFromHomeType = mergeWorkFromHomeType(
       workFromHomeType,

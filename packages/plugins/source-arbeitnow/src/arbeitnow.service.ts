@@ -18,6 +18,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { ARBEITNOW_API_URL, ARBEITNOW_HEADERS } from './arbeitnow.constants';
 import { ArbeitnowJob, ArbeitnowApiResponse } from './arbeitnow.types';
@@ -142,9 +143,7 @@ export class ArbeitnowService implements IScraper {
     let datePosted: string | null = null;
     if (raw.created_at) {
       try {
-        datePosted = new Date(raw.created_at * 1000)
-          .toISOString()
-          .split('T')[0];
+        datePosted = toDateOnly(raw.created_at * 1000);
       } catch {
         datePosted = null;
       }

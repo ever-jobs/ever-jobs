@@ -41,8 +41,8 @@ function listing(overrides: Partial<BreezyJob> = {}): BreezyJob {
   };
 }
 
-function detailPage(description: string): string {
-  const ld = {
+function detailPage(description: string, baseSalary?: unknown): string {
+  const ld: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'JobPosting',
     title: 'Senior Engineer',
@@ -50,6 +50,7 @@ function detailPage(description: string): string {
     jobLocationType: null,
     employmentType: 'FULL_TIME',
   };
+  if (baseSalary !== undefined) ld.baseSalary = baseSalary;
   return `<!doctype html><html><head>
     <script type="application/ld+json">${JSON.stringify({ '@type': 'WebSite' })}</script>
     <script type="application/ld+json">${JSON.stringify(ld)}</script>
@@ -154,6 +155,55 @@ describe('BreezyHRService', () => {
     expect(comp?.minAmount).toBe(19);
     expect(comp?.maxAmount).toBe(27);
     expect(comp?.interval).toBe(CompensationInterval.HOURLY);
+  });
+
+  it('uses the company display name (company.name) over the slug', async () => {
+    mockBoard([listing({ company: { name: 'Acme Inc.' } })], {
+      'friendly-1': detailPage('<p>x</p>'),
+    });
+
+    const result = await new BreezyHRService().scrape(input());
+    expect(result.jobs[0].companyName).toBe('Acme Inc.');
+  });
+
+  it('falls back to the slug when company.name is absent', async () => {
+    mockBoard([listing()], { 'friendly-1': detailPage('<p>x</p>') });
+
+    const result = await new BreezyHRService().scrape(input());
+    expect(result.jobs[0].companyName).toBe('acme');
+  });
+
+  it('prefers structured baseSalary over the free-text salary heuristic', async () => {
+    // Free text "$30 - $45" parses as hourly, but the detail ld+json baseSalary
+    // declares YEAR — the structured source is authoritative.
+    mockBoard([listing({ salary: '$30 - $45' })], {
+      'friendly-1': detailPage('<p>x</p>', {
+        '@type': 'MonetaryAmount',
+        currency: 'USD',
+        value: {
+          '@type': 'QuantitativeValue',
+          minValue: 30,
+          maxValue: 45,
+          unitText: 'YEAR',
+        },
+      }),
+    });
+
+    const job = (await new BreezyHRService().scrape(input())).jobs[0];
+    expect(job.compensation?.minAmount).toBe(30);
+    expect(job.compensation?.maxAmount).toBe(45);
+    expect(job.compensation?.interval).toBe(CompensationInterval.YEARLY);
+    expect(job.salarySource).toBe('structured');
+  });
+
+  it('sets salarySource=description when only the free-text salary is present', async () => {
+    mockBoard([listing({ salary: '$105k - $125k' })], {
+      'friendly-1': detailPage('<p>x</p>'),
+    });
+
+    const job = (await new BreezyHRService().scrape(input())).jobs[0];
+    expect(job.compensation?.interval).toBe(CompensationInterval.YEARLY);
+    expect(job.salarySource).toBe('description');
   });
 
   it('maps jobType and employmentType from the type node', async () => {

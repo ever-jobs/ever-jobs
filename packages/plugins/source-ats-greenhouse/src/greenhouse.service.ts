@@ -18,6 +18,7 @@ import {
   extractEmails,
   parseLocationList,
   resolveCompensation,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { GREENHOUSE_API_URL, GREENHOUSE_HARVEST_API_URL, GREENHOUSE_HEADERS } from './greenhouse.constants';
 import {
@@ -121,6 +122,14 @@ export class GreenhouseService implements IScraper {
       this.locationLabels(job.location?.name ?? job.offices?.[0]?.name ?? null),
     );
 
+    // Greenhouse exposes no structured remote *flag*, so its only structured
+    // remote evidence is the `offices[]` and the company-defined "Work
+    // Location" metadata entry. Fold both into the isRemote OR (Spec 5027).
+    const structuredRemote = parseLocationList([
+      ...this.officeLabels(job.offices),
+      ...this.workLocationLabels(job.metadata),
+    ]);
+
     // Department
     const department = job.departments?.[0]?.name ?? null;
 
@@ -145,11 +154,12 @@ export class GreenhouseService implements IScraper {
       location: parsedLocations.location,
       description,
       compensation,
-      datePosted: datePosted
-        ? new Date(datePosted).toISOString().split('T')[0]
-        : null,
-      isRemote: parsedLocations.remoteMentioned,
-      workFromHomeType: parsedLocations.workFromHomeType,
+      datePosted: toDateOnly(datePosted),
+      isRemote: parsedLocations.remoteMentioned || structuredRemote.remoteMentioned,
+      workFromHomeType: this.mergeWorkFromHomeType(
+        parsedLocations.workFromHomeType,
+        structuredRemote.workFromHomeType,
+      ),
       employmentType,
       emails: extractEmails(description),
       site: Site.GREENHOUSE,
@@ -377,6 +387,11 @@ export class GreenhouseService implements IScraper {
       this.locationLabels(office?.name ?? office?.location?.name ?? null),
     );
 
+    // Greenhouse has no structured remote flag; the Harvest `offices[]` are the
+    // only structured remote evidence here. Fold them into the isRemote OR
+    // (Spec 5027). The Harvest list endpoint carries no company metadata.
+    const structuredRemote = parseLocationList(this.officeLabels(job.offices));
+
     // Department
     const department = job.departments?.[0]?.name ?? null;
 
@@ -393,11 +408,12 @@ export class GreenhouseService implements IScraper {
       compensation: resolveCompensation({
         text: this.salaryTextFromContent(job.notes),
       }),
-      datePosted: datePosted
-        ? new Date(datePosted).toISOString().split('T')[0]
-        : null,
-      isRemote: parsedLocations.remoteMentioned,
-      workFromHomeType: parsedLocations.workFromHomeType,
+      datePosted: toDateOnly(datePosted),
+      isRemote: parsedLocations.remoteMentioned || structuredRemote.remoteMentioned,
+      workFromHomeType: this.mergeWorkFromHomeType(
+        parsedLocations.workFromHomeType,
+        structuredRemote.workFromHomeType,
+      ),
       emails: extractEmails(description),
       site: Site.GREENHOUSE,
       // ATS-specific fields
@@ -405,5 +421,68 @@ export class GreenhouseService implements IScraper {
       atsType: 'greenhouse',
       department,
     });
+  }
+
+  /**
+   * Office name / location strings usable as remote-evidence labels. Accepts
+   * both the public-board office shape (`location` is a string) and the
+   * Harvest office shape (`location` is `{ name }`).
+   */
+  private officeLabels(
+    offices:
+      | Array<{
+          name?: string | null;
+          location?: string | { name?: string | null } | null;
+        }>
+      | null
+      | undefined,
+  ): string[] {
+    const labels: string[] = [];
+    for (const office of offices ?? []) {
+      if (!office) continue;
+      labels.push(...this.locationLabels(office.name ?? null));
+      const loc = office.location;
+      const locName = typeof loc === 'string' ? loc : (loc?.name ?? null);
+      labels.push(...this.locationLabels(locName));
+    }
+    return labels;
+  }
+
+  /**
+   * Values of the company-defined "Work Location" `metadata` entry, as
+   * remote-evidence labels. The field is operator-named, so it is matched
+   * case-insensitively on `name`; its value may be a single string or a
+   * multi-select array.
+   */
+  private workLocationLabels(
+    metadata: GreenhouseMetadataItem[] | null | undefined,
+  ): string[] {
+    const labels: string[] = [];
+    for (const item of metadata ?? []) {
+      if (!item || item.name?.toLowerCase() !== 'work location') continue;
+      const value = item.value;
+      if (typeof value === 'string') {
+        labels.push(...this.locationLabels(value));
+      } else if (Array.isArray(value)) {
+        for (const entry of value) {
+          if (typeof entry === 'string') labels.push(...this.locationLabels(entry));
+        }
+      }
+    }
+    return labels;
+  }
+
+  /**
+   * Combine two `workFromHomeType` signals. Prefers a present value, keeps a
+   * shared value, and widens to `Hybrid or Remote` when they genuinely differ
+   * (mirrors the merge used across the ATS plugins).
+   */
+  private mergeWorkFromHomeType(
+    a: string | null,
+    b: string | null,
+  ): string | null {
+    if (!a) return b;
+    if (!b || a === b) return a;
+    return 'Hybrid or Remote';
   }
 }

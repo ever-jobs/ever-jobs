@@ -5,6 +5,7 @@
  * The company slug format for Workday is: {company}:{wd_number}:{site}
  * e.g., "tesla:5:Tesla" or "microsoft:1:External"
  */
+import { toDateOnly } from '@ever-jobs/common';
 
 /** Default page size for Workday pagination */
 export const WORKDAY_PAGE_SIZE = 20;
@@ -65,8 +66,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * `.toISOString()` throw a RangeError.
  */
 function toIsoDate(date: Date): string | null {
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().split('T')[0];
+  return toDateOnly(date);
 }
 
 /**

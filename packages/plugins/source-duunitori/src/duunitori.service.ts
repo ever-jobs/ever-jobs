@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { DUUNITORI_API_URL, DUUNITORI_DEFAULT_RESULTS, DUUNITORI_HEADERS } from './duunitori.constants';
 import { DuunitoriApiResponse, DuunitoriJobEntry } from './duunitori.types';
@@ -119,7 +120,7 @@ export class DuunitoriService implements IScraper {
     let datePosted: string | null = null;
     if (raw.date_posted) {
       try {
-        datePosted = new Date(raw.date_posted).toISOString().split('T')[0];
+        datePosted = toDateOnly(raw.date_posted);
       } catch {
         datePosted = null;
       }

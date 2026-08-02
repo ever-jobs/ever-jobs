@@ -69,6 +69,10 @@ describe('GemService — Spec 006 / T05 + T06', () => {
   beforeEach(() => {
     mockPost.mockReset();
     mockSetHeaders.mockReset();
+    // Default: detail (ExternalJobPostingQuery) calls return an empty
+    // envelope so a test that only seeds the list response still has
+    // every per-posting detail fetch resolve cleanly (to null detail).
+    mockPost.mockResolvedValue({ data: [] });
   });
 
   describe('registration scaffolding (carries forward from T02)', () => {
@@ -116,10 +120,12 @@ describe('GemService — Spec 006 / T05 + T06', () => {
       expect(first.atsType).toBe('gem');
       expect(first.atsId).toBe('ext-1001');
       expect(first.site).toBe(Site.GEM);
-      expect(first.jobUrl).toBe('https://jobs.gem.com/acme/jobs/ext-1001');
+      expect(first.jobUrl).toBe('https://jobs.gem.com/acme/ext-1001');
       expect(first.location?.city).toBe('New York, NY');
       expect(first.department).toBe('Engineering');
       expect(first.isRemote).toBe(false);
+      // employmentType is humanised from the list `job.employmentType` enum.
+      expect(first.employmentType).toBe('Full-time');
 
       // Remote-detection sanity check on the SRE row.
       const sre = result.jobs.find((j) => j.atsId === 'ext-1002');
@@ -131,10 +137,9 @@ describe('GemService — Spec 006 / T05 + T06', () => {
       expect(designer?.isRemote).toBe(false);
       expect(designer?.department).toBe('Design');
 
-      // Verify the wire request: one batched POST, both operations
-      // present, in the canonical order (Theme first, List second),
-      // boardId = companySlug.
-      expect(mockPost).toHaveBeenCalledTimes(1);
+      // Verify the list request: the first POST carries both operations
+      // in the canonical order (Theme first, List second), boardId =
+      // companySlug. (Per-posting detail POSTs follow.)
       const [url, payload] = mockPost.mock.calls[0];
       expect(url).toBe('https://jobs.gem.com/api/public/graphql/batch');
       expect(Array.isArray(payload)).toBe(true);
@@ -157,6 +162,55 @@ describe('GemService — Spec 006 / T05 + T06', () => {
 
       const result = await service.scrape(input);
       expect(result.jobs).toHaveLength(2);
+    });
+  });
+
+  describe('detail overlay', () => {
+    it('overlays description, datePosted, compensation and maps employmentType + URL', async () => {
+      // Route by operation: the list POST returns the batch fixture; each
+      // ExternalJobPostingQuery returns a per-extId detail envelope.
+      const details: Record<string, any> = {
+        'ext-1001': {
+          descriptionHtml: '<p>Build <b>flight</b> avionics.</p>',
+          firstPublishedTsSec: 1756568058,
+          startDateTs: null,
+          compensationHtml:
+            '<h2>Compensation</h2><div>The base pay range is $170,000 – $200,000 per year.</div>',
+        },
+      };
+      mockPost.mockImplementation(async (_url: string, payload: any[]) => {
+        const op = payload?.[0]?.operationName;
+        if (op === 'ExternalJobPostingQuery') {
+          const extId = payload[0].variables.extId as string;
+          return { data: [{ data: { oatsExternalJobPosting: details[extId] ?? null } }] };
+        }
+        return { data: clone(BATCH_RESPONSE_RAW) };
+      });
+
+      const service = new GemService();
+      const result = await service.scrape({
+        siteType: [Site.GEM],
+        companySlug: 'acme',
+        resultsWanted: 100,
+      } as ScraperInputDto);
+
+      const first = result.jobs.find((j) => j.atsId === 'ext-1001');
+      expect(first?.jobUrl).toBe('https://jobs.gem.com/acme/ext-1001');
+      // Body is overlaid from the detail (markdown by default).
+      expect(first?.description).toContain('Build');
+      expect(first?.description).toContain('flight');
+      // datePosted comes from firstPublishedTsSec (Unix seconds → Date).
+      expect(first?.datePosted).toEqual(new Date(1756568058 * 1000));
+      // Free-text compensationHtml is parsed into a structured range.
+      expect(first?.compensation?.minAmount).toBe(170000);
+      expect(first?.compensation?.maxAmount).toBe(200000);
+      expect(first?.employmentType).toBe('Full-time');
+
+      // A posting with no detail node keeps its list-only fields (no body/date).
+      const noDetail = result.jobs.find((j) => j.atsId === 'ext-1002');
+      expect(noDetail?.description ?? null).toBeNull();
+      expect(noDetail?.datePosted ?? null).toBeNull();
+      expect(noDetail?.title).toBe('Remote Site Reliability Engineer');
     });
   });
 

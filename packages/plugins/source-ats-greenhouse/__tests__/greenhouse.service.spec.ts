@@ -193,4 +193,80 @@ describe('GreenhouseService — Spec 5009', () => {
     expect(job.compensation?.minAmount).toBe(170000);
     expect(job.compensation?.maxAmount).toBe(220000);
   });
+
+  it('keeps datePosted on the source local day for an evening offset timestamp (Spec 5024)', async () => {
+    // 2026-04-20T22:32:33-04:00 is 2026-04-21T02:32Z; UTC truncation would
+    // report 2026-04-21. The posting's own calendar day is 2026-04-20.
+    const job = await scrapeOne({
+      id: 9,
+      title: 'Engineer',
+      content: '&lt;p&gt;Role&lt;/p&gt;',
+      location: { name: 'Boston, MA' },
+      first_published: '2026-04-20T22:32:33-04:00',
+    });
+
+    expect(job.datePosted).toBe('2026-04-20');
+  });
+
+  // ── Spec 5027 — structured remote evidence (offices[] + Work Location) ──
+  describe('structured remote evidence (Spec 5027)', () => {
+    it('flags remote from an office named Remote when the role location is concrete', async () => {
+      const job = await scrapeOne({
+        id: 20,
+        title: 'Engineer',
+        content: '&lt;p&gt;Role&lt;/p&gt;',
+        location: { name: 'Austin, TX' },
+        offices: [{ id: 1, name: 'Remote' }],
+      });
+
+      expect(job.isRemote).toBe(true);
+      expect(job.workFromHomeType).toBe('Remote');
+    });
+
+    it('flags remote from a "Work Location" metadata value of Remote', async () => {
+      const job = await scrapeOne({
+        id: 21,
+        title: 'Engineer',
+        content: '&lt;p&gt;Role&lt;/p&gt;',
+        location: { name: 'Austin, TX' },
+        metadata: [
+          { id: 30, name: 'Work Location', value_type: 'single_select', value: 'Remote' },
+        ],
+      });
+
+      expect(job.isRemote).toBe(true);
+      expect(job.workFromHomeType).toBe('Remote');
+    });
+
+    it('maps a Hybrid "Work Location" to workFromHomeType without flagging remote', async () => {
+      const job = await scrapeOne({
+        id: 22,
+        title: 'Engineer',
+        content: '&lt;p&gt;Role&lt;/p&gt;',
+        location: { name: 'Austin, TX' },
+        metadata: [
+          { id: 31, name: 'Work Location', value_type: 'single_select', value: 'Hybrid' },
+        ],
+      });
+
+      expect(job.isRemote).toBe(false);
+      expect(job.workFromHomeType).toBe('Hybrid');
+    });
+
+    it('does not flag remote for a concrete office and non-remote location', async () => {
+      const job = await scrapeOne({
+        id: 23,
+        title: 'Engineer',
+        content: '&lt;p&gt;Role&lt;/p&gt;',
+        location: { name: 'Austin, TX' },
+        offices: [{ id: 2, name: 'Austin', location: 'Austin, TX' }],
+        metadata: [
+          { id: 32, name: 'Work Location', value_type: 'single_select', value: 'On-site' },
+        ],
+      });
+
+      expect(job.isRemote).toBe(false);
+      expect(job.workFromHomeType).toBeNull();
+    });
+  });
 });

@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { BadRequestException } from '@nestjs/common';
 import {
   ScraperInputDto,
   JobPostDto,
@@ -10,6 +11,7 @@ import {
   CompensationDto,
   CompensationInterval,
 } from '@ever-jobs/models';
+import { PluginRegistry } from '@ever-jobs/plugin';
 
 // ---------------------------------------------------------------------------
 // Mock ALL source packages before importing JobsService.
@@ -217,6 +219,11 @@ import {
   MAX_SEARCH_CONCURRENCY,
 } from '../jobs.service';
 
+const ATS_SITES = new Set<string>([
+  Site.GREENHOUSE,
+  Site.LEVER,
+]);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -278,10 +285,18 @@ const STUB_ATS_SITES: Site[] = [
  * by the Spec 5026 deadline; the fan-out cases opt in explicitly.
  */
 function createService(
-  scraperEntries: [Site, IScraper][],
+  scraperEntries: [Site, IScraper, boolean?][],
   overrides: { concurrency?: number; deadlineMs?: number } = {},
 ): JobsService {
-  const scraperMap = new Map<Site, IScraper>(scraperEntries);
+  const scraperMap = new Map<Site, IScraper>(
+    scraperEntries.map(([site, scraper]) => [site, scraper]),
+  );
+  // Sites the caller explicitly flags as ATS via the optional third tuple
+  // element (the fork’s harness shape). Unioned with STUB_ATS_SITES below so
+  // both the pre-existing routing cases and the flagged cases resolve.
+  const explicitAts = new Set<Site>(
+    scraperEntries.filter(([, , isAts]) => isAts).map(([site]) => site),
+  );
   const service: any = Object.create(JobsService.prototype);
 
   service.logger = {
@@ -295,7 +310,12 @@ function createService(
     size: scraperMap.size,
     getScraper: (site: Site) => scraperMap.get(site),
     listSiteKeys: () => [...scraperMap.keys()],
-    listAtsSites: () => STUB_ATS_SITES.filter((s) => scraperMap.has(s)),
+    listAtsSites: () => [
+      ...new Set([
+        ...STUB_ATS_SITES.filter((s) => scraperMap.has(s)),
+        ...explicitAts,
+      ]),
+    ],
     listSources: () =>
       [...scraperMap.keys()].map((site) => ({
         site,
@@ -355,7 +375,7 @@ describe('JobsService', () => {
       const greenhouse = makeScraper([{ title: 'GH job' }]);
       const linkedin = makeScraper([{ title: 'LI job' }]);
       const service = createService([
-        [Site.GREENHOUSE, greenhouse],
+        [Site.GREENHOUSE, greenhouse, true],
         [Site.LINKEDIN, linkedin],
       ]);
 
@@ -378,7 +398,7 @@ describe('JobsService', () => {
       const amazon = makeScraper([{ title: 'Amazon job' }]);
       const service = createService([
         [Site.LINKEDIN, linkedin],
-        [Site.LEVER, lever],
+        [Site.LEVER, lever, true],
         [Site.AMAZON, amazon],
       ]);
 
@@ -400,7 +420,7 @@ describe('JobsService', () => {
 
     it('should allow ATS scrapers via explicit siteType even without companySlug', async () => {
       const lever = makeScraper([{ title: 'Lever job' }]);
-      const service = createService([[Site.LEVER, lever]]);
+      const service = createService([[Site.LEVER, lever, true]]);
 
       const input = new ScraperInputDto({
         searchTerm: 'node',
@@ -409,6 +429,90 @@ describe('JobsService', () => {
       const result = await service.searchJobs(input);
 
       expect(lever.scrape).toHaveBeenCalled();
+      expect(result.length).toBe(1);
+    });
+
+    it('should resolve companyDomain to a registered Site token', async () => {
+      const buildcover = makeScraper([{ title: 'Buildcover job' }]);
+      const linkedin = makeScraper([{ title: 'LI job' }]);
+      const service = createService([
+        [Site.BUILDCOVER, buildcover],
+        [Site.LINKEDIN, linkedin],
+      ]);
+
+      const input = new ScraperInputDto({
+        searchTerm: 'engineer',
+        companyDomain: ['buildcover.com'],
+      });
+      const result = await service.searchJobs(input);
+
+      expect(buildcover.scrape).toHaveBeenCalled();
+      expect(linkedin.scrape).not.toHaveBeenCalled();
+      expect(result.length).toBe(1);
+      expect(result[0].title).toBe('Buildcover job');
+    });
+
+    it('should union companyDomain with explicit siteType', async () => {
+      const buildcover = makeScraper([{ title: 'Buildcover job' }]);
+      const linkedin = makeScraper([{ title: 'LI job' }]);
+      const service = createService([
+        [Site.BUILDCOVER, buildcover],
+        [Site.LINKEDIN, linkedin],
+      ]);
+
+      const input = new ScraperInputDto({
+        searchTerm: 'engineer',
+        siteType: [Site.LINKEDIN],
+        companyDomain: ['buildcover.com'],
+      });
+      const result = await service.searchJobs(input);
+
+      expect(linkedin.scrape).toHaveBeenCalled();
+      expect(buildcover.scrape).toHaveBeenCalled();
+      expect(result.length).toBe(2);
+    });
+
+    it('should throw BadRequestException for an unresolved companyDomain', async () => {
+      const linkedin = makeScraper([{ title: 'LI job' }]);
+      const service = createService([[Site.LINKEDIN, linkedin]]);
+
+      const input = new ScraperInputDto({
+        searchTerm: 'engineer',
+        companyDomain: ['not-a-real-company.io'],
+      });
+
+      await expect(service.searchJobs(input)).rejects.toThrow(BadRequestException);
+      await expect(service.searchJobs(input)).rejects.toThrow(
+        /domain `not-a-real-company\.io` → token `not-a-real-company_io` is not a registered plugin/,
+      );
+      expect(linkedin.scrape).not.toHaveBeenCalled();
+    });
+
+    it('should resolve a full URL or www-prefixed domain', async () => {
+      const hyl = makeScraper([{ title: 'Hylio job' }]);
+      const service = createService([[Site.HYL_IO, hyl]]);
+
+      const input = new ScraperInputDto({
+        searchTerm: 'drone',
+        companyDomain: ['https://www.hyl.io/careers'],
+      });
+      const result = await service.searchJobs(input);
+
+      expect(hyl.scrape).toHaveBeenCalled();
+      expect(result.length).toBe(1);
+    });
+
+    it('should ignore empty or whitespace-only companyDomain entries', async () => {
+      const buildcover = makeScraper([{ title: 'Buildcover job' }]);
+      const service = createService([[Site.BUILDCOVER, buildcover]]);
+
+      const input = new ScraperInputDto({
+        searchTerm: 'engineer',
+        companyDomain: ['', '  ', 'buildcover.com'],
+      });
+      const result = await service.searchJobs(input);
+
+      expect(buildcover.scrape).toHaveBeenCalled();
       expect(result.length).toBe(1);
     });
   });

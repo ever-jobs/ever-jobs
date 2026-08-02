@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   ZIMYO_ROOT_DOMAIN,
@@ -537,7 +538,7 @@ export class ZimyoService implements IScraper {
     const iso = dmy ? `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}` : cleaned;
     try {
       const parsed = new Date(iso);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(iso);
     } catch {
       // ignore
     }

@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JOBYLON_API_URL, JOBYLON_HEADERS } from './jobylon.constants';
 import { JobylonJob } from './jobylon.types';
@@ -127,7 +128,7 @@ export class JobylonService implements IScraper {
 
     // Date posted
     const datePosted = job.from_date
-      ? new Date(job.from_date).toISOString().split('T')[0]
+      ? toDateOnly(job.from_date)
       : null;
 
     // Skills from skills array

@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { ELIXIRJOBS_RSS_URL, ELIXIRJOBS_DEFAULT_RESULTS, ELIXIRJOBS_HEADERS } from './elixirjobs.constants';
 import { ElixirJobsRssItem } from './elixirjobs.types';
@@ -152,7 +153,7 @@ export class ElixirJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

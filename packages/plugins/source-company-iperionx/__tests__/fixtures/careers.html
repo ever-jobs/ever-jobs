@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+	<meta charset="UTF-8">
+<script>
+var gform;gform||(document.addEventListener("gform_main_scripts_loaded",function(){gform.scriptsLoaded=!0}),document.addEventListener("gform/theme/scripts_loaded",function(){gform.themeScriptsLoaded=!0}),window.addEventListener("DOMContentLoaded",function(){gform.domLoaded=!0}),gform={domLoaded:!1,scriptsLoaded:!1,themeScriptsLoaded:!1,isFormEditor:()=>"function"==typeof InitializeEditor,callIfLoaded:function(o){return!(!gform.domLoaded||!gform.scriptsLoaded||!gform.themeScriptsLoaded&&!gform.isFormEditor()||(gform.isFormEditor()&&console.warn("The use of gform.initializeOnLoaded() is deprecated in the form editor context and will be removed in Gravity Forms 3.1."),o(),0))},initializeOnLoaded:function(o){gform.callIfLoaded(o)||(document.addEventListener("gform_main_scripts_loaded",()=>{gform.scriptsLoaded=!0,gform.callIfLoaded(o)}),document.addEventListener("gform/theme/scripts_loaded",()=>{gform.themeScriptsLoaded=!0,gform.callIfLoaded(o)}),window.addEventListener("DOMContentLoaded",()=>{gform.domLoaded=!0,gform.callIfLoaded(o)}))},hooks:{action:{},filter:{}},addAction:function(o,r,e,t){gform.addHook("action",o,r,e,t)},addFilter:function(o,r,e,t){gform.addHook("filter",o,r,e,t)},doAction:function(o){gform.doHook("action",o,arguments)},applyFilters:function(o){return gform.doHook("filter",o,arguments)},removeAction:function(o,r){gform.removeHook("action",o,r)},removeFilter:function(o,r,e){gform.removeHook("filter",o,r,e)},addHook:function(o,r,e,t,n){null==gform.hooks[o][r]&&(gform.hooks[o][r]=[]);var d=gform.hooks[o][r];null==n&&(n=r+"_"+d.length),gform.hooks[o][r].push({tag:n,callable:e,priority:t=null==t?10:t})},doHook:function(r,o,e){var t;if(e=Array.prototype.slice.call(e,1),null!=gform.hooks[r][o]&&((o=gform.hooks[r][o]).sort(function(o,r){return o.priority-r.priority}),o.forEach(function(o){"function"!=typeof(t=o.callable)&&(t=window[t]),"action"==r?t.apply(null,e):e[0]=t.apply(null,e)})),"filter"==r)return e[0]},removeHook:function(o,r,t,n){var e;null!=gform.hooks[o][r]&&(e=(e=gform.hooks[o][r]).filter(function(o,r,e){return!!(null!=n&&n!=o.tag||null!=t&&t!=o.priority)}),gform.hooks[o][r]=e)}});
+</script>
+
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+	<link rel='shortcut icon' type='image/x-icon' href='https://iperionx.com/wp-content/themes/iperionx/assets/favicons/favicon.ico' />
+		<link rel="apple-touch-icon" sizes="any" href="https://iperionx.com/wp-content/themes/iperionx/assets/favicons/apple-touch-icon.png">
+	<link rel="icon" type="image/png" sizes="32x32" href="https://iperionx.com/wp-content/themes/iperionx/assets/favicons/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="https://iperionx.com/wp-content/themes/iperionx/assets/favicons/favicon-16x16.png">
+	<link rel="manifest" href="https://iperionx.com/wp-content/themes/iperionx/assets/favicons/site.webmanifest">
+		<!-- <link rel="mask-icon" href="https://iperionx.com/wp-content/themes/iperionx/assets/favicons/safari-pinned-tab.svg" color="#AC2EFF">  -->
+	<meta name="msapplication-TileColor" content="#AC2EFF">
+	<meta name="theme-color" content="#AC2EFF">
+	<script type="text/javascript" data-cookieconsent="ignore">
+	window.dataLayer = window.dataLayer || [];
+
+	function gtag() {
+		dataLayer.push(arguments);
+	}
+
+	gtag("consent", "default", {
+		ad_personalization: "denied",
+		ad_storage: "denied",
+		ad_user_data: "denied",
+		analytics_storage: "denied",
+		functionality_storage: "denied",
+		personalization_storage: "denied",
+		security_storage: "granted",
+		wait_for_update: 500,
+	});
+	gtag("set", "ads_data_redaction", true);
+	</script>
+<script type="text/javascript" data-cookieconsent="ignore">
+		(function (w, d, s, l, i) {
+		w[l] = w[l] || [];
+		w[l].push({'gtm.start': new Date().getTime(), event: 'gtm.js'});
+		var f = d.getElementsByTagName(s)[0], j = d.createElement(s), dl = l !== 'dataLayer' ? '&l=' + l : '';
+		j.async = true;
+		j.src = 'https://www.googletagmanager.com/gtm.js?id=' + i + dl;
+		f.parentNode.insertBefore(j, f);
+	})(
+		window,
+		document,
+		'script',
+		'dataLayer',
+		'G-MB1H0T0TB3'
+	);
+</script>
+<script type="text/javascript"
+		id="Cookiebot"
+		src="https://consent.cookiebot.com/uc.js"
+		data-implementation="wp"
+		data-cbid="51972630-7f6b-4642-b002-791389a8365b"
+							data-blockingmode="auto"
+	></script>
+<meta name='robots' content='index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1' />
+
+	<!-- This site is optimized with the Yoast SEO Premium plugin v28.0 (Yoast SEO v28.0) - https://yoast.com/product/yoast-seo-premium-wordpress/ -->
+	<title>Careers - IperionX</title>
+	<meta name="description" content="Stay connected with IperionX through our newsletter and social media channels to be informed about IperionX careers and upcoming vacancies." />
+	<link rel="canonical" href="https://iperionx.com/careers/" />
+	<meta property="og:locale" content="en_US" />
+	<meta property="og:type" content="article" />
+	<meta property="og:title" content="Careers" />
+	<meta property="og:description" content="Stay connected with IperionX through our newsletter and social media channels to be informed about IperionX careers and upcoming vacancies." />
+	<meta property="og:url" content="https://iperionx.com/careers/" />
+	<meta property="og:site_name" content="IperionX" />
+	<meta property="article:publisher" content="https://www.facebook.com/iperionx" />
+	<meta property="article:modified_time" content="2026-06-18T22:25:46+00:00" />
+	<meta property="og:image" content="https://iperionx.com/wp-content/uploads/2022/06/iperionx-social.jpg" />
+	<meta property="og:image:width" content="800" />
+	<meta property="og:image:height" content="800" />
+	<meta property="og:image:type" content="image/jpeg" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:site" content="@IperionX" />
+	<meta name="twitter:label1" content="Est. reading time" />
+	<meta name="twitter:data1" content="4 minutes" />
+	<script type="application/ld+json" class="yoast-schema-graph">{"@context":"https:\/\/schema.org","@graph":[{"@type":"WebPage","@id":"https:\/\/iperionx.com\/careers\/","url":"https:\/\/iperionx.com\/careers\/","name":"Careers - IperionX","isPartOf":{"@id":"https:\/\/iperionx.com\/#website"},"datePublished":"2023-05-30T15:37:18+00:00","dateModified":"2026-06-18T22:25:46+00:00","description":"Stay connected with IperionX through our newsletter and social media channels to be informed about IperionX careers and upcoming vacancies.","breadcrumb":{"@id":"https:\/\/iperionx.com\/careers\/#breadcrumb"},"inLanguage":"en-US","potentialAction":[{"@type":"ReadAction","target":["https:\/\/iperionx.com\/careers\/"]}]},{"@type":"BreadcrumbList","@id":"https:\/\/iperionx.com\/careers\/#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https:\/\/iperionx.com\/"},{"@type":"ListItem","position":2,"name":"Careers"}]},{"@type":"WebSite","@id":"https:\/\/iperionx.com\/#website","url":"https:\/\/iperionx.com\/","name":"IperionX","description":"Welcome to the Titanium Age","potentialAction":[{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https:\/\/iperionx.com\/?s={search_term_string}"},"query-input":{"@type":"PropertyValueSpecification","valueRequired":true,"valueName":"search_term_string"}}],"inLanguage":"en-US"}]}</script>
+	<!-- / Yoast SEO Premium plugin. -->
+
+
+<link rel='dns-prefetch' href='//www.googletagmanager.com' />
+<link rel="alternate" title="oEmbed (JSON)" type="application/json+oembed" href="https://iperionx.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fiperionx.com%2Fcareers%2F" />
+<link rel="alternate" title="oEmbed (XML)" type="text/xml+oembed" href="https://iperionx.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fiperionx.com%2Fcareers%2F&#038;format=xml" />
+<style id="wp-img-auto-sizes-contain-inline-css">
+img:is([sizes=auto i],[sizes^="auto," i]){contain-intrinsic-size:3000px 1500px}
+/*# sourceURL=wp-img-auto-sizes-contain-inline-css */
+</style>
+<style id="wp-emoji-styles-inline-css">
+
+	img.wp-smiley, img.emoji {
+		display: inline !important;
+		border: none !important;
+		box-shadow: none !important;
+		height: 1em !important;
+		width: 1em !important;
+		margin: 0 0.07em !important;
+		vertical-align: -0.1em !important;
+		background: none !important;
+		padding: 0 !important;
+	}
+/*# sourceURL=wp-emoji-styles-inline-css */
+</style>
+<style id="wp-block-library-inline-css">
+:root{--wp-block-synced-color:#7a00df;--wp-block-synced-color--rgb:122,0,223;--wp-bound-block-color:var(--wp-block-synced-color);--wp-editor-canvas-background:#ddd;--wp-admin-theme-color:#007cba;--wp-admin-theme-color--rgb:0,124,186;--wp-admin-theme-color-darker-10:#006ba1;--wp-admin-theme-color-darker-10--rgb:0,107,160.5;--wp-admin-theme-color-darker-20:#005a87;--wp-admin-theme-color-darker-20--rgb:0,90,135;--wp-admin-border-width-focus:2px}@media (min-resolution:192dpi){:root{--wp-admin-border-width-focus:1.5px}}.wp-element-button{cursor:pointer}:root .has-very-light-gray-background-color{background-color:#eee}:root .has-very-dark-gray-background-color{background-color:#313131}:root .has-very-light-gray-color{color:#eee}:root .has-very-dark-gray-color{color:#313131}:root .has-vivid-green-cyan-to-vivid-cyan-blue-gradient-background{background:linear-gradient(135deg,#00d084,#0693e3)}:root .has-purple-crush-gradient-background{background:linear-gradient(135deg,#34e2e4,#4721fb 50%,#ab1dfe)}:root .has-hazy-dawn-gradient-background{background:linear-gradient(135deg,#faaca8,#dad0ec)}:root .has-subdued-olive-gradient-background{background:linear-gradient(135deg,#fafae1,#67a671)}:root .has-atomic-cream-gradient-background{background:linear-gradient(135deg,#fdd79a,#004a59)}:root .has-nightshade-gradient-background{background:linear-gradient(135deg,#330968,#31cdcf)}:root .has-midnight-gradient-background{background:linear-gradient(135deg,#020381,#2874fc)}:root{--wp--preset--font-size--normal:16px;--wp--preset--font-size--huge:42px}.has-regular-font-size{font-size:1em}.has-larger-font-size{font-size:2.625em}.has-normal-font-size{font-size:var(--wp--preset--font-size--normal)}.has-huge-font-size{font-size:var(--wp--preset--font-size--huge)}:root .has-text-align-center{text-align:center}:root .has-text-align-left{text-align:left}:root .has-text-align-right{text-align:right}.has-fit-text{white-space:nowrap!important}#end-resizable-editor-section{display:none}.aligncenter{clear:both}.items-justified-left{justify-content:flex-start}.items-justified-center{justify-content:center}.items-justified-right{justify-content:flex-end}.items-justified-space-between{justify-content:space-between}.screen-reader-text{word-wrap:normal!important;border:0;clip-path:inset(50%);height:1px;margin:-1px;overflow:hidden;padding:0;position:absolute;width:1px}.screen-reader-text:focus{background-color:#ddd;clip-path:none;color:#444;display:block;font-size:1em;height:auto;left:5px;line-height:normal;padding:15px 23px 14px;text-decoration:none;top:5px;width:auto;z-index:100000}html :where(.has-border-color){border-style:solid}html :where([style*=border-color]){border-style:solid}html :where([style*=border-top-color]){border-top-style:solid}html :where([style*=border-right-color]){border-right-style:solid}html :where([style*=border-bottom-color]){border-bottom-style:solid}html :where([style*=border-left-color]){border-left-style:solid}html :where([style*=border-width]){border-style:solid}html :where([style*=border-top-width]){border-top-style:solid}html :where([style*=border-right-width]){border-right-style:solid}html :where([style*=border-bottom-width]){border-bottom-style:solid}html :where([style*=border-left-width]){border-left-style:solid}html :where(img[class*=wp-image-]){height:auto;max-width:100%}:where(figure){margin:0 0 1em}html :where(.is-position-sticky){--wp-admin--admin-bar--position-offset:var(--wp-admin--admin-bar--height,0px)}@media screen and (max-width:600px){html :where(.is-position-sticky){--wp-admin--admin-bar--position-offset:0px}}
+
+/*# sourceURL=/wp-includes/css/dist/block-library/common.min.css */
+</style>
+<style id="classic-theme-styles-inline-css">
+/*! This file is auto-generated */
+.wp-block-button__link{color:#fff;background-color:#32373c;border-radius:9999px;box-shadow:none;text-decoration:none;padding:calc(.667em + 2px) calc(1.333em + 2px);font-size:1.125em}.wp-block-file__button{background:#32373c;color:#fff;text-decoration:none}
+/*# sourceURL=/wp-includes/css/classic-themes.min.css */
+</style>
+
+<style id="global-styles-inline-css">
+:root{--wp--preset--aspect-ratio--square: 1;--wp--preset--aspect-ratio--4-3: 4/3;--wp--preset--aspect-ratio--3-4: 3/4;--wp--preset--aspect-ratio--3-2: 3/2;--wp--preset--aspect-ratio--2-3: 2/3;--wp--preset--aspect-ratio--16-9: 16/9;--wp--preset--aspect-ratio--9-16: 9/16;--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgb(6,147,227) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgb(252,185,0) 0%,rgb(255,105,0) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgb(255,105,0) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;--wp--preset--spacing--20: 0.44rem;--wp--preset--spacing--30: 0.67rem;--wp--preset--spacing--40: 1rem;--wp--preset--spacing--50: 1.5rem;--wp--preset--spacing--60: 2.25rem;--wp--preset--spacing--70: 3.38rem;--wp--preset--spacing--80: 5.06rem;--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgb(255, 255, 255), 6px 6px rgb(0, 0, 0);--wp--preset--shadow--crisp: 6px 6px 0px rgb(0, 0, 0);}:where(body) { margin: 0; }:where(.is-layout-flex){gap: 0.5em;}:where(.is-layout-grid){gap: 0.5em;}body .is-layout-flex{display: flex;}.is-layout-flex{flex-wrap: wrap;align-items: center;}.is-layout-flex > :is(*, div){margin: 0;}body .is-layout-grid{display: grid;}.is-layout-grid > :is(*, div){margin: 0;}body{padding-top: 0px;padding-right: 0px;padding-bottom: 0px;padding-left: 0px;}:root :where(.wp-element-button, .wp-block-button__link){background-color: #32373c;border-width: 0;color: #fff;font-family: inherit;font-size: inherit;font-style: inherit;font-weight: inherit;letter-spacing: inherit;line-height: inherit;padding-top: calc(0.667em + 2px);padding-right: calc(1.333em + 2px);padding-bottom: calc(0.667em + 2px);padding-left: calc(1.333em + 2px);text-decoration: none;text-transform: inherit;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}
+/*# sourceURL=global-styles-inline-css */
+</style>
+
+<link rel='stylesheet' id='pvfw-modaal-css' href='https://iperionx.com/wp-content/plugins/pdf-viewer-for-wordpress/tnc-resources/modaal.min.css?ver=12.5.5' media='all' />
+<link rel='stylesheet' id='ui-font-css' href='https://iperionx.com/wp-content/plugins/wp-accessibility/toolbar/fonts/css/a11y-toolbar.css?ver=2.3.4' media='all' />
+<link rel='stylesheet' id='wpa-toolbar-css' href='https://iperionx.com/wp-content/plugins/wp-accessibility/toolbar/css/a11y.css?ver=2.3.4' media='all' />
+<link rel='stylesheet' id='ui-fontsize.css-css' href='https://iperionx.com/wp-content/plugins/wp-accessibility/toolbar/css/a11y-fontsize-alt.css?ver=2.3.4' media='all' />
+<style id="ui-fontsize.css-inline-css">
+html { --wpa-font-size: 150%; }
+/*# sourceURL=ui-fontsize.css-inline-css */
+</style>
+<link rel='stylesheet' id='wpa-style-css' href='https://iperionx.com/wp-content/plugins/wp-accessibility/css/wpa-style.css?ver=2.3.4' media='all' />
+<style id="wpa-style-inline-css">
+
+.wpa-hide-ltr#skiplinks a, .wpa-hide-ltr#skiplinks a:hover, .wpa-hide-ltr#skiplinks a:visited {
+	
+}
+.wpa-hide-ltr#skiplinks a:active,  .wpa-hide-ltr#skiplinks a:focus {
+	background-color: #f1f1f1;
+	box-shadow: 0 0 2px 2px rgba(0, 0, 0, 0.6);
+	color: #0073aa;
+	display: block;
+	font-weight: 600;
+	height: auto;
+	line-height: normal;
+	padding: 15px 23px 14px;
+	position: absolute;
+	left: 6px;
+	top: var(--admin-bar-top);
+	text-decoration: none;
+	text-transform: none;
+	width: auto;
+	z-index: 100000;
+}
+	:root { --admin-bar-top : 7px; }
+/*# sourceURL=wpa-style-inline-css */
+</style>
+<link rel='preload' as='style' onload="this.rel='stylesheet'" id='preload-iperionx-fonts-css' href='https://iperionx.com/wp-content/themes/iperionx/assets/dist/css/fonts.css?ver=1.0.1' media='all' />
+<link rel='stylesheet' id='iperionx-site-css' href='https://iperionx.com/wp-content/themes/iperionx/assets/dist/css/app.css?ver=1.0.1' media='all' />
+<script id="jquery-core-js" src="https://iperionx.com/wp-includes/js/jquery/jquery.min.js?ver=3.7.1"></script>
+<script id="jquery-migrate-js" src="https://iperionx.com/wp-includes/js/jquery/jquery-migrate.min.js?ver=3.4.1"></script>
+<script id="whistleblower-js" src="https://iperionx.com/wp-content/plugins/b2i-investor-tools/js/wb_script.js?ver=1.0.8.2"></script>
+<link rel="https://api.w.org/" href="https://iperionx.com/wp-json/" /><link rel="alternate" title="JSON" type="application/json" href="https://iperionx.com/wp-json/wp/v2/pages/2294" /><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://iperionx.com/xmlrpc.php?rsd" />
+<link rel='shortlink' href='https://iperionx.com/?p=2294' />
+<meta name="generator" content="Site Kit by Google 1.182.0" /><style type='text/css'>
+				iframe.pvfw-pdf-viewer-frame{
+					max-width: 100%;
+					border: 0px;
+				}
+				@media screen and (max-width: 799px) {
+					iframe.pvfw-pdf-viewer-frame{
+						height: 400px;
+					}
+				}</style><style id="wp-custom-css">
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+.sr-only {
+  position:absolute;
+  left:-10000px;
+  top:auto;
+  width:1px;
+  height:1px;
+  overflow:hidden;
+}
+.current_page_item {
+	color: rgb(254 209 64/var(--tw-text-opacity));
+}
+
+.current_page_item li {
+	color: #fff !important;
+}
+.menu-item-has-children ul {
+	background-color: #fff !important;
+}
+
+.menu-item-has-children ul li {
+	color: #000 !important;
+	margin-bottom: 20px !important
+}
+
+
+
+
+#main-menu li.current-menu-ancestor li.current-menu-item:after, #main-menu li.current-menu-ancestor:after, #main-menu>li.current-menu-item:not(:last-child):after {
+background: #ffc640;
+bottom: -4px;
+content: "";
+display: inline-block;
+height: 2px;
+left: 0;
+position: absolute;
+width: 90%;
+}
+
+nav#stickyheader #main-menu ul li ul { position: relative !important; top: 20px; margin-left: -12px; padding-left: 40px; }
+
+#mobile_menu li ul:not([hidden]) li ul { display:block !important; background: #fed140 !important; padding-left: 40px; }
+
+#mobile_menu li ul li ul li { margin-bottom: 0 !important; }
+
+nav#stickyheader #main-menu li ul > li.current-menu-ancestor:after { display:none; }
+.page-id-102 #newsroom-external {
+	padding-top:20px !important;
+}
+.page-id-102 #newsroom-external .md\:grid-cols-3 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.page-id-102 #newsroom-external .py-4 {
+    padding-bottom: 0;
+}
+.txt-3-btn-row {
+	text-align: center;
+	max-width: 1024px;
+}
+.txt-3-btn-row .txt-3btn {
+	display:inline-block;
+	width:220px;
+}
+.txt-3-btn-row .txt-3btn a {
+	width: 200px;
+}
+.page-id-106 #text-overview  h3 {
+  text-align: center;
+}
+.page-id-106 .float-head-sec {
+	    background: #002554;
+}
+.page-id-106 .float-head-sec h3 {
+	color: #fff;
+}
+.page-id-106 .contact-form-sec .py-\[90px\] {
+    padding-top: 0;
+}
+.page-id-106 .float-head-sec .border-ipx-blue {
+    border-color: #fff;
+}
+ul.txt-ul {
+	padding-left: 25px;
+	margin: 20px 0;
+	list-style-type: square;
+}
+ul.txt-ul li {
+	padding-left: 0px !important;
+}
+ul.txt-ul li::before {
+	display:none;
+}
+ul.txt-ul-sub {
+	padding-left: 25px;
+	margin: 20px 0;
+	list-style-type: circle;
+	list-style-position: inside;
+}
+ul.txt-ul-sub li::before {
+	display:none;
+}
+ul.txt-ul-sub li::marker {
+	padding-right:10px;
+}
+ul.txt-ul-sub li {
+	padding-left: 0px !important;
+}
+.banner-button button {
+	white-space: nowrap;
+}
+    white-space: nowrap;
+@media (min-width: 768px) {
+#past-reports .md\:grid-cols-3 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+	.banner-button {
+	padding-top:100px;
+}
+}
+@media only screen and (max-width: 767px) {
+	.page-id-102 #newsroom-external .grid-cols-1 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+	.banner-section-txt {
+		flex-direction: column-reverse;
+	}
+	.banner-button {
+	padding-left:5px;
+}
+	.pt-on-mob {
+		padding-top: 20px;
+	}
+}
+
+body .gform_wrapper h2.gform_title {
+    display: none !important;
+}
+ul.ipx-footer-col-menu > li {
+  width:200px;	
+}
+#b2iLibTools {
+	margin-bottom: 40px;
+}
+#B2iLibSearchButton {
+	background: #FFC640;
+    box-shadow: 0px 4px 4px rgba(0, 37, 84, 0.2);
+    border-radius: 6px;
+    font-family: 'Roboto';
+    font-style: normal;
+    font-weight: 700;
+    font-size: 18px;
+    line-height: 24px;
+    padding: 10px 35px !important;
+    text-align: center;
+    text-transform: uppercase;
+    cursor: pointer;
+    color: #002554;
+	  margin-left: 20px;
+}
+#B2iLibSearchButton:hover {
+	background: #fff;
+}
+
+.PressLayout10 .PressItem-Readmore a {
+    background: #FFC640 !important;
+    border-radius: 6px;
+    font-family: 'Roboto';
+    font-style: normal;
+    font-weight: 700;
+    font-size: 18px;
+    line-height: 24px;
+    padding: 10px 35px !important;
+    text-align: center;
+    text-transform: uppercase;
+    cursor: pointer;
+    color: #002554 !important;
+}
+.PressLayout10 .PressItem-Readmore a:hover {
+	background: #fff !important;
+}
+.b2iSelect {
+	border: 1px solid #FFC640;
+}
+.b2iTextbox {
+	border: 1px solid #FFC640;
+}
+.PressLayout10 .PressItemHeadline {
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.2;
+    padding-bottom: 10px;
+    font-family: "Inter", sans-serif !important;
+    font-weight: normal !important;
+}
+.bwalignc {
+    font-family:ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+.bwalignc i {
+    font-style: normal;
+}
+.bwalignc strong {
+    font-weight: normal;
+}
+.bwlistsquare li:before {
+	display:none;
+}
+.bwlistsquare li {
+	padding-left: 0 !important;
+}
+.arch-pagination li {
+	display:inline-block;
+}
+
+.arch-pagination li .page-numbers {
+    background: #acacac;
+    box-shadow: 0px 4px 4px rgba(0, 37, 84, 0.2);
+    border-radius: 6px;
+    font-family: 'Roboto';
+    font-style: normal;
+    font-weight: 700;
+    font-size: 18px;
+    line-height: 24px;
+    padding: 5px 15px !important;
+    text-align: center;
+    text-transform: uppercase;
+    cursor: pointer;
+    color: #002554;
+}
+.arch-pagination li .current {
+	background: #FFC640;
+}
+.arch-pagination {
+	padding-top: 0 !important;
+}
+.arch-top-space {
+	padding-top:80px;
+}
+.pr-loop-title {
+	font-size: 32px;
+}
+
+.page-id-2455 section:nth-child(3) {
+	margin-top:140px;
+}
+#bit-section ul li::before {
+    content: "\2611";
+    color: #002554;
+    font-weight: 700;
+    margin-left: 0px;
+	  margin-right: 10px;
+}
+#bit-section ul li ul li::before {
+    content: "\2713 ";
+    color: #002554;
+    font-weight: 700;
+	  margin-left: 25px;
+	  margin-right: 10px;
+}
+#bit-section ul li {
+	margin-bottom: 10px;
+}
+#bit-section ul li ul li:first-child {
+	margin-top: 10px;
+}
+.gform_wrapper.gravity-theme #gform_11 input[type="text"], .gform_wrapper.gravity-theme #gform_11 input[type="email"], .gform_wrapper.gravity-theme #gform_11 .gfield textarea {
+    color: #002554;
+	  font-size: 16px;
+	  font-weight: 400;
+}
+.gform_wrapper.gravity-theme #gform_11 .gfield_label {
+    color: #002554 !important;
+	  font-size: 16px;
+	  font-weight: 400;
+}
+.gform_wrapper.gravity-theme #gform_11 ::placeholder,
+.gform_wrapper.gravity-theme #gform_11 ::-webkit-input-placeholder,
+.gform_wrapper.gravity-theme #gform_11 input[placeholder] {
+  color: #002554;
+  opacity: 1;
+	font-size: 16px;
+	font-weight: 400;
+}
+.career-first-sec {
+	padding-bottom: 50px;
+}
+.career-form-sec {
+	padding-top: 10px;
+}
+table.research-det-table {
+    width: 100%;
+	  border: 1px solid #fed140;
+}
+table.research-det-table th {
+    text-align: left;
+    background: #fed140;
+	  color: #002554;
+}
+table.research-det-table th, table.research-det-table td {
+    padding: 10px;
+}
+table.research-det-table tr:nth-child(odd) {
+background-color: #f2f2f2;
+}
+.awards-section h5 {
+	font-size: 14px;
+	line-height: 20px;
+}
+.no-pad-both {
+	padding-top:0 !important;
+	padding-bottom: 0 !important;
+}
+.pad-bot-d2 {
+	padding-bottom: 40px !important;
+}
+.pad-bot-100 {
+	padding-bottom: 100px !important;
+}
+button {
+	display: flex;
+}
+.sus-ind-pg-img {
+        --tw-shadow: 0 4px 6px 0px rgb(0 0 0 / 0.3), 0 4px 6px 0px rgb(0 0 0 / 0.3);
+    --tw-shadow-colored: 0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -2px var(--tw-shadow-color);
+    box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+	margin-top:50px;
+}
+.m-keywords {
+	display:none;
+}
+ul.sus-reports-pg {
+    list-style: square;
+    margin: 0;
+    padding-left: 25px;
+	  margin-top:20px;
+}
+ul.sus-reports-pg li:before {
+    display:none;
+}
+ul.sus-reports-pg li {
+    margin-bottom: 10px;
+}
+[type="button"] {
+	display: inline-block;
+	text-align: center;
+}
+.a11y-toolbar {
+    position: fixed;
+    z-index: 99999;
+    top: auto;
+    left: 0;
+    bottom: 0px;
+}
+ul.un-ind {
+	
+}
+
+
+
+ul.un-ind {
+  list-style: none;
+  padding-left:45px;
+  margin: 0;
+}
+
+ul.un-ind li {
+  position: relative;
+  padding-left: 2.5em;
+  margin-bottom: 0.2em;
+}
+
+ul.un-ind li::before {
+
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0em;
+  text-align: right;
+}
+.priv-page-txt u {
+	margin-top:25px;
+	display: inline-block;
+}
+.priv-page-txt ul {
+	padding-left:55px;
+	margin-bottom: 25px;
+	margin-top:15px;
+}
+.priv-page-txt li {
+	margin-bottom:20px;
+	padding-left:35px;
+}
+.priv-page-txt ul li::before {
+    margin-left: -35px !important;
+    margin-right: 25px !important;
+    display: inline-block;
+}
+#CybotCookiebotDialogFooter .CybotCookiebotDialogBodyButton
+ {
+    background-color: #002554 !important;
+    border: 2px solid #002554 !important;
+}
+#CookiebotWidget #CookiebotWidget-buttons button {
+    background-color: #002554 !important;
+    border: 2px solid #002554 !important;
+}
+#CookiebotWidget .CookiebotWidget-body .CookiebotWidget-consents-list li svg {
+    fill: #fed140 !important;
+}
+#CookiebotWidget .CookiebotWidget-consent-details button {
+    color: #002554 !important;
+}
+#CybotCookiebotDialog .CybotCookiebotDialogBodyLevelButtonSlider {
+    background-color: #002554 !important;
+}
+#CybotCookiebotDialog input:checked+.CybotCookiebotDialogBodyLevelButtonSlider
+ {
+    background-color: #fed140 !important;
+}
+#CybotCookiebotDialogNav .CybotCookiebotDialogNavItemLink.CybotCookiebotDialogActive
+ {
+    border-color: transparent;
+    border-bottom: 1px solid #fed140 !important;
+    color: #002554 !important;
+}
+#CybotCookiebotDialogNav .CybotCookiebotDialogNavItemLink:hover {
+    color: #002554 !important;
+}
+#CybotCookiebotDialog #CybotCookiebotDialogBodyContentText a, #CybotCookiebotDialog #CybotCookiebotDialogDetailFooter a, #CybotCookiebotDialog #CybotCookiebotDialogDetailBulkConsentList dt a, #CybotCookiebotDialog .CybotCookiebotDialogBodyLevelButtonIABDescription a, #CybotCookiebotDialog .CybotCookiebotDialogDetailBodyContentCookieLink, #CybotCookiebotDialog #CybotCookiebotDialogBodyLevelButtonIABHeaderViewPartnersLink, #CybotCookiebotDialogDetailBodyContentTextAbout a
+ {
+    color: #002554 !important;
+}
+#CybotCookiebotDialog .CookieCard .CybotCookiebotDialogDetailBodyContentCookieContainerButton:hover, #CybotCookiebotDialog .CookieCard .CybotCookiebotDialogDetailBodyContentIABv2Tab:hover, #CybotCookiebotDialogDetailBodyContentCookieContainerTypes .CybotCookiebotDialogDetailBodyContentCookieProvider:not(.CybotCookiebotDialogDetailBodyContentCookieInfoCount):hover
+ {
+    color: #002554 !important;
+}
+#CybotCookiebotDialog a:hover:after, #CybotCookiebotDialog a:hover:before, #CybotCookiebotDialog button:hover:after, #CybotCookiebotDialog button:hover:before
+ {
+    border-color: #002554 !important;
+}
+.page-id-1714 .yellow-ply-btn {
+    z-index: 2;
+    display: none;
+}
+.font-turismo {
+    font-family: "Inter", sans-serif !important;
+	font-weight:normal !important;
+}
+section.two-column-template h2 {
+    font-family: "Inter", sans-serif !important;
+}
+</style>
+	
+	
+<link rel='stylesheet' id='gform_basic-css' href='https://iperionx.com/wp-content/plugins/gravityforms/assets/css/dist/basic.min.css?ver=2.10.5' media='all' />
+<link rel='stylesheet' id='gform_theme_components-css' href='https://iperionx.com/wp-content/plugins/gravityforms/assets/css/dist/theme-components.min.css?ver=2.10.5' media='all' />
+<link rel='stylesheet' id='gform_theme-css' href='https://iperionx.com/wp-content/plugins/gravityforms/assets/css/dist/theme.min.css?ver=2.10.5' media='all' />
+
+</head>
+
+<body class="wp-singular page-template-default page page-id-2294 wp-theme-iperionx iperionx wpa-excerpt">
+<a id="skip-nav" class="skip-nav screen-reader-text" href="#main">Skip to main content</a>
+<header>
+<div class="absolute w-full z-20">
+	<nav class="relative px-5 pt-[60px] pb-8" id="stickyheader">
+		<div class="container mx-auto flex justify-between items-center">
+			<a class="mr-5"  href="https://iperionx.com/" title="IperionX" rel="home">
+               <img src="https://iperionx.com/wp-content/themes/iperionx/assets/images/iperionx-logo.svg" alt="IperionX Logo"  id="iperionx-logo" />
+               <img src="https://iperionx.com/wp-content/themes/iperionx/assets/images/iperionx-logo-blue.svg" alt="IperionX Logo"  id="iperionx-logo-blue" />
+            </a>
+            
+            
+            <div class="flex items-center flex-none">
+				<ul id="main-menu" class="hidden lg:flex space-x-6 text-white font-bold main-menu items-center "><li id="menu-item-115" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-115"><a href="https://iperionx.com/why-titanium/">Why Titanium</a></li>
+<li id="menu-item-1048" class="flex relative group hasSubMenu items-center menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-1048"><a href="https://iperionx.com/our-operations/">Operations</a><i class="fa-2xs text-ipx-yellow rotate-hover ml-1">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</i>
+<ul class=" font-light absolute px-3 py-2 w-40 top-8 transform scale-0 group-hover:scale-100 transition duration-300 ease-in origin-top ">
+	<li id="menu-item-1719" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-1719"><a href="https://iperionx.com/our-operations/metals/">Metal Operations</a>
+	<ul class=" font-light absolute px-3 py-2 w-40 top-8 transform scale-0 group-hover:scale-100 transition duration-300 ease-in origin-top ">
+		<li id="menu-item-545" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-545"><a href="https://iperionx.com/our-operations/metals/hamr-process/">The HAMR Process</a></li>
+		<li id="menu-item-2605" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2605"><a href="https://iperionx.com/our-operations/metals/hspt-process/">The HSPT Process</a></li>
+		<li id="menu-item-1577" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1577"><a href="https://iperionx.com/our-operations/metals/green-rutile-process/">The Green Rutile Process</a></li>
+		<li id="menu-item-2785" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2785"><a href="https://iperionx.com/our-operations/metals/virtual-tour/">Tour the Titanium Manufacturing Campus</a></li>
+	</ul>
+</li>
+	<li id="menu-item-1721" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1721"><a href="https://iperionx.com/our-operations/minerals/">Mineral Development</a></li>
+</ul>
+</li>
+<li id="menu-item-117" class="flex relative group hasSubMenu items-center menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-117"><a href="https://iperionx.com/sustainability/">Sustainability</a><i class="fa-2xs text-ipx-yellow rotate-hover ml-1">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</i>
+<ul class=" font-light absolute px-3 py-2 w-40 top-8 transform scale-0 group-hover:scale-100 transition duration-300 ease-in origin-top ">
+	<li id="menu-item-3172" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3172"><a href="https://iperionx.com/sustainability/2025-sustainability-report/">Latest Report</a></li>
+	<li id="menu-item-3296" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3296"><a href="https://iperionx.com/sustainability/scholarships/">Scholarships</a></li>
+	<li id="menu-item-2336" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2336"><a href="https://iperionx.com/sustainability/lca/">Life Cycle Assessment</a></li>
+	<li id="menu-item-119" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-119"><a href="https://iperionx.com/sustainability/our-community/">Community Relations</a></li>
+</ul>
+</li>
+<li id="menu-item-118" class="flex relative group hasSubMenu items-center menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-118"><a href="https://iperionx.com/company-overview/">Company Overview</a><i class="fa-2xs text-ipx-yellow rotate-hover ml-1">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</i>
+<ul class=" font-light absolute px-3 py-2 w-40 top-8 transform scale-0 group-hover:scale-100 transition duration-300 ease-in origin-top ">
+	<li id="menu-item-1164" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1164"><a href="https://iperionx.com/company-overview/board-of-directors/">Board of Directors</a></li>
+	<li id="menu-item-1163" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1163"><a href="https://iperionx.com/company-overview/governance-corporate-directory/">Governance &#038; Corporate Directory</a></li>
+</ul>
+</li>
+<li id="menu-item-544" class="flex relative group hasSubMenu items-center menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-544"><a href="https://iperionx.com/investor-center/">Investors</a><i class="fa-2xs text-ipx-yellow rotate-hover ml-1">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</i>
+<ul class=" font-light absolute px-3 py-2 w-40 top-8 transform scale-0 group-hover:scale-100 transition duration-300 ease-in origin-top ">
+	<li id="menu-item-1263" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1263"><a href="https://iperionx.com/investor-center/share-price-announcements/">Share Price</a></li>
+	<li id="menu-item-1363" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1363"><a href="https://iperionx.com/investor-center/sec-filings/">SEC Filings</a></li>
+	<li id="menu-item-1364" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1364"><a href="https://iperionx.com/investor-center/asx-announcements/">ASX Announcements</a></li>
+	<li id="menu-item-1365" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1365"><a href="https://iperionx.com/investor-center/reports-presentations/">Reports &#038; Presentations</a></li>
+	<li id="menu-item-2726" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2726"><a href="https://iperionx.com/investor-center/analyst-coverage/">Analyst Coverage</a></li>
+	<li id="menu-item-2475" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2475"><a href="https://iperionx.com/right-to-receive-documents/">Right to Receive Documents</a></li>
+	<li id="menu-item-1410" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1410"><a href="https://iperionx.com/company-overview/american-depository-receipt-faqs/">American Depository Receipt FAQs</a></li>
+</ul>
+</li>
+<li id="menu-item-2464" class="flex relative group hasSubMenu items-center menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-2464"><a href="https://iperionx.com/newsroom/">Newsroom</a><i class="fa-2xs text-ipx-yellow rotate-hover ml-1">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</i>
+<ul class=" font-light absolute px-3 py-2 w-40 top-8 transform scale-0 group-hover:scale-100 transition duration-300 ease-in origin-top ">
+	<li id="menu-item-2465" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2465"><a href="https://iperionx.com/press-releases/">Press Releases</a></li>
+	<li id="menu-item-2466" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2466"><a href="https://iperionx.com/articles/">Articles</a></li>
+</ul>
+</li>
+<li id="menu-item-114" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-114"><a href="https://iperionx.com/contact-us/">Contact Us</a></li>
+</ul>            
+                <div id="search-toggle" class="search-icon cursor-pointer pl-6 hidden lg:flex">
+					<svg class="fill-current pointer-events-none text-white w-4 h-4 inline" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                    <path d="M12.9 14.32a8 8 0 1 1 1.41-1.41l5.35 5.33-1.42 1.42-5.33-5.34zM8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12z"></path>
+                    </svg>
+                </div>
+            </div>
+            
+            
+			
+            
+			<button id="mobile-icon" class="lg:hidden">
+				<!--<i onclick="changeIcon(this)">-->
+                <img src="https://iperionx.com/wp-content/themes/iperionx/assets/images/mobile-menu-toggle-white.png" alt="mobile-toggle"  id="mobile-btn-white" />
+                <img src="https://iperionx.com/wp-content/themes/iperionx/assets/images/mobile-menu-toggle-blue.png" alt="mobile-toggle"  id="mobile-btn-blue" />
+			</button>
+		</div>
+        <!-- search box -->
+        <div class="relative w-full hidden bg-white bg-opacity-0" id="search-content">
+          <div class="container mx-auto py-4 text-black">
+          	<form id="searchform" method="get" action="https://iperionx.com/"  class="flex flex-row rounded">
+            	
+                <input id="searchfield" name="s" type="search" placeholder="Search..." class="w-full text-grey-800 transition focus:ring-0 focus:outline-none focus:border-transparent p-2 appearance-none leading-normal lg:text-2xl rounded-md rounded-r-none">
+                <span class="flex items-center bg-ipx-yellow hover:bg-white rounded-md rounded-l-none border-0 font-bold ">
+                <button class="bg-ipx-yellow hover:bg-ipx-blue font-bold py-3 px-6 text-ipx-blue hover:text-white">SEARCH</button>
+            	</span>
+            </form>
+            
+          </div>
+
+    	</div>
+        <!-- search box -->
+		<!-- Mobile menu -->
+		<div class="lg:hidden flex justify-center mt-3 w-full">
+			<div id="mobile-menu" class="mobile-menu absolute bg-ipx-yellow top-0 w-full h-screen">
+            	
+                <div class="flex px-5 pt-10 pb-0">
+                
+                    <img src="https://iperionx.com/wp-content/themes/iperionx/assets/images/iperionx-logo-blue.svg" alt="IperionX Logo" />
+                    <button id="mobile-close" class="ml-auto" value="mobile-button-close">
+                    <!--<i onclick="changeIcon(this)">-->
+                        <i>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-ipx-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1" alt="Mobile menu close button">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </i>
+                    </button> 
+                </div>
+            
+            	
+            
+            
+            
+				<!-- add hidden here later -->
+                
+                <ul id="mobile_menu" class="bg-ipx-yellow leading-[64px] font-bold min-h-[500px]  text-ipx-blue p-5 justify-center divide-ipx-blue divide-y divide-solid "><li id="menu-item-123"><a href="https://iperionx.com/why-titanium/">Why Titanium</a></li>
+<li id="menu-item-1045" class="hasSubMenu"><a href="https://iperionx.com/our-operations/">Operations</a><i class="fa-2xs text-ipx-blue mobile-click ml-1">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 " fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</i>
+<ul class=" subMenu hidden bg-white leading-loose text-xl ">
+	<li id="menu-item-1723" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-1723"><a href="https://iperionx.com/our-operations/metals/">Metal Operations</a>
+	<ul class=" subMenu hidden bg-white leading-loose text-xl ">
+		<li id="menu-item-548" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-548"><a href="https://iperionx.com/our-operations/metals/hamr-process/">The HAMR Process</a></li>
+		<li id="menu-item-2606" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2606"><a href="https://iperionx.com/our-operations/metals/hspt-process/">The HSPT Process</a></li>
+		<li id="menu-item-1724" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1724"><a href="https://iperionx.com/our-operations/metals/green-rutile-process/">The Green Rutile Process</a></li>
+		<li id="menu-item-2786" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2786"><a href="https://iperionx.com/our-operations/metals/virtual-tour/">Tour the Titanium Manufacturing Campus</a></li>
+	</ul>
+</li>
+	<li id="menu-item-1046" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1046"><a href="https://iperionx.com/our-operations/minerals/">Mineral Development</a></li>
+</ul>
+</li>
+<li id="menu-item-125" class="hasSubMenu"><a href="https://iperionx.com/sustainability/">Sustainability</a><i class="fa-2xs text-ipx-blue mobile-click ml-1">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 " fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</i>
+<ul class=" subMenu hidden bg-white leading-loose text-xl ">
+	<li id="menu-item-3173" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3173"><a href="https://iperionx.com/sustainability/2025-sustainability-report/">Latest Report</a></li>
+	<li id="menu-item-3295" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-3295"><a href="https://iperionx.com/sustainability/scholarships/">Scholarships</a></li>
+	<li id="menu-item-2335" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2335"><a href="https://iperionx.com/sustainability/lca/">Life Cycle Assessment</a></li>
+	<li id="menu-item-127" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-127"><a href="https://iperionx.com/sustainability/our-community/">Community Relations</a></li>
+</ul>
+</li>
+<li id="menu-item-549" class="hasSubMenu"><a href="https://iperionx.com/company-overview/">Company Overview</a><i class="fa-2xs text-ipx-blue mobile-click ml-1">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 " fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</i>
+<ul class=" subMenu hidden bg-white leading-loose text-xl ">
+	<li id="menu-item-1160" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1160"><a href="https://iperionx.com/company-overview/board-of-directors/">Board of Directors</a></li>
+	<li id="menu-item-1159" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1159"><a href="https://iperionx.com/company-overview/governance-corporate-directory/">Governance &#038; Corporate Directory</a></li>
+</ul>
+</li>
+<li id="menu-item-552" class="hasSubMenu"><a href="https://iperionx.com/investor-center/">Investor Center</a><i class="fa-2xs text-ipx-blue mobile-click ml-1">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 " fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</i>
+<ul class=" subMenu hidden bg-white leading-loose text-xl ">
+	<li id="menu-item-1264" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1264"><a href="https://iperionx.com/investor-center/share-price-announcements/">Share Price</a></li>
+	<li id="menu-item-2001" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2001"><a href="https://iperionx.com/investor-center/sec-filings/">SEC Filings</a></li>
+	<li id="menu-item-2002" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2002"><a href="https://iperionx.com/investor-center/asx-announcements/">ASX Announcements</a></li>
+	<li id="menu-item-2003" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2003"><a href="https://iperionx.com/investor-center/reports-presentations/">Reports &#038; Presentations</a></li>
+	<li id="menu-item-2724" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2724"><a href="https://iperionx.com/investor-center/analyst-coverage/">Analyst Coverage</a></li>
+	<li id="menu-item-2725" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2725"><a href="https://iperionx.com/right-to-receive-documents/">Right to Receive Documents</a></li>
+	<li id="menu-item-2004" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2004"><a href="https://iperionx.com/company-overview/american-depository-receipt-faqs/">American Depository Receipt FAQs</a></li>
+</ul>
+</li>
+<li id="menu-item-2468" class="hasSubMenu"><a href="https://iperionx.com/newsroom/">Newsroom</a><i class="fa-2xs text-ipx-blue mobile-click ml-1">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 " fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</i>
+<ul class=" subMenu hidden bg-white leading-loose text-xl ">
+	<li id="menu-item-2413" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-2413"><a href="https://iperionx.com/press-releases/">Press Releases</a></li>
+	<li id="menu-item-1886" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1886"><a href="https://iperionx.com/articles/">Articles</a></li>
+</ul>
+</li>
+<li id="menu-item-131"><a href="https://iperionx.com/contact-us/">Contact Us</a></li>
+</ul>                <!-- search box -->
+                
+                
+                 <!-- <div class="container mx-auto px-10 py-4 text-black bg-ipx-yellow">
+                    <form id="searchform" method="get" action="https://iperionx.com/"  class="flex flex-row rounded">
+                        
+                        <input id="searchfield" name="s" type="search" placeholder="Search..." autofocus class="w-full text-grey-800 transition focus:ring-0 focus:outline-none focus:border-transparent p-2 appearance-none leading-normal lg:text-2xl rounded rounded-r-none">
+                        <span class="flex items-center bg-ipx-yellow hover:bg-white rounded rounded-l-none border-0 font-bold ">
+                        <button class="bg-ipx-yellow hover:bg-white font-bold py-3 px-6 text-ipx-blue">SEARCH</button>
+                        </span>
+                    </form>
+                   </div> -->
+        		
+                <!-- search box -->
+            </div>
+		</div>
+        <!--Mobile menu -->
+	</nav>
+</div>
+</header>
+<main>
+
+	<section class="relative pt-16 flex content-center items-center justify-center h-screen  max-h-[540px]">
+		<div class="bg-landing-background bg-cover bg-center absolute top-0 w-full h-full max-h-[540px]" style="background-image:url(https://iperionx.com/wp-content/uploads/2023/05/Copy-of-596A9931_web.jpg);"></div>
+
+
+		<div class="bg-landing-background bg-right-bottom bg-cover bg-no-repeat absolute top-0 w-full h-full h-[540px]" style="background: linear-gradient(to top, rgba(0, 37, 84, 1) 0% , rgba(0, 37, 84, 0) 25% , transparent 75%);"></div>
+
+	</section>
+
+	<section class="bg-neutral-200  -mt-20 md:-mt-44 md:-mb-20 ">
+		<div class="container mx-auto">
+			<div class="flex flex-wrap relative z-50">
+				<div class="w-10/12 md:w-auto flex justify-center text-left fade-in">
+					<div class="w-full bg-ipx-blue overflow-hdden py-10 md:py-16 border-t-4 border-white main-info md:px-[150px]">
+						<div class="p-4 md:max-w-[560px] mx-auto">
+
+														<h1 class="h-hero no-sub font-turismo text-ipx-yellow">Careers</h1>
+
+
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+	<section id="text-overview" class="relative  py-[90px] md:pt-40 md:pb-[90px] bg-white career-first-sec" >
+    <div class="container container-ipx m-auto px-5">
+        <div class="w-full pr-10">
+        	            
+                        
+            <h3 class="font-turismo text-ipx-blue js-show-on-scroll">Careers at IperionX</h3> 
+            
+                        <div class="flex-grow border-t-4 border-ipx-blue max-w-[50px] my-5 js-show-on-scroll"></div>
+                        
+                    	<div class="text-ipx-blue font-normal leading-relaxed subheading js-show-on-scroll"><p>Thank you for your interest in becoming part of the world-class team at IperionX.</p>
+<p>We are currently scaling production at our Virginia Titanium Manufacturing Campus, comprising the Titanium Production Facility and the Advanced Manufacturing Center at the Southern Virginia Technology Park in Halifax County, Virginia.</p>
+<p>We encourage you to explore our website and learn more about who we are and what we do. Stay connected with us through our newsletter and social media channels for the latest opportunities and company updates.</p>
+</div>
+                               
+        </div>
+                
+         
+        
+                      
+       
+        
+                
+        	</div>
+</section>
+<section id="text-overview" class="relative   py-[90px]" >
+    <div class="container container-ipx m-auto px-5">
+
+
+        
+        <div class="text-center md:text-left   pr-10 py-10">
+        	
+
+                       		 <h3 class="font-turismo text-ipx-blue js-show-on-scroll text-center">Current Openings</h3> 
+            
+				            
+            
+                        
+                               
+        </div>
+        
+        	
+                
+        <div class="block md:hidden flex-grow border-t border-[#C4C4C4] my-2"></div>
+
+        
+        <div class="text-center md:text-left   pr-10 py-10">
+        	
+
+                       		 <h3 class="font-turismo text-ipx-blue js-show-on-scroll ">Manufacturing Engineer - Virginia</h3> 
+            
+				            
+            
+                    	<div class="text-ipx-blue leading-relaxed subheading js-show-on-scroll"><p>IperionX is seeking a skilled Manufacturing Engineer to join our team at the Titanium Manufacturing Campus in the Southern Virginia Technology Park. In this role, you will play a key part in designing, developing, and optimizing manufacturing processes to improve production efficiency, enhance product quality, and ensure all operations meet rigorous safety and quality standards.</p>
+</div>
+                        
+                            <div class="w-full h-auto js-show-on-scroll mt-10">
+                <a type="button" class="text-white text-center inline-block hover:text-ipx-blue bg-ipx-blue hover:bg-ipx-yellow focus:ring-4 font-bold rounded-md text-sm px-8 py-3 md:py-5 mb-5 shadow-md" href="https://www.indeed.com/job/manufacturing-engineer-9d457ad68b2d10c5">Apply Now</a>
+                </div>
+            
+                               
+        </div>
+        
+        	
+                
+        <div class="block md:hidden flex-grow border-t border-[#C4C4C4] my-2"></div>
+
+        
+        <div class="text-center md:text-left   pr-10 py-10">
+        	
+
+                       		 <h3 class="font-turismo text-ipx-blue js-show-on-scroll ">Quality Coordinator - Virginia</h3> 
+            
+				            
+            
+                    	<div class="text-ipx-blue leading-relaxed subheading js-show-on-scroll"><p>IperionX is seeking a Quality Coordinator to join our team at IperionX&#8217;s Titanium Manufacturing Campus in the Southern Virginia Technology Park. In this role, you will be responsible for overseeing and maintaining the company’s Quality Management System (QMS), ensuring compliance with applicable ISO standards, and supporting ongoing certification readiness. You will play a key role in driving continuous improvement initiatives, coordinating internal audits, and managing documentation control processes to uphold quality and operational excellence. This position reports directly to the Senior Quality Engineer and serves as a critical contributor to IperionX’s commitment to high-performance manufacturing and quality assurance.</p>
+</div>
+                        
+                            <div class="w-full h-auto js-show-on-scroll mt-10">
+                <a type="button" class="text-white text-center inline-block hover:text-ipx-blue bg-ipx-blue hover:bg-ipx-yellow focus:ring-4 font-bold rounded-md text-sm px-8 py-3 md:py-5 mb-5 shadow-md" href="https://www.indeed.com/job/quality-coordinator-57eb8525f4e8e67f">Apply Now</a>
+                </div>
+            
+                               
+        </div>
+        
+        	
+                
+        <div class="block md:hidden flex-grow border-t border-[#C4C4C4] my-2"></div>
+
+        
+        <div class="text-center md:text-left   pr-10 py-10">
+        	
+
+                       		 <h3 class="font-turismo text-ipx-blue js-show-on-scroll ">Production Supervisor - Night - Virginia</h3> 
+            
+				            
+            
+                    	<div class="text-ipx-blue leading-relaxed subheading js-show-on-scroll"><p>IperionX is seeking a Production Supervisor (Night) to join our team at the Titanium Manufacturing Campus in the Southern Virginia Technology Park. In this role, you will support the scale-up of our innovative, low-carbon titanium manufacturing operations by leading safe, efficient chemical and metallurgical production processes. As a frontline leader, you will oversee hourly operators, ensure production and quality targets are met, and maintain a strong presence on the floor while collaborating closely with Engineering, Maintenance, Quality, and EHS teams to drive reliable operations and continuous improvement.</p>
+</div>
+                        
+                            <div class="w-full h-auto js-show-on-scroll mt-10">
+                <a type="button" class="text-white text-center inline-block hover:text-ipx-blue bg-ipx-blue hover:bg-ipx-yellow focus:ring-4 font-bold rounded-md text-sm px-8 py-3 md:py-5 mb-5 shadow-md" href="https://www.indeed.com/job/production-supervisor-night-2f5eac9a5055b943">Apply Now</a>
+                </div>
+            
+                               
+        </div>
+        
+        	
+                
+        <div class="block md:hidden flex-grow border-t border-[#C4C4C4] my-2"></div>
+
+        
+        <div class="text-center md:text-left   pr-10 py-10">
+        	
+
+                       		 <h3 class="font-turismo text-ipx-blue js-show-on-scroll ">Advanced Manufacturing Engineer - Virginia</h3> 
+            
+				            
+            
+                    	<div class="text-ipx-blue leading-relaxed subheading js-show-on-scroll"><p>IperionX is seeking an Advanced Manufacturing Engineer to join our team at IperionX&#8217;s Titanium Manufacturing Campus in the Southern Virginia Technology Park. In this role, you will be responsible for driving the development and production of complex metal components using cutting-edge additive manufacturing technologies, with a strong focus on Binder Jetting and Laser Powder Bed Fusion (LPBF). You’ll play a critical part in advancing our manufacturing capabilities from print preparation and process optimization to post-processing and full production readiness ensuring high-quality, scalable output. As a key contributor, you will collaborate cross-functionally with engineering, operations, quality, and customer teams to bridge the gap between innovation and execution, helping bring next-generation titanium products from concept to reality.</p>
+</div>
+                        
+                            <div class="w-full h-auto js-show-on-scroll mt-10">
+                <a type="button" class="text-white text-center inline-block hover:text-ipx-blue bg-ipx-blue hover:bg-ipx-yellow focus:ring-4 font-bold rounded-md text-sm px-8 py-3 md:py-5 mb-5 shadow-md" href="https://www.indeed.com/job/advanced-manufacturing-engineer-metal-additive-manufacturing-6499fd9ca4076d36">Apply Now</a>
+                </div>
+            
+                               
+        </div>
+        
+        	
+                
+        <div class="block md:hidden flex-grow border-t border-[#C4C4C4] my-2"></div>
+
+        
+        <div class="text-center md:text-left   pr-10 py-10">
+        	
+
+                       		 <h3 class="font-turismo text-ipx-blue js-show-on-scroll ">R&D Lab Technician - Virginia</h3> 
+            
+				            
+            
+                    	<div class="text-ipx-blue leading-relaxed subheading js-show-on-scroll"><p>IperionX is seeking an R&amp;D Lab Technician to join our team at IperionX&#8217;s Titanium Manufacturing Campus in the Southern Virginia Technology Park. In this role, you will be responsible for assisting in the execution of complex, cross-functional projects focused on scale-up, commercialization, and optimization of particulate processing technologies for minerals and metals. This role operates in a fast-paced, high-accountability environment and ensures that technical, safety, schedule, and cost objectives are consistently met. This is an entry-level role that reports to the R&amp;D Operations Manager, Process Development.</p>
+</div>
+                        
+                            <div class="w-full h-auto js-show-on-scroll mt-10">
+                <a type="button" class="text-white text-center inline-block hover:text-ipx-blue bg-ipx-blue hover:bg-ipx-yellow focus:ring-4 font-bold rounded-md text-sm px-8 py-3 md:py-5 mb-5 shadow-md" href="https://www.indeed.com/job/rd-lab-technician-644df9b6b40d9ee3">Apply Now</a>
+                </div>
+            
+                               
+        </div>
+        
+        	
+                
+        <div class="block md:hidden flex-grow border-t border-[#C4C4C4] my-2"></div>
+
+        
+        <div class="text-center md:text-left   pr-10 py-10">
+        	
+
+                       		 <h3 class="font-turismo text-ipx-blue js-show-on-scroll ">Maintenance Manager - Virginia</h3> 
+            
+				            
+            
+                    	<div class="text-ipx-blue leading-relaxed subheading js-show-on-scroll"><p>IperionX is seeking a Maintenance Manager to join our team at IperionX’s Titanium Manufacturing Campus in the Southern Virginia Technology Park. In this role, you will be responsible for leading a skilled team of maintenance professionals to support 24/7 operations, driving continuous improvement initiatives to reduce equipment downtime, and owning a proactive maintenance program aligned with Lean Total Productive Maintenance principles. You will oversee budgeting, safety, and compliance programs, while leading root cause analysis, managing capital projects, and collaborating cross-functionally to optimize equipment performance, reliability, and throughput across the facility.</p>
+</div>
+                        
+                            <div class="w-full h-auto js-show-on-scroll mt-10">
+                <a type="button" class="text-white text-center inline-block hover:text-ipx-blue bg-ipx-blue hover:bg-ipx-yellow focus:ring-4 font-bold rounded-md text-sm px-8 py-3 md:py-5 mb-5 shadow-md" href="https://www.indeed.com/job/maintenance-manager-8f38b1874b603880">Apply Now</a>
+                </div>
+            
+                               
+        </div>
+        
+        	
+                
+        <div class="block md:hidden flex-grow border-t border-[#C4C4C4] my-2"></div>
+	</div>
+</section>
+
+
+
+    
+    	
+        
+
+        
+        
+
+
+
+
+</main>
+	
+
+
+
+
+		
+		<footer class="bg-ipx-blue relative bg-right bg-no-repeat py-[90px]" style="background-image: url(https://iperionx.com/wp-content/themes/iperionx/assets/images/footer-svg.svg); ">
+        	<div class="container container-ipx m-auto px-5">
+                
+                <div class="md:flex justify-center content-center md:space-x-4 border-b-2 border-white/20 pb-10 mb-10 js-show-on-scroll">
+                    <div class="md:w-1/3 pr-5">
+                    	
+						                        <h3 class="font-turismo text-ipx-yellow hidden md:block">STAY UP<br/>TO DATE</h3>
+                        <h3 class="font-turismo text-ipx-yellow block md:hidden">STAY UP TO DATE</h3>
+                        <div class="flex-grow border-t-4 border-ipx-yellow max-w-[50px] mb-5"></div>
+                                                
+						                        	<div class="text-white font-light ">
+                            <p>Join our newsletters to get the latest news on IperionX</p>
+                            </div>
+                    	                        
+                        <div class="flex items-start justify-start mt-5 mb-2.5">
+                        	                        	<div class="pr-6">
+                                <a href="https://www.facebook.com/iperionx" target="_blank">
+                                	<img src="https://iperionx.com/wp-content/themes/iperionx/assets/images/icon-facebook.svg" alt="facebook" class="max-h-[24px] h-[24px]" />
+                                </a>
+                            </div> 
+                                                        
+                                                        <div class="pr-6">
+                            	<a href="https://www.linkedin.com/company/iperionx" target="_blank">
+                                	<img src="https://iperionx.com/wp-content/themes/iperionx/assets/images/icon-linkedin.svg" alt="linkedin" class="max-h-[24px] h-[24px]" />
+                                </a>
+                            </div>
+                                                        
+                                                        <div class="pr-6">
+                            	<a href="https://twitter.com/IperionX" target="_blank">
+                                	<img src="https://iperionx.com/wp-content/themes/iperionx/assets/images/icon-twitter.svg" alt="twitter" class="max-h-[24px] h-[24px]" />
+                                </a>
+                            </div>
+                                                        
+                                                        <div class="pr-6">
+                            	<a href="https://www.youtube.com/channel/UCBS1r0ga0r3HWhukfwQIy-g" target="_blank">
+                                	<img src="https://iperionx.com/wp-content/themes/iperionx/assets/images/icon-youtube.svg" alt="youtube" class="max-h-[24px] h-[24px]" />
+                                </a>
+                            </div>
+                                                        
+                                                        
+                        </div>
+                        
+                    </div>
+                    <div class="md:w-2/3 mt-10 md:mt-0 md:pl-12">
+                        
+                        
+                <div class='gf_browser_gecko gform_wrapper gravity-theme gform-theme--no-framework' data-form-theme='gravity-theme' data-form-index='0' id='gform_wrapper_1' ><div id='gf_1' class='gform_anchor' tabindex='-1'></div><form method='post' enctype='multipart/form-data' target='gform_ajax_frame_1' id='gform_1'  action='/careers/#gf_1' data-formid='1' novalidate>
+                        <div class='gform-body gform_body'><div id='gform_fields_1' class='gform_fields top_label form_sublabel_below description_below validation_below'><div id="field_1_6" class="gfield gfield--type-text gfield--input-type-text gfield--width-half gfield_contains_required field_sublabel_below gfield--no-description field_description_below hidden_label field_validation_below gfield_visibility_visible"  ><label class='gfield_label gform-field-label' for='input_1_6'>First Name<span class="gfield_required"><span class="gfield_required gfield_required_text">(Required)</span></span></label><div class='ginput_container ginput_container_text'><input name='input_6' id='input_1_6' type='text' value='' class='large'    placeholder='First Name' aria-required="true" aria-invalid="false"   /></div></div><div id="field_1_7" class="gfield gfield--type-text gfield--input-type-text gfield--width-half gfield_contains_required field_sublabel_below gfield--no-description field_description_below hidden_label field_validation_below gfield_visibility_visible"  ><label class='gfield_label gform-field-label' for='input_1_7'>Last Name<span class="gfield_required"><span class="gfield_required gfield_required_text">(Required)</span></span></label><div class='ginput_container ginput_container_text'><input name='input_7' id='input_1_7' type='text' value='' class='large'    placeholder='Last Name' aria-required="true" aria-invalid="false"   /></div></div><div id="field_1_5" class="gfield gfield--type-text gfield--input-type-text gfield--width-half gfield_contains_required field_sublabel_below gfield--no-description field_description_below hidden_label field_validation_below gfield_visibility_visible"  ><label class='gfield_label gform-field-label' for='input_1_5'>Company<span class="gfield_required"><span class="gfield_required gfield_required_text">(Required)</span></span></label><div class='ginput_container ginput_container_text'><input name='input_5' id='input_1_5' type='text' value='' class='large'    placeholder='Company Name' aria-required="true" aria-invalid="false"   /></div></div><div id="field_1_3" class="gfield gfield--type-email gfield--input-type-email gfield--width-half gfield_contains_required field_sublabel_below gfield--no-description field_description_below hidden_label field_validation_below gfield_visibility_visible"  ><label class='gfield_label gform-field-label' for='input_1_3'>Email<span class="gfield_required"><span class="gfield_required gfield_required_text">(Required)</span></span></label><div class='ginput_container ginput_container_email'>
+                            <input name='input_3' id='input_1_3' type='email' value='' class='large'   placeholder='Email' aria-required="true" aria-invalid="false"  />
+                        </div></div><fieldset id="field_1_4" class="gfield gfield--type-checkbox gfield--type-choice gfield--input-type-checkbox gfield--width-full field_sublabel_below gfield--no-description field_description_below hidden_label field_validation_below gfield_visibility_visible"  ><legend class='gfield_label gform-field-label gfield_label_before_complex' >Stay up to date</legend><div class='ginput_container ginput_container_checkbox'><div class='gfield_checkbox ' id='input_1_4'><div class='gchoice gchoice_1_4_1'>
+								<input class='gfield-choice-input' name='input_4.1' type='checkbox'  value='General News'  id='choice_1_4_1'   />
+								<label for='choice_1_4_1' id='label_1_4_1' class='gform-field-label gform-field-label--type-inline'>General News</label>
+							</div><div class='gchoice gchoice_1_4_2'>
+								<input class='gfield-choice-input' name='input_4.2' type='checkbox'  value='Investor News'  id='choice_1_4_2'   />
+								<label for='choice_1_4_2' id='label_1_4_2' class='gform-field-label gform-field-label--type-inline'>Investor News</label>
+							</div><div class='gchoice gchoice_1_4_3'>
+								<input class='gfield-choice-input' name='input_4.3' type='checkbox'  value='West Tennessee Community  News'  id='choice_1_4_3'   />
+								<label for='choice_1_4_3' id='label_1_4_3' class='gform-field-label gform-field-label--type-inline'>West Tennessee Community  News</label>
+							</div></div></div></fieldset><div id="field_1_8" class="gfield gfield--type-captcha gfield--input-type-captcha gfield--width-full field_sublabel_below gfield--no-description field_description_below field_validation_below gfield_visibility_visible"  ><label class='gfield_label gform-field-label' for='input_1_8'>CAPTCHA</label><div id='input_1_8' class='ginput_container ginput_recaptcha' data-sitekey='6LcqfXUpAAAAAMfrt8ctEnHRTfg50EgGvYJMa38d'  data-theme='light' data-tabindex='0'  data-badge=''></div></div><div id="field_1_9" class="gfield gfield--type-html gfield--input-type-html gfield--width-full gfield_html gfield_html_formatted gfield_no_follows_desc field_sublabel_below gfield--no-description field_description_below field_validation_below gfield_visibility_visible"  ><label class="sr-only" for="g-recaptcha-response">Google Recaptcha</label></div></div></div>
+        <div class='gform-footer gform_footer top_label'> <input type='submit' id='gform_submit_button_1' class='gform_button button' onclick='gform.submission.handleButtonClick(this);' data-submission-type='submit' value='Submit'  /> <input type='hidden' name='gform_ajax' value='form_id=1&amp;title=&amp;description=&amp;tabindex=49&amp;theme=gravity-theme&amp;styles=[]&amp;hash=e9e77816d7b3e67cbebbfac4fc38ce8c' />
+            <input type='hidden' class='gform_hidden' name='gform_submission_method' data-js='gform_submission_method_1' value='iframe' />
+            <input type='hidden' class='gform_hidden' name='gform_theme' data-js='gform_theme_1' id='gform_theme_1' value='gravity-theme' />
+            <input type='hidden' class='gform_hidden' name='gform_style_settings' data-js='gform_style_settings_1' id='gform_style_settings_1' value='[]' />
+            <input type='hidden' class='gform_hidden' name='is_submit_1' value='1' />
+            <input type='hidden' class='gform_hidden' name='gform_submit' value='1' />
+            
+            <input type='hidden' class='gform_hidden' name='gform_currency' data-currency='USD' value='xynbY6o7mzk4Io00a7i04d0aiLyXy5gPF/prioAP1HUVFuqcnBntDe34i9MsjGTiAOU47WXVRSyRqLv0ruZ+yBIJbqiyZaUKknLC9x0GWkT9XQI=' />
+            <input type='hidden' class='gform_hidden' name='gform_unique_id' value='' />
+            <input type='hidden' class='gform_hidden' name='state_1' value='WyJbXSIsIjU5ZWJmZDVmMGY3N2I1YmIyM2ZkYmQyY2MyZGRkNTk3Il0=' />
+            <input type='hidden' autocomplete='off' class='gform_hidden' name='gform_target_page_number_1' id='gform_target_page_number_1' value='0' />
+            <input type='hidden' autocomplete='off' class='gform_hidden' name='gform_source_page_number_1' id='gform_source_page_number_1' value='1' />
+            <input type='hidden' name='gform_field_values' value='' />
+            
+        </div>
+                        </form>
+                        </div>
+		                <iframe style='display:none;width:0px;height:0px;' src='about:blank' name='gform_ajax_frame_1' id='gform_ajax_frame_1' title='This iframe contains the logic required to handle Ajax powered Gravity Forms.'></iframe>
+		                <script>
+gform.initializeOnLoaded( function() {gformInitSpinner( 1, 'https://iperionx.com/wp-content/plugins/gravityforms/images/spinner.svg', true );jQuery('#gform_ajax_frame_1').on('load',function(){var contents = jQuery(this).contents().find('*').html();var is_postback = contents.indexOf('GF_AJAX_POSTBACK') >= 0;if(!is_postback){return;}var form_content = jQuery(this).contents().find('#gform_wrapper_1');var is_confirmation = jQuery(this).contents().find('#gform_confirmation_wrapper_1').length > 0;var is_redirect = contents.indexOf('gformRedirect(){') >= 0;var is_form = form_content.length > 0 && ! is_redirect && ! is_confirmation;var mt = parseInt(jQuery('html').css('margin-top'), 10) + parseInt(jQuery('body').css('margin-top'), 10) + 100;if(is_form){jQuery('#gform_wrapper_1').html(form_content.html());if(form_content.hasClass('gform_validation_error')){jQuery('#gform_wrapper_1').addClass('gform_validation_error');} else {jQuery('#gform_wrapper_1').removeClass('gform_validation_error');}setTimeout( function() { /* delay the scroll by 50 milliseconds to fix a bug in chrome */ jQuery(document).scrollTop(jQuery('#gform_wrapper_1').offset().top - mt); }, 50 );if(window['gformInitDatepicker']) {gformInitDatepicker();}if(window['gformInitPriceFields']) {gformInitPriceFields();}var current_page = jQuery('#gform_source_page_number_1').val();gformInitSpinner( 1, 'https://iperionx.com/wp-content/plugins/gravityforms/images/spinner.svg', true );jQuery(document).trigger('gform_page_loaded', [1, current_page]);window['gf_submitting_1'] = false;}else if(!is_redirect){var confirmation_content = jQuery(this).contents().find('.GF_AJAX_POSTBACK').html();if(!confirmation_content){confirmation_content = contents;}jQuery('#gform_wrapper_1').replaceWith(confirmation_content);jQuery(document).scrollTop(jQuery('#gf_1').offset().top - mt);jQuery(document).trigger('gform_confirmation_loaded', [1]);window['gf_submitting_1'] = false;wp.a11y.speak(jQuery('#gform_confirmation_message_1').text());}else{jQuery('#gform_1').append(contents);if(window['gformRedirect']) {gformRedirect();}}jQuery(document).trigger("gform_pre_post_render", [{ formId: "1", currentPage: "current_page", abort: function() { this.preventDefault(); } }]);        if (event && event.defaultPrevented) {                return;        }        const gformWrapperDiv = document.getElementById( "gform_wrapper_1" );        if ( gformWrapperDiv ) {            const visibilitySpan = document.createElement( "span" );            visibilitySpan.id = "gform_visibility_test_1";            gformWrapperDiv.insertAdjacentElement( "afterend", visibilitySpan );        }        const visibilityTestDiv = document.getElementById( "gform_visibility_test_1" );        let postRenderFired = false;        function triggerPostRender() {            if ( postRenderFired ) {                return;            }            postRenderFired = true;            gform.core.triggerPostRenderEvents( 1, current_page );            if ( visibilityTestDiv ) {                visibilityTestDiv.parentNode.removeChild( visibilityTestDiv );            }        }        function debounce( func, wait, immediate ) {            var timeout;            return function() {                var context = this, args = arguments;                var later = function() {                    timeout = null;                    if ( !immediate ) func.apply( context, args );                };                var callNow = immediate && !timeout;                clearTimeout( timeout );                timeout = setTimeout( later, wait );                if ( callNow ) func.apply( context, args );            };        }        const debouncedTriggerPostRender = debounce( function() {            triggerPostRender();        }, 200 );        if ( visibilityTestDiv && visibilityTestDiv.offsetParent === null ) {            const observer = new MutationObserver( ( mutations ) => {                mutations.forEach( ( mutation ) => {                    if ( mutation.type === 'attributes' && visibilityTestDiv.offsetParent !== null ) {                        debouncedTriggerPostRender();                        observer.disconnect();                    }                });            });            observer.observe( document.body, {                attributes: true,                childList: false,                subtree: true,                attributeFilter: [ 'style', 'class' ],            });        } else {            triggerPostRender();        }    } );} );
+</script>
+                    </div>            
+                </div>
+                
+                
+                
+                
+                <div class="md:flex items-start justify-center content-center md:space-x-4 js-show-on-scroll">
+                		
+                        <!-- <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:w-1/3"> -->
+						<div class="grid grid-cols-1 md:grid-cols-1 gap-4 md:w-1/3">
+                            <div class="hidden md:block md:pr-10">
+                            	<div class="footer-logo">
+                                	<a href="https://iperionx.com/" title="IperionX" rel="home">
+                                    <img src="https://iperionx.com/wp-content/themes/iperionx/assets/images/iperionx-logo.svg" alt="IperionX Logo" width="220" />
+                                    </a>
+                                </div>
+                                <!-- <p class="font-light text-ipx-yellow">QUICK LINKS</p> -->
+                                                            </div>
+                           <div class="md:px-5">
+                            
+                            <ul class="text-center md:text-left text-white leading-8 footer-small-font">
+								                            </ul>
+                                  <!--<p class="font-light text-ipx-yellow">CONTACT</p>
+                                <ul class="text-white leading-8 flex justify-center md:justify-start">
+                                                                        <li class="mx-2">•</li>
+                                                                     </ul>-->
+                                 
+                                
+        
+                            </div> 
+                        </div> 
+                    <!-- org <div class="text-center md:text-left md:w-2/3 mt-7 md:mt-0"> -->
+					<div class="text-center md:text-left md:w-2/3 mt-10 md:mt-0 md:pl-12">
+                        <!-- <p class="font-light text-ipx-yellow">SOCIAL</p> -->
+                        <!-- <ul class="text-white leading-8 footer-small-font mx-auto flex justify-center md:justify-start">
+                                                                                 </ul> -->
+                         <!-- <div class=" md:hidden ">
+                            	<div class="footer-logo my-10 ">
+                                	<a href="https://iperionx.com/" title="IperionX" rel="home">
+                                    <img src="https://iperionx.com/wp-content/themes/iperionx/assets/images/iperionx-logo.svg" alt="IperionX Logo" width="340" class="mx-auto text-center justify-center" />
+                                    </a>
+                                </div>
+                               
+                            </div> -->
+							
+							<ul class="text-white leading-8 mx-auto flex justify-center md:justify-start ipx-footer-col-menu">
+								<li>
+									<ul id="footer_menu1" class="text-white leading-8 "><li id="menu-item-2301" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-2301"><a href="/company-overview/">About Us</a></li>
+<li id="menu-item-2302" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-2302"><a href="/investor-center/">Investors</a></li>
+</ul>								</li>
+								<li>
+									<ul id="footer_menu2" class="text-white leading-8 "><li id="menu-item-2303" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-2303"><a href="/sustainability/">Sustainability</a></li>
+<li id="menu-item-2304" class="menu-item menu-item-type-custom menu-item-object-custom current-menu-item menu-item-2304"><a href="/careers/" aria-current="page">Careers</a></li>
+</ul>								</li>
+								<li>
+									<ul id="footer_menu3" class="text-white leading-8 "><li id="menu-item-2305" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-2305"><a href="/news/">News</a></li>
+<li id="menu-item-2306" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-2306"><a href="/contact-us/">Contact Us</a></li>
+</ul>								</li>
+								<li>
+									<ul id="footer_menu4" class="text-white leading-8 "><li id="menu-item-3262" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-privacy-policy menu-item-3262"><a rel="privacy-policy" href="https://iperionx.com/privacy-policy/">Privacy Policy</a></li>
+</ul>								</li>
+								
+							<ul>
+                    </div>             
+                </div>
+            
+            	
+        
+        	<!-- <p class="my-10 text-white text-sm">&copy; 2026 Iperionx. Site designed by <a href="https://nclud.com/">Nclud</a>.</p> -->
+    		</div>
+            
+		</footer>         <script type="speculationrules">
+{"prefetch":[{"source":"document","where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/wp-*.php","/wp-admin/*","/wp-content/uploads/*","/wp-content/*","/wp-content/plugins/*","/wp-content/themes/iperionx/*","/*\\?(.+)"]}},{"not":{"selector_matches":"a[rel~=\"nofollow\"]"}},{"not":{"selector_matches":".no-prefetch, .no-prefetch a"}}]},"eagerness":"conservative"}]}
+</script>
+<script id="pvfw-modaal-js" src="https://iperionx.com/wp-content/plugins/pdf-viewer-for-wordpress/tnc-resources/modaal.min.js?ver=12.5.5"></script>
+<script id="pvfw-custom-modaal-js" src="https://iperionx.com/wp-content/plugins/pdf-viewer-for-wordpress/tnc-resources/custom-modal.js?ver=12.5.5"></script>
+<script id="wpa-toolbar-js-extra">
+var wpatb = {"location":"body","is_rtl":"ltr","is_right":"reversed","responsive":"a11y-non-responsive","contrast":"Toggle High Contrast","grayscale":"Toggle Grayscale","fontsize":"Toggle Font size","custom_location":"standard-location","enable_grayscale":"false","enable_fontsize":"true","enable_contrast":"true"};
+var wpa11y = {"path":"https://iperionx.com/wp-content/plugins/wp-accessibility/toolbar/css/a11y-contrast.css?version=2.3.4"};
+//# sourceURL=wpa-toolbar-js-extra
+</script>
+<script data-wp-strategy="defer" defer id="wpa-toolbar-js" src="https://iperionx.com/wp-content/plugins/wp-accessibility/js/wpa-toolbar.min.js?ver=2.3.4"></script>
+<script defer id="iperionx-defer-js" src="https://iperionx.com/wp-content/themes/iperionx/assets/dist/js/app.js?ver=1.0.1"></script>
+<script id="wp-accessibility-js-extra">
+var wpa = {"skiplinks":{"enabled":true,"output":"\u003Cdiv class=\"wpa-hide-ltr\" id=\"skiplinks\" role=\"navigation\" aria-label=\"Skip links\"\u003E\u003Ca href=\"#main\" class='no-scroll et_smooth_scroll_disabled'\u003ESkip to Content\u003C/a\u003E \u003Ca href=\"#main\" class='no-scroll et_smooth_scroll_disabled'\u003ESkip to navigation\u003C/a\u003E \u003C/div\u003E"},"target":"1","tabindex":"1","underline":{"enabled":false,"target":"a"},"videos":"","dir":"ltr","viewport":"1","lang":"en-US","titles":"1","labels":"1","wpalabels":{"s":"Search","author":"Name","email":"Email","url":"Website","comment":"Comment"},"alt":"1","altSelector":".hentry img[alt]:not([alt=\"\"]), .comment-content img[alt]:not([alt=\"\"]), #content img[alt]:not([alt=\"\"]),.entry-content img[alt]:not([alt=\"\"])","current":"","errors":"","tracking":"","ajaxurl":"https://iperionx.com/wp-admin/admin-ajax.php","security":"5a12c157d4","action":"wpa_stats_action","url":"https://iperionx.com/careers/","post_id":"2294","continue":"","pause":"Pause video","play":"Play video","restUrl":"https://iperionx.com/wp-json/wp/v2/media","ldType":"link","ldHome":"https://iperionx.com","ldText":"\u003Cspan class=\"dashicons dashicons-media-text\" aria-hidden=\"true\"\u003E\u003C/span\u003E\u003Cspan class=\"screen-reader\"\u003ELong Description\u003C/span\u003E"};
+//# sourceURL=wp-accessibility-js-extra
+</script>
+<script data-wp-strategy="defer" defer id="wp-accessibility-js" src="https://iperionx.com/wp-content/plugins/wp-accessibility/js/wp-accessibility.min.js?ver=2.3.4"></script>
+<script id="wp-dom-ready-js" src="https://iperionx.com/wp-includes/js/dist/dom-ready.min.js?ver=a06281ae5cf5500e9317"></script>
+<script id="wp-hooks-js" src="https://iperionx.com/wp-includes/js/dist/hooks.min.js?ver=7496969728ca0f95732d"></script>
+<script id="wp-i18n-js" src="https://iperionx.com/wp-includes/js/dist/i18n.min.js?ver=781d11515ad3d91786ec"></script>
+<script id="wp-i18n-js-after">
+wp.i18n.setLocaleData( { 'text direction\u0004ltr': [ 'ltr' ] } );
+//# sourceURL=wp-i18n-js-after
+</script>
+<script id="wp-a11y-js" src="https://iperionx.com/wp-includes/js/dist/a11y.min.js?ver=af934e5259bc51b8718e"></script>
+<script id="gform_json-js" defer='defer' src="https://iperionx.com/wp-content/plugins/gravityforms/js/jquery.json.min.js?ver=2.10.5"></script>
+<script id="gform_gravityforms-js-extra">
+var gform_i18n = {"datepicker":{"days":{"monday":"Mo","tuesday":"Tu","wednesday":"We","thursday":"Th","friday":"Fr","saturday":"Sa","sunday":"Su"},"months":{"january":"January","february":"February","march":"March","april":"April","may":"May","june":"June","july":"July","august":"August","september":"September","october":"October","november":"November","december":"December"},"firstDay":1,"iconText":"Select date"}};
+var gf_legacy_multi = [];
+var gform_gravityforms = {"strings":{"invalid_file_extension":"This type of file is not allowed. Must be one of the following:","file_uploaded":"File uploaded","delete_file":"Delete this file","in_progress":"in progress","file_exceeds_limit":"File exceeds size limit","illegal_extension":"This type of file is not allowed.","max_reached":"Maximum number of files reached","unknown_error":"There was a problem while saving the file on the server","currently_uploading":"Please wait for the uploading to complete","cancel":"Cancel","cancel_upload":"Cancel this upload","cancelled":"Cancelled","error":"Error","message":"Message"},"vars":{"images_url":"https://iperionx.com/wp-content/plugins/gravityforms/images"}};
+var gf_global = {"gf_currency_config":{"name":"U.S. Dollar","symbol_left":"$","symbol_right":"","symbol_padding":"","thousand_separator":",","decimal_separator":".","decimals":2,"code":"USD"},"base_url":"https://iperionx.com/wp-content/plugins/gravityforms","number_formats":[],"spinnerUrl":"https://iperionx.com/wp-content/plugins/gravityforms/images/spinner.svg","version_hash":"7e7bfe844e7582c0ac7b0411f38968de","strings":{"newRowAdded":"New row added.","rowRemoved":"Row removed","formSaved":"The form has been saved.  The content contains the link to return and complete the form."}};
+//# sourceURL=gform_gravityforms-js-extra
+</script>
+<script id="gform_gravityforms-js" defer='defer' src="https://iperionx.com/wp-content/plugins/gravityforms/js/gravityforms.min.js?ver=2.10.5"></script>
+<script id="gform_recaptcha-js" defer='defer' src="https://www.google.com/recaptcha/api.js?hl=en&#038;&#038;ver=7.0#038;render=explicit"></script>
+<script id="gform_placeholder-js" defer='defer' src="https://iperionx.com/wp-content/plugins/gravityforms/js/placeholders.jquery.min.js?ver=2.10.5"></script>
+<script id="gform_gravityforms_utils-js" defer='defer' src="https://iperionx.com/wp-content/plugins/gravityforms/assets/js/dist/utils.min.js?ver=3f278756f0a3032bed328ff6a9f6c01d"></script>
+<script id="gform_gravityforms_theme_vendors-js" defer='defer' src="https://iperionx.com/wp-content/plugins/gravityforms/assets/js/dist/vendor-theme.min.js?ver=7c651d0ba638ce98b9c65141edddd567"></script>
+<script id="gform_gravityforms_theme-js-extra">
+var gform_theme_config = {"common":{"form":{"honeypot":{"version_hash":"7e7bfe844e7582c0ac7b0411f38968de"},"ajax":{"ajaxurl":"https://iperionx.com/wp-admin/admin-ajax.php","ajax_submission_nonce":"12f348737a","i18n":{"step_announcement":"Step %1$s of %2$s, %3$s","unknown_error":"There was an unknown error processing your request. Please try again.","error_403":"The request was blocked (403 error) for unknown security reasons. Remove any code-like text (scripts or DB queries) and try again."}}}},"hmr_dev":"","public_path":"https://iperionx.com/wp-content/plugins/gravityforms/assets/js/dist/","config_nonce":"b064ee4dff"};
+//# sourceURL=gform_gravityforms_theme-js-extra
+</script>
+<script id="gform_gravityforms_theme-js" defer='defer' src="https://iperionx.com/wp-content/plugins/gravityforms/assets/js/dist/scripts-theme.min.js?ver=301fdc9aa6144168f3b854c4c2c8f6d3"></script>
+<script id="wp-emoji-settings" type="application/json">
+{"baseUrl":"https://s.w.org/images/core/emoji/17.0.2/72x72/","ext":".png","svgUrl":"https://s.w.org/images/core/emoji/17.0.2/svg/","svgExt":".svg","source":{"concatemoji":"https://iperionx.com/wp-includes/js/wp-emoji-release.min.js?ver=7.0"}}
+</script>
+<script type="module">
+/*! This file is auto-generated */
+const a=JSON.parse(document.getElementById("wp-emoji-settings").textContent),o=(window._wpemojiSettings=a,"wpEmojiSettingsSupports"),s=["flag","emoji"];function i(e){try{var t={supportTests:e,timestamp:(new Date).valueOf()};sessionStorage.setItem(o,JSON.stringify(t))}catch(e){}}function c(e,t,n){e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(t,0,0);t=new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data);e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(n,0,0);const a=new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data);return t.every((e,t)=>e===a[t])}function p(e,t){e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(t,0,0);var n=e.getImageData(16,16,1,1);for(let e=0;e<n.data.length;e++)if(0!==n.data[e])return!1;return!0}function u(e,t,n,a){switch(t){case"flag":return n(e,"\ud83c\udff3\ufe0f\u200d\u26a7\ufe0f","\ud83c\udff3\ufe0f\u200b\u26a7\ufe0f")?!1:!n(e,"\ud83c\udde8\ud83c\uddf6","\ud83c\udde8\u200b\ud83c\uddf6")&&!n(e,"\ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f","\ud83c\udff4\u200b\udb40\udc67\u200b\udb40\udc62\u200b\udb40\udc65\u200b\udb40\udc6e\u200b\udb40\udc67\u200b\udb40\udc7f");case"emoji":return!a(e,"\ud83e\u1fac8")}return!1}function f(e,t,n,a){let r;const o=(r="undefined"!=typeof WorkerGlobalScope&&self instanceof WorkerGlobalScope?new OffscreenCanvas(300,150):document.createElement("canvas")).getContext("2d",{willReadFrequently:!0}),s=(o.textBaseline="top",o.font="600 32px Arial",{});return e.forEach(e=>{s[e]=t(o,e,n,a)}),s}function r(e){var t=document.createElement("script");t.src=e,t.defer=!0,document.head.appendChild(t)}a.supports={everything:!0,everythingExceptFlag:!0},new Promise(t=>{let n=function(){try{var e=JSON.parse(sessionStorage.getItem(o));if("object"==typeof e&&"number"==typeof e.timestamp&&(new Date).valueOf()<e.timestamp+604800&&"object"==typeof e.supportTests)return e.supportTests}catch(e){}return null}();if(!n){if("undefined"!=typeof Worker&&"undefined"!=typeof OffscreenCanvas&&"undefined"!=typeof URL&&URL.createObjectURL&&"undefined"!=typeof Blob)try{var e="postMessage("+f.toString()+"("+[JSON.stringify(s),u.toString(),c.toString(),p.toString()].join(",")+"));",a=new Blob([e],{type:"text/javascript"});const r=new Worker(URL.createObjectURL(a),{name:"wpTestEmojiSupports"});return void(r.onmessage=e=>{i(n=e.data),r.terminate(),t(n)})}catch(e){}i(n=f(s,u,c,p))}t(n)}).then(e=>{for(const n in e)a.supports[n]=e[n],a.supports.everything=a.supports.everything&&a.supports[n],"flag"!==n&&(a.supports.everythingExceptFlag=a.supports.everythingExceptFlag&&a.supports[n]);var t;a.supports.everythingExceptFlag=a.supports.everythingExceptFlag&&!a.supports.flag,a.supports.everything||((t=a.source||{}).concatemoji?r(t.concatemoji):t.wpemoji&&t.twemoji&&(r(t.twemoji),r(t.wpemoji)))});
+//# sourceURL=https://iperionx.com/wp-includes/js/wp-emoji-loader.min.js
+</script>
+<script>
+gform.initializeOnLoaded( function() { jQuery(document).on('gform_post_render', function(event, formId, currentPage){if(formId == 1) {if(typeof Placeholders != 'undefined'){
+                        Placeholders.enable();
+                    }} } );jQuery(document).on('gform_post_conditional_logic', function(event, formId, fields, isInit){} ) } );
+</script>
+<script>
+gform.initializeOnLoaded( function() {jQuery(document).trigger("gform_pre_post_render", [{ formId: "1", currentPage: "1", abort: function() { this.preventDefault(); } }]);        if (event && event.defaultPrevented) {                return;        }        const gformWrapperDiv = document.getElementById( "gform_wrapper_1" );        if ( gformWrapperDiv ) {            const visibilitySpan = document.createElement( "span" );            visibilitySpan.id = "gform_visibility_test_1";            gformWrapperDiv.insertAdjacentElement( "afterend", visibilitySpan );        }        const visibilityTestDiv = document.getElementById( "gform_visibility_test_1" );        let postRenderFired = false;        function triggerPostRender() {            if ( postRenderFired ) {                return;            }            postRenderFired = true;            gform.core.triggerPostRenderEvents( 1, 1 );            if ( visibilityTestDiv ) {                visibilityTestDiv.parentNode.removeChild( visibilityTestDiv );            }        }        function debounce( func, wait, immediate ) {            var timeout;            return function() {                var context = this, args = arguments;                var later = function() {                    timeout = null;                    if ( !immediate ) func.apply( context, args );                };                var callNow = immediate && !timeout;                clearTimeout( timeout );                timeout = setTimeout( later, wait );                if ( callNow ) func.apply( context, args );            };        }        const debouncedTriggerPostRender = debounce( function() {            triggerPostRender();        }, 200 );        if ( visibilityTestDiv && visibilityTestDiv.offsetParent === null ) {            const observer = new MutationObserver( ( mutations ) => {                mutations.forEach( ( mutation ) => {                    if ( mutation.type === 'attributes' && visibilityTestDiv.offsetParent !== null ) {                        debouncedTriggerPostRender();                        observer.disconnect();                    }                });            });            observer.observe( document.body, {                attributes: true,                childList: false,                subtree: true,                attributeFilter: [ 'style', 'class' ],            });        } else {            triggerPostRender();        }    } );
+</script>
+ 
+
+    <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1b101e1ad02efc2',t:'MTc4NDAzNzE0MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>

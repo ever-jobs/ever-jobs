@@ -7,65 +7,69 @@
  * publishes a public, unauthenticated careers site keyed by a 32-character hex
  * `clientkey`, e.g.
  *
- *   https://www.paycomonline.net/v4/ats/web.php/jobs?clientkey={CLIENTKEY}
+ *   https://www.paycomonline.net/v4/ats/web.php/portal/{CLIENTKEY}/career-page
  *
- * The listing page and per-job detail page are both client-rendered React apps
- * (a no-JS fetch returns only a `Loading…` shell), so the stable crawlable
- * surface is the board's JSON API rather than the HTML. The React app boots a
- * short-lived bearer token (a JWT) into the page and then talks to the
+ * The board is a client-rendered React app (a no-JS fetch of `/career-page`
+ * returns only a `Loading…` shell), so the stable crawlable surface is the
+ * board's JSON API rather than the HTML. The React app boots a public,
+ * read-only bearer token (a JWT) into the page and then talks to the
  * applicant-tracking JSON API:
  *
  *  1. Bootstrap — fetch the clientkey-addressed board page and read the bearer
  *     token the app embeds for its own API calls:
  *
- *       GET https://www.paycomonline.net/v4/ats/web.php/jobs?clientkey={KEY}
- *         → HTML carrying a `"token":"{JWT}"` / `Bearer {JWT}` value the React
- *           app forwards to the JSON API below. No login / candidate account is
- *           required — the token is public, page-embedded, and read-only.
+ *       GET https://www.paycomonline.net/v4/ats/web.php/portal/{KEY}/career-page
+ *         → HTML carrying a `"sessionJWT":"{JWT}"` value (inside the page's
+ *           `configsFromHost` bootstrap object) the React app forwards to the
+ *           JSON API below. No login / candidate account is required — the token
+ *           is public, page-embedded, and read-only.
  *
- *  2. Listing — POST the job-posting-previews search to enumerate open roles:
+ *  2. Listing — POST the job-posting-previews search to enumerate open roles.
+ *     The endpoint returns an EMPTY set unless the full `filtersForQuery` object
+ *     is sent alongside `skip`/`take` (a bare `{skip,take}` yields zero):
  *
  *       POST https://portal-applicant-tracking.us-cent.paycomonline.net
  *              /api/ats/job-posting-previews/search
  *         Authorization: Bearer {JWT}
- *         { "skip": 0, "take": {n} }
- *         → { "results": [ { "jobPostingId": 342042, "title": "…",
- *             "city": "Oklahoma City", "state": "OK", … } ], "total": N }
+ *         { "skip": 0, "take": {n}, "filtersForQuery": { … } }
+ *         → { "jobPostingPreviews": [ { "jobId": 60339,
+ *             "jobTitle": "Production Technician", "locations": "Seymour, IN …",
+ *             "remoteType": "", … } ], "jobPostingPreviewsCount": N }
  *
- *  3. Detail — GET a single posting for its full HTML description:
+ *  3. Detail — GET a single posting for its full HTML body + Google-for-Jobs
+ *     schema.org `JobPosting` JSON-LD. The payload is WRAPPED in `jobPosting`:
  *
  *       GET https://portal-applicant-tracking.us-cent.paycomonline.net
- *             /api/ats/job-postings/{jobPostingId}
+ *             /api/ats/job-postings/{jobId}
  *         Authorization: Bearer {JWT}
- *         → { "title": "…", "description": "<p>…HTML body…</p>",
- *             "city": "…", "state": "…", "datePosted": "2026-05-20", … }
+ *         → { "jobPosting": { "jobTitle": "…", "location": "…",
+ *             "positionType": "Full Time", "jobCategory": "Manufacturing",
+ *             "description": "<p>…</p>", "qualifications": "<ul>…</ul>",
+ *             "salaryRange": "", "googleJobJson": "{…schema.org JobPosting…}" } }
  *
- * The classic board additionally pre-renders each role for Google-for-Jobs with a
- * schema.org `JobPosting` JSON-LD block on its detail page
- * (`…/web.php/jobs/ViewJobDetails?job={jobId}&clientkey={KEY}`); the adapter falls
- * back to scanning that JSON-LD (plus `og:` meta tags) when the JSON API path is
- * unavailable, so a markup / API drift never blanks a tenant entirely.
+ *  4. Company name — the tenant's display name is behind a separate endpoint
+ *     (it is NOT derivable from the clientkey):
+ *
+ *       GET https://portal-applicant-tracking.us-cent.paycomonline.net
+ *             /api/ats/company-name
+ *         Authorization: Bearer {JWT}
+ *         → { "companyName": "Guardian Bikes" }
+ *
+ * `datePosted` is carried ONLY inside each detail's `googleJobJson` schema.org
+ * string (the preview `postedOn` and detail `startDate` are empty), so the
+ * adapter parses that JSON-LD node for the date, canonical URL, and any
+ * structured `baseSalary`.
  *
  * The search API returns the tenant's full open-roles set (paged by skip/take),
  * so we request up to `resultsWanted` in one page and slice client-side. An
- * unknown clientkey (HTTP 4xx), a missing token, a malformed page, or a
- * non-JSON payload degrades to an empty (graceful) result rather than throwing,
- * so a single bad tenant never breaks a batch run.
+ * unknown clientkey (HTTP 4xx), a missing token, or a non-JSON payload degrades
+ * to an empty (graceful) result rather than throwing, so a single bad tenant
+ * never breaks a batch run.
  *
- * Surface confidence (researched 2026-06-03, no authentication):
- *  - Confirmed the platform + clientkey-addressed board pattern
- *    `paycomonline.net/v4/ats/web.php/jobs?clientkey={KEY}` and real, named
- *    tenants on it (Club Champion, Hollywood Feed, Piping Rock Club, Stir Foods).
- *    Confirmed the JSON API host
- *    `portal-applicant-tracking.us-cent.paycomonline.net/api/ats/...`: a GET to
- *    `/job-posting-previews/search` returns HTTP 405 (Method Not Allowed),
- *    confirming the endpoint exists and expects POST.
- *  - The board is a JS-rendered React app, so an unauthenticated no-JS fetch
- *    returns only the `Loading…` shell; the page-embedded bearer token and the
- *    JSON API's exact byte-level response shape could NOT be confirmed via a
- *    no-JS fetch. The JSON API + schema.org `JobPosting` fallback are the
- *    documented public patterns the board advertises, so the parser is written
- *    defensively around them (verified=false).
+ * Surface confidence (verified 2026-06-30 against five live tenants — Boxabl,
+ * Spudnik, Guardian Bikes, Aperture, Prefix — via a read-only probe): the
+ * board → `sessionJWT` → search/detail/company-name API contract above is
+ * confirmed end-to-end (verified=true).
  */
 
 /** Canonical board origin (the public, clientkey-addressed careers host). */
@@ -77,20 +81,31 @@ export const PAYCOM_ROOT_DOMAIN = 'paycomonline.net';
 /** Alternate board domain some legacy tenants are served from. */
 export const PAYCOM_ALT_DOMAINS = ['paycomonline.com'];
 
-/** Clientkey-addressed board listing path (the React board's entry page). */
-export const PAYCOM_BOARD_PATH = '/v4/ats/web.php/jobs';
-
-/** Per-job detail (classic board) path; carries schema.org JobPosting JSON-LD. */
-export const PAYCOM_DETAIL_PATH = '/v4/ats/web.php/jobs/ViewJobDetails';
-
 /** Origin of the applicant-tracking JSON API the React board calls. */
-export const PAYCOM_API_ORIGIN = 'https://portal-applicant-tracking.us-cent.paycomonline.net';
+export const PAYCOM_API_ORIGIN =
+  'https://portal-applicant-tracking.us-cent.paycomonline.net';
 
-/** Job-posting-previews search endpoint (POST {skip,take}); enumerates open roles. */
+/** Job-posting-previews search endpoint (POST {skip,take,filtersForQuery}). */
 export const PAYCOM_API_SEARCH_PATH = '/api/ats/job-posting-previews/search';
 
-/** Single job-posting endpoint (GET); returns a posting's full HTML description. */
+/** Single job-posting endpoint (GET); returns `{ jobPosting: {…} }`. */
 export const PAYCOM_API_DETAIL_PATH = '/api/ats/job-postings';
+
+/** Tenant display-name endpoint (GET); returns `{ companyName }`. */
+export const PAYCOM_API_COMPANY_NAME_PATH = '/api/ats/company-name';
+
+/**
+ * Build the clientkey-addressed board page URL. The board page boots the
+ * `sessionJWT` the API calls require.
+ */
+export function paycomBoardUrl(clientkey: string): string {
+  return `${PAYCOM_BOARD_ORIGIN}/v4/ats/web.php/portal/${encodeURIComponent(clientkey)}/career-page`;
+}
+
+/** Build a public per-job detail / apply URL for a role. */
+export function paycomJobUrl(clientkey: string, jobId: string): string {
+  return `${PAYCOM_BOARD_ORIGIN}/v4/ats/web.php/portal/${encodeURIComponent(clientkey)}/jobs/${encodeURIComponent(jobId)}`;
+}
 
 /**
  * Default internal results cap. Mirrors the sibling ATS adapters: the public DTO
@@ -108,36 +123,45 @@ export const PAYCOM_HEADERS: Record<string, string> = {
 };
 
 /**
- * Matches the page-embedded bearer token the React board boots for its own API
- * calls. We tolerate a few shapes: a JSON `"token":"…"` / `"accessToken":"…"`
- * field, or an inline `Bearer …` literal. The token is a JWT (three
- * dot-separated base64url segments) — the value capture stays JWT-shaped.
+ * Match the page-embedded bearer token the React board boots for its own API
+ * calls. The board embeds it as `"sessionJWT":"{JWT}"` inside its
+ * `configsFromHost` bootstrap object — NOT as a `"token"` / `"accessToken"` /
+ * `Bearer` literal. The value is captured verbatim (it is a JWT).
  */
-export const PAYCOM_TOKEN_REGEX =
-  /(?:"(?:access[_-]?)?token"\s*:\s*"|Bearer\s+)([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/i;
+export const PAYCOM_SESSION_JWT_REGEX = /"sessionJWT"\s*:\s*"([^"]+)"/;
 
-/** Matches a board listing URL's `clientkey` query value. */
-export const PAYCOM_CLIENTKEY_REGEX = /[?&]clientkey=([A-Za-z0-9]+)/i;
+/**
+ * The search endpoint returns an empty result unless the full `filtersForQuery`
+ * object is POSTed alongside `skip`/`take` (an "unfiltered" search still needs
+ * the empty-filter shape). These are the default, no-criteria values.
+ */
+export const PAYCOM_SEARCH_FILTERS: Record<string, unknown> = {
+  distanceFrom: 0,
+  workEnvironments: [],
+  positionTypes: [],
+  educationLevels: [],
+  categories: [],
+  travelTypes: [],
+  shiftTypes: [],
+  otherFilters: [],
+  keywordSearchText: '',
+  location: '',
+  sortOption: '',
+};
+
+/**
+ * `remoteType` single-letter codes that denote a remote / non-onsite role:
+ * `R` remote, `F` field, `H` hybrid, `T` telework. (`O`/empty = onsite.)
+ */
+export const PAYCOM_REMOTE_TYPE_CODES = new Set(['R', 'F', 'H', 'T']);
+
+/** Matches a board URL's `clientkey` — either `/portal/{KEY}/` or `?clientkey={KEY}`. */
+export const PAYCOM_PORTAL_CLIENTKEY_REGEX = /\/portal\/([A-Za-z0-9]+)/i;
+export const PAYCOM_QUERY_CLIENTKEY_REGEX = /[?&]clientkey=([A-Za-z0-9]+)/i;
 
 /** A bare clientkey looks like a 16–64 char hex/alphanumeric token. */
 export const PAYCOM_CLIENTKEY_TOKEN_REGEX = /^[A-Za-z0-9]{16,64}$/;
 
-/**
- * Extracts every `<script type="application/ld+json">…</script>` block's inner
- * JSON text from a detail page. A page may carry several JSON-LD blocks
- * (Organization, BreadcrumbList, JobPosting); we scan them all for the
- * `JobPosting` object.
- */
-export const PAYCOM_JSONLD_REGEX =
-  /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-
-/** Extracts a `<meta property="og:…" content="…">` / `<meta name="…" content="…">` value. */
-export const PAYCOM_OG_TITLE_REGEX = /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["']/i;
-export const PAYCOM_OG_URL_REGEX = /<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']*)["']/i;
-export const PAYCOM_OG_DESCRIPTION_REGEX =
-  /<meta[^>]+property=["']og:description["'][^>]+content=["']([\s\S]*?)["']\s*\/?>/i;
-export const PAYCOM_TITLE_TAG_REGEX = /<title>([\s\S]*?)<\/title>/i;
-
-/** Detects remote / work-from-home roles across the title, location, and body text. */
+/** Detects remote / work-from-home roles across the title and location text. */
 export const PAYCOM_REMOTE_REGEX =
   /\b(remote|work\s*from\s*home|wfh|telecommute|fully\s*remote|home[\s-]?based)\b/i;

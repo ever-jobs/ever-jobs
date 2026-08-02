@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JOBSDB_API_URL, JOBSDB_HEADERS } from './jobsdb.constants';
 import { JobsdbJob } from './jobsdb.types';
@@ -150,7 +151,7 @@ export class JobsdbService implements IScraper {
     let datePosted: string | null = null;
     if (item.listingDate) {
       try {
-        datePosted = new Date(item.listingDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.listingDate);
       } catch {
         datePosted = null;
       }

@@ -17,6 +17,7 @@ import {
   extractEmails,
   randomSleep,
   BrowserPool,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { WELLFOUND_JOBS_URL, WELLFOUND_DELAY_MIN, WELLFOUND_DELAY_MAX } from './wellfound.constants';
 import { WellfoundNextData, WellfoundListing } from './wellfound.types';
@@ -188,7 +189,7 @@ export class WellfoundService implements IScraper, OnModuleDestroy {
     }
 
     const datePosted = listing.createdAt
-      ? new Date(listing.createdAt).toISOString().split('T')[0]
+      ? toDateOnly(listing.createdAt)
       : null;
 
     return new JobPostDto({

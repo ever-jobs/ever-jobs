@@ -1,0 +1,69 @@
+About ARC Impact Acquisition Corporation
+ARC Impact Acquisition Corporation, the owner of the Desktop Metal brand and products, is
+pioneering a new generation of additive manufacturing technologies focused on providing
+unique solutions for customers. We offer a portfolio of integrated additive manufacturing
+solutions for engineers, designers and manufacturers of hardware, software, materials and
+services. At ARC, we believe additive manufacturing, commonly referred to as 3D printing, is
+one of the most exciting and transformational technology innovations of our time.
+We are looking for a Systems Engineer to help build, maintain, and troubleshoot our rapidly
+expanding infrastructure and systems. Due to the nature of our business and right sizing our
+environments we are looking for a self-starter, fast learner, who isn’t afraid to roll up their
+sleeves and deliver the necessary results.
+Systems Engineer responsibilities include:
+● Managing and monitoring systems and infrastructure
+● Installing, configuring, testing, maintaining operating systems, application software, and
+system management tools
+● Managing private cloud systems and infrastructure
+● Configuring and supporting hybrid/multi-cloud systems and infrastructure
+● Ensuring the highest levels of systems and infrastructure availability
+Systems Engineer Job Description:
+Job brief
+We are looking for a Systems Engineer to help build out, maintain, and troubleshoot our rapidly
+evolving IT environment. Due to the rapid nature of our business, we are looking for a
+self-starter, and fast learner, who isn’t afraid to roll up their sleeves and deliver the necessary
+results.
+What does a Systems Engineer do?
+You will be part of a talented and fast moving team, delivering mission-critical infrastructure and
+systems, and ensuring the highest levels of availability, performance, and security. Qualified
+Systems Engineers will have a background in IT, Computer Science, Engineering, or Systems
+Engineering and analysis.
+
+Responsibilities
+● Install, configure, test, and maintain operating systems, application software, and system
+management tools
+● Manage and monitor systems and infrastructure across multiple sites.
+● Proactively ensure the highest levels of systems and infrastructure availability
+● Monitor and test applications and system performance for potential bottlenecks, identify
+possible solutions, and work with the appropriate team(s) to implement those fixes
+● Maintain security, backup, and redundancy strategies
+● Write and maintain custom scripts to increase system efficiency to reduce or eliminate
+the human intervention time on tasks
+● Participate in the design of information and operational support systems
+● Provide an escalation point to various team members
+● Liaise with vendors and other IT personnel for problem resolution
+Qualifications/ Requirements
+● Must be able to work from our Burlington MA HQ on a hybrid office schedule
+● BS/MS degree in Computer Science, Engineering or a related subject or equivalent work
+experience.
+● Proven working experience in installing, configuring, and troubleshooting heterogenous
+based environments (Windows, Linux, macOS).
+● Experience with virtualization and containerization (e.g., VMware, Hyper-V, Docker)
+● Experience with AI as a workforce multiplier a plus
+● Experience with automation software and Infrastructure as Code is a plus (e.g., Ansible,
+Terraform, Puppet, cfengine, Chef)
+● Solid scripting skills (e.g., PowerShell, Bash, Python, Ruby)
+● Solid networking knowledge (OSI network layers, TCP/IP)
+● Accustomed to working with change control management
+● Elite problem solver
+● Willingness to learn and mentor team members
+An Equal Opportunity Employer
+At Arc Impact Acquisition Corporation, innovation is at the core of our DNA. And we believe
+ground-breaking discoveries are born from diverse teams with unique backgrounds and
+experiences. We are an Equal Opportunity Employer. All qualified applicants will receive
+consideration for employment without regard to race, color, religion, sex, sexual orientation,
+gender identity, national origin, disability, protected veteran status, or any other protected
+characteristic under applicable law.
+Salary Range:
+$110,000, – $150,000, annually, depending on experience and qualifications.
+This role is eligible for a comprehensive benefits package including: health, dental, vision,
+401(k), and more.

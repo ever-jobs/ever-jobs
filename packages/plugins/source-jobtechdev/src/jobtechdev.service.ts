@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JOBTECHDEV_API_URL, JOBTECHDEV_HEADERS, JOBTECHDEV_DEFAULT_RESULTS, JOBTECHDEV_MAX_RESULTS } from './jobtechdev.constants';
 import { JobTechDevResponse, JobTechDevHit } from './jobtechdev.types';
@@ -135,7 +136,7 @@ export class JobTechDevService implements IScraper {
     let datePosted: string | null = null;
     if (hit.publication_date) {
       try {
-        datePosted = new Date(hit.publication_date).toISOString().split('T')[0];
+        datePosted = toDateOnly(hit.publication_date);
       } catch {
         datePosted = null;
       }

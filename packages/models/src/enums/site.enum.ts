@@ -2078,6 +2078,54 @@ export enum Site {
   WURL = 'wurljobs',
   // Phase 969: Spec 974 — Source Company Plugin: Zynga
   ZYNGA = 'zyngacareers',
+  // Phase 970: Spec 5036 — AppOne (Paychex-owned) ATS plugin
+  APPONE = 'appone',
+  // Phase 971: Spec 5041 — PrismHR (HiringThing) ATS plugin
+  PRISMHR = 'prismhr',
+  // Phase 972: Spec 5042 — Terraform Industries company careers plugin
+  TERRAFORMINDUSTRIES = 'terraformindustries',
+  // Phase 973: Spec 5043 — Submit4Jobs (Pereless) ATS plugin
+  SUBMIT4JOBS = 'submit4jobs',
+  // Phase 974: Spec 5044 — Notion public-page careers plugin (shared, page-id keyed)
+  NOTION_PAGES = 'notion-pages',
+  // Phase 975: Spec 5045 — Cover (buildcover.com) company careers plugin (Sanity CMS)
+  BUILDCOVER = 'buildcover',
+  // Phase 976: Spec 5046 — NANO Nuclear Energy (nanonuclearenergy.com) company careers plugin (WordPress/Divi)
+  NANONUCLEARENERGY = 'nanonuclearenergy',
+  // Phase 977: Spec 5047 — Desktop Metal (desktopmetal.com) company careers plugin (Cloudflare-gated HTML listing + per-role PDF JDs)
+  DESKTOPMETAL = 'desktopmetal',
+  // Phase 978: Spec 5048 — Avalanche Energy (avalanchefusion.com) company careers plugin (Webflow listing + detail pages, LinkedIn apply)
+  AVALANCHEFUSION = 'avalanchefusion',
+  // Phase 979: Spec 5049 — Spike Aerospace (spikeaerospace.com) company careers plugin (WordPress REST category posts)
+  SPIKEAEROSPACE = 'spikeaerospace',
+  // Phase 980: Spec 5050 — CaneKast (canekast.com) company careers plugin (WordPress/Elementor listing + per-role PDF JDs)
+  CANEKAST = 'canekast',
+  // Phase 981: Spec 5051 — Velontra (velontra.com) company careers plugin (WordPress/Beaver Builder inline accordion roles)
+  VELONTRA = 'velontra',
+  // Phase 982: Spec 5052 — Solideon (solideon.com) company careers plugin (WordPress/Elementor listing + per-role detail pages)
+  SOLIDEON = 'solideon',
+  // Phase 983: Spec 5053 — Galadyne (galadyne.io) company careers plugin (Next.js listing HTML + client-chunk job descriptions)
+  GALADYNE_IO = 'galadyne_io',
+  // Phase 984: Spec 5054 — Gusto-hosted multi-tenant job boards (jobs.gusto.com/boards/<slug>); distinct from GUSTO (Gusto, Inc.'s own careers)
+  GUSTO_HOSTED = 'gusto_hosted',
+  // Phase 985: Spec 5056 — ReElement Technologies (reelementtech.com) company careers plugin (Webflow CMS listing + /jobs/<slug> detail)
+  REELEMENTTECH = 'reelementtech',
+  // Phase 986: Spec 5057 — FLYMOTION (flymotionus.com) company careers plugin (Webflow CMS listing + /jobs/<slug> detail; HubSpot apply form)
+  FLYMOTIONUS = 'flymotionus',
+  // Phase 987: Spec 5059 — IperionX (iperionx.com) company careers plugin (WordPress summary-only board; apply links out to Indeed, not scraped)
+  IPERIONX = 'iperionx',
+  // Phase 988: Spec 5061 — Hylio (hyl.io) company careers plugin (Webflow CMS listing + /hiring/<slug> detail; apply links out to Indeed, not scraped)
+  HYL_IO = 'hyl_io',
+  // Phase 989: Spec 5062 — True Metal Supply (truemetalsupply.com) company careers plugin (Wix popup/lightbox JDs; headless BrowserPool; title-only location)
+  TRUEMETALSUPPLY = 'truemetalsupply',
+  // Phase 990: Spec 5063 — Framework Automation (framework.co) company careers plugin (Framer SSG; two-step /hiring -> /jobs/{slug}; stated location + salary; apply -> shared /apply form)
+  FRAMEWORK_CO = 'framework_co',
+  // Phase 991: Spec 5064 — Terminus Industrials (terminusindustrials.com) company careers plugin (Next.js SSR; single-page /careers with inline JD; stated location + employment type; apply -> on-page modal form)
+  TERMINUSINDUSTRIALS = 'terminusindustrials',
+  // Phase 992: Spec 5065 — Mara Defense (mara.inc) company careers plugin (Webflow SSR; single-page /career cards; stated location + employment type; apply -> LinkedIn, link-only)
+  MARA_INC = 'mara_inc',
+  // Phase 993: Spec 5066 — Vight (vightaero.com) company careers plugin (hand-coded static HTML; two-step /join-us -> /join-us/{slug}; stated location + employment type; apply -> Cloudflare-obfuscated join@ email)
+  VIGHTAERO = 'vightaero',
   // Phase 970: Spec 976 — Source Company Plugin: Airwallex
   AIRWALLEX = 'airwallex',
   // Phase 971: Spec 977 — Source Company Plugin: Renuity

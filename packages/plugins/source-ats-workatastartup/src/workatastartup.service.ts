@@ -22,6 +22,7 @@ import {
   parseJobPostingLd,
   jobPostingLdToCompensation,
   JobPostingLd,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   WAAS_DETAIL_CONCURRENCY,
@@ -241,7 +242,7 @@ export class WorkAtAStartupService implements IScraper {
         : null;
 
     const jobType = this.mapJobTypes(job.type, ld?.employmentType ?? null);
-    const datePosted = ld?.datePosted ? this.toDateOnly(ld.datePosted) : null;
+    const datePosted = ld?.datePosted ? toDateOnly(ld.datePosted) : null;
     const jobUrl = job.url
       ? waasDetailUrl(job.url)
       : waasCanonicalCompanyUrl(companySlug);
@@ -356,13 +357,6 @@ export class WorkAtAStartupService implements IScraper {
     // The fallback body is markdown; for HTML/plain callers, plain text is the
     // safe lossless-enough rendering (no markdown→HTML lib in the hot path).
     return htmlToPlainText(markdown);
-  }
-
-  private toDateOnly(value: string): string {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime())
-      ? value
-      : parsed.toISOString().split('T')[0];
   }
 
   private toHtml(data: unknown): string {

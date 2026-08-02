@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { NAVJOBS_FEED_URL, NAVJOBS_PUBLIC_TOKEN_URL, NAVJOBS_HEADERS, NAVJOBS_DEFAULT_RESULTS } from './navjobs.constants';
 import { NavJobsFeedResponse, NavJobsFeedItem } from './navjobs.types';
@@ -140,7 +141,7 @@ export class NavJobsService implements IScraper {
     let datePosted: string | null = null;
     if (entry?.published) {
       try {
-        datePosted = new Date(entry.published).toISOString().split('T')[0];
+        datePosted = toDateOnly(entry.published);
       } catch {
         datePosted = null;
       }

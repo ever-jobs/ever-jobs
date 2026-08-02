@@ -16,6 +16,7 @@ import {
   markdownConverter,
   extractEmails,
   decodeHtmlEntities,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   HEYRECRUIT_HOST_SUFFIX,
@@ -466,7 +467,7 @@ export class HeyrecruitService implements IScraper {
     if (!value) return null;
     try {
       const parsed = new Date(value.trim());
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(value.trim());
     } catch {
       // ignore
     }

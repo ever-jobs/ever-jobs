@@ -16,6 +16,7 @@ import {
   markdownConverter,
   extractEmails,
   randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   DIGITALRECRUITERS_API_HOST,
@@ -584,7 +585,7 @@ export class DigitalRecruitersService implements IScraper {
       try {
         const normalised = value.trim().replace(' ', 'T');
         const parsed = new Date(normalised);
-        if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+        if (!isNaN(parsed.getTime())) return toDateOnly(normalised);
       } catch {
         // try next candidate
       }

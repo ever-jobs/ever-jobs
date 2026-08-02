@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { DEVITJOBS_FEED_URL, DEVITJOBS_DEFAULT_RESULTS, DEVITJOBS_MAX_RESULTS, DEVITJOBS_HEADERS } from './devitjobs.constants';
 import { DevITJobsXmlItem } from './devitjobs.types';
@@ -165,7 +166,7 @@ export class DevITJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

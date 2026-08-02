@@ -23,6 +23,7 @@ import {
   resolveCompensation,
   JobPostingLd,
   JobPostingLdLocation,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JSONLD_HEADERS } from './jsonld.constants';
 
@@ -114,7 +115,7 @@ export class JsonLdService implements IScraper {
     const jobTypes = this.mapJobTypes(posting.employmentType);
 
     const datePosted = posting.datePosted
-      ? this.toDateOnly(posting.datePosted)
+      ? toDateOnly(posting.datePosted)
       : null;
 
     return new JobPostDto({
@@ -167,13 +168,6 @@ export class JsonLdService implements IScraper {
       state: first.region,
       country: first.country,
     });
-  }
-
-  private toDateOnly(value: string): string {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime())
-      ? value
-      : parsed.toISOString().split('T')[0];
   }
 
   /** Short stable id from the job URL (avoids leaking the full URL into ids). */

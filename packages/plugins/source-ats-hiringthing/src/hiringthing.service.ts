@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { HIRINGTHING_API_URL, HIRINGTHING_HEADERS } from './hiringthing.constants';
 import { HiringThingResponse, HiringThingJob } from './hiringthing.types';
@@ -138,7 +139,7 @@ export class HiringThingService implements IScraper {
 
     // Date posted
     const datePosted = job.created_at
-      ? new Date(job.created_at).toISOString().split('T')[0]
+      ? toDateOnly(job.created_at)
       : null;
 
     return new JobPostDto({

@@ -15,6 +15,7 @@ import {
   markdownConverter,
   plainConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   DEFAULT_JOB_DOMAINS,
@@ -86,7 +87,7 @@ export class ExaService implements IScraper {
       let startPublishedDate: string | undefined;
       if (input.hoursOld) {
         const since = new Date(Date.now() - input.hoursOld * 60 * 60 * 1000);
-        startPublishedDate = since.toISOString().split('T')[0];
+        startPublishedDate = toDateOnly(since) ?? undefined;
       }
 
       const response = await exa.searchAndContents(query, {
@@ -158,7 +159,7 @@ export class ExaService implements IScraper {
 
     // Parse published date
     const datePosted = result.publishedDate
-      ? new Date(result.publishedDate).toISOString().split('T')[0]
+      ? toDateOnly(result.publishedDate)
       : null;
 
     return new JobPostDto({

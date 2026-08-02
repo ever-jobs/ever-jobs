@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   REED_API_URL,
@@ -169,7 +170,7 @@ export class ReedService implements IScraper {
     let datePosted: string | null = null;
     if (raw.date) {
       try {
-        datePosted = new Date(raw.date).toISOString().split('T')[0];
+        datePosted = toDateOnly(raw.date);
       } catch {
         datePosted = null;
       }

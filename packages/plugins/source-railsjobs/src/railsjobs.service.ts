@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { RAILSJOBS_RSS_URL, RAILSJOBS_DEFAULT_RESULTS, RAILSJOBS_HEADERS } from './railsjobs.constants';
 import { RailsJobsRssItem } from './railsjobs.types';
@@ -152,7 +153,7 @@ export class RailsJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

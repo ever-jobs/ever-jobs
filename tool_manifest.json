@@ -60,7 +60,12 @@
       "siteType": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "Sites to search. Omit to search all search + company sources. Provide companySlug for ATS sources."
+        "description": "Sites to search. Omit (and omit companyDomain) to search all search + company sources. Provide companySlug for ATS sources."
+      },
+      "companyDomain": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Company domains to resolve to Site tokens (e.g., 'buildcover.com', 'hyl.io'). Resolved tokens are unioned with siteType. Unresolved domains return HTTP 400."
       },
       "companySlug": {
         "type": "string",

@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { FINDWORK_API_URL, FINDWORK_HEADERS, FINDWORK_DEFAULT_RESULTS } from './findwork.constants';
 import { FindWorkApiResponse, FindWorkJob } from './findwork.types';
@@ -159,7 +160,7 @@ export class FindWorkService implements IScraper {
     let datePosted: string | null = null;
     if (raw.date_posted) {
       try {
-        datePosted = new Date(raw.date_posted).toISOString().split('T')[0];
+        datePosted = toDateOnly(raw.date_posted);
       } catch {
         datePosted = null;
       }

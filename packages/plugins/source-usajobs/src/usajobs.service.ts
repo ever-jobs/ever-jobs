@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   USAJOBS_API_URL,
@@ -208,7 +209,7 @@ export class UsajobsService implements IScraper {
     let datePosted: string | null = null;
     if (desc.PublicationStartDate) {
       try {
-        datePosted = new Date(desc.PublicationStartDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(desc.PublicationStartDate);
       } catch {
         datePosted = null;
       }

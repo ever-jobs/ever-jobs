@@ -14,6 +14,7 @@ import {
 import {
   createHttpClient,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   FUNCTIONALWORKS_API_URL,
@@ -117,7 +118,7 @@ export class FunctionalworksService implements IScraper {
     let datePosted: string | undefined;
     if (posting.firstPublished) {
       try {
-        datePosted = new Date(posting.firstPublished).toISOString().split('T')[0];
+        datePosted = toDateOnly(posting.firstPublished) ?? undefined;
       } catch {
         datePosted = undefined;
       }

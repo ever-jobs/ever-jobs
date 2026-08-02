@@ -19,6 +19,7 @@ import {
   parseLocationList,
   resolveCompensation,
   aggregateCompensation,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   ASHBY_API_URL,
@@ -234,6 +235,22 @@ export class AshbyService implements IScraper {
 
     const parsedLocations = parseLocationList(this.locationLabels(job));
 
+    // Remote status: Ashby's structured `workplaceType` is authoritative
+    // (`isRemote=true` is also set for Hybrid roles, so the boolean alone
+    // over-counts remote). Trust `workplaceType === 'Remote'`, fall back to the
+    // boolean only when `workplaceType` is absent, OR'd with location text.
+    const isRemote =
+      job.workplaceType?.toLowerCase() === 'remote' ||
+      (job.workplaceType == null && Boolean(job.isRemote)) ||
+      parsedLocations.remoteMentioned;
+
+    // workFromHomeType: prefer the structured `workplaceType` (Hybrid/Remote),
+    // merged with anything inferred from the location text.
+    const workFromHomeType = this.mergeWorkFromHomeType(
+      parsedLocations.workFromHomeType,
+      this.workFromHomeTypeFromWorkplace(job.workplaceType),
+    );
+
     // Compensation - structured tiers first, then fall back to parsing the
     // job description (Spec 5018). Always parse a plain-text body so HTML mode
     // does not feed tags to the salary matcher.
@@ -251,7 +268,7 @@ export class AshbyService implements IScraper {
     // the authenticated one so both paths populate.
     const publishedRaw = job.publishedAt ?? job.publishedDate;
     const datePosted = publishedRaw
-      ? new Date(publishedRaw).toISOString().split('T')[0]
+      ? toDateOnly(publishedRaw)
       : null;
 
     return new JobPostDto({
@@ -263,8 +280,8 @@ export class AshbyService implements IScraper {
       description,
       compensation,
       datePosted,
-      isRemote: Boolean(job.isRemote) || parsedLocations.remoteMentioned,
-      workFromHomeType: parsedLocations.workFromHomeType,
+      isRemote,
+      workFromHomeType,
       emails: extractEmails(description),
       site: Site.ASHBY,
       // ATS-specific fields
@@ -275,6 +292,29 @@ export class AshbyService implements IScraper {
       employmentType: job.employmentType ?? null,
       applyUrl: job.applyUrl ?? null,
     });
+  }
+
+  /** Map Ashby's `workplaceType` to a workFromHomeType label. OnSite → none. */
+  private workFromHomeTypeFromWorkplace(
+    workplaceType: string | null | undefined,
+  ): string | null {
+    switch (workplaceType?.toLowerCase()) {
+      case 'hybrid':
+        return 'Hybrid';
+      case 'remote':
+        return 'Remote';
+      default:
+        return null;
+    }
+  }
+
+  private mergeWorkFromHomeType(
+    a: string | null,
+    b: string | null,
+  ): string | null {
+    if (!a) return b;
+    if (!b || a === b) return a;
+    return 'Hybrid or Remote';
   }
 
   private locationLabels(job: AshbyJob): string[] {

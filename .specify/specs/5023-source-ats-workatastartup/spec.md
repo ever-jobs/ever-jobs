@@ -13,7 +13,7 @@
 ## Problem
 
 Y Combinator's **Work at a Startup** (WaaS) is a multi-tenant ATS: every YC
-company gets a hosted board under a per-company slug. fetch1 now recognises it
+company gets a hosted board under a per-company slug. It is now recognised
 as an ATS (`workatastartup:<slug>`) and routes diode.computer, loombotic.com,
 and bucket.bot to it, but there is **no ever-jobs plugin** to harvest those
 boards — the same "detected ATS, no harvester" gap manatal had before Spec 5021.
@@ -54,7 +54,7 @@ Spec 5018/5019 compensation helpers.
       `parseJobPostingLd`; fall back to the detail page's `data-page`
       `props.job.description` (markdown) when the ld+json description is empty.
       Bounded concurrency, isolated failures (`Promise.allSettled`).
-2. **Field mapping (full ATS checklist, `ats-plugin-feature-checklist-SPEC`):**
+2. **Field mapping (full ATS checklist):**
     - `title` ← ld `title` → list `title`.
     - `companyName` ← `props.company.name` → list `companyName`.
     - `companyUrl` ← **canonical** `workatastartup.com/companies/{slug}`.
@@ -90,7 +90,7 @@ Spec 5018/5019 compensation helpers.
   no descriptions, auth-gated) — the YC mirror is the data source.
 - No equity-range modelling (`equityRange` is not a JobPostDto field); captured
   only incidentally if it ever maps.
-- No fetch1 changes (detection already shipped on `devin/branch1`).
+- No detection changes (detection already shipped separately).
 
 ## Contracts
 

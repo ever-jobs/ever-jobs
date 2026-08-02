@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JOBICY_API_URL, JOBICY_HEADERS } from './jobicy.constants';
 import { JobicyJob, JobicyApiResponse } from './jobicy.types';
@@ -114,7 +115,7 @@ export class JobicyService implements IScraper {
     let datePosted: string | null = null;
     if (raw.pubDate) {
       try {
-        datePosted = new Date(raw.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(raw.pubDate);
       } catch {
         datePosted = raw.pubDate;
       }

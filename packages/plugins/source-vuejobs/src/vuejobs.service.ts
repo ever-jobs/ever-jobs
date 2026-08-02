@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { VUEJOBS_RSS_URL, VUEJOBS_DEFAULT_RESULTS, VUEJOBS_HEADERS } from './vuejobs.constants';
 import { VueJobsRssItem } from './vuejobs.types';
@@ -140,7 +141,7 @@ export class VueJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

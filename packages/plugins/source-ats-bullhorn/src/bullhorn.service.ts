@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   BULLHORN_DEFAULT_FIELDS,
@@ -175,7 +176,7 @@ export class BullhornService implements IScraper {
 
     // Date posted — dateAdded is epoch milliseconds
     const datePosted = order.dateAdded
-      ? new Date(order.dateAdded).toISOString().split('T')[0]
+      ? toDateOnly(order.dateAdded)
       : null;
 
     // Job URL — Bullhorn does not expose a public careers page URL;

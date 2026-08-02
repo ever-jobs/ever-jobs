@@ -2,15 +2,17 @@
  * E2E test for the Paycom ATS scraper.
  *
  * No authentication required — Paycom serves a public, clientkey-addressed
- * careers board from `paycomonline.net` (`/v4/ats/web.php/jobs?clientkey={KEY}`).
- * The board is a client-rendered React app whose open roles are enumerated via a
- * page-token-gated JSON API (`/api/ats/job-posting-previews/search`), with each
- * role's classic detail page additionally carrying schema.org `JobPosting`
- * JSON-LD as a fallback. The adapter resolves the tenant from a `companySlug`
- * (the bare `clientkey`) or a full board `companyUrl`. Tests run against a known
- * Paycom-powered tenant but tolerate upstream changes / empty feeds by treating
- * zero results as acceptable; the shape assertions only run when jobs are
- * actually returned.
+ * careers board from `paycomonline.net`
+ * (`/v4/ats/web.php/portal/{KEY}/career-page`). The board is a client-rendered
+ * React app that boots a public bearer (`configsFromHost.sessionJWT`) the
+ * adapter reads to call the applicant-tracking JSON API: a search endpoint
+ * (`/api/ats/job-posting-previews/search`, full `filtersForQuery`) enumerates
+ * roles and a detail endpoint (`/api/ats/job-postings/{id}`) returns each role
+ * (with a `googleJobJson` schema.org node for the date / canonical URL). The
+ * adapter resolves the tenant from a `companySlug` (the bare `clientkey`) or a
+ * board `companyUrl`. Tests run against a known Paycom-powered tenant but
+ * tolerate upstream changes / empty feeds by treating zero results as
+ * acceptable; shape assertions only run when jobs are actually returned.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { PaycomModule, PaycomService } from '@ever-jobs/source-ats-paycom';

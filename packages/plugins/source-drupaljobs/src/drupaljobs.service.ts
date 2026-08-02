@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { DRUPALJOBS_RSS_URL, DRUPALJOBS_HEADERS } from './drupaljobs.constants';
 import { DrupalJobsRssItem } from './drupaljobs.types';
@@ -152,7 +153,7 @@ export class DrupalJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

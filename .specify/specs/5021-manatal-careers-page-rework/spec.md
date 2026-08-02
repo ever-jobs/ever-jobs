@@ -61,7 +61,7 @@ Observed real values (captured fixtures):
 ## Scope
 
 Repoint the plugin at the careers-page.com JSON API and apply the standard ATS
-checklist (`docs_fetch1/ats-plugin-feature-checklist-SPEC.md`), reusing shared
+checklist, reusing shared
 helpers (Specs 5018–5019 compensation, common location parser, `extractEmails`).
 
 - **`companySlug` = the careers-page.com client slug** (first path segment of
@@ -103,7 +103,7 @@ helpers (Specs 5018–5019 compensation, common location parser, `extractEmails`
   `docs/questions.md`.)
 - **No per-job detail fetch.** The list payload is complete.
 - **No `companySlug` auto-discovery.** The slug is supplied by the caller (the
-  fetch1 detector extracts it from the careers-page link).
+  upstream detector extracts it from the careers-page link).
 - **No employment-type / job-function / datePosted synthesis.** Not in payload.
 - **No change to other ATS plugins.**
 

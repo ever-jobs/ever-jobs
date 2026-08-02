@@ -8,7 +8,7 @@ import {
 } from '@ever-jobs/models';
 import {
   createHttpClient, markdownConverter, removeAttributes,
-  extractEmails, randomSleep,
+  extractEmails, randomSleep, toDateOnly,
 } from '@ever-jobs/common';
 import { BDJOBS_HEADERS, BDJOBS_SEARCH_PARAMS, BDJOBS_JOB_SELECTORS } from './bdjobs.constants';
 
@@ -148,7 +148,7 @@ export class BDJobsService implements IScraper {
       title,
       companyName,
       location,
-      datePosted: datePosted?.toISOString().split('T')[0] ?? null,
+      datePosted,
       jobUrl,
       isRemote,
       site: Site.BDJOBS,
@@ -210,16 +210,11 @@ export class BDJobsService implements IScraper {
     return { description: description || undefined };
   }
 
-  private parseDate(dateText: string): Date | null {
-    try {
-      if (dateText.includes('Deadline:')) {
-        dateText = dateText.replace('Deadline:', '').trim();
-      }
-      const parsed = new Date(dateText);
-      return isNaN(parsed.getTime()) ? null : parsed;
-    } catch {
-      return null;
+  private parseDate(dateText: string): string | null {
+    if (dateText.includes('Deadline:')) {
+      dateText = dateText.replace('Deadline:', '').trim();
     }
+    return toDateOnly(dateText);
   }
 
   private hashCode(str: string): number {

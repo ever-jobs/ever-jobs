@@ -15,6 +15,7 @@ import {
   markdownConverter,
   extractEmails,
   randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   TEAMDASH_HOST_TEMPLATE,
@@ -544,7 +545,7 @@ export class TeamdashService implements IScraper {
       // JS Date does not accept 6-digit fractional seconds; trim to 3.
       const normalised = value.trim().replace(/(\.\d{3})\d+/, '$1');
       const parsed = new Date(normalised);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(normalised);
     } catch {
       // ignore
     }

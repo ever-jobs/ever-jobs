@@ -18,6 +18,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { DEEL_API_URL, DEEL_HEADERS } from './deel.constants';
 import { DeelJobPosting, DeelResponse } from './deel.types';
@@ -123,7 +124,7 @@ export class DeelService implements IScraper {
 
     // Date posted
     const datePosted = posting.created_at
-      ? new Date(posting.created_at).toISOString().split('T')[0]
+      ? toDateOnly(posting.created_at)
       : null;
 
     return new JobPostDto({

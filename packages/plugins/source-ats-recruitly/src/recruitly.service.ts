@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   RECRUITLY_ROOT_DOMAIN,
@@ -414,13 +415,13 @@ export class RecruitlyService implements IScraper {
       const day = dd.padStart(2, '0');
       const month = mm.padStart(2, '0');
       const parsed = new Date(`${yyyy}-${month}-${day}T00:00:00Z`);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(`${yyyy}-${month}-${day}T00:00:00Z`);
       return null;
     }
 
     try {
       const parsed = new Date(cleaned);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(cleaned);
     } catch {
       // ignore
     }

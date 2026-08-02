@@ -90,8 +90,9 @@ Hiring platform designed for small and mid-sized businesses. Workable provides s
 
 SAP's cloud-based human experience management suite used by large enterprises worldwide. SuccessFactors Recruiting handles talent acquisition at scale with deep integration into SAP's broader HR ecosystem.
 
-- **Method**: OData API with HTML fallback
-- **Data Format**: XML/JSON, full requisition details
+- **Method**: three read surfaces, deterministic switch (Spec 5055) — OData API (preferred when an instance is known) → **Career Site Builder (CSB / RMK)** portal → native careersection HTML fallback
+- **Data Format**: OData XML/JSON with full requisition details; CSB portals are server-rendered HTML whose detail pages carry schema.org `JobPosting` **microdata** (not JSON-LD)
+- **CSB portals**: frequently on the employer's **own custom domain** (e.g. `careers.example.com`, no `successfactors` in the hostname) and often without public OData; addressed by the portal URL (`companyUrl`), list at `/tile-search-results/?...&startrow={N}`, detail at `/job/{slug}/{jobId}/`
 - **Notable Users**: Siemens, Accenture, Deloitte, EY
 
 ### Oracle Taleo
@@ -752,6 +753,17 @@ Austrian ATS (part of the onlyfy/XING group). The candidate portal is server-ren
 - **Data Format**: HTML (+ JSON-LD detail)
 - **Tenant Resolution**: `handle` (sub-domain label) via `companySlug` or `companyUrl`; legacy `jobbase.io`/`prescreenapp.io` hosts 301-redirect here
 - **Known Limitation**: host-rebrand churn; single listing page observed; description served in the tenant's language when `lang=en` is unavailable (Spec 330, Q-058)
+
+### Gusto Hosted
+
+Multi-tenant job-board product hosted by Gusto (the payroll/HR vendor) at `jobs.gusto.com` for other companies. **Distinct from `source-company-gusto`**, which scrapes Gusto, Inc.'s OWN Greenhouse-backed careers (a single employer) and is left untouched — the two share a vendor name but are different targets (Spec 5054).
+
+- **Plugin**: `source-ats-gusto-hosted` (`Site.GUSTO_HOSTED = 'gusto_hosted'`)
+- **Method**: stealth headless browser (`BrowserPool.getPage({ proxy, stealth: true })`) → GET `/boards/{slug}` (enumerate `/postings/{postingSlug}` links) + GET `/postings/{postingSlug}` (bounded fan-out) → shared `parseJobPostingLd` (Spec 5022)
+- **Data Format**: HTML + schema.org `JobPosting` JSON-LD (title, description, datePosted, employmentType, hiringOrganization, location, baseSalary)
+- **Tenant Resolution**: board slug `<company>-<uuid>` via `companySlug`, or a `jobs.gusto.com/boards/<slug>` `companyUrl`
+- **Cloudflare**: both pages sit behind a Cloudflare managed challenge (plain HTTPS is 403'd `cf-mitigated: challenge`), so a real stealth browser clears it — same pattern as `source-company-desktopmetal` (Spec 5047). If the challenge is not cleared → `[]`; the plugin NEVER falls back to another company's board.
+- **Known Limitation**: live board/posting HTML capture deferred (the Turnstile challenge loops on a datacenter IP); board enumeration is anchored on the stable `/postings/{slug}` link shape and detail parsing on the stable JSON-LD contract (Spec 5054, `questions.md`)
 
 ---
 

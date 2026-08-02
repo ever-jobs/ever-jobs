@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   TRAFFIT_HOST_TEMPLATE,
@@ -344,7 +345,7 @@ export class TraffitService implements IScraper {
       // "2026-06-03 15:58:21" → ISO-compatible "2026-06-03T15:58:21".
       const normalised = value.trim().replace(' ', 'T');
       const parsed = new Date(normalised);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(normalised);
     } catch {
       // ignore
     }

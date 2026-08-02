@@ -15,59 +15,62 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
+  parseLocationText,
+  jobPostingLdFromNode,
+  jobPostingLdToCompensation,
+  resolveCompensation,
+  type JobPostingLd,
 } from '@ever-jobs/common';
 import {
-  PAYCOM_BOARD_ORIGIN,
   PAYCOM_ROOT_DOMAIN,
   PAYCOM_ALT_DOMAINS,
-  PAYCOM_BOARD_PATH,
-  PAYCOM_DETAIL_PATH,
   PAYCOM_API_ORIGIN,
   PAYCOM_API_SEARCH_PATH,
   PAYCOM_API_DETAIL_PATH,
-  PAYCOM_TOKEN_REGEX,
-  PAYCOM_CLIENTKEY_REGEX,
-  PAYCOM_CLIENTKEY_TOKEN_REGEX,
-  PAYCOM_JSONLD_REGEX,
-  PAYCOM_OG_TITLE_REGEX,
-  PAYCOM_OG_URL_REGEX,
-  PAYCOM_OG_DESCRIPTION_REGEX,
-  PAYCOM_TITLE_TAG_REGEX,
+  PAYCOM_API_COMPANY_NAME_PATH,
+  PAYCOM_SESSION_JWT_REGEX,
+  PAYCOM_SEARCH_FILTERS,
+  PAYCOM_REMOTE_TYPE_CODES,
   PAYCOM_REMOTE_REGEX,
+  PAYCOM_PORTAL_CLIENTKEY_REGEX,
+  PAYCOM_QUERY_CLIENTKEY_REGEX,
+  PAYCOM_CLIENTKEY_TOKEN_REGEX,
   PAYCOM_DEFAULT_RESULTS,
   PAYCOM_HEADERS,
+  paycomBoardUrl,
+  paycomJobUrl,
 } from './paycom.constants';
 import {
+  PaycomCompanyNameResponse,
+  PaycomDetailResponse,
   PaycomJob,
-  PaycomJobDetail,
-  PaycomJobLocation,
   PaycomJobPosting,
   PaycomJobPreview,
-  PaycomPostalAddress,
   PaycomSearchResponse,
 } from './paycom.types';
 
 /**
  * Paycom ATS careers scraper — generic, multi-tenant.
  *
- * Paycom (paycom.com, US) serves a public, clientkey-addressed careers board from
- * `paycomonline.net` (`/v4/ats/web.php/jobs?clientkey={KEY}`). The board is a
- * client-rendered React app, so the adapter resolves the tenant's `clientkey`,
- * fetches the board page to read the page-embedded bearer token the app boots,
- * and then enumerates open roles through the applicant-tracking JSON API
- * (`POST /api/ats/job-posting-previews/search`), fetching each role's full HTML
- * body from `GET /api/ats/job-postings/{id}`. When the JSON API path is
- * unavailable (no token / drift), it falls back to the classic per-job detail
- * page's schema.org `JobPosting` JSON-LD (with `og:` meta tags as defensive
- * fallbacks).
+ * Paycom (paycom.com, US) serves a public, clientkey-addressed careers board
+ * from `paycomonline.net`. The board is a client-rendered React app, so the
+ * adapter resolves the tenant's `clientkey`, fetches the board page to read the
+ * public bearer the app boots (`configsFromHost.sessionJWT`), and then talks to
+ * the applicant-tracking JSON API:
+ *
+ *  - `POST /api/ats/job-posting-previews/search` (with the full
+ *    `filtersForQuery` object) enumerates open roles (`jobPostingPreviews[]`);
+ *  - `GET  /api/ats/job-postings/{id}` returns each role wrapped in `jobPosting`
+ *    (full HTML body + `googleJobJson` schema.org node carrying `datePosted`,
+ *    the canonical URL, and any structured `baseSalary`);
+ *  - `GET  /api/ats/company-name` returns the tenant display name.
  *
  * The caller addresses a tenant by `companySlug` (the bare `clientkey`) or by
- * `companyUrl` (a board URL carrying `?clientkey=…`). The search API returns the
- * tenant's full open-roles set paged by skip/take, so we request up to
- * `resultsWanted` in one page and slice client-side to honour it. A single fetch
- * error, an unknown clientkey (HTTP 4xx), a missing token, or a malformed payload
- * degrades to an empty / partial result rather than throwing, so a single tenant
- * never nukes a batch run.
+ * `companyUrl` (a board URL carrying the clientkey in its `/portal/{KEY}/` path
+ * or a `?clientkey=…` query). A single fetch error, an unknown clientkey
+ * (HTTP 4xx), a missing token, or a malformed payload degrades to an empty /
+ * partial result rather than throwing, so a single tenant never nukes a batch.
  */
 @SourcePlugin({
   site: Site.PAYCOM,
@@ -80,13 +83,12 @@ export class PaycomService implements IScraper {
   private readonly logger = new Logger(PaycomService.name);
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
-    const companySlug = input.companySlug;
-    if (!companySlug && !input.companyUrl) {
+    if (!input.companySlug && !input.companyUrl) {
       this.logger.warn('No companySlug or companyUrl provided for Paycom scraper');
       return new JobResponseDto([]);
     }
 
-    const clientkey = this.resolveClientKey(companySlug, input.companyUrl);
+    const clientkey = this.resolveClientKey(input.companySlug, input.companyUrl);
     if (!clientkey) {
       this.logger.warn('Could not resolve a Paycom clientkey from input');
       return new JobResponseDto([]);
@@ -100,37 +102,35 @@ export class PaycomService implements IScraper {
     client.setHeaders(PAYCOM_HEADERS);
 
     const resultsWanted = input.resultsWanted ?? PAYCOM_DEFAULT_RESULTS;
-    const boardUrl = this.buildBoardUrl(clientkey);
-    const seen = new Set<string>();
     const jobPosts: JobPostDto[] = [];
 
     try {
       this.logger.log(`Fetching Paycom board for clientkey: ${clientkey}`);
 
-      // Read the page-embedded bearer token the React board boots for its API.
-      const board = await this.fetchBoard(client, boardUrl);
+      // Read the public bearer the React board boots for its own API calls.
+      const board = await this.fetchBoard(client, paycomBoardUrl(clientkey));
       const token = board ? this.extractToken(board) : null;
+      if (!token) {
+        this.logger.warn(`No Paycom sessionJWT found for clientkey ${clientkey}`);
+        return new JobResponseDto([]);
+      }
+      const auth = { Authorization: `Bearer ${token}` };
 
-      // Preferred path: the applicant-tracking JSON API (token-gated, public).
-      const previews = token
-        ? await this.fetchPreviews(client, token, resultsWanted)
-        : [];
+      // The display name is behind its own endpoint (not the clientkey).
+      const companyName = await this.fetchCompanyName(client, auth);
 
+      const previews = await this.fetchPreviews(client, auth, resultsWanted);
+      const seen = new Set<string>();
       const wanted = previews
-        .map((p) => ({ preview: p, atsId: this.previewId(p) }))
+        .map((preview) => ({ preview, atsId: this.previewId(preview) }))
         .filter((x) => x.atsId && !seen.has(x.atsId) && seen.add(x.atsId))
         .slice(0, resultsWanted);
 
       for (const { preview, atsId } of wanted) {
         try {
-          const post = await this.processPreview(
-            client,
-            token,
-            preview,
-            atsId,
-            clientkey,
-            input.descriptionFormat,
-          );
+          const posting = await this.fetchDetail(client, auth, atsId);
+          const job = this.assemble(preview, posting, atsId, clientkey, companyName);
+          const post = this.toJobPost(job, input.descriptionFormat);
           if (post) jobPosts.push(post);
         } catch (err: any) {
           this.logger.warn(`Error processing Paycom job ${atsId}: ${err.message}`);
@@ -167,40 +167,54 @@ export class PaycomService implements IScraper {
   }
 
   /**
-   * Read the page-embedded bearer token (JWT) the React board boots for its own
-   * API calls. The token is public, page-embedded, and read-only — no login is
-   * required. Returns null when no token is present (we then fall back to the
-   * JSON-LD detail path).
+   * Read the public bearer (JWT) the React board boots into its
+   * `configsFromHost.sessionJWT`. The token is public, page-embedded, and
+   * read-only — no login is required. Returns null when absent.
    */
   private extractToken(html: string): string | null {
-    const match = PAYCOM_TOKEN_REGEX.exec(html);
+    const match = PAYCOM_SESSION_JWT_REGEX.exec(html);
     return match ? match[1] : null;
+  }
+
+  /** Resolve the tenant display name via the company-name endpoint. */
+  private async fetchCompanyName(
+    client: ReturnType<typeof createHttpClient>,
+    auth: Record<string, string>,
+  ): Promise<string | null> {
+    try {
+      const response = await client.get<PaycomCompanyNameResponse>(
+        `${PAYCOM_API_ORIGIN}${PAYCOM_API_COMPANY_NAME_PATH}`,
+        { headers: auth },
+      );
+      return this.cleanText(response.data?.companyName);
+    } catch (err: any) {
+      this.logger.warn(`Paycom company-name lookup failed: ${err.message}`);
+      return null;
+    }
   }
 
   /**
    * Enumerate a tenant's open-role previews via the search API. The endpoint is
-   * paged by skip/take; we request up to `resultsWanted` in one page. An unknown
-   * clientkey / expired token (HTTP 4xx) degrades to an empty list.
+   * paged by skip/take and requires the full `filtersForQuery` object (a bare
+   * `{skip,take}` returns an empty set). An unknown clientkey / expired token
+   * (HTTP 4xx) degrades to an empty list.
    */
   private async fetchPreviews(
     client: ReturnType<typeof createHttpClient>,
-    token: string,
+    auth: Record<string, string>,
     resultsWanted: number,
   ): Promise<PaycomJobPreview[]> {
-    const url = `${PAYCOM_API_ORIGIN}${PAYCOM_API_SEARCH_PATH}`;
     const take = Math.max(1, Math.min(resultsWanted, PAYCOM_DEFAULT_RESULTS));
     try {
       const response = await client.post<PaycomSearchResponse>(
-        url,
-        { skip: 0, take },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        },
+        `${PAYCOM_API_ORIGIN}${PAYCOM_API_SEARCH_PATH}`,
+        { skip: 0, take, filtersForQuery: PAYCOM_SEARCH_FILTERS },
+        { headers: { ...auth, 'Content-Type': 'application/json' } },
       );
-      return this.parsePreviews(response.data);
+      const list = response.data?.jobPostingPreviews;
+      return Array.isArray(list)
+        ? list.filter((p): p is PaycomJobPreview => !!p && typeof p === 'object')
+        : [];
     } catch (err: any) {
       const status = err?.response?.status;
       if (status && status >= 400 && status < 500) {
@@ -211,53 +225,20 @@ export class PaycomService implements IScraper {
     }
   }
 
-  /** Pull the previews array out of whichever envelope key the API used. */
-  private parsePreviews(data: PaycomSearchResponse | null | undefined): PaycomJobPreview[] {
-    if (!data || typeof data !== 'object') return [];
-    const list =
-      data.results ?? data.data ?? data.items ?? data.jobPostings ?? [];
-    return Array.isArray(list) ? list.filter((p): p is PaycomJobPreview => !!p && typeof p === 'object') : [];
-  }
-
   /**
-   * Map a single preview → JobPostDto, fetching the role's full HTML body from
-   * the detail API when a token is available, else from the classic detail page's
-   * schema.org JSON-LD.
-   */
-  private async processPreview(
-    client: ReturnType<typeof createHttpClient>,
-    token: string | null,
-    preview: PaycomJobPreview,
-    atsId: string,
-    clientkey: string,
-    format: DescriptionFormat | undefined,
-  ): Promise<JobPostDto | null> {
-    let detail: PaycomJobDetail | null = null;
-    if (token) {
-      detail = await this.fetchDetail(client, token, atsId);
-    }
-    const job = detail
-      ? this.fromApi(preview, detail, atsId, clientkey)
-      : await this.fromJsonLd(client, preview, atsId, clientkey);
-    return this.processJob(job, clientkey, format);
-  }
-
-  /**
-   * Fetch a single posting's full payload from the detail API. A removed role
-   * (HTTP 4xx) degrades to null without failing the batch.
+   * Fetch a single posting (wrapped in `jobPosting`). A removed role (HTTP 4xx)
+   * degrades to null without failing the batch.
    */
   private async fetchDetail(
     client: ReturnType<typeof createHttpClient>,
-    token: string,
+    auth: Record<string, string>,
     atsId: string,
-  ): Promise<PaycomJobDetail | null> {
+  ): Promise<PaycomJobPosting | null> {
     const url = `${PAYCOM_API_ORIGIN}${PAYCOM_API_DETAIL_PATH}/${encodeURIComponent(atsId)}`;
     try {
-      const response = await client.get<PaycomJobDetail>(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = response.data;
-      return data && typeof data === 'object' ? data : null;
+      const response = await client.get<PaycomDetailResponse>(url, { headers: auth });
+      const posting = response.data?.jobPosting;
+      return posting && typeof posting === 'object' ? posting : null;
     } catch (err: any) {
       const status = err?.response?.status;
       if (status && status >= 400 && status < 500) {
@@ -268,228 +249,111 @@ export class PaycomService implements IScraper {
     }
   }
 
-  /** Assemble a normalised PaycomJob from the search preview + detail API payloads. */
-  private fromApi(
+  /** Assemble a normalised PaycomJob from the preview + detail payloads. */
+  private assemble(
     preview: PaycomJobPreview,
-    detail: PaycomJobDetail,
+    detail: PaycomJobPosting | null,
     atsId: string,
     clientkey: string,
+    companyName: string | null,
   ): PaycomJob {
-    const title = this.cleanText(detail.title ?? detail.name ?? detail.jobTitle) ??
-      this.cleanText(preview.title ?? preview.name ?? preview.jobTitle);
-    const descriptionHtml = this.cleanText(
-      detail.descriptionHtml ?? detail.description ?? preview.description,
-    );
-    const city = this.cleanText(detail.city ?? preview.city);
-    const state = this.cleanText(detail.state ?? detail.stateProvince ?? preview.state ?? preview.stateProvince);
-    const country = this.cleanText(detail.country ?? preview.country);
-    const employmentType = this.normaliseEmploymentType(
-      detail.employmentType ?? detail.jobType ?? preview.employmentType ?? preview.jobType,
-    );
-    const department = this.cleanText(detail.department ?? detail.category ?? preview.department ?? preview.category);
-    const datePosted =
-      this.parseDate(detail.datePosted ?? detail.postedDate ?? detail.createdDate) ??
-      this.parseDate(preview.datePosted ?? preview.postedDate ?? preview.createdDate);
+    const google = jobPostingLdFromNode(detail?.googleJobJson);
+    const location =
+      this.cleanText(detail?.location) ?? this.cleanText(preview.locations);
 
     return {
-      jobPostingId: atsId,
-      url: this.buildDetailUrl(atsId, clientkey),
-      canonicalUrl: this.buildDetailUrl(atsId, clientkey),
-      title,
-      companyName: null,
-      descriptionHtml,
-      description: this.cleanText(preview.summary ?? preview.description),
-      city,
-      state,
-      country,
-      employmentType,
-      department,
-      datePosted,
-      isRemote: this.detectRemoteApi(preview, detail, title, city, state),
-    };
-  }
-
-  /**
-   * Fallback path: parse the classic per-job detail page's schema.org
-   * `JobPosting` JSON-LD (with `og:` meta fallbacks) when the JSON API is
-   * unavailable. A missing / malformed page yields a preview-only job.
-   */
-  private async fromJsonLd(
-    client: ReturnType<typeof createHttpClient>,
-    preview: PaycomJobPreview,
-    atsId: string,
-    clientkey: string,
-  ): Promise<PaycomJob> {
-    const url = this.buildDetailUrl(atsId, clientkey);
-    let html = '';
-    try {
-      const response = await client.get<string>(url, { responseType: 'text' });
-      html = typeof response.data === 'string' ? response.data : '';
-    } catch (err: any) {
-      const status = err?.response?.status;
-      if (!(status && status >= 400 && status < 500)) {
-        // A transient (5xx / network) error on the fallback path: surface the
-        // preview-only job rather than failing the role.
-        this.logger.warn(`Paycom detail page fetch failed for ${atsId}: ${err.message}`);
-      }
-    }
-
-    const posting = html ? this.findJobPosting(html) : null;
-    const ogTitle = html ? this.firstGroup(html, PAYCOM_OG_TITLE_REGEX) : null;
-    const titleTag = html ? this.firstGroup(html, PAYCOM_TITLE_TAG_REGEX) : null;
-    const ogDescription = html ? this.firstGroup(html, PAYCOM_OG_DESCRIPTION_REGEX) : null;
-    const ogUrl = html ? this.firstGroup(html, PAYCOM_OG_URL_REGEX) : null;
-
-    const title =
-      this.cleanText(posting?.title) ??
-      this.leadingTitle(ogTitle) ??
-      this.leadingTitle(titleTag) ??
-      this.cleanText(preview.title ?? preview.name ?? preview.jobTitle);
-
-    const address = this.firstAddress(posting?.jobLocation);
-    const companyName = this.organizationName(posting?.hiringOrganization);
-    const descriptionHtml = this.cleanText(posting?.description) ?? this.cleanText(preview.description);
-
-    return {
-      jobPostingId: atsId,
-      url,
-      canonicalUrl: this.cleanText(posting?.url) ?? (ogUrl ? this.decodeEntities(ogUrl) : url),
-      title: title ? this.decodeEntities(title) : null,
-      companyName: companyName ? this.decodeEntities(companyName) : null,
-      descriptionHtml: descriptionHtml ? this.decodeEntities(descriptionHtml) : null,
-      description: ogDescription
-        ? this.decodeEntities(ogDescription)
-        : this.cleanText(preview.summary),
-      city: this.cleanText(address?.addressLocality) ?? this.cleanText(preview.city),
-      state: this.cleanText(address?.addressRegion) ?? this.cleanText(preview.state ?? preview.stateProvince),
-      country: this.countryName(address?.addressCountry) ?? this.cleanText(preview.country),
-      department: this.cleanText(posting?.industry) ?? this.cleanText(preview.department ?? preview.category),
-      employmentType: this.normaliseEmploymentType(
-        posting?.employmentType ?? preview.employmentType ?? preview.jobType,
-      ),
+      jobId: atsId,
+      url: this.cleanText(google?.url) ?? paycomJobUrl(clientkey, atsId),
+      title: this.cleanText(detail?.jobTitle) ?? this.cleanText(preview.jobTitle),
+      companyName,
+      descriptionHtml: this.bodyHtml(detail, google),
+      location,
+      employmentType: this.cleanText(detail?.positionType ?? preview.positionType),
+      department: this.cleanText(detail?.jobCategory),
       datePosted:
-        this.parseDate(posting?.datePosted) ??
-        this.parseDate(preview.datePosted ?? preview.postedDate ?? preview.createdDate),
-      isRemote: this.detectRemote(posting, title, address),
+        this.parseDate(google?.datePosted) ?? this.parseDate(preview.postedOn),
+      isRemote: this.detectRemote(preview, detail, location),
+      remoteTypeCode: this.cleanText(detail?.remoteType ?? preview.remoteType),
+      structuredCompensation: jobPostingLdToCompensation(google?.baseSalary),
     };
   }
 
   /**
-   * Scan every `application/ld+json` block for a `JobPosting` object. Each block
-   * may be a single object, an array of objects, or a `@graph` envelope; we
-   * narrow defensively and return the first `JobPosting` found.
+   * The visible body spans both the `description` and `qualifications` HTML
+   * sections; concatenate them. Fall back to the schema.org node's description.
    */
-  private findJobPosting(html: string): PaycomJobPosting | null {
-    const re = new RegExp(PAYCOM_JSONLD_REGEX.source, 'gi');
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(html)) !== null) {
-      const raw = match[1]?.trim();
-      if (!raw) continue;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        // Malformed JSON-LD block — skip it and keep scanning.
-        continue;
-      }
-      const posting = this.extractPosting(parsed);
-      if (posting) return posting;
-    }
-    return null;
-  }
-
-  /** Recursively locate a `JobPosting` node within a parsed JSON-LD value. */
-  private extractPosting(value: unknown): PaycomJobPosting | null {
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        const found = this.extractPosting(item);
-        if (found) return found;
-      }
-      return null;
-    }
-    if (value && typeof value === 'object') {
-      const obj = value as Record<string, unknown>;
-      if (this.isJobPostingType(obj['@type'])) return obj as PaycomJobPosting;
-      // schema.org `@graph` envelope: search its members.
-      if (Array.isArray(obj['@graph'])) return this.extractPosting(obj['@graph']);
-    }
-    return null;
-  }
-
-  /** True when a JSON-LD `@type` value names a JobPosting. */
-  private isJobPostingType(type: unknown): boolean {
-    if (typeof type === 'string') return type.toLowerCase() === 'jobposting';
-    if (Array.isArray(type)) return type.some((t) => typeof t === 'string' && t.toLowerCase() === 'jobposting');
-    return false;
+  private bodyHtml(
+    detail: PaycomJobPosting | null,
+    google: JobPostingLd | null,
+  ): string | null {
+    const body = [detail?.description, detail?.qualifications]
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+      .join('\n')
+      .trim();
+    if (body) return body;
+    return this.cleanText(google?.description);
   }
 
   /** Map a normalised PaycomJob → JobPostDto. */
-  private processJob(
-    job: PaycomJob,
-    clientkey: string,
-    format?: DescriptionFormat,
-  ): JobPostDto | null {
-    const title = job.title;
-    if (!title) return null;
+  private toJobPost(job: PaycomJob, format?: DescriptionFormat): JobPostDto | null {
+    if (!job.title || !job.jobId || !job.url) return null;
 
-    const atsId = String(job.jobPostingId ?? '');
-    if (!atsId) return null;
+    const description = this.formatDescription(job.descriptionHtml, format);
 
-    const jobUrl = job.url || job.canonicalUrl;
-    if (!jobUrl) return null;
+    const compensation = resolveCompensation({
+      structured: job.structuredCompensation,
+      text: description,
+    });
+    const salarySource = compensation
+      ? job.structuredCompensation
+        ? 'structured'
+        : 'description'
+      : null;
 
-    const companyName = this.deriveCompanyName(job.companyName, clientkey);
-    const description = this.formatDescription(job.descriptionHtml ?? null, job.description ?? null, format);
+    const workFromHomeType = this.workFromHomeType(job);
 
     return new JobPostDto({
-      id: `paycom-${atsId}`,
-      title,
-      companyName,
-      jobUrl,
-      location: this.extractLocation(job),
+      id: `paycom-${job.jobId}`,
+      title: job.title,
+      companyName: job.companyName,
+      jobUrl: job.url,
+      location: this.buildLocation(job),
       description,
-      datePosted: job.datePosted ?? null,
-      isRemote: job.isRemote ?? false,
+      datePosted: job.datePosted,
+      isRemote: job.isRemote,
+      ...(workFromHomeType ? { workFromHomeType } : {}),
+      ...(compensation ? { compensation, salarySource } : {}),
       emails: extractEmails(description),
       site: Site.PAYCOM,
-      atsId,
+      atsId: job.jobId,
       atsType: 'paycom',
-      department: this.cleanText(job.department),
-      employmentType: this.cleanText(job.employmentType),
-      applyUrl: job.canonicalUrl || jobUrl,
+      department: job.department,
+      employmentType: job.employmentType,
+      applyUrl: job.url,
     });
   }
 
   /**
-   * Convert the job-ad body per `descriptionFormat`. The detail / JSON-LD
-   * `description` is an HTML body; we prefer it so markdown / plain conversion is
-   * consistent, falling back to the plain-text preview / `og:description` blob
-   * when no HTML body exists.
+   * Convert the job-ad body per `descriptionFormat`. The detail body is HTML;
+   * we prefer it so markdown / plain conversion is consistent.
    */
-  private formatDescription(
-    html: string | null,
-    text: string | null,
-    format?: DescriptionFormat,
-  ): string | null {
-    if (html) {
-      if (format === DescriptionFormat.HTML) return html;
-      if (format === DescriptionFormat.MARKDOWN) return markdownConverter(html) ?? html;
-      return htmlToPlainText(html);
-    }
-    if (text) {
-      // Only a plain-text body is available; surface it as-is for every format.
-      return text;
-    }
-    return null;
+  private formatDescription(html: string | null, format?: DescriptionFormat): string | null {
+    if (!html) return null;
+    if (format === DescriptionFormat.HTML) return html;
+    if (format === DescriptionFormat.MARKDOWN) return markdownConverter(html) ?? html;
+    return htmlToPlainText(html);
   }
 
   /**
-   * Resolve the tenant `clientkey`. An explicit `companySlug` is used verbatim
-   * when it looks like a bare clientkey; a `companyUrl` on a Paycom board domain
-   * has its `?clientkey=…` query value extracted. Returns an empty string when
-   * neither yields a clientkey.
+   * Resolve the tenant `clientkey`. A `companyUrl` on a Paycom board domain has
+   * its clientkey extracted from the `/portal/{KEY}/` path or a `?clientkey=…`
+   * query; an explicit `companySlug` is used verbatim when it looks like a bare
+   * clientkey (or carries one). Returns an empty string when neither yields one.
    */
-  private resolveClientKey(companySlug: string | undefined, companyUrl: string | undefined): string {
+  private resolveClientKey(
+    companySlug: string | undefined,
+    companyUrl: string | undefined,
+  ): string {
     if (companyUrl) {
       try {
         const u = new URL(companyUrl);
@@ -498,173 +362,79 @@ export class PaycomService implements IScraper {
           hostname.endsWith(PAYCOM_ROOT_DOMAIN) ||
           PAYCOM_ALT_DOMAINS.some((d) => hostname === d || hostname.endsWith(`.${d}`));
         if (onBoard) {
-          const fromQuery = u.searchParams.get('clientkey');
-          if (fromQuery && PAYCOM_CLIENTKEY_TOKEN_REGEX.test(fromQuery)) return fromQuery;
+          const fromKey = this.clientKeyFromUrl(companyUrl);
+          if (fromKey) return fromKey;
         }
-        // Some board URLs carry the clientkey outside a parsed query (encoded).
-        const match = PAYCOM_CLIENTKEY_REGEX.exec(companyUrl);
-        if (match && PAYCOM_CLIENTKEY_TOKEN_REGEX.test(match[1])) return match[1];
       } catch {
         // Malformed URL — fall through to the slug.
       }
+      // Some callers pass an un-parseable/relative URL; still try to scrape a key.
+      const fromKey = this.clientKeyFromUrl(companyUrl);
+      if (fromKey) return fromKey;
     }
     if (companySlug && companySlug.trim()) {
       const slug = companySlug.trim();
       if (PAYCOM_CLIENTKEY_TOKEN_REGEX.test(slug)) return slug;
-      // A caller may also pass a board URL as the slug.
-      const match = PAYCOM_CLIENTKEY_REGEX.exec(slug);
-      if (match && PAYCOM_CLIENTKEY_TOKEN_REGEX.test(match[1])) return match[1];
+      const fromKey = this.clientKeyFromUrl(slug);
+      if (fromKey) return fromKey;
     }
     return '';
   }
 
-  /** Build the clientkey-addressed board listing URL. */
-  private buildBoardUrl(clientkey: string): string {
-    return `${PAYCOM_BOARD_ORIGIN}${PAYCOM_BOARD_PATH}?clientkey=${encodeURIComponent(clientkey)}`;
+  /** Pull a clientkey from a board URL's `/portal/{KEY}/` path or `?clientkey=`. */
+  private clientKeyFromUrl(value: string): string {
+    const portal = PAYCOM_PORTAL_CLIENTKEY_REGEX.exec(value);
+    if (portal && PAYCOM_CLIENTKEY_TOKEN_REGEX.test(portal[1])) return portal[1];
+    const query = PAYCOM_QUERY_CLIENTKEY_REGEX.exec(value);
+    if (query && PAYCOM_CLIENTKEY_TOKEN_REGEX.test(query[1])) return query[1];
+    return '';
   }
 
-  /** Build a public per-job detail / apply URL for a role. */
-  private buildDetailUrl(atsId: string, clientkey: string): string {
-    return `${PAYCOM_BOARD_ORIGIN}${PAYCOM_DETAIL_PATH}?job=${encodeURIComponent(atsId)}&clientkey=${encodeURIComponent(clientkey)}`;
-  }
-
-  /** Resolve the stable per-role id from a preview (tolerating field aliases). */
+  /** Resolve the stable per-role id from a preview. */
   private previewId(preview: PaycomJobPreview): string {
-    const raw = preview.jobPostingId ?? preview.id ?? preview.jobId;
+    const raw = preview.jobId;
     if (raw == null) return '';
     const s = String(raw).trim();
     return s.length > 0 ? s : '';
   }
 
-  private deriveCompanyName(company: string | null | undefined, clientkey: string): string {
-    const base = (typeof company === 'string' && company.trim() ? company.trim() : clientkey) || clientkey;
-    return base
-      .replace(/[-_]+/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase());
+  /** Parse the role's single location string into a LocationDto, or null. */
+  private buildLocation(job: PaycomJob): LocationDto | null {
+    if (!job.location) return job.isRemote ? new LocationDto({ city: 'Remote' }) : null;
+    // Paycom appends a US ZIP ("Seymour, IN 47274"); strip it so the shared
+    // "City, ST" parser can resolve a clean city/state.
+    const text = job.location.replace(/\s+\d{5}(?:-\d{4})?$/, '').trim();
+    return parseLocationText(text).location;
   }
 
   /**
-   * Surface the role's location parts (city / state / country) as a LocationDto,
-   * leaving location null when nothing usable is present.
+   * Map the `remoteType` code (or remote text in the title / location) to a
+   * work-from-home label, when the role is non-onsite.
    */
-  private extractLocation(job: PaycomJob): LocationDto | null {
-    const city = job.city;
-    const state = job.state;
-    const country = job.country;
-    if (!city && !state && !country) return null;
-    return new LocationDto({ city, state, country });
+  private workFromHomeType(job: PaycomJob): string | null {
+    const code = (job.remoteTypeCode ?? '').toUpperCase();
+    if (code === 'H') return 'Hybrid';
+    if (code === 'R' || code === 'T' || code === 'F') return 'Remote';
+    return job.isRemote ? 'Remote' : null;
   }
 
-  /** Detect remote roles from the API flags, the title, or the location text. */
-  private detectRemoteApi(
-    preview: PaycomJobPreview,
-    detail: PaycomJobDetail,
-    title: string | null,
-    city: string | null,
-    state: string | null,
-  ): boolean {
-    if (preview.isRemote === true || preview.remote === true) return true;
-    if (detail.isRemote === true || detail.remote === true) return true;
-    const haystacks: Array<string | null | undefined> = [title, city, state, detail.location, preview.location];
-    for (const field of haystacks) {
-      if (typeof field !== 'string') continue;
-      if (PAYCOM_REMOTE_REGEX.test(field)) return true;
-    }
-    return false;
-  }
-
-  /** Detect remote roles from `jobLocationType`, the title, or the location text. */
+  /** Detect remote roles from the `remoteType` code, the title, or the location. */
   private detectRemote(
-    posting: PaycomJobPosting | null,
-    title: string | null,
-    address: PaycomPostalAddress | null,
+    preview: PaycomJobPreview,
+    detail: PaycomJobPosting | null,
+    location: string | null,
   ): boolean {
-    const locType = this.cleanText(posting?.jobLocationType);
-    if (locType && /telecommute|remote/i.test(locType)) return true;
-    const haystacks: Array<string | null | undefined> = [
-      title,
-      this.cleanText(address?.addressLocality),
-      this.cleanText(address?.addressRegion),
-    ];
-    for (const field of haystacks) {
-      if (typeof field !== 'string') continue;
-      if (PAYCOM_REMOTE_REGEX.test(field)) return true;
-    }
-    return false;
-  }
-
-  /** Return the first `PostalAddress` from a `jobLocation` (object or array). */
-  private firstAddress(
-    jobLocation: PaycomJobLocation | PaycomJobLocation[] | null | undefined,
-  ): PaycomPostalAddress | null {
-    if (!jobLocation) return null;
-    const first = Array.isArray(jobLocation) ? jobLocation[0] : jobLocation;
-    const address = first?.address;
-    return address && typeof address === 'object' ? address : null;
-  }
-
-  /** Resolve the hiring-organisation display name (object `name` or bare string). */
-  private organizationName(
-    org: PaycomJobPosting['hiringOrganization'],
-  ): string | null {
-    if (!org) return null;
-    if (typeof org === 'string') return this.cleanText(org);
-    return this.cleanText(org.name);
-  }
-
-  /** Resolve the country display value (a bare code/name, or an object with `name`). */
-  private countryName(country: PaycomPostalAddress['addressCountry']): string | null {
-    if (!country) return null;
-    if (typeof country === 'string') return this.cleanText(country);
-    return this.cleanText(country.name);
-  }
-
-  /**
-   * Normalise an employment-type label (e.g. `FULL_TIME`, `PART_TIME`,
-   * `CONTRACTOR`, or an array thereof) into a readable label
-   * (`Full Time`, `Part Time`, …). Free-text values are passed through trimmed.
-   */
-  private normaliseEmploymentType(value: string | string[] | null | undefined): string | null {
-    const raw = Array.isArray(value) ? value.find((v) => typeof v === 'string' && v.trim()) : value;
-    const cleaned = this.cleanText(raw);
-    if (!cleaned) return null;
-    return cleaned
-      .replace(/[_-]+/g, ' ')
-      .toLowerCase()
-      .replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-
-  /** Return the leading "{title}" segment of an "{title} - {company}" string. */
-  private leadingTitle(value: string | null): string | null {
-    if (!value) return null;
-    const cleaned = value.trim();
-    if (!cleaned) return null;
-    // og:title / <title> use " - " / " | " between the role and the company.
-    const idx = cleaned.search(/\s[-|]\s/);
-    const head = idx > 0 ? cleaned.slice(0, idx) : cleaned;
-    return head.trim() || null;
+    const code = this.cleanText(detail?.remoteType ?? preview.remoteType);
+    if (code && PAYCOM_REMOTE_TYPE_CODES.has(code.toUpperCase())) return true;
+    const haystacks = [this.cleanText(detail?.jobTitle ?? preview.jobTitle), location];
+    return haystacks.some((field) => typeof field === 'string' && PAYCOM_REMOTE_REGEX.test(field));
   }
 
   /** Parse a date string into a YYYY-MM-DD string. */
   private parseDate(value: string | null | undefined): string | null {
     if (value == null || value === '') return null;
-    try {
-      const parsed = new Date(value);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
-    } catch {
-      // ignore
-    }
-    return null;
-  }
-
-  /** Run a regex and return its first capture group, trimmed, or null. */
-  private firstGroup(html: string, regex: RegExp): string | null {
-    const match = regex.exec(html);
-    if (match && typeof match[1] === 'string') {
-      const v = match[1].trim();
-      return v.length > 0 ? v : null;
-    }
-    return null;
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : toDateOnly(value);
   }
 
   /** Trim a string, returning null for empty / non-string values. */
@@ -672,21 +442,5 @@ export class PaycomService implements IScraper {
     if (typeof value !== 'string') return null;
     const v = value.trim();
     return v.length > 0 ? v : null;
-  }
-
-  /** Decode the handful of HTML/XML entities that appear in meta tags / JSON-LD. */
-  private decodeEntities(value: string): string {
-    return value
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#0?39;/g, "'")
-      .replace(/&apos;/g, "'")
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&#(\d+);/g, (_, d) => {
-        const code = Number(d);
-        return Number.isFinite(code) ? String.fromCodePoint(code) : _;
-      })
-      .replace(/&amp;/g, '&');
   }
 }

@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   SYMPA_CAREERS_ROOT_DOMAIN,
@@ -451,7 +452,7 @@ export class SympaService implements IScraper {
       .replace(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})/, '$1T$2');
     try {
       const parsed = new Date(iso);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(iso);
     } catch {
       // ignore
     }

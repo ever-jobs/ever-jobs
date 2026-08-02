@@ -8,11 +8,21 @@ import { Country } from '../enums/country.enum';
 import { ScraperAuthDto } from './auth/scraper-auth.dto';
 
 export class ScraperInputDto {
-  @ApiPropertyOptional({ enum: Site, isArray: true, description: 'Sites to scrape (default: all)' })
+  @ApiPropertyOptional({ enum: Site, isArray: true, description: 'Sites to scrape (default: search + company scrapers; omit or pass explicit values to override)' })
   @IsOptional()
   @IsArray()
   @IsEnum(Site, { each: true })
   siteType?: Site[];
+
+  @ApiPropertyOptional({
+    description: 'Company domains to resolve to registered Site tokens. Each domain is mapped via the Spec 5069 rule (e.g. boomsupersonic.com → boomsupersonic, hyl.io → hyl_io). Resolved tokens are unioned with siteType. Unresolved domains produce a 400.',
+    isArray: true,
+    type: String,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  companyDomain?: string[];
 
   @ApiPropertyOptional({ description: 'Search term / keywords' })
   @IsOptional()
@@ -190,7 +200,6 @@ export class ScraperInputDto {
   auth?: ScraperAuthDto;
 
   constructor(partial?: Partial<ScraperInputDto>) {
-    this.siteType = Object.values(Site);
     this.resultsWanted = 15;
     this.offset = 0;
     this.distance = 50;

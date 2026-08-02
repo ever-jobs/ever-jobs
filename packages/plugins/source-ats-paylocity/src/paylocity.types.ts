@@ -5,6 +5,8 @@
  * and the per-job detail page, not the (dead) JSON feed endpoint.
  */
 
+import type { JobPostingLdSalary } from '@ever-jobs/common';
+
 /** Nested location object on each board job (`Jobs[].JobLocation`). */
 export interface PaylocityJobLocation {
   City?: string | null;
@@ -46,4 +48,6 @@ export interface PaylocityJobDetail {
   description: string | null;
   /** Employment type label, e.g. `Full-time`; absent on some jobs. */
   jobType: string | null;
+  /** Structured pay from the detail page's ld+json `baseSalary`, when present. */
+  baseSalary: JobPostingLdSalary | null;
 }

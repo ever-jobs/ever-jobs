@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { FRESHTEAM_HEADERS } from './freshteam.constants';
 import { FreshteamJobPosting } from './freshteam.types';
@@ -135,7 +136,7 @@ export class FreshteamService implements IScraper {
 
     // Date posted
     const datePosted = posting.created_at
-      ? new Date(posting.created_at).toISOString().split('T')[0]
+      ? toDateOnly(posting.created_at)
       : null;
 
     return new JobPostDto({

@@ -4,7 +4,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient } from '@ever-jobs/common';
+import { createHttpClient,
+  toDateOnly,
+} from '@ever-jobs/common';
 import {
   ZOOM_SEARCH_ENDPOINT, ZOOM_HEADERS,
   ZOOM_PAGE_SIZE, ZOOM_REQUEST_DELAY_MS, ZOOM_BASE_URL,
@@ -97,7 +99,7 @@ export class ZoomService implements IScraper {
       }),
       department: p.department ?? undefined,
       datePosted: p.postedTs
-        ? new Date(p.postedTs * 1000).toISOString().split('T')[0]
+        ? toDateOnly(p.postedTs * 1000)
         : undefined,
       atsId: p.displayJobId ?? undefined,
     });

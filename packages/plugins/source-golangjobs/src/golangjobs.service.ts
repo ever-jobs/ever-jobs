@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { GOLANGJOBS_RSS_URL, GOLANGJOBS_HEADERS } from './golangjobs.constants';
 import { GolangJobsRssItem } from './golangjobs.types';
@@ -152,7 +153,7 @@ export class GolangJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

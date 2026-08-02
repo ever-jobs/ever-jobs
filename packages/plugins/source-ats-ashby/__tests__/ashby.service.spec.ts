@@ -178,6 +178,51 @@ describe('AshbyService — Spec 719', () => {
     });
   });
 
+  // Spec 5026 — structured workplaceType is authoritative over the boolean.
+  describe('workplaceType remote detection (Spec 5026)', () => {
+    async function mapFirstJob(mutate: (job: any) => void) {
+      const raw = clone(BOARD_RAW) as any;
+      const target = raw.jobs[0];
+      target.location = 'Austin, TX';
+      target.address = null;
+      target.secondaryLocations = null;
+      mutate(target);
+      mockGet.mockResolvedValueOnce({ data: raw });
+
+      const result = await new AshbyService().scrape({
+        siteType: [Site.ASHBY],
+        companySlug: SLUG,
+      } as ScraperInputDto);
+      return result.jobs.find((j) => j.id === `ashby-${target.id}`);
+    }
+
+    it('treats a Hybrid role (isRemote=true) as not remote', async () => {
+      const job = await mapFirstJob((j) => {
+        j.isRemote = true;
+        j.workplaceType = 'Hybrid';
+      });
+      expect(job?.isRemote).toBe(false);
+      expect(job?.workFromHomeType).toBe('Hybrid');
+    });
+
+    it('flags a Remote workplaceType as remote', async () => {
+      const job = await mapFirstJob((j) => {
+        j.isRemote = false;
+        j.workplaceType = 'Remote';
+      });
+      expect(job?.isRemote).toBe(true);
+      expect(job?.workFromHomeType).toBe('Remote');
+    });
+
+    it('falls back to the boolean when workplaceType is absent', async () => {
+      const job = await mapFirstJob((j) => {
+        j.isRemote = true;
+        delete j.workplaceType;
+      });
+      expect(job?.isRemote).toBe(true);
+    });
+  });
+
   describe('compensation mapping', () => {
     it('maps the tiered shape (compensationComponents[].tiers[]) into CompensationDto', async () => {
       mockGet.mockResolvedValueOnce({ data: clone(BOARD_RAW) });

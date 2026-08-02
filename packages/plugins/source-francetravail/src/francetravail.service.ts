@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   FRANCETRAVAIL_API_URL,
@@ -178,7 +179,7 @@ export class FranceTravailService implements IScraper {
     let datePosted: string | null = null;
     if (offer.dateCreation) {
       try {
-        datePosted = new Date(offer.dateCreation).toISOString().split('T')[0];
+        datePosted = toDateOnly(offer.dateCreation);
       } catch {
         datePosted = null;
       }

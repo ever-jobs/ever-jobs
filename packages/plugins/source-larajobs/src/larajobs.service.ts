@@ -14,6 +14,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { LARAJOBS_RSS_URL, LARAJOBS_HEADERS } from './larajobs.constants';
 import { LaraJobsRssItem } from './larajobs.types';
@@ -161,7 +162,7 @@ export class LaraJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

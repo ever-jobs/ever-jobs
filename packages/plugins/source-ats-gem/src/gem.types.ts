@@ -72,3 +72,26 @@ export interface GemBatchEnvelope {
   readonly data?: GemJobBoardListData & Record<string, unknown>;
   readonly errors?: ReadonlyArray<{ readonly message?: string }>;
 }
+
+/**
+ * `data.oatsExternalJobPosting` from the per-posting
+ * `ExternalJobPostingQuery` detail op. Carries the fields the list
+ * op omits: the full body, the posted-date timestamps, and the
+ * free-text pay block.
+ */
+export interface GemExternalJobPosting {
+  readonly descriptionHtml?: string | null;
+  /** First-published Unix timestamp in **seconds**. */
+  readonly firstPublishedTsSec?: number | null;
+  /** Fallback posted-date timestamp (seconds) when `firstPublishedTsSec` is absent. */
+  readonly startDateTs?: number | null;
+  readonly compensationHtml?: string | null;
+}
+
+/** Response envelope for the batched detail POST (one `ExternalJobPostingQuery` op). */
+export interface GemDetailEnvelope {
+  readonly data?: {
+    readonly oatsExternalJobPosting?: GemExternalJobPosting | null;
+  };
+  readonly errors?: ReadonlyArray<{ readonly message?: string }>;
+}

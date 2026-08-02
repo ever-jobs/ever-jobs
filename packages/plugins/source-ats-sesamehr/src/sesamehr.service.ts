@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   SESAMEHR_ROOT_DOMAIN,
@@ -502,7 +503,7 @@ export class SesameHrService implements IScraper {
       : cleaned;
     try {
       const parsed = new Date(iso);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(iso);
     } catch {
       // ignore
     }

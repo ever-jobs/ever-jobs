@@ -99,6 +99,35 @@ export function parseJobPostingLd(html: string): JobPostingLd[] {
   return nodes.map(mapJobPosting);
 }
 
+/**
+ * Normalise an already-parsed schema.org value into a {@link JobPostingLd}.
+ *
+ * Some ATSes hand back the `JobPosting` JSON-LD as a decoded object (or a JSON
+ * string), not embedded in page HTML — e.g. Paycom's detail API carries it in a
+ * `googleJobJson` field. This reuses the same defensive container-unwrapping and
+ * field mapping as {@link parseJobPostingLd} without round-tripping through a
+ * `<script>` wrapper (which would truncate on a literal `</script>` in the body).
+ * Accepts an object/array or a JSON string; returns the first `JobPosting` node
+ * found, or `null`.
+ */
+export function jobPostingLdFromNode(
+  value: unknown,
+): JobPostingLd | null {
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    const raw = value.trim();
+    if (!raw) return null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  const nodes: Record<string, unknown>[] = [];
+  collectJobPostings(parsed, nodes);
+  return nodes.length > 0 ? mapJobPosting(nodes[0]) : null;
+}
+
 /** Convenience: map a {@link JobPostingLdSalary} to a {@link CompensationDto}. */
 export function jobPostingLdToCompensation(
   salary: JobPostingLdSalary | null | undefined,

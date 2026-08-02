@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   JOBDATAAPI_API_URL,
@@ -168,7 +169,7 @@ export class JobDataApiService implements IScraper {
     let datePosted: string | null = null;
     if (raw.date_posted) {
       try {
-        datePosted = new Date(raw.date_posted).toISOString().split('T')[0];
+        datePosted = toDateOnly(raw.date_posted);
       } catch {
         datePosted = null;
       }

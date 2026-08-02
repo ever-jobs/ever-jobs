@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   RELIEFWEB_API_URL,
@@ -127,7 +128,7 @@ export class ReliefWebService implements IScraper {
     let datePosted: string | null = null;
     if (fields.date?.created) {
       try {
-        datePosted = new Date(fields.date.created).toISOString().split('T')[0];
+        datePosted = toDateOnly(fields.date.created);
       } catch {
         datePosted = null;
       }

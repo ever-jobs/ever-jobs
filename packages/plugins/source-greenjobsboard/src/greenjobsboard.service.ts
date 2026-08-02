@@ -14,6 +14,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { GREENJOBSBOARD_RSS_URL, GREENJOBSBOARD_HEADERS } from './greenjobsboard.constants';
 import { GreenJobsBoardRssItem } from './greenjobsboard.types';
@@ -167,7 +168,7 @@ export class GreenJobsBoardService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

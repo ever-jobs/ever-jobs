@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   WEBCRUITER_HOST,
@@ -364,7 +365,7 @@ export class WebcruiterService implements IScraper {
     // Fallback: any Date-parseable string (e.g. ISO-8601).
     try {
       const parsed = new Date(trimmed);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(trimmed);
     } catch {
       // ignore
     }

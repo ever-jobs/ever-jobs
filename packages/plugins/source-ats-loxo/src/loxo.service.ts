@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { LOXO_API_URL, LOXO_HEADERS } from './loxo.constants';
 import { LoxoJob, LoxoJobLocation, LoxoCompensation } from './loxo.types';
@@ -201,7 +202,7 @@ export class LoxoService implements IScraper {
       location,
       description,
       datePosted: job.created_at
-        ? new Date(job.created_at).toISOString().split('T')[0]
+        ? toDateOnly(job.created_at)
         : null,
       isRemote,
       compensation,

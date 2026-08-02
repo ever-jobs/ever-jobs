@@ -8,6 +8,7 @@ import {
 } from '@ever-jobs/models';
 import {
   createHttpClient, NaukriException, markdownConverter, extractEmails, randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { NAUKRI_HEADERS } from './naukri.constants';
 
@@ -134,7 +135,7 @@ export class NaukriService implements IScraper {
       companyUrl: job.staticUrl ? `https://www.naukri.com/${job.staticUrl}` : null,
       location,
       isRemote,
-      datePosted: datePosted?.toISOString().split('T')[0] ?? null,
+      datePosted: toDateOnly(datePosted),
       jobUrl,
       compensation,
       description,

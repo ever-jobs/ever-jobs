@@ -463,4 +463,41 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(job.datePosted).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
   });
+
+  /**
+   * Spec 5025 — remote under-detection: Workday occasionally emits a slugified
+   * location label (e.g. "Remote_USA"). The underscore is a word character, so
+   * the shared parser's `\bremote\b` check missed it and `isRemote` stayed
+   * false. Normalizing underscores to spaces restores detection.
+   */
+  describe('remote location underscore normalization — Spec 5025', () => {
+    it('detects isRemote when the only location label is slugified ("Remote_USA")', async () => {
+      mockPost.mockResolvedValueOnce({
+        data: {
+          total: 1,
+          jobPostings: [
+            {
+              title: 'Technical Sales Representative',
+              externalPath:
+                '/job/Remote_USA/Technical-Sales-Representative_JR002273',
+              locationsText: 'Remote_USA',
+              postedOn: 'Posted Today',
+            },
+          ],
+        },
+      });
+      // Detail unavailable (matches the live case): info is undefined, so the
+      // summary "Remote_USA" label is the only remote signal.
+      mockGet.mockResolvedValueOnce({ data: {} });
+
+      const result = await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'zekelman:12:Careers',
+      } as ScraperInputDto);
+
+      expect(result.jobs).toHaveLength(1);
+      expect(result.jobs[0].isRemote).toBe(true);
+      expect(result.jobs[0].location?.city).not.toContain('_');
+    });
+  });
 });

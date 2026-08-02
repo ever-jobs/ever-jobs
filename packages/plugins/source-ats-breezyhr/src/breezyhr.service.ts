@@ -8,17 +8,17 @@ import {
   JobPostDto,
   Site,
   LocationDto,
-  CompensationDto,
   DescriptionFormat,
   getJobTypeFromString,
 } from '@ever-jobs/models';
 import {
   createHttpClient,
   htmlToPlainText,
+  jobPostingLdToCompensation,
   markdownConverter,
   parseJobPostingLd,
   parseLocationList,
-  salaryToCompensation,
+  resolveCompensation,
 } from '@ever-jobs/common';
 
 import {
@@ -26,7 +26,7 @@ import {
   breezyDetailUrl,
   breezyListUrl,
 } from './breezyhr.constants';
-import { BreezyJob, BreezyLocation } from './breezyhr.types';
+import { BreezyDetail, BreezyJob, BreezyLocation } from './breezyhr.types';
 
 @SourcePlugin({
   site: Site.BREEZYHR,
@@ -60,16 +60,16 @@ export class BreezyHRService implements IScraper {
       const { data } = await client.get<BreezyJob[]>(url);
       const listings = (Array.isArray(data) ? data : []).slice(0, resultsWanted);
 
-      // The list endpoint omits the posting body; overlay each job with the
-      // description parsed from its public detail page before mapping.
-      const descriptions = await this.fetchDescriptions(client, listings, company);
+      // The list endpoint omits the posting body and structured pay; overlay
+      // each job with its public detail page (ld+json) before mapping.
+      const details = await this.fetchDetails(client, listings, company);
 
       listings.forEach((listing, index) => {
         try {
           const post = this.processJob(
             listing,
             company,
-            descriptions[index],
+            details[index],
             input.descriptionFormat,
           );
           if (post) jobs.push(post);
@@ -91,7 +91,7 @@ export class BreezyHRService implements IScraper {
   private processJob(
     listing: BreezyJob,
     company: string,
-    descriptionHtml: string | null | undefined,
+    detail: BreezyDetail | null | undefined,
     format?: DescriptionFormat,
   ): JobPostDto | null {
     const title = listing.name ?? listing.title ?? '';
@@ -107,8 +107,24 @@ export class BreezyHRService implements IScraper {
     const isRemote =
       (listing.location?.is_remote ?? false) || parsedLocations.remoteMentioned;
 
-    const description = this.formatDescription(descriptionHtml, format);
-    const compensation = this.extractCompensation(listing.salary);
+    const description = this.formatDescription(detail?.description, format);
+
+    // The list record carries the human-readable display name under
+    // `company.name`; the slug is only a last resort.
+    const companyName = listing.company?.name?.trim() || company;
+
+    // Structured-first: the detail ld+json `baseSalary` is authoritative; the
+    // free-text list `salary` is the fallback (Spec 5018 precedence).
+    const structured = jobPostingLdToCompensation(detail?.baseSalary);
+    const compensation = resolveCompensation({
+      structured,
+      text: listing.salary,
+    });
+    const salarySource = structured
+      ? 'structured'
+      : compensation
+        ? 'description'
+        : null;
 
     const employmentType = listing.type?.name?.trim() || null;
     const jobTypeKey = listing.type?.id ?? listing.type?.name ?? null;
@@ -118,13 +134,13 @@ export class BreezyHRService implements IScraper {
       id,
       site: Site.BREEZYHR,
       title,
-      companyName: company,
+      companyName,
       jobUrl:
         listing.url ??
         `https://${company}.breezy.hr/p/${listing.friendly_id ?? jobId}`,
       location,
       description,
-      ...(compensation ? { compensation } : {}),
+      ...(compensation ? { compensation, salarySource } : {}),
       datePosted: listing.published_date ?? listing.creation_date ?? null,
       isRemote,
       ...(mappedJobType ? { jobType: [mappedJobType] } : {}),
@@ -137,15 +153,18 @@ export class BreezyHRService implements IScraper {
 
   /**
    * Fetch each job's detail page under bounded concurrency and parse the
-   * schema.org `JobPosting` description out of it. Fail-safe: a failed fetch or
-   * an unparseable page yields `null` for that job (the batch is never nuked).
+   * schema.org `JobPosting` (description + structured `baseSalary`) out of it.
+   * Fail-safe: a failed fetch or an unparseable page yields `null` for that job
+   * (the batch is never nuked).
    */
-  private async fetchDescriptions(
+  private async fetchDetails(
     client: ReturnType<typeof createHttpClient>,
     listings: BreezyJob[],
     company: string,
-  ): Promise<(string | null)[]> {
-    const descriptions: (string | null)[] = new Array(listings.length).fill(null);
+  ): Promise<(BreezyDetail | null)[]> {
+    const details: (BreezyDetail | null)[] = new Array(listings.length).fill(
+      null,
+    );
 
     for (
       let index = 0;
@@ -154,23 +173,23 @@ export class BreezyHRService implements IScraper {
     ) {
       const batch = listings.slice(index, index + BREEZYHR_DETAIL_CONCURRENCY);
       const settled = await Promise.allSettled(
-        batch.map((listing) => this.fetchDescription(client, listing, company)),
+        batch.map((listing) => this.fetchDetail(client, listing, company)),
       );
       settled.forEach((result, batchIndex) => {
         if (result.status === 'fulfilled') {
-          descriptions[index + batchIndex] = result.value;
+          details[index + batchIndex] = result.value;
         }
       });
     }
 
-    return descriptions;
+    return details;
   }
 
-  private async fetchDescription(
+  private async fetchDetail(
     client: ReturnType<typeof createHttpClient>,
     listing: BreezyJob,
     company: string,
-  ): Promise<string | null> {
+  ): Promise<BreezyDetail | null> {
     const friendlyId = listing.friendly_id ?? listing.id;
     if (!friendlyId) return null;
 
@@ -181,9 +200,15 @@ export class BreezyHRService implements IScraper {
       );
       if (typeof data !== 'string') return null;
       const posting = parseJobPostingLd(data).find(
-        (p) => p.description && p.description.trim().length > 0,
+        (p) =>
+          (p.description && p.description.trim().length > 0) ||
+          p.baseSalary != null,
       );
-      return posting?.description ?? null;
+      if (!posting) return null;
+      return {
+        description: posting.description ?? null,
+        baseSalary: posting.baseSalary ?? null,
+      };
     } catch (err: any) {
       this.logger.warn(
         `BreezyHR: detail fetch failed for ${company}/${friendlyId}: ${err.message}`,
@@ -243,12 +268,5 @@ export class BreezyHRService implements IScraper {
       return loc.name ? new LocationDto({ city: loc.name }) : null;
     }
     return new LocationDto({ city, state, country });
-  }
-
-  /** Parse the free-text `salary` range into a CompensationDto. */
-  private extractCompensation(
-    salary: string | null | undefined,
-  ): CompensationDto | null {
-    return salaryToCompensation(salary);
   }
 }

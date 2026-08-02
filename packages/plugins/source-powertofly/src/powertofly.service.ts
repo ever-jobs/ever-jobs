@@ -12,6 +12,7 @@ import {
 import {
   createHttpClient,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   POWERTOFLY_API_URL,
@@ -112,7 +113,7 @@ export class PowertoflyService implements IScraper {
     let datePosted: string | undefined;
     if (item.published_on) {
       try {
-        datePosted = new Date(item.published_on).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.published_on) ?? undefined;
       } catch {
         datePosted = undefined;
       }

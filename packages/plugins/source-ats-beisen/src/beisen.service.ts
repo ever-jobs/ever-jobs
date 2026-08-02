@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   BEISEN_ROOT_DOMAIN,
@@ -581,14 +582,14 @@ export class BeisenService implements IScraper {
     if (typeof value === 'number' && Number.isFinite(value)) {
       const ms = value > 1e12 ? value : value * 1000;
       const parsed = new Date(ms);
-      return isNaN(parsed.getTime()) ? null : parsed.toISOString().split('T')[0];
+      return isNaN(parsed.getTime()) ? null : toDateOnly(ms);
     }
     const cleaned = this.cleanText(typeof value === 'string' ? value : null);
     if (!cleaned) return null;
     if (cleaned.startsWith(BEISEN_UNSET_DATE_PREFIX)) return null;
     try {
       const parsed = new Date(cleaned.replace(' ', 'T'));
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(cleaned.replace(' ', 'T'));
     } catch {
       // ignore
     }

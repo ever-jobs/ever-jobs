@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   TEAMTAILOR_API_URL,
@@ -208,7 +209,7 @@ export class TeamtailorService implements IScraper {
     // Date posted
     const createdAt = attrs['created-at'] ?? null;
     const datePosted = createdAt
-      ? new Date(createdAt).toISOString().split('T')[0]
+      ? toDateOnly(createdAt)
       : null;
 
     // Department from relationships

@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { GETONBOARD_API_URL, GETONBOARD_HEADERS, GETONBOARD_DEFAULT_RESULTS, GETONBOARD_MAX_RESULTS } from './getonboard.constants';
 import { GetOnBoardSearchResponse, GetOnBoardJob } from './getonboard.types';
@@ -125,7 +126,7 @@ export class GetOnBoardService implements IScraper {
     let datePosted: string | null = null;
     if (attrs.published_at) {
       try {
-        datePosted = new Date(attrs.published_at * 1000).toISOString().split('T')[0];
+        datePosted = toDateOnly(attrs.published_at * 1000);
       } catch {
         datePosted = null;
       }

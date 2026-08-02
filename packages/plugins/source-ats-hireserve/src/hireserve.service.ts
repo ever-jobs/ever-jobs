@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   HIRESERVE_BASE,
@@ -665,7 +666,7 @@ export class HireserveService implements IScraper {
     if (/\bago\b|\bin\s+\d/i.test(cleaned)) return null; // relative, not absolute
     try {
       const parsed = new Date(cleaned);
-      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      if (!isNaN(parsed.getTime())) return toDateOnly(cleaned);
     } catch {
       // ignore
     }

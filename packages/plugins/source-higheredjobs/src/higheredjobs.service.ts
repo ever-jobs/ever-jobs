@@ -14,6 +14,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { HIGHEREDJOBS_RSS_URL, HIGHEREDJOBS_HEADERS } from './higheredjobs.constants';
 import { HigherEdJobsRssItem } from './higheredjobs.types';
@@ -163,7 +164,7 @@ export class HigherEdJobsService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

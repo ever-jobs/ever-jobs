@@ -20,6 +20,7 @@ import {
   plainConverter,
   extractEmails,
   randomSleep,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { INDEED_HEADERS, JOB_SEARCH_QUERY } from './indeed.constants';
 import { getJobType, getCompensation, isJobRemote } from './indeed.utils';
@@ -174,7 +175,7 @@ export class IndeedService implements IScraper {
       location,
       description,
       compensation,
-      datePosted: datePosted ? new Date(datePosted).toISOString().split('T')[0] : null,
+      datePosted: datePosted ? toDateOnly(datePosted) : null,
       jobType,
       isRemote: remote,
       emails: extractEmails(description),

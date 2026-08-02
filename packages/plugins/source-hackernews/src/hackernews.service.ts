@@ -14,6 +14,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { HN_JOB_STORIES_URL, HN_ITEM_URL } from './hackernews.constants';
 import { HackerNewsItem } from './hackernews.types';
@@ -180,9 +181,7 @@ export class HackerNewsService implements IScraper {
     let datePosted: string | null = null;
     if (item.time) {
       try {
-        datePosted = new Date(item.time * 1000)
-          .toISOString()
-          .split('T')[0];
+        datePosted = toDateOnly(item.time * 1000);
       } catch {
         datePosted = null;
       }

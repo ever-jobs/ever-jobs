@@ -7,6 +7,9 @@ import {
   JobResponseDto,
   JobPostDto,
   LocationDto,
+  CompensationDto,
+  CompensationInterval,
+  getJobTypeFromString,
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
@@ -15,9 +18,27 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationList,
+  resolveCompensation,
+  toDateOnly,
 } from '@ever-jobs/common';
-import { ADP_API_URL, ADP_HEADERS } from './adp.constants';
+import {
+  ADP_DETAIL_CONCURRENCY,
+  ADP_HEADERS,
+  ADP_HOSTS,
+  adpCareersUrl,
+  adpDetailUrl,
+  adpListUrl,
+} from './adp.constants';
 import { AdpResponse, AdpJob } from './adp.types';
+
+type HttpClient = ReturnType<typeof createHttpClient>;
+
+/** The requisition list, plus the host it resolved on (for detail + URLs). */
+interface AdpListing {
+  host: string;
+  jobs: AdpJob[];
+}
 
 @SourcePlugin({
   site: Site.ADP,
@@ -30,9 +51,9 @@ export class AdpService implements IScraper {
   private readonly logger = new Logger(AdpService.name);
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
-    const companySlug = input.companySlug;
-    if (!companySlug) {
-      this.logger.warn('No companySlug provided for ADP scraper');
+    const cid = input.companySlug;
+    if (!cid) {
+      this.logger.warn('No companySlug (cid) provided for ADP scraper');
       return new JobResponseDto([]);
     }
 
@@ -43,101 +64,259 @@ export class AdpService implements IScraper {
     });
     client.setHeaders(ADP_HEADERS);
 
-    const url = `${ADP_API_URL}?cid=${encodeURIComponent(companySlug)}`;
-
-    try {
-      this.logger.log(`Fetching ADP jobs for company: ${companySlug}`);
-      const response = await client.get(url);
-      const data: AdpResponse = response.data ?? { jobRequisitions: [] };
-      const jobs = data.jobRequisitions ?? [];
-
-      this.logger.log(`ADP: found ${jobs.length} raw jobs for ${companySlug}`);
-
-      const resultsWanted = input.resultsWanted ?? 100;
-      const jobPosts: JobPostDto[] = [];
-
-      for (const job of jobs) {
-        if (jobPosts.length >= resultsWanted) break;
-
-        try {
-          const post = this.mapJob(job, companySlug, input.descriptionFormat);
-          if (post) {
-            jobPosts.push(post);
-          }
-        } catch (err: any) {
-          this.logger.warn(
-            `Error processing ADP job ${job.jobRequisitionId}: ${err.message}`,
-          );
-        }
-      }
-
-      return new JobResponseDto(jobPosts);
-    } catch (err: any) {
+    const listing = await this.fetchList(client, cid);
+    if (!listing) {
       this.logger.error(
-        `ADP scrape error for ${companySlug}: ${err.message}`,
+        `ADP: no host resolved the requisition list for cid ${cid}`,
       );
       return new JobResponseDto([]);
     }
+
+    this.logger.log(
+      `ADP: found ${listing.jobs.length} raw jobs for ${cid} on ${listing.host}`,
+    );
+
+    const resultsWanted = input.resultsWanted ?? 100;
+    // The list feed omits the posting body; `requisitionDescription` lives only
+    // on the per-requisition detail endpoint. Overlay the wanted slice.
+    const wanted = listing.jobs.slice(0, resultsWanted);
+    const details = await this.fetchDetails(client, listing.host, cid, wanted);
+
+    const jobPosts: JobPostDto[] = [];
+    wanted.forEach((job, index) => {
+      try {
+        const post = this.mapJob(
+          job,
+          details[index],
+          listing.host,
+          cid,
+          input.descriptionFormat,
+        );
+        if (post) {
+          jobPosts.push(post);
+        }
+      } catch (err: any) {
+        this.logger.warn(`Error processing ADP job ${job.itemID}: ${err.message}`);
+      }
+    });
+
+    return new JobResponseDto(jobPosts);
+  }
+
+  /**
+   * Fetch the requisition list, trying each ADP host in order. The same `cid`
+   * resolves on exactly one host (the other 404s), so the first host that
+   * returns a `jobRequisitions` payload wins — even when that array is empty
+   * (a company with no open reqs is still "resolved").
+   */
+  private async fetchList(
+    client: HttpClient,
+    cid: string,
+  ): Promise<AdpListing | null> {
+    for (const host of ADP_HOSTS) {
+      try {
+        const response = await client.get<AdpResponse>(adpListUrl(host, cid));
+        const data = response.data;
+        if (data && Array.isArray(data.jobRequisitions)) {
+          return { host, jobs: data.jobRequisitions };
+        }
+        this.logger.warn(`ADP: unexpected payload from ${host} for ${cid}`);
+      } catch (err: any) {
+        this.logger.warn(
+          `ADP: list fetch failed on ${host} for ${cid}: ${err.message}`,
+        );
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Overlay each listing with its per-requisition detail payload under bounded
+   * concurrency. Fail-safe: a failed or empty detail fetch yields `null` for
+   * that index (the batch is never nuked), so the job still maps from the list.
+   */
+  private async fetchDetails(
+    client: HttpClient,
+    host: string,
+    cid: string,
+    jobs: AdpJob[],
+  ): Promise<(AdpJob | null)[]> {
+    const details: (AdpJob | null)[] = new Array(jobs.length).fill(null);
+    for (let index = 0; index < jobs.length; index += ADP_DETAIL_CONCURRENCY) {
+      const batch = jobs.slice(index, index + ADP_DETAIL_CONCURRENCY);
+      const settled = await Promise.allSettled(
+        batch.map((job) => this.fetchDetail(client, host, cid, job.itemID)),
+      );
+      settled.forEach((result, batchIndex) => {
+        if (result.status === 'fulfilled') {
+          details[index + batchIndex] = result.value;
+        }
+      });
+    }
+    return details;
+  }
+
+  /** GET the per-requisition detail; the response *is* the requisition object. */
+  private async fetchDetail(
+    client: HttpClient,
+    host: string,
+    cid: string,
+    itemId: string | null | undefined,
+  ): Promise<AdpJob | null> {
+    if (!itemId) return null;
+    const response = await client.get<AdpJob>(adpDetailUrl(host, cid, itemId));
+    return response.data ?? null;
   }
 
   private mapJob(
     job: AdpJob,
-    companySlug: string,
+    detail: AdpJob | null,
+    host: string,
+    cid: string,
     format?: DescriptionFormat,
   ): JobPostDto | null {
-    const title = job.jobTitle;
+    const title = job.requisitionTitle ?? detail?.requisitionTitle ?? null;
     if (!title) return null;
 
-    // Description
-    let description: string | null = null;
-    const rawDesc = job.jobDescription ?? job.shortDescription ?? null;
-    if (rawDesc) {
-      if (format === DescriptionFormat.HTML) {
-        description = rawDesc;
-      } else if (format === DescriptionFormat.MARKDOWN) {
-        description = markdownConverter(rawDesc) ?? rawDesc;
-      } else {
-        description = htmlToPlainText(rawDesc);
-      }
-    }
+    const itemId = job.itemID ?? detail?.itemID ?? '';
 
-    // Location — prefer first location from array, fall back to single
-    const loc = job.locations?.[0] ?? job.location ?? null;
-    const location = loc
-      ? new LocationDto({
-          city: loc.city ?? null,
-          state: loc.stateProvince ?? null,
-          country: loc.country ?? null,
-        })
+    const description = this.formatDescription(
+      detail?.requisitionDescription ?? job.requisitionDescription,
+      format,
+    );
+
+    // ADP exposes no structured remote flag; its `requisitionLocations` labels
+    // are the only machine-readable remote evidence (e.g. a location named
+    // "Remote"), parsed through the shared location normalizer.
+    const labels = this.locationLabels(
+      job.requisitionLocations ?? detail?.requisitionLocations,
+    );
+    const parsedLocation = parseLocationList(labels);
+    const location = parsedLocation.location ?? new LocationDto({});
+    const isRemote = parsedLocation.remoteMentioned;
+    const workFromHomeType = parsedLocation.workFromHomeType;
+
+    const employmentLabel =
+      job.workLevelCode?.shortName ?? detail?.workLevelCode?.shortName ?? null;
+    const employmentType = employmentLabel?.trim() || null;
+    const mappedJobType = employmentLabel
+      ? getJobTypeFromString(employmentLabel)
       : null;
 
-    // Remote detection
-    const locationStr =
-      loc?.formattedAddress ?? loc?.city ?? '';
-    const isRemote = locationStr.toLowerCase().includes('remote');
+    const compensation = resolveCompensation({
+      structured: this.extractCompensation(job, detail),
+      text: description,
+    });
 
-    // Job URL
-    const jobUrl =
-      job.externalUrl ??
-      `https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${encodeURIComponent(companySlug)}&jobId=${job.jobRequisitionId ?? ''}`;
+    const postDate = job.postDate ?? detail?.postDate ?? null;
 
     return new JobPostDto({
-      id: `adp-${job.jobRequisitionId ?? job.requisitionNumber ?? ''}`,
+      id: `adp-${itemId}`,
       title,
-      companyName: job.companyName ?? companySlug,
-      jobUrl,
+      companyName: null,
+      jobUrl: adpCareersUrl(host, cid, itemId),
       location,
       description,
-      datePosted: job.postedDate
-        ? new Date(job.postedDate).toISOString().split('T')[0]
-        : null,
+      ...(compensation ? { compensation } : {}),
+      datePosted: postDate ? toDateOnly(postDate) : null,
       isRemote,
+      ...(workFromHomeType ? { workFromHomeType } : {}),
+      ...(mappedJobType ? { jobType: [mappedJobType] } : {}),
+      ...(employmentType ? { employmentType } : {}),
       emails: extractEmails(description),
       site: Site.ADP,
-      atsId: job.jobRequisitionId ?? job.requisitionNumber ?? null,
+      atsId: itemId || null,
       atsType: 'adp',
-      department: job.departmentName ?? null,
-      employmentType: job.employmentType ?? job.workerTypeCode ?? null,
     });
+  }
+
+  /**
+   * Build the ordered list of location labels from `requisitionLocations`,
+   * preferring the display `nameCode.shortName` and falling back to the
+   * structured address (`City, ST`).
+   */
+  private locationLabels(
+    locations: AdpJob['requisitionLocations'],
+  ): string[] {
+    const labels: string[] = [];
+    for (const loc of locations ?? []) {
+      const shortName = loc?.nameCode?.shortName?.trim();
+      if (shortName) {
+        labels.push(shortName);
+        continue;
+      }
+      const city = loc?.address?.cityName?.trim();
+      const state = loc?.address?.countrySubdivisionLevel1?.codeValue?.trim();
+      const composed = [city, state].filter(Boolean).join(', ');
+      if (composed) labels.push(composed);
+    }
+    return labels;
+  }
+
+  /**
+   * Build a CompensationDto from the structured `payGradeRange`. The pay period
+   * is not in `payGradeRange`, so it is read from the human-readable
+   * "SalaryRange" custom field when present (e.g. "... (USD) Annually").
+   */
+  private extractCompensation(
+    job: AdpJob,
+    detail: AdpJob | null,
+  ): CompensationDto | null {
+    const range = job.payGradeRange ?? detail?.payGradeRange ?? null;
+    const minAmount = range?.minimumRate?.amountValue ?? null;
+    const maxAmount = range?.maximumRate?.amountValue ?? null;
+    if (minAmount == null && maxAmount == null) return null;
+
+    const currency =
+      range?.minimumRate?.currencyCode ??
+      range?.maximumRate?.currencyCode ??
+      undefined;
+    const interval = this.payInterval(job, detail);
+
+    return new CompensationDto({
+      minAmount,
+      maxAmount,
+      currency,
+      ...(interval ? { interval } : {}),
+    });
+  }
+
+  /**
+   * Read the pay period from the "SalaryRange" custom field, if present. ADP
+   * writes the period as an adverb ("... Annually" / "Hourly" / "Monthly"),
+   * which is matched by stem here.
+   */
+  private payInterval(
+    job: AdpJob,
+    detail: AdpJob | null,
+  ): CompensationInterval | null {
+    const fields = [
+      ...(job.customFieldGroup?.stringFields ?? []),
+      ...(detail?.customFieldGroup?.stringFields ?? []),
+    ];
+    const salaryRange = fields.find(
+      (field) => field?.nameCode?.codeValue === 'SalaryRange',
+    )?.stringValue;
+    if (!salaryRange) return null;
+
+    const period = (salaryRange.trim().split(/\s+/).pop() ?? '').toLowerCase();
+    if (/^(annual|year)/.test(period)) return CompensationInterval.YEARLY;
+    if (/^month/.test(period)) return CompensationInterval.MONTHLY;
+    if (/^week/.test(period)) return CompensationInterval.WEEKLY;
+    if (/^(daily|day)/.test(period)) return CompensationInterval.DAILY;
+    if (/^hour/.test(period)) return CompensationInterval.HOURLY;
+    return null;
+  }
+
+  private formatDescription(
+    html: string | null | undefined,
+    format?: DescriptionFormat,
+  ): string | null {
+    if (!html || !html.trim()) return null;
+    if (format === DescriptionFormat.HTML) return html;
+    if (format === DescriptionFormat.MARKDOWN) {
+      return markdownConverter(html) ?? html;
+    }
+    return htmlToPlainText(html);
   }
 }

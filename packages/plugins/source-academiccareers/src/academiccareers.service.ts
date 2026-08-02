@@ -14,6 +14,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { ACADEMICCAREERS_RSS_URL, ACADEMICCAREERS_HEADERS } from './academiccareers.constants';
 import { AcademiccareersRssItem } from './academiccareers.types';
@@ -166,7 +167,7 @@ export class AcademiccareersService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { TALROO_API_URL, TALROO_HEADERS, TALROO_DEFAULT_RESULTS, TALROO_MAX_RESULTS } from './talroo.constants';
 import { TalrooApiResponse, TalrooJob } from './talroo.types';
@@ -158,7 +159,7 @@ export class TalrooService implements IScraper {
     let datePosted: string | null = null;
     if (raw.date) {
       try {
-        datePosted = new Date(raw.date).toISOString().split('T')[0];
+        datePosted = toDateOnly(raw.date);
       } catch {
         datePosted = null;
       }

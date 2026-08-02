@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import {
   ARBEITSAGENTUR_API_URL,
@@ -155,7 +156,7 @@ export class ArbeitsagenturService implements IScraper {
     const rawDate = entry.aktuelleVeroeffentlichungsdatum || entry.eintrittsdatum;
     if (rawDate) {
       try {
-        datePosted = new Date(rawDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(rawDate);
       } catch {
         datePosted = null;
       }

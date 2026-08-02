@@ -1,6 +1,7 @@
 import {
   extractLdJsonBlocks,
   parseJobPostingLd,
+  jobPostingLdFromNode,
   jobPostingLdToCompensation,
 } from '../src';
 import { CompensationInterval } from '@ever-jobs/models';
@@ -242,5 +243,46 @@ describe('jobPostingLdToCompensation', () => {
         interval: null,
       }),
     ).toBeNull();
+  });
+});
+
+describe('jobPostingLdFromNode', () => {
+  it('maps a pre-parsed JobPosting object (e.g. Paycom googleJobJson)', () => {
+    const node = jobPostingLdFromNode({
+      ...baseJob,
+      url: 'https://example.com/jobs/42',
+      baseSalary: {
+        '@type': 'MonetaryAmount',
+        currency: 'USD',
+        value: { '@type': 'QuantitativeValue', minValue: 90000, maxValue: 120000, unitText: 'YEAR' },
+      },
+    });
+    expect(node?.title).toBe('Staff Engineer');
+    expect(node?.datePosted).toBe('2026-06-11T21:42:38-05:00');
+    expect(node?.url).toBe('https://example.com/jobs/42');
+    expect(jobPostingLdToCompensation(node?.baseSalary)).toMatchObject({
+      minAmount: 90000,
+      maxAmount: 120000,
+      currency: 'USD',
+      interval: CompensationInterval.YEARLY,
+    });
+  });
+
+  it('parses a JSON string and unwraps @graph containers', () => {
+    const fromString = jobPostingLdFromNode(JSON.stringify(baseJob));
+    expect(fromString?.title).toBe('Staff Engineer');
+
+    const fromGraph = jobPostingLdFromNode({
+      '@context': 'https://schema.org',
+      '@graph': [{ '@type': 'WebSite' }, baseJob],
+    });
+    expect(fromGraph?.title).toBe('Staff Engineer');
+  });
+
+  it('returns null for empty / malformed / non-JobPosting input', () => {
+    expect(jobPostingLdFromNode(null)).toBeNull();
+    expect(jobPostingLdFromNode('')).toBeNull();
+    expect(jobPostingLdFromNode('{ not json')).toBeNull();
+    expect(jobPostingLdFromNode({ '@type': 'Organization', name: 'Acme' })).toBeNull();
   });
 });

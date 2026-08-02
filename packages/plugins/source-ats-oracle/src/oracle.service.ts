@@ -12,6 +12,7 @@ import { createHttpClient } from '@ever-jobs/common';
 import {
   ORACLE_DEFAULT_EXPAND,
   ORACLE_DEFAULT_FACETS,
+  ORACLE_DEFAULT_HOST_SEGMENT,
   ORACLE_DEFAULT_RESULTS_WANTED,
   ORACLE_DEFAULT_SITE_NUMBER,
   ORACLE_DEFAULT_SORT_BY,
@@ -36,13 +37,16 @@ import {
  * CandidateExperience) tenant. URL pattern:
  * `https://{subdomain}.fa.{region}.oraclecloud.com`.
  *
- * Tenant resolution (Spec 013 / FR-3, decision-boundary line in
- * tasks.md "Notes for the next run"):
- *   1. `input.companyUrl` (full URL override) is canonical.
- *   2. `input.companySlug` (e.g. `eeho-us2`) is composed to
- *      `https://<subdomain>.fa.<region>.oraclecloud.com` only when
- *      `companyUrl` is absent.
- *   3. If neither is supplied, the scrape returns an empty
+ * Tenant resolution (Spec 013 / FR-3, updated Spec 5037):
+ *   1. `input.companyUrl` (full CandidateExperience URL) is canonical.
+ *      `siteNumber` is extracted from the URL path (`/sites/{CX_…}`).
+ *   2. `input.companySlug` accepts three forms (see `parseSlug`):
+ *      a. `{fullHost}:{siteNumber}` — preferred; no host guessing.
+ *      b. `{subdomain}:{siteNumber}` — host completed with `.fa.ocs.`
+ *         (works for modern SaaS pods; region-code tenants need form a).
+ *      c. `{subdomain}-{region}` — legacy compose (back-compat).
+ *   3. `input.siteNumber` overrides slug/URL-derived values when set.
+ *   4. If neither is supplied, the scrape returns an empty
  *      `JobResponseDto` with sentinel `ERR_ORACLE_BAD_TENANT`.
  *
  * Wire format (Spec 013 / FR-2 — matches upstream Python's exact
@@ -83,18 +87,21 @@ export class OracleService implements IScraper {
   private readonly logger = new Logger(OracleService.name);
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
-    const tenant = this.resolveTenant(input);
-    if (!tenant) {
+    const resolved = this.resolveTenant(input);
+    if (!resolved) {
       this.logger.warn(
         `OracleService: ${ORACLE_ERR_BAD_TENANT} — both companyUrl and companySlug unset`,
       );
       return new JobResponseDto([]);
     }
+    const { tenant } = resolved;
 
     const resultsWanted =
       input.resultsWanted ?? ORACLE_DEFAULT_RESULTS_WANTED;
+    // Precedence: explicit input.siteNumber > site parsed from the
+    // slug/URL (`…:CX_1` / `/sites/CX_1`) > the CX_45001 default.
     const siteNumber =
-      input.siteNumber?.trim() || ORACLE_DEFAULT_SITE_NUMBER;
+      input.siteNumber?.trim() || resolved.siteNumber || ORACLE_DEFAULT_SITE_NUMBER;
 
     const client = createHttpClient({
       proxies: input.proxies,
@@ -104,6 +111,7 @@ export class OracleService implements IScraper {
     client.setHeaders(ORACLE_HEADERS);
 
     const collected: OracleRequisition[] = [];
+    let totalJobsCount: number | null = null;
 
     for (let page = 0; page < ORACLE_MAX_PAGES; page++) {
       if (collected.length >= resultsWanted) break;
@@ -127,7 +135,12 @@ export class OracleService implements IScraper {
         break;
       }
 
-      const requisitions = this.extractRequisitions(payload);
+      const wrapper = payload?.items?.[0];
+      if (totalJobsCount === null && typeof wrapper?.TotalJobsCount === 'number') {
+        totalJobsCount = wrapper.TotalJobsCount;
+      }
+
+      const requisitions = wrapper?.requisitionList ?? [];
       if (requisitions.length === 0) {
         this.logger.debug(
           `OracleService: empty page at offset=${offset} for ${tenant.domain}`,
@@ -140,7 +153,15 @@ export class OracleService implements IScraper {
         collected.push(req);
       }
 
-      if (requisitions.length < ORACLE_RECORDS_PER_PAGE) break;
+      // Oracle returns SHORT pages mid-run (offset 0→100, 100→99,
+      // 200→44 for a 244-job board), so `page.length < limit` is NOT a
+      // last-page signal. Terminate on `TotalJobsCount` (or an empty
+      // page, handled above) instead — otherwise the scrape stops early.
+      const target =
+        totalJobsCount !== null
+          ? Math.min(totalJobsCount, resultsWanted)
+          : resultsWanted;
+      if (collected.length >= target) break;
     }
 
     const jobs: JobPostDto[] = collected.map((r) =>
@@ -152,14 +173,21 @@ export class OracleService implements IScraper {
     return new JobResponseDto(jobs);
   }
 
-  /** Resolve `companyUrl` / `companySlug` into an `OracleTenantContext`. */
+  /**
+   * Resolve `companyUrl` / `companySlug` into an `OracleTenantContext`
+   * plus the `siteNumber` carried alongside it (if any). `companyUrl`
+   * is canonical; `companySlug` is the fallback.
+   */
   private resolveTenant(
     input: ScraperInputDto,
-  ): OracleTenantContext | null {
+  ): { tenant: OracleTenantContext; siteNumber: string | null } | null {
     const fromUrl = input.companyUrl?.trim();
     if (fromUrl) {
       try {
-        return this.tenantFromUrl(fromUrl);
+        return {
+          tenant: this.tenantFromUrl(fromUrl),
+          siteNumber: this.siteNumberFromUrl(fromUrl),
+        };
       } catch (err: any) {
         this.logger.warn(
           `OracleService: invalid companyUrl=${fromUrl} — ${err?.message}; trying companySlug fallback`,
@@ -169,19 +197,70 @@ export class OracleService implements IScraper {
 
     const slug = input.companySlug?.trim();
     if (slug) {
-      const composed = this.composeUrlFromSlug(slug);
-      if (composed) {
+      const parsed = this.parseSlug(slug);
+      if (parsed) {
         try {
-          return this.tenantFromUrl(composed);
+          return {
+            tenant: this.tenantFromUrl(parsed.baseUrl),
+            siteNumber: parsed.siteNumber,
+          };
         } catch (err: any) {
           this.logger.warn(
-            `OracleService: composed URL ${composed} invalid — ${err?.message}`,
+            `OracleService: composed URL ${parsed.baseUrl} invalid — ${err?.message}`,
           );
         }
       }
     }
 
     return null;
+  }
+
+  /**
+   * Parse a `companySlug` into a base URL + optional `siteNumber`.
+   * Accepted forms (Spec 5037):
+   *   - `{fullHost}:{siteNumber}` — e.g.
+   *     `fa-esbv-saasfaprod1.fa.ocs.oraclecloud.com:CX_1` (preferred —
+   *     no host reconstruction, region/pod preserved).
+   *   - `{fullHost}` — host only, siteNumber falls back to default.
+   *   - `{subdomain}:{siteNumber}` — e.g. `fa-esbv-saasfaprod1:CX_1`;
+   *     host completed with the default `.fa.ocs.` segment (works for
+   *     modern SaaS pods; region-code tenants need the full-host form).
+   *   - `{subdomain}-{region}` — legacy compose (e.g. `eeho-us2`), kept
+   *     for back-compat.
+   */
+  private parseSlug(
+    slug: string,
+  ): { baseUrl: string; siteNumber: string | null } | null {
+    const colon = slug.indexOf(':');
+    const left = (colon >= 0 ? slug.slice(0, colon) : slug).trim();
+    const siteNumber =
+      colon >= 0 ? slug.slice(colon + 1).trim() || null : null;
+    if (!left) return null;
+
+    // Full host (has a dot) — use verbatim; strip any scheme/path.
+    if (left.includes('.')) {
+      const host = left.replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+      return { baseUrl: `https://${host}`, siteNumber };
+    }
+
+    // Bare pod subdomain via the colon form: the WHOLE left side is the
+    // subdomain — complete it with the default host segment.
+    if (colon >= 0) {
+      return {
+        baseUrl: `https://${left}.fa.${ORACLE_DEFAULT_HOST_SEGMENT}.oraclecloud.com`,
+        siteNumber,
+      };
+    }
+
+    // Legacy `{subdomain}-{region}` form.
+    const composed = this.composeUrlFromSlug(left);
+    return composed ? { baseUrl: composed, siteNumber: null } : null;
+  }
+
+  /** Extract the Oracle `siteNumber` from a CandidateExperience URL path. */
+  private siteNumberFromUrl(rawUrl: string): string | null {
+    const match = /\/sites\/([^/?#]+)/i.exec(rawUrl);
+    return match ? decodeURIComponent(match[1]) : null;
   }
 
   /**
@@ -244,14 +323,6 @@ export class OracleService implements IScraper {
       `&finder=${ORACLE_FINDER_NAME};${finderString}`;
 
     return `${baseUrl}${ORACLE_REST_PATH}${queryString}`;
-  }
-
-  /** Pull `requisitionList[]` out of `response.items[0]`. */
-  private extractRequisitions(
-    payload: OracleJobsResponse,
-  ): OracleRequisition[] {
-    const wrapper = payload?.items?.[0];
-    return wrapper?.requisitionList ?? [];
   }
 
   /** Map a single requisition into the canonical `JobPostDto`. */

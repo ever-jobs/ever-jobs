@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { CRELATE_BASE_URL, CRELATE_HEADERS } from './crelate.constants';
 import { CrelateJob } from './crelate.types';
@@ -131,7 +132,7 @@ export class CrelateService implements IScraper {
 
     // Date posted
     const datePosted = job.created_date
-      ? new Date(job.created_date).toISOString().split('T')[0]
+      ? toDateOnly(job.created_date)
       : null;
 
     return new JobPostDto({

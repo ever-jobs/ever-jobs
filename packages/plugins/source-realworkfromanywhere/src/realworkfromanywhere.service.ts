@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { RWFA_RSS_URL, RWFA_HEADERS } from './realworkfromanywhere.constants';
 import { RealWorkFromAnywhereRssItem } from './realworkfromanywhere.types';
@@ -152,7 +153,7 @@ export class RealWorkFromAnywhereService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

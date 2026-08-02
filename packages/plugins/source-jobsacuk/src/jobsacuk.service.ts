@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  toDateOnly,
 } from '@ever-jobs/common';
 import { JOBSACUK_BASE_URL, JOBSACUK_DEFAULT_CATEGORY, JOBSACUK_HEADERS } from './jobsacuk.constants';
 import { JobsAcUkRssItem } from './jobsacuk.types';
@@ -145,7 +146,7 @@ export class JobsAcUkService implements IScraper {
     let datePosted: string | undefined;
     if (item.pubDate) {
       try {
-        datePosted = new Date(item.pubDate).toISOString().split('T')[0];
+        datePosted = toDateOnly(item.pubDate) ?? undefined;
       } catch {
         datePosted = undefined;
       }

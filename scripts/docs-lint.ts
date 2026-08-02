@@ -60,6 +60,7 @@ interface LogEntry {
   line: number;
   date: string;
   runNumber: number | null;
+  specNumber: number | null;
   raw: string;
 }
 
@@ -79,12 +80,12 @@ const INLINE_LINK_RE = /\[(?:[^\]\\]|\\.)*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 const INLINE_CODE_RE = /`[^`]+`/g;
 const FENCE_RE = /^(```|~~~)/;
 // Two-pass header parser: first try to capture the run number, then fall
-// back to a date-only header. A single combined regex with an optional
-// run-number group is unreliable because the lazy `.*?` always succeeds
-// with the optional group skipped — turning every header into a
-// "date-only" record (the bug fixed in run #11).
+// back to a spec number, then a date-only header. A single combined regex
+// with optional groups is unreliable because the lazy `.*?` always succeeds
+// with the groups skipped.
 const LOG_HEADER_WITH_RUN_RE =
   /^##\s+(\d{4}-\d{2}-\d{2})\b[^\n]*?\brun\s*#?(\d+)/i;
+const LOG_HEADER_SPEC_RE = /^##\s+(\d{4}-\d{2}-\d{2})\b[^\n]*?\bSpec\s+(\d+)/i;
 const LOG_HEADER_DATE_ONLY_RE = /^##\s+(\d{4}-\d{2}-\d{2})\b/;
 // Frontmatter check applies to `spec.md` + `plan.md` only (Spec 002 §FR-7).
 // `tasks.md` is a list of work items and intentionally has no metadata
@@ -195,6 +196,18 @@ export function parseLogHeaders(body: string): LogEntry[] {
         line: i + 1,
         date: withRun[1],
         runNumber: Number(withRun[2]),
+        specNumber: null,
+        raw: line,
+      });
+      continue;
+    }
+    const withSpec = line.match(LOG_HEADER_SPEC_RE);
+    if (withSpec) {
+      out.push({
+        line: i + 1,
+        date: withSpec[1],
+        runNumber: null,
+        specNumber: Number(withSpec[2]),
         raw: line,
       });
       continue;
@@ -205,6 +218,7 @@ export function parseLogHeaders(body: string): LogEntry[] {
         line: i + 1,
         date: dateOnly[1],
         runNumber: null,
+        specNumber: null,
         raw: line,
       });
     }
@@ -214,17 +228,22 @@ export function parseLogHeaders(body: string): LogEntry[] {
 
 function compareLogEntries(a: LogEntry, b: LogEntry): number {
   if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-  const ar = a.runNumber ?? -Infinity;
-  const br = b.runNumber ?? -Infinity;
-  if (ar === br) return 0;
-  return ar < br ? -1 : 1;
+  // Only order by run number when both entries have one; otherwise we cannot
+  // reliably compare a scheduled-run entry with an ad-hoc spec-only entry.
+  if (a.runNumber != null && b.runNumber != null) {
+    if (a.runNumber === b.runNumber) return 0;
+    return a.runNumber < b.runNumber ? -1 : 1;
+  }
+  return 0;
 }
 
 function findDuplicates(entries: LogEntry[]): string[] {
   const seen = new Map<string, number>();
   const dupes: string[] = [];
   for (const e of entries) {
-    const key = `${e.date}#${e.runNumber ?? 'na'}`;
+    // Disambiguate same-day ad-hoc spec entries by spec number when no run
+    // number is present.
+    const key = `${e.date}#${e.runNumber ?? e.specNumber ?? 'na'}`;
     const prior = seen.get(key);
     if (prior !== undefined) {
       dupes.push(`docs/log.md:${e.line} duplicate of line ${prior} (${key})`);

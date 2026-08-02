@@ -103,7 +103,7 @@ and the shared compensation helper (Specs 5018–5019).
 - **No attempt to revive the feed API.** It is disabled/partner-gated; the board
   page is the supported public path. (Recorded in `docs/questions.md`.)
 - **No `companySlug` auto-discovery.** The GUID is supplied by the caller (the
-  fetch1 detector extracts it from the careers-page link). Out of scope here.
+  upstream detector extracts it from the careers-page link). Out of scope here.
 - **No change to other ATS plugins.**
 
 ## Contracts
