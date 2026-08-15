@@ -7,6 +7,16 @@ import { getRequestId } from '../context';
 
 const RETRYABLE_STATUSES = [429, 500, 502, 503, 504];
 
+/**
+ * Query-string keys whose values must never reach a log line. Several sources
+ * authenticate by query parameter (`source-ats-ceipal` `api_key`,
+ * `source-ats-jazzhr` `apikey`, `source-ats-teamtailor` / `source-ats-talentera`
+ * / `source-ats-comeet` `token`), so naming the raw URL on retry would copy
+ * those credentials into the pod logs.
+ */
+const SENSITIVE_QUERY_KEYS =
+  /^(?:api[-_]?key|access[-_]?token|token|secret|password|passwd|pwd|auth|authorization|signature|sig|session|credentials?)$/i;
+
 export interface HttpClientOptions {
   proxies?: string[];
   caCert?: string;
@@ -167,9 +177,35 @@ export class HttpClient {
    */
   private describeRequest(config: AxiosRequestConfig): string {
     const method = (config.method ?? 'GET').toUpperCase();
-    const url = config.url ?? '(no url)';
+    const url = config.url ? this.redactUrl(config.url) : '(no url)';
     const requestId = getRequestId();
     return requestId ? `[${requestId}] ${method} ${url}` : `${method} ${url}`;
+  }
+
+  /**
+   * Replace the value of every credential-bearing query parameter with
+   * `REDACTED`, leaving the rest of the URL intact so the line still names its
+   * target. Splits on delimiters rather than parsing, so a relative URL or a
+   * malformed query degrades to "unchanged" instead of throwing inside a
+   * logging path.
+   */
+  private redactUrl(url: string): string {
+    const start = url.indexOf('?');
+    if (start === -1) return url;
+
+    const [query, ...fragment] = url.slice(start + 1).split('#');
+    const redacted = query
+      .split('&')
+      .map((pair) => {
+        const eq = pair.indexOf('=');
+        if (eq === -1) return pair;
+        const key = pair.slice(0, eq);
+        return SENSITIVE_QUERY_KEYS.test(key) ? `${key}=REDACTED` : pair;
+      })
+      .join('&');
+
+    const hash = fragment.length ? `#${fragment.join('#')}` : '';
+    return `${url.slice(0, start)}?${redacted}${hash}`;
   }
 
   /** `Retry-After` as milliseconds: delta-seconds or an HTTP-date. Null when absent/unparseable. */
