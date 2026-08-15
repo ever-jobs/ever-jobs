@@ -17,6 +17,22 @@ const RETRYABLE_STATUSES = [429, 500, 502, 503, 504];
 const SENSITIVE_QUERY_KEYS =
   /^(?:api[-_]?key|access[-_]?token|token|secret|password|passwd|pwd|auth|authorization|signature|sig|session|credentials?)$/i;
 
+/**
+ * Hosts that carry a credential in the URL *path* rather than the query string,
+ * mapped to the zero-based index of the offending path segment. Ceipal routes
+ * every tenant call through `https://api.ceipal.com/{apiKey}/job-postings/`, so
+ * the first segment is the tenant's career-portal key — `CeipalService` already
+ * masks it in its own logs (`maskKey`), and the shared retry line must not undo
+ * that. `source-ats-ceipal` is currently the only plugin that builds a URL this
+ * way; add a row here if another one appears.
+ */
+const SENSITIVE_PATH_SEGMENTS: Record<string, number> = {
+  'api.ceipal.com': 0,
+};
+
+/** Scheme + authority of an absolute URL, e.g. `https://api.ceipal.com:443`. */
+const URL_AUTHORITY = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i;
+
 export interface HttpClientOptions {
   proxies?: string[];
   caCert?: string;
@@ -183,13 +199,49 @@ export class HttpClient {
   }
 
   /**
-   * Replace the value of every credential-bearing query parameter with
-   * `REDACTED`, leaving the rest of the URL intact so the line still names its
-   * target. Splits on delimiters rather than parsing, so a relative URL or a
-   * malformed query degrades to "unchanged" instead of throwing inside a
-   * logging path.
+   * Strip credentials out of a URL before it reaches a log line, leaving the
+   * rest intact so the message still names its target. Splits on delimiters
+   * rather than parsing, so a relative or malformed URL degrades to "unchanged"
+   * instead of throwing inside a logging path.
    */
   private redactUrl(url: string): string {
+    return this.redactQuery(this.redactPathCredential(url));
+  }
+
+  /**
+   * Replace a credential carried as a path segment (see
+   * `SENSITIVE_PATH_SEGMENTS`) with `REDACTED`. Relative URLs and hosts with no
+   * rule are returned unchanged.
+   */
+  private redactPathCredential(url: string): string {
+    const authority = URL_AUTHORITY.exec(url);
+    if (!authority) return url;
+
+    const host = authority[1].replace(/^.*@/, '').replace(/:\d+$/, '').toLowerCase();
+    const index = SENSITIVE_PATH_SEGMENTS[host];
+    if (index === undefined) return url;
+
+    const pathStart = authority[0].length;
+    const query = url.indexOf('?', pathStart);
+    const fragment = url.indexOf('#', pathStart);
+    const ends = [query, fragment].filter((i) => i !== -1);
+    const pathEnd = ends.length ? Math.min(...ends) : url.length;
+
+    // A path that starts with `/` splits to a leading empty segment, so the
+    // first real segment is at index 1.
+    const segments = url.slice(pathStart, pathEnd).split('/');
+    const target = index + 1;
+    if (target >= segments.length || !segments[target]) return url;
+
+    segments[target] = 'REDACTED';
+    return url.slice(0, pathStart) + segments.join('/') + url.slice(pathEnd);
+  }
+
+  /**
+   * Replace the value of every credential-bearing query parameter with
+   * `REDACTED`.
+   */
+  private redactQuery(url: string): string {
     const start = url.indexOf('?');
     if (start === -1) return url;
 

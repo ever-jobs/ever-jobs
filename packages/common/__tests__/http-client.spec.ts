@@ -140,9 +140,9 @@ describe('HttpClient retry log URL redaction', () => {
   }
 
   it.each([
-    ['api_key', 'https://api.ceipal.com/getJobPostings?api_key=SECRET-VALUE'],
     ['apikey', 'https://api.resumatorapi.com/v1/jobs?apikey=SECRET-VALUE'],
     ['token', 'https://api.comeet.co/careers/v1/positions?token=SECRET-VALUE'],
+    ['api_key', 'https://api.example-ats.com/v1/jobs?api_key=SECRET-VALUE'],
     ['access_token', 'https://acme.example.com/v1/jobs?access_token=SECRET-VALUE'],
   ])('redacts a %s query parameter', async (key, url) => {
     const line = await warnLineFor(url);
@@ -153,11 +153,11 @@ describe('HttpClient retry log URL redaction', () => {
 
   it('keeps the non-credential parameters that make the line attributable', async () => {
     const line = await warnLineFor(
-      'https://api.ceipal.com/getJobPostings?company=acme&api_key=SECRET-VALUE&page=3',
+      'https://api.resumatorapi.com/v1/jobs?company=acme&apikey=SECRET-VALUE&page=3',
     );
 
     expect(line).not.toContain('SECRET-VALUE');
-    expect(line).toContain('https://api.ceipal.com/getJobPostings?company=acme&api_key=REDACTED&page=3');
+    expect(line).toContain('https://api.resumatorapi.com/v1/jobs?company=acme&apikey=REDACTED&page=3');
   });
 
   it('leaves a URL without a query string untouched', async () => {
@@ -171,5 +171,44 @@ describe('HttpClient retry log URL redaction', () => {
 
     expect(line).not.toContain('SECRET-VALUE');
     expect(line).toContain('https://acme.example.com/jobs?token=REDACTED#results');
+  });
+
+  /**
+   * Ceipal carries the tenant key as the first path segment rather than a query
+   * parameter (`CeipalService.fetchListPage` builds
+   * `https://api.ceipal.com/{apiKey}/job-postings/`), and the service masks it
+   * in its own logs — the shared retry line must not undo that.
+   */
+  it('redacts the Ceipal tenant key carried as a path segment', async () => {
+    const line = await warnLineFor('https://api.ceipal.com/deadbeefkey/job-postings/');
+
+    expect(line).not.toContain('deadbeefkey');
+    expect(line).toContain('https://api.ceipal.com/REDACTED/job-postings/');
+  });
+
+  it('redacts a Ceipal path key alongside a query string', async () => {
+    const line = await warnLineFor('https://api.ceipal.com/deadbeefkey/job-postings/?page=2');
+
+    expect(line).not.toContain('deadbeefkey');
+    expect(line).toContain('https://api.ceipal.com/REDACTED/job-postings/?page=2');
+  });
+
+  it('leaves the first path segment of every other host alone', async () => {
+    const line = await warnLineFor('https://boards.greenhouse.io/acme/jobs/42');
+
+    expect(line).toContain('https://boards.greenhouse.io/acme/jobs/42');
+  });
+
+  it('redacts the Ceipal key when the URL carries a port', async () => {
+    const line = await warnLineFor('https://api.ceipal.com:443/deadbeefkey/job-postings/');
+
+    expect(line).not.toContain('deadbeefkey');
+    expect(line).toContain('https://api.ceipal.com:443/REDACTED/job-postings/');
+  });
+
+  it('leaves a bare Ceipal origin with no key alone', async () => {
+    const line = await warnLineFor('https://api.ceipal.com/');
+
+    expect(line).toContain('GET https://api.ceipal.com/ failed 429');
   });
 });
