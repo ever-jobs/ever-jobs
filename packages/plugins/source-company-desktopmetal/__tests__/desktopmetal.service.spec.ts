@@ -2,7 +2,9 @@ import 'reflect-metadata';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { CompensationInterval, ScraperInputDto, Site } from '@ever-jobs/models';
+import { BrowserPool } from '@ever-jobs/common';
 import { DesktopmetalService } from '../src/desktopmetal.service';
+import { DESKTOPMETAL_READY_TIMEOUT_SECONDS } from '../src/desktopmetal.constants';
 
 const FIXTURES = join(__dirname, 'fixtures');
 const LISTING_HTML = readFileSync(join(FIXTURES, 'careers.html'), 'utf8');
@@ -164,6 +166,52 @@ describe('DesktopmetalService', () => {
       inputFrom(),
     );
     expect(jobs).toHaveLength(0);
+  });
+
+  it('requests a headful stealth browser when fetching the listing', async () => {
+    const page = {
+      goto: jest.fn().mockResolvedValue(undefined),
+      waitForSelector: jest.fn().mockResolvedValue(null),
+      content: jest.fn().mockResolvedValue('<html></html>'),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    const getPageSpy = jest
+      .spyOn(BrowserPool, 'getPage')
+      .mockResolvedValue(page as any);
+
+    const service = new DesktopmetalService();
+    await (service as any).fetchListingHtml(new ScraperInputDto());
+
+    expect(getPageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ stealth: true, headful: true }),
+    );
+    expect(page.close).toHaveBeenCalled();
+
+    getPageSpy.mockRestore();
+  });
+
+  it('bounds the listing readiness wait with the ready timeout, not the nav timeout (Spec 5083)', async () => {
+    const page = {
+      goto: jest.fn().mockResolvedValue(undefined),
+      waitForSelector: jest.fn().mockResolvedValue(null),
+      content: jest.fn().mockResolvedValue('<html></html>'),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    const getPageSpy = jest
+      .spyOn(BrowserPool, 'getPage')
+      .mockResolvedValue(page as any);
+
+    const service = new DesktopmetalService();
+    await (service as any).fetchListingHtml(new ScraperInputDto());
+
+    expect(page.waitForSelector).toHaveBeenCalledWith(
+      'a[href*="/uploads/"][href$=".pdf"]',
+      expect.objectContaining({
+        timeout: DESKTOPMETAL_READY_TIMEOUT_SECONDS * 1000,
+      }),
+    );
+
+    getPageSpy.mockRestore();
   });
 });
 

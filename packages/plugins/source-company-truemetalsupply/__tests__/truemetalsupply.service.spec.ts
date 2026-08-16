@@ -3,9 +3,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Test } from '@nestjs/testing';
 import { JobResponseDto, ScraperInputDto, Site } from '@ever-jobs/models';
+import { BrowserPool } from '@ever-jobs/common';
 import {
   TRUEMETALSUPPLY_CAREERS_URL,
   TRUEMETALSUPPLY_COMPANY_NAME,
+  TRUEMETALSUPPLY_DIALOG_TRIGGER_SELECTOR,
+  TRUEMETALSUPPLY_DIALOG_SELECTOR,
+  TRUEMETALSUPPLY_READY_TIMEOUT_SECONDS,
 } from '../src/truemetalsupply.constants';
 import { TrueMetalSupplyOpening } from '../src/truemetalsupply.types';
 import { TrueMetalSupplyModule, TrueMetalSupplyService } from '../src';
@@ -33,26 +37,41 @@ function serviceWithOpenings(openings: TrueMetalSupplyOpening[]): TrueMetalSuppl
   return service;
 }
 
+type FakeDialog = {
+  text: string;
+  html: string | null;
+  /** Clicks required before the popup actually opens (default 1). */
+  opensAfter?: number;
+};
+
 /**
  * Build a fake Playwright `Page` for `collectDialogs`: each entry is the dialog
  * revealed by clicking trigger `i`. `null` entries simulate a trigger that opens
- * no dialog. Exercises the real click/read/filter/dedup loop without a browser.
+ * no dialog. `opensAfter` models a Wix popup whose first click(s) don't open it
+ * (the first-click-not-wired case). Exercises the real click/read/filter/dedup
+ * loop — including the open-retry — without a browser.
  */
-function fakePage(
-  dialogs: Array<{ text: string; html: string | null } | null>,
-): unknown {
+function fakePage(dialogs: Array<FakeDialog | null>): unknown {
   let open = -1;
+  const clicks: Record<number, number> = {};
   const triggerLocator = {
     count: async () => dialogs.length,
     nth: (i: number) => ({
+      boundingBox: async () => ({ x: 0, y: 0, width: 100, height: 50 }),
+      getAttribute: async (name: string) =>
+        name === 'data-popupid' ? `popup-${i}` : null,
       scrollIntoViewIfNeeded: async () => undefined,
       click: async () => {
-        open = i;
+        clicks[i] = (clicks[i] ?? 0) + 1;
+        const spec = dialogs[i];
+        if (spec && clicks[i] >= (spec.opensAfter ?? 1)) open = i;
       },
     }),
   };
   const dialogLocator = {
     first: () => ({
+      waitFor: async () => undefined,
+      isVisible: async () => open >= 0 && !!dialogs[open],
       count: async () => (open >= 0 && dialogs[open] ? 1 : 0),
       innerText: async () => dialogs[open]?.text ?? '',
       innerHTML: async () => dialogs[open]?.html ?? null,
@@ -60,7 +79,9 @@ function fakePage(
   };
   return {
     locator: (sel: string) =>
-      sel === '[role="dialog"]' ? dialogLocator : triggerLocator,
+      sel === TRUEMETALSUPPLY_DIALOG_TRIGGER_SELECTOR
+        ? triggerLocator
+        : dialogLocator,
     keyboard: {
       press: async () => {
         open = -1;
@@ -69,7 +90,7 @@ function fakePage(
   };
 }
 
-describe('TrueMetalSupplyService (Spec 5062 — Wix popup careers, headless)', () => {
+describe('TrueMetalSupplyService (Spec 5062 — Wix popup careers, headful)', () => {
   it('resolves through TrueMetalSupplyModule via NestJS DI', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [TrueMetalSupplyModule],
@@ -174,10 +195,38 @@ describe('TrueMetalSupplyService (Spec 5062 — Wix popup careers, headless)', (
 
     const openings = await (
       service as unknown as {
-        collectDialogs: (p: unknown) => Promise<TrueMetalSupplyOpening[]>;
+        collectDialogs: (p: unknown, timeoutMs: number) => Promise<TrueMetalSupplyOpening[]>;
       }
-    ).collectDialogs(page);
+    ).collectDialogs(page, 30000);
 
+    expect(openings.map((o) => o.title)).toEqual([
+      'Project Estimator',
+      'Delivery Driver',
+    ]);
+  });
+
+  it('retries a trigger whose first click opens nothing (first-click-not-wired) so the first role is not dropped', async () => {
+    const service = serviceWithOpenings([]);
+    jest
+      .spyOn(service as unknown as { sleep: () => Promise<void> }, 'sleep')
+      .mockResolvedValue(undefined);
+
+    const est = DIALOGS[0];
+    const del = DIALOGS[3];
+    // The first trigger only opens on its SECOND click — mirrors the live Wix
+    // board where the first popup click lands before the handler is wired.
+    const page = fakePage([
+      { text: est.descriptionText, html: est.descriptionHtml, opensAfter: 2 },
+      { text: del.descriptionText, html: del.descriptionHtml },
+    ]);
+
+    const openings = await (
+      service as unknown as {
+        collectDialogs: (p: unknown, timeoutMs: number) => Promise<TrueMetalSupplyOpening[]>;
+      }
+    ).collectDialogs(page, 30000);
+
+    // Without the retry the first role (Project Estimator) would be missing.
     expect(openings.map((o) => o.title)).toEqual([
       'Project Estimator',
       'Delivery Driver',
@@ -220,5 +269,63 @@ describe('TrueMetalSupplyService (Spec 5062 — Wix popup careers, headless)', (
     const result = await service.scrape({} as ScraperInputDto);
     expect(result).toBeInstanceOf(JobResponseDto);
     expect(result.jobs).toEqual([]);
+  });
+
+  it('requests a headful stealth browser when collecting openings', async () => {
+    const getPageSpy = jest.spyOn(BrowserPool, 'getPage').mockResolvedValue({
+      ...(fakePage([
+        {
+          text: 'Project Estimator\nPosition Overview\nKey Responsibilities\nRequirements',
+          html: '<div><h2>Project Estimator</h2><p>Position Overview</p><p>Key Responsibilities</p><p>Requirements</p></div>',
+        },
+      ]) as any),
+      goto: jest.fn().mockResolvedValue(undefined),
+      waitForSelector: jest.fn().mockResolvedValue(null),
+      close: jest.fn().mockResolvedValue(undefined),
+    } as any);
+    const service = new TrueMetalSupplyService();
+    jest
+      .spyOn(service as unknown as { sleep: () => Promise<void> }, 'sleep')
+      .mockResolvedValue(undefined);
+
+    const result = await service.scrape({} as ScraperInputDto);
+
+    expect(getPageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ stealth: true, headful: true }),
+    );
+    expect(result.jobs).toHaveLength(1);
+    expect(result.jobs[0].title).toBe('Project Estimator');
+
+    getPageSpy.mockRestore();
+  });
+
+  it('waits for the dialog triggers as ATTACHED with a bounded readiness timeout (Spec 5083)', async () => {
+    // The Wix triggers are attached immediately but never Playwright-`visible`,
+    // so gating on the default (visible) state burned the whole navigation
+    // timeout. Assert we wait for `attached` with the short readiness timeout,
+    // not the 30 s navigation budget.
+    const waitForSelector = jest.fn().mockResolvedValue(null);
+    const getPageSpy = jest.spyOn(BrowserPool, 'getPage').mockResolvedValue({
+      ...(fakePage([]) as any),
+      goto: jest.fn().mockResolvedValue(undefined),
+      waitForSelector,
+      close: jest.fn().mockResolvedValue(undefined),
+    } as any);
+    const service = new TrueMetalSupplyService();
+    jest
+      .spyOn(service as unknown as { sleep: () => Promise<void> }, 'sleep')
+      .mockResolvedValue(undefined);
+
+    await service.scrape({} as ScraperInputDto);
+
+    expect(waitForSelector).toHaveBeenCalledWith(
+      TRUEMETALSUPPLY_DIALOG_TRIGGER_SELECTOR,
+      expect.objectContaining({
+        state: 'attached',
+        timeout: TRUEMETALSUPPLY_READY_TIMEOUT_SECONDS * 1000,
+      }),
+    );
+
+    getPageSpy.mockRestore();
   });
 });

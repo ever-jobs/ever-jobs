@@ -22,4 +22,5 @@ export interface GustoHostedDetailData {
   state: string | null;
   country: string | null;
   compensation: CompensationDto | null;
+  workFromHomeType: string | null;
 }

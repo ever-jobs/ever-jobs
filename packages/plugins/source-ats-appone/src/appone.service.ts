@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SourcePlugin } from '@ever-jobs/plugin';
-import {
+import { classifyScrapeError,
   IScraper,
   JobPostDto,
   JobResponseDto,
@@ -87,7 +87,7 @@ export class ApponeService implements IScraper {
       this.logger.warn(
         `AppOne list fetch failed for ${tenant}: ${err.message ?? String(err)}`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
 
     const companyName = listing.companyName?.trim() || tenant;

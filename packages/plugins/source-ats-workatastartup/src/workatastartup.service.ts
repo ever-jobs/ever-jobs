@@ -1,7 +1,7 @@
 import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
-import {
+import { classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -97,7 +97,7 @@ export class WorkAtAStartupService implements IScraper {
       this.logger.error(
         `Work at a Startup scrape error for ${companySlug}: ${err.message}`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
 
     const company = page?.props?.company ?? null;

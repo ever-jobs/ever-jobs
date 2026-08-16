@@ -345,6 +345,56 @@ describe('lintDocs', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('flags a new duplicate spec number', async () => {
+    tempRoot = await makeRepo({
+      'docs/index.md': '# Index\n',
+      '.specify/specs/5090-first/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/5090-second/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+    });
+    const r = await lintDocs(tempRoot);
+    expect(r.duplicateSpecNumbers).toHaveLength(1);
+    expect(r.duplicateSpecNumbers[0]).toContain('5090');
+    expect(r.duplicateSpecNumbers[0]).toContain('5090-first');
+    expect(r.duplicateSpecNumbers[0]).toContain('5090-second');
+    expect(r.ok).toBe(false);
+  });
+
+  it('allow-lists the inherited cross-fork duplicates 5024/5025/5026', async () => {
+    tempRoot = await makeRepo({
+      'docs/index.md': '# Index\n',
+      '.specify/specs/5024-ours/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/5024-upstream/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/5025-ours/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/5025-upstream/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/5026-ours/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/5026-upstream/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+    });
+    const r = await lintDocs(tempRoot);
+    expect(r.duplicateSpecNumbers).toEqual([]);
+  });
+
+  it('runs the duplicate check even when ranges.json is absent', async () => {
+    tempRoot = await makeRepo({
+      'docs/index.md': '# Index\n',
+      '.specify/specs/5090-a/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+      '.specify/specs/5090-b/spec.md':
+        '# Spec\n\n| Field | Value |\n| --- | --- |\n| Spec | s |\n',
+    });
+    const r = await lintDocs(tempRoot);
+    expect(r.overlappingRanges).toEqual([]);
+    expect(r.outOfBandSpecs).toEqual([]);
+    expect(r.duplicateSpecNumbers).toHaveLength(1);
+  });
+
   it('skips the band checks entirely when ranges.json is absent', async () => {
     tempRoot = await makeRepo({
       'docs/index.md':
@@ -372,6 +422,7 @@ describe('formatResult', () => {
       missingFrontmatter: [],
       overlappingRanges: [],
       outOfBandSpecs: [],
+      duplicateSpecNumbers: [],
       ok: true,
     });
     expect(out).toContain('Doc-lint passed');
@@ -388,6 +439,7 @@ describe('formatResult', () => {
       missingFrontmatter: ['.specify/specs/006-foo/spec.md'],
       overlappingRanges: ['range "a" [1-5000] overlaps "b" [5000-5999]'],
       outOfBandSpecs: ['9001-foo (number 9001 is outside every reserved band)'],
+      duplicateSpecNumbers: ['5090: 5090-first, 5090-second'],
       ok: false,
     });
     expect(out).toContain('1 broken link(s)');
@@ -397,5 +449,6 @@ describe('formatResult', () => {
     expect(out).toContain('missing H1 + metadata table');
     expect(out).toContain('overlapping fork range');
     expect(out).toContain('outside every reserved range');
+    expect(out).toContain('duplicate spec number');
   });
 });

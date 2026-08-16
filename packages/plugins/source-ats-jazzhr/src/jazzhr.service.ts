@@ -2,7 +2,7 @@ import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
-import {
+import { classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -117,7 +117,7 @@ export class JazzHRService implements IScraper {
       return new JobResponseDto(jobs);
     } catch (err: any) {
       this.logger.error(`JazzHR scrape error for ${companySlug}: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

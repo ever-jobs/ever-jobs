@@ -3,6 +3,7 @@ import {
   Site, ScraperInputDto, JobPostDto, JobResponseDto, IScraper,
   Country, SalarySource, CompensationDto,
   ERR_SOURCE_CIRCUIT_OPEN,
+  SourceDiagnosticDto, ScrapeReason, classifyScrapeError,
 } from '@ever-jobs/models';
 import { extractSalary, convertToAnnual, siteFromDomain, deriveSiteToken } from '@ever-jobs/common';
 import { ConfigService } from '@nestjs/config';
@@ -153,6 +154,18 @@ export class JobsService implements OnModuleInit {
    * tokens via `siteFromDomain`; unresolved domains throw `BadRequestException`.
    */
   async searchJobs(input: ScraperInputDto): Promise<JobPostDto[]> {
+    return (await this.searchJobsWithDiagnostics(input)).jobs;
+  }
+
+  /**
+   * Like {@link searchJobs} but also returns a per-source outcome breakdown
+   * (Spec 5082): one {@link SourceDiagnosticDto} per fanned-out source with its
+   * count and a categorized `reason`, so a caller can tell an empty board apart
+   * from a blocked/errored source. `searchJobs` is a thin wrapper over this.
+   */
+  async searchJobsWithDiagnostics(
+    input: ScraperInputDto,
+  ): Promise<{ jobs: JobPostDto[]; perSource: SourceDiagnosticDto[] }> {
     const atsSites = new Set<Site>(this.registry.listAtsSites());
     const resolvedSites = this.resolveCompanyDomains(input.companyDomain);
     const effectiveSites = this.buildEffectiveSites(input.siteType, resolvedSites);
@@ -184,7 +197,7 @@ export class JobsService implements OnModuleInit {
 
     if (selectedScrapers.length === 0) {
       this.logger.warn('No valid scrapers selected');
-      return [];
+      return { jobs: [], perSource: [] };
     }
 
     // Spec 5026 — bounded fan-out. Previously this was a bare
@@ -280,13 +293,28 @@ export class JobsService implements OnModuleInit {
           `or narrow siteType to cover more of the catalogue.`,
       );
     }
-    // Aggregate results from fulfilled searches
+    // Aggregate results from fulfilled searches + derive a per-source outcome
+    // (Spec 5082). The reason comes from the plugin's own diagnostics when it
+    // set them (e.g. `browser_unavailable`, `blocked`); otherwise it is inferred
+    // from the settled outcome: jobs → `ok`, empty → `empty`, thrown → classify.
     const allJobs: JobPostDto[] = [];
-    for (const result of results) {
+    const perSource: SourceDiagnosticDto[] = [];
+    results.forEach((result, index) => {
+      const site = selectedScrapers[index]?.site ?? 'unknown';
       if (result?.status === 'fulfilled') {
-        allJobs.push(...result.value.jobs);
+        const jobs = result.value.jobs;
+        allJobs.push(...jobs);
+        const diag = result.value.diagnostics;
+        const reason: ScrapeReason =
+          jobs.length > 0 ? 'ok' : (diag?.reason ?? 'empty');
+        perSource.push(
+          new SourceDiagnosticDto(site, jobs.length, reason, diag?.detail),
+        );
+      } else {
+        const diag = classifyScrapeError(result?.reason);
+        perSource.push(new SourceDiagnosticDto(site, 0, diag.reason, diag.detail));
       }
-    }
+    });
 
     // Post-processing: salary enrichment (mirrors Python __init__.py logic)
     for (const job of allJobs) {
@@ -304,7 +332,7 @@ export class JobsService implements OnModuleInit {
     });
 
     this.logger.log(`Total aggregated jobs: ${allJobs.length}`);
-    return allJobs;
+    return { jobs: allJobs, perSource };
   }
 
   /**

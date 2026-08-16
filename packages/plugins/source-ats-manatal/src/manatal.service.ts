@@ -1,7 +1,7 @@
 import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
-import {
+import { classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -68,7 +68,7 @@ export class ManatalService implements IScraper {
       this.logger.error(
         `Manatal scrape error for ${companySlug}: ${err.message}`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
 
     this.logger.log(

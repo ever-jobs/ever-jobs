@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SourcePlugin } from '@ever-jobs/plugin';
-import {
+import { classifyScrapeError,
   CompensationDto,
   DescriptionFormat,
   IScraper,
@@ -110,7 +110,7 @@ export class NotionService implements IScraper {
       return new JobResponseDto(jobs);
     } catch (error: unknown) {
       this.logger.error(`Notion scrape failed for ${pageId}: ${this.errorLabel(error)}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(error));
     }
   }
 

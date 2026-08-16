@@ -19,6 +19,7 @@ import { Response } from 'express';
 import {
   ScraperInputDto,
   JobPostDto,
+  SourceDiagnosticDto,
   JobAnalysisDto,
   LIVENESS_CHECKER_TOKEN,
   LEGITIMACY_CHECKER_TOKEN,
@@ -119,13 +120,18 @@ export class JobsController {
     const cached = await this.cacheService.get<JobPostDto[]>(cacheParams);
     let rawJobs: JobPostDto[];
     let fromCache = false;
+    // Per-source outcome breakdown (Spec 5082). Only meaningful on a fresh
+    // fan-out — a cache hit ran no scrapers, so it stays empty.
+    let perSource: SourceDiagnosticDto[] = [];
 
     if (cached) {
       rawJobs = cached;
       fromCache = true;
       this.logger.log(`Cache hit — returning ${rawJobs.length} cached results`);
     } else {
-      rawJobs = await this.jobsService.searchJobs(input);
+      const result = await this.jobsService.searchJobsWithDiagnostics(input);
+      rawJobs = result.jobs;
+      perSource = result.perSource;
       await this.cacheService.set(cacheParams, rawJobs);
     }
 
@@ -198,6 +204,7 @@ export class JobsController {
         deduped: aggregated.deduped,
         raw_count: aggregated.rawCount,
         dedup_metrics: aggregated.dedupMetrics,
+        per_source: perSource,
         next_page: page < totalPages ? page + 1 : null,
         previous_page: page > 1 ? page - 1 : null,
       };
@@ -214,6 +221,7 @@ export class JobsController {
       deduped: aggregated.deduped,
       raw_count: aggregated.rawCount,
       dedup_metrics: aggregated.dedupMetrics,
+      per_source: perSource,
     };
   }
 

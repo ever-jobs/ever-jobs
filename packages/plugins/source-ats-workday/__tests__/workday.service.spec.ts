@@ -13,6 +13,8 @@ jest.mock('@ever-jobs/common', () => {
       get: mockGet,
       setHeaders: jest.fn(),
     })),
+    // Skip the inter-page rate-limit sleep so multi-page cases stay fast.
+    randomSleep: jest.fn(async () => undefined),
   };
 });
 
@@ -470,6 +472,115 @@ describe('WorkdayService — Spec 720 / T05', () => {
    * the shared parser's `\bremote\b` check missed it and `isRemote` stayed
    * false. Normalizing underscores to spaces restores detection.
    */
+  /**
+   * Spec 5084 — some tenants answer an out-of-range offset by re-serving page 1
+   * instead of an empty page. Pagination must terminate on client-side evidence
+   * (distinct postings) rather than on the server shortening a page.
+   */
+  describe('pagination termination — Spec 5084', () => {
+    /** N distinct postings, page-shaped. */
+    function page(count: number, startIndex = 0, total?: number | null) {
+      return {
+        ...(total === undefined ? {} : { total }),
+        jobPostings: Array.from({ length: count }, (_, i) => ({
+          title: `Engineer ${startIndex + i}`,
+          externalPath: `/job/Anywhere/Engineer_R-${startIndex + i}`,
+          locationsText: 'Austin, TX',
+          postedOn: 'Posted Today',
+        })),
+      };
+    }
+
+    it('stops on a positive total instead of requesting past the end', async () => {
+      mockPost.mockResolvedValue({ data: page(20, 0, 20) });
+
+      const result = await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'acme:108:Acme_Careers',
+        resultsWanted: 9999,
+      } as ScraperInputDto);
+
+      expect(result.jobs).toHaveLength(20);
+      expect(mockPost).toHaveBeenCalledTimes(1);
+      expect(mockGet).toHaveBeenCalledTimes(20);
+    });
+
+    it('stops when a page adds no new postings, even with no usable total', async () => {
+      // Every offset re-serves page 1, and total is absent — the no-progress guard
+      // is the only thing that can end this.
+      mockPost.mockResolvedValue({ data: page(20, 0, undefined) });
+
+      const result = await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'acme:108:Acme_Careers',
+        resultsWanted: 9999,
+      } as ScraperInputDto);
+
+      expect(result.jobs).toHaveLength(20);
+      expect(mockPost).toHaveBeenCalledTimes(2);
+      // One request per distinct posting, not per accumulated entry.
+      expect(mockGet).toHaveBeenCalledTimes(20);
+    });
+
+    it('does not truncate an honest multi-page board', async () => {
+      mockPost
+        .mockResolvedValueOnce({ data: page(20, 0, 24) })
+        .mockResolvedValueOnce({ data: page(4, 20, 24) });
+
+      const result = await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'acme:503:Acme_Careers',
+        resultsWanted: 9999,
+      } as ScraperInputDto);
+
+      expect(result.jobs).toHaveLength(24);
+      expect(mockPost).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps paging when a real page reports total 0', async () => {
+      mockPost
+        .mockResolvedValueOnce({ data: page(20, 0, 0) })
+        .mockResolvedValueOnce({ data: page(5, 20, 0) });
+
+      const result = await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'acme:108:Acme_Careers',
+        resultsWanted: 9999,
+      } as ScraperInputDto);
+
+      expect(result.jobs).toHaveLength(25);
+    });
+
+    it('bounds resultsWanted by distinct postings', async () => {
+      mockPost.mockResolvedValue({ data: page(20, 0, undefined) });
+
+      const result = await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'acme:108:Acme_Careers',
+        resultsWanted: 5,
+      } as ScraperInputDto);
+
+      expect(result.jobs).toHaveLength(5);
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not enrich after a pagination failure', async () => {
+      mockPost
+        .mockResolvedValueOnce({ data: page(20, 0, 100) })
+        .mockRejectedValueOnce(new Error('Request failed with status code 429'));
+
+      const result = await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'acme:108:Acme_Careers',
+        resultsWanted: 9999,
+      } as ScraperInputDto);
+
+      expect(result.jobs).toEqual([]);
+      expect(result.diagnostics?.reason).toBeDefined();
+      expect(mockGet).not.toHaveBeenCalled();
+    });
+  });
+
   describe('remote location underscore normalization — Spec 5025', () => {
     it('detects isRemote when the only location label is slugified ("Remote_USA")', async () => {
       mockPost.mockResolvedValueOnce({

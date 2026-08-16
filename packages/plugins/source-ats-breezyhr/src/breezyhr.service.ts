@@ -10,6 +10,8 @@ import {
   LocationDto,
   DescriptionFormat,
   getJobTypeFromString,
+  classifyScrapeError,
+  ScrapeDiagnostics,
 } from '@ever-jobs/models';
 import {
   createHttpClient,
@@ -47,6 +49,7 @@ export class BreezyHRService implements IScraper {
 
     const jobs: JobPostDto[] = [];
     const resultsWanted = input.resultsWanted ?? 100;
+    let diagnostics: ScrapeDiagnostics | undefined;
 
     try {
       const client = createHttpClient({
@@ -83,9 +86,10 @@ export class BreezyHRService implements IScraper {
       this.logger.log(`BreezyHR: scraped ${jobs.length} jobs for ${company}`);
     } catch (err: any) {
       this.logger.error(`BreezyHR scrape failed for ${company}: ${err.message}`);
+      diagnostics = classifyScrapeError(err);
     }
 
-    return new JobResponseDto(jobs);
+    return new JobResponseDto(jobs, jobs.length ? undefined : diagnostics);
   }
 
   private processJob(

@@ -10,6 +10,7 @@ import {
   CompensationDto,
   Site,
   DescriptionFormat,
+  classifyScrapeError,
 } from '@ever-jobs/models';
 import {
   createHttpClient,
@@ -29,6 +30,7 @@ import {
   buildWorkdayUrl,
   buildWorkdayDetailUrl,
   parseWorkdayPostedOn,
+  workdayListingKey,
 } from './workday.constants';
 import {
   WorkdayJobDetail,
@@ -65,6 +67,7 @@ export class WorkdayService implements IScraper {
 
     const resultsWanted = input.resultsWanted ?? 100;
     const listingsToEnrich: WorkdayJobListItem[] = [];
+    const seenKeys = new Set<string>();
     let offset = 0;
 
     try {
@@ -89,15 +92,37 @@ export class WorkdayService implements IScraper {
           `${data.total ? ` (total: ${data.total})` : ''}`,
         );
 
+        // Count distinct postings, not pushes: some tenants answer an out-of-range
+        // offset by re-serving page 1, and re-serving the same page must never look
+        // like progress toward resultsWanted.
+        let added = 0;
         for (const listing of listings) {
           if (listingsToEnrich.length >= resultsWanted) break;
+          const key = workdayListingKey(listing);
+          if (key && seenKeys.has(key)) continue;
+          if (key) seenKeys.add(key);
           listingsToEnrich.push(listing);
+          added++;
         }
 
+        const pageOffset = offset;
         offset += listings.length;
+
+        if (added === 0) {
+          this.logger.warn(
+            `Workday: pagination not advancing for ${company} (wd${wdNumber}/${site}): ` +
+            `page at offset ${pageOffset} returned ${listings.length} jobs, 0 new ` +
+            `(server re-served an earlier page); stopping with ${listingsToEnrich.length} distinct jobs`,
+          );
+          break;
+        }
 
         // If we got less than page size, no more results
         if (listings.length < WORKDAY_PAGE_SIZE) break;
+
+        // A positive total ends paging before the first out-of-range request. Zero or
+        // absent is not a count: a real page can report total 0 on some tenants.
+        if (typeof data.total === 'number' && data.total > 0 && offset >= data.total) break;
 
         // Respect rate limiting
         await randomSleep(1000, 2000);
@@ -105,6 +130,10 @@ export class WorkdayService implements IScraper {
 
     } catch (err: any) {
       this.logger.error(`Workday scrape error for ${company}: ${err.message}`);
+
+      // The listing set is untrustworthy after a pagination failure, and enriching it
+      // would spend one detail request per accumulated entry on it.
+      return new JobResponseDto([], classifyScrapeError(err));
     }
 
     return this.buildResponse(
@@ -125,8 +154,24 @@ export class WorkdayService implements IScraper {
     site: string,
     format?: DescriptionFormat,
   ): Promise<JobResponseDto> {
-    const details = await this.fetchDetails(client, listings, company, wdNumber, site);
-    const jobPosts = listings
+    // Second de-dup pass: enrichment must cost one request per distinct posting even
+    // if pagination ever hands over repeats again.
+    const seen = new Set<string>();
+    const distinct = listings.filter((listing) => {
+      const key = workdayListingKey(listing);
+      if (!key) return true;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (distinct.length < listings.length) {
+      this.logger.warn(
+        `Workday: dropped ${listings.length - distinct.length} duplicate listings for ${company} before detail fetch`,
+      );
+    }
+
+    const details = await this.fetchDetails(client, distinct, company, wdNumber, site);
+    const jobPosts = distinct
       .map((listing, index) => {
         try {
           return this.processListing(
@@ -156,6 +201,7 @@ export class WorkdayService implements IScraper {
     site: string,
   ): Promise<Array<WorkdayJobDetail | null>> {
     const details: Array<WorkdayJobDetail | null> = [];
+    let failed = 0;
 
     for (let index = 0; index < listings.length; index += WORKDAY_DETAIL_CONCURRENCY) {
       const batch = listings.slice(index, index + WORKDAY_DETAIL_CONCURRENCY);
@@ -174,11 +220,19 @@ export class WorkdayService implements IScraper {
           return;
         }
         const listing = batch[batchIndex];
+        failed++;
         this.logger.warn(
-          `Workday detail failed for ${listing.externalPath ?? listing.title ?? 'unknown job'}: ${result.reason?.message ?? result.reason}`,
+          `Workday detail failed for ${company} (wd${wdNumber}/${site}) ` +
+          `${listing.externalPath ?? listing.title ?? 'unknown job'}: ${result.reason?.message ?? result.reason}`,
         );
         details.push(null);
       });
+    }
+
+    if (failed > 0) {
+      this.logger.warn(
+        `Workday: ${failed} of ${listings.length} detail requests failed for ${company} (wd${wdNumber}/${site})`,
+      );
     }
 
     return details;

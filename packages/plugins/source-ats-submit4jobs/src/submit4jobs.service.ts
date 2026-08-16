@@ -1,7 +1,7 @@
 import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
-import {
+import { classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -138,7 +138,7 @@ export class Submit4jobsService implements IScraper {
       return new JobResponseDto(jobPosts);
     } catch (err: any) {
       this.logger.error(`Submit4Jobs scrape error for ${slug}: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

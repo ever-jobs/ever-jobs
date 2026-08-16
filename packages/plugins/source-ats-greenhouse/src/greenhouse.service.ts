@@ -1,7 +1,7 @@
 ﻿import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
-import {
+import { classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -101,7 +101,7 @@ export class GreenhouseService implements IScraper {
       return new JobResponseDto(jobPosts);
     } catch (err: any) {
       this.logger.error(`Greenhouse scrape error for ${companySlug}: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

@@ -54,7 +54,10 @@ export class AdpService implements IScraper {
     const cid = input.companySlug;
     if (!cid) {
       this.logger.warn('No companySlug (cid) provided for ADP scraper');
-      return new JobResponseDto([]);
+      return new JobResponseDto([], {
+        reason: 'bad_input',
+        detail: 'no companySlug (cid) provided for ADP scraper',
+      });
     }
 
     const client = createHttpClient({
@@ -69,7 +72,10 @@ export class AdpService implements IScraper {
       this.logger.error(
         `ADP: no host resolved the requisition list for cid ${cid}`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], {
+        reason: 'fetch_error',
+        detail: `no ADP host resolved the requisition list for cid ${cid}`,
+      });
     }
 
     this.logger.log(

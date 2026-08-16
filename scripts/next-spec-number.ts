@@ -19,10 +19,11 @@ import { execSync } from 'child_process';
 import * as path from 'path';
 
 import {
+  Allocation,
+  allocateInRange,
   findRangeForRepo,
   listSpecNumbers,
   loadRanges,
-  nextNumberInRange,
   parseOriginRepo,
 } from './spec-ranges';
 
@@ -45,7 +46,13 @@ function resolveForkRepo(repoRoot: string): string | null {
   return originRepoFromGit(repoRoot);
 }
 
-export async function computeNextSpecNumber(repoRoot: string): Promise<number> {
+/**
+ * Full allocation for the current fork's band: the number to mint plus any
+ * reserved renumber slots (empty under the default `max-in-band + 1` policy).
+ */
+export async function computeNextSpecAllocation(
+  repoRoot: string,
+): Promise<Allocation> {
   const ranges = await loadRanges(repoRoot);
   if (!ranges || ranges.length === 0) {
     throw new Error(
@@ -64,13 +71,17 @@ export async function computeNextSpecNumber(repoRoot: string): Promise<number> {
       `No reserved range for "${repo}" in .specify/ranges.json. Add a row for this fork first.`,
     );
   }
-  const next = nextNumberInRange(await listSpecNumbers(repoRoot), band);
-  if (next > band.end) {
+  const allocation = allocateInRange(await listSpecNumbers(repoRoot), band);
+  if (allocation.mint > band.end) {
     throw new Error(
       `Band "${band.fork}" [${band.start}-${band.end}] is exhausted — reserve another range.`,
     );
   }
-  return next;
+  return allocation;
+}
+
+export async function computeNextSpecNumber(repoRoot: string): Promise<number> {
+  return (await computeNextSpecAllocation(repoRoot)).mint;
 }
 
 function isCliEntry(): boolean {
@@ -89,10 +100,18 @@ if (isCliEntry()) {
   const repoRoot = process.argv[2]
     ? path.resolve(process.argv[2])
     : process.cwd();
-  computeNextSpecNumber(repoRoot)
-    .then((n) => {
+  computeNextSpecAllocation(repoRoot)
+    .then((allocation) => {
+      // stdout carries only the mint number, so `npm run spec:next` stays
+      // machine-parseable; reserved slots (if any) go to stderr as an FYI.
+      if (allocation.reserved.length) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `next-spec-number: reserved ${allocation.reserved.join(', ')} as renumber targets`,
+        );
+      }
       // eslint-disable-next-line no-console
-      console.log(String(n));
+      console.log(String(allocation.mint));
     })
     .catch((err: Error) => {
       // eslint-disable-next-line no-console

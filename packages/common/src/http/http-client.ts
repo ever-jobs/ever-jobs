@@ -3,6 +3,36 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
+import { getRequestId } from '../context';
+
+const RETRYABLE_STATUSES = [429, 500, 502, 503, 504];
+
+/**
+ * Query-string keys whose values must never reach a log line. Several sources
+ * authenticate by query parameter (`source-ats-ceipal` `api_key`,
+ * `source-ats-jazzhr` `apikey`, `source-ats-teamtailor` / `source-ats-talentera`
+ * / `source-ats-comeet` `token`), so naming the raw URL on retry would copy
+ * those credentials into the pod logs.
+ */
+const SENSITIVE_QUERY_KEYS =
+  /^(?:api[-_]?key|access[-_]?token|token|secret|password|passwd|pwd|auth|authorization|signature|sig|session|credentials?)$/i;
+
+/**
+ * Hosts that carry a credential in the URL *path* rather than the query string,
+ * mapped to the zero-based index of the offending path segment. Ceipal routes
+ * every tenant call through `https://api.ceipal.com/{apiKey}/job-postings/`, so
+ * the first segment is the tenant's career-portal key — `CeipalService` already
+ * masks it in its own logs (`maskKey`), and the shared retry line must not undo
+ * that. `source-ats-ceipal` is currently the only plugin that builds a URL this
+ * way; add a row here if another one appears.
+ */
+const SENSITIVE_PATH_SEGMENTS: Record<string, number> = {
+  'api.ceipal.com': 0,
+};
+
+/** Scheme + authority of an absolute URL, e.g. `https://api.ceipal.com:443`. */
+const URL_AUTHORITY = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i;
+
 export interface HttpClientOptions {
   proxies?: string[];
   caCert?: string;
@@ -126,12 +156,18 @@ export class HttpClient {
       } catch (error: any) {
         lastError = error;
         const status = error.response?.status;
-        if (status && [500, 502, 503, 504, 429].includes(status) && attempt < this.maxRetries) {
-          const delay = this.retryBackoff === 'exponential'
-            ? Math.min(this.retryMaxDelay, this.retryDelay * Math.pow(2, attempt))
-            : Math.min(this.retryMaxDelay, this.retryDelay * (attempt + 1));
+        if (status && RETRYABLE_STATUSES.includes(status) && attempt < this.maxRetries) {
+          const backoff = this.retryBackoff === 'exponential'
+            ? this.retryDelay * Math.pow(2, attempt)
+            : this.retryDelay * (attempt + 1);
+          // A server that sent Retry-After has stated its own terms; retrying sooner
+          // (429 especially) only extends the block.
+          const delay = Math.min(
+            this.retryMaxDelay,
+            this.retryAfterMs(error.response?.headers) ?? backoff,
+          );
 
-          this.logger.warn(`Request failed with ${status}, retrying (${attempt + 1}/${this.maxRetries}) in ${delay}ms...`);
+          this.logger.warn(`${this.describeRequest(config)} failed ${status}, retry ${attempt + 1}/${this.maxRetries} in ${delay}ms`);
           await this.sleep(delay);
           continue;
         }
@@ -149,6 +185,95 @@ export class HttpClient {
   /** Get the underlying Axios instance for low-level access */
   getAxiosInstance(): AxiosInstance {
     return this.client;
+  }
+
+  /**
+   * Identify the request a log line is about. Scrapers fan out concurrently, so a
+   * message without its own target cannot be attributed to anything.
+   */
+  private describeRequest(config: AxiosRequestConfig): string {
+    const method = (config.method ?? 'GET').toUpperCase();
+    const url = config.url ? this.redactUrl(config.url) : '(no url)';
+    const requestId = getRequestId();
+    return requestId ? `[${requestId}] ${method} ${url}` : `${method} ${url}`;
+  }
+
+  /**
+   * Strip credentials out of a URL before it reaches a log line, leaving the
+   * rest intact so the message still names its target. Splits on delimiters
+   * rather than parsing, so a relative or malformed URL degrades to "unchanged"
+   * instead of throwing inside a logging path.
+   */
+  private redactUrl(url: string): string {
+    return this.redactQuery(this.redactPathCredential(url));
+  }
+
+  /**
+   * Replace a credential carried as a path segment (see
+   * `SENSITIVE_PATH_SEGMENTS`) with `REDACTED`. Relative URLs and hosts with no
+   * rule are returned unchanged.
+   */
+  private redactPathCredential(url: string): string {
+    const authority = URL_AUTHORITY.exec(url);
+    if (!authority) return url;
+
+    const host = authority[1].replace(/^.*@/, '').replace(/:\d+$/, '').toLowerCase();
+    const index = SENSITIVE_PATH_SEGMENTS[host];
+    if (index === undefined) return url;
+
+    const pathStart = authority[0].length;
+    const query = url.indexOf('?', pathStart);
+    const fragment = url.indexOf('#', pathStart);
+    const ends = [query, fragment].filter((i) => i !== -1);
+    const pathEnd = ends.length ? Math.min(...ends) : url.length;
+
+    // A path that starts with `/` splits to a leading empty segment, so the
+    // first real segment is at index 1.
+    const segments = url.slice(pathStart, pathEnd).split('/');
+    const target = index + 1;
+    if (target >= segments.length || !segments[target]) return url;
+
+    segments[target] = 'REDACTED';
+    return url.slice(0, pathStart) + segments.join('/') + url.slice(pathEnd);
+  }
+
+  /**
+   * Replace the value of every credential-bearing query parameter with
+   * `REDACTED`.
+   */
+  private redactQuery(url: string): string {
+    const start = url.indexOf('?');
+    if (start === -1) return url;
+
+    const [query, ...fragment] = url.slice(start + 1).split('#');
+    const redacted = query
+      .split('&')
+      .map((pair) => {
+        const eq = pair.indexOf('=');
+        if (eq === -1) return pair;
+        const key = pair.slice(0, eq);
+        return SENSITIVE_QUERY_KEYS.test(key) ? `${key}=REDACTED` : pair;
+      })
+      .join('&');
+
+    const hash = fragment.length ? `#${fragment.join('#')}` : '';
+    return `${url.slice(0, start)}?${redacted}${hash}`;
+  }
+
+  /** `Retry-After` as milliseconds: delta-seconds or an HTTP-date. Null when absent/unparseable. */
+  private retryAfterMs(headers: unknown): number | null {
+    const raw = (headers as Record<string, unknown> | undefined)?.['retry-after'];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (typeof value !== 'string' && typeof value !== 'number') return null;
+
+    const text = String(value).trim();
+    if (!text) return null;
+
+    if (/^\d+$/.test(text)) return Number(text) * 1000;
+
+    const date = Date.parse(text);
+    if (Number.isNaN(date)) return null;
+    return Math.max(0, date - Date.now());
   }
 
   private sleep(ms: number): Promise<void> {

@@ -1,7 +1,7 @@
 import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
-import {
+import { classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -140,7 +140,7 @@ export class DoverService implements IScraper {
       return new JobResponseDto(jobPosts);
     } catch (err: any) {
       this.logger.error(`Dover scrape error for ${token}: ${err.message}`);
-      return new JobResponseDto(jobPosts); // partial results
+      return new JobResponseDto(jobPosts, jobPosts.length ? undefined : classifyScrapeError(err)); // partial results
     }
   }
 

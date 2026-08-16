@@ -57,6 +57,18 @@ export function buildWorkdayDetailUrl(
   return `https://${company}.wd${wdNumber}.myworkdayjobs.com/wday/cxs/${company}/${site}${path}`;
 }
 
+/**
+ * Identity of a search-result posting, for de-duplication. `externalPath` is the
+ * detail-URL path and is unique per requisition; a listing without one falls back to
+ * its title so it is de-duplicated rather than dropped.
+ */
+export function workdayListingKey(listing: {
+  externalPath?: string | null;
+  title?: string | null;
+}): string | null {
+  return listing.externalPath?.trim() || listing.title?.trim() || null;
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**

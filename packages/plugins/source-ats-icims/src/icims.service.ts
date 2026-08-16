@@ -2,7 +2,7 @@ import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
-import {
+import { classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -92,7 +92,7 @@ export class IcimsService implements IScraper {
       return new JobResponseDto(jobPosts.slice(0, resultsWanted));
     } catch (err: any) {
       this.logger.error(`iCIMS scrape error for ${subdomain}: ${err.message}`);
-      return new JobResponseDto(jobPosts); // partial results
+      return new JobResponseDto(jobPosts, jobPosts.length ? undefined : classifyScrapeError(err)); // partial results
     }
   }
 

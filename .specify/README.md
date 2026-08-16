@@ -24,11 +24,31 @@ stored here.
 
 ## Numbering
 
-`NNN` is a 3-digit zero-padded incrementing ID. Slugs are kebab-case. Examples:
+`NNN` is a zero-padded incrementing ID (historically 3 digits; higher-numbered
+forks use 4). Slugs are kebab-case. Examples:
 
 - `001-plugin-architecture-foundation`
 - `002-source-pipeline-batching`
 - `010-deduplication-engine`
+
+Numbers are minted **per fork** from a disjoint band so that two forks never
+pick the same number. `ranges.json` reserves one band per fork (keyed by its
+`origin` repo); run `npm run spec:next` to get the next number for the current
+fork — never hand-number. See `.specify/specs/787-fork-spec-range-reservation/`
+for the design and `scripts/spec-ranges.ts` for the allocator.
+
+A band may set an optional `policy` in `ranges.json`:
+
+- absent / unknown → default `max-in-band + 1`.
+- `reserve-overlaps` → fill gaps and hold the lowest-available numbers open as
+  renumber targets for any number that ended up with more than one directory
+  (e.g. after a cross-fork merge). `spec:next` prints those reserved numbers on
+  stderr.
+
+`docs-lint` enforces the registry on every push/PR: bands stay disjoint, every
+spec number sits inside a reserved band, and no two directories share a number
+(except a small allow-list of numbers already duplicated across forks before
+that check existed).
 
 ## Workflow
 

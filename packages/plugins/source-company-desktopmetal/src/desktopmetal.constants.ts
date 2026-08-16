@@ -31,6 +31,14 @@ export const DESKTOPMETAL_DEFAULT_RESULTS = 50;
 export const DESKTOPMETAL_DEFAULT_TIMEOUT_SECONDS = 30;
 
 /**
+ * Readiness-wait timeout (seconds) for the listing `waitForSelector`, kept well
+ * below the navigation timeout so a best-effort gate can never consume the whole
+ * request budget when the listing markup changes (the PDF anchors resolve in
+ * ~1.7 s today).
+ */
+export const DESKTOPMETAL_READY_TIMEOUT_SECONDS = 15;
+
+/**
  * Bounded concurrency for the per-role PDF fetches.
  *
  * Declared by the plugin author but left unwired — the fan-out was an
