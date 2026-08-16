@@ -1,6 +1,15 @@
 import { JobPostDto, LocationDto, Site } from '@ever-jobs/models';
 import { DedupHybridService } from '../src/dedup-hybrid.service';
 
+/**
+ * Same budget knob `dedup-perf.spec.ts` uses, and the one CI already sets
+ * (`DEDUP_PERF_NFR1_MS`, see the `Run feature plugin tests` step). This
+ * assertion was hardcoded to the local default, so the documented CI ceiling
+ * never reached it and a contended shared runner failed the job on wall-clock
+ * alone rather than on a real regression.
+ */
+const NFR1_BUDGET_MS = Number(process.env.DEDUP_PERF_NFR1_MS ?? 250);
+
 function job(partial: Partial<JobPostDto>): JobPostDto {
   return new JobPostDto({
     title: 'Senior Software Engineer',
@@ -161,7 +170,7 @@ describe('DedupHybridService', () => {
     expect(out.metrics.mergedPairs).toBe(0);
   });
 
-  it('meets NFR-1 — 1 000 mostly-unique jobs dedup in under 250 ms', async () => {
+  it(`meets NFR-1 — 1 000 mostly-unique jobs dedup in under ${NFR1_BUDGET_MS} ms`, async () => {
     const inputs: JobPostDto[] = [];
     for (let i = 0; i < 1000; i++) {
       // Force a 5x duplication factor — 200 distinct logical jobs.
@@ -182,6 +191,6 @@ describe('DedupHybridService', () => {
 
     expect(out.metrics.outputCount).toBe(200);
     expect(out.metrics.mergedPairs).toBe(800);
-    expect(elapsed).toBeLessThan(250);
+    expect(elapsed).toBeLessThan(NFR1_BUDGET_MS);
   });
 });

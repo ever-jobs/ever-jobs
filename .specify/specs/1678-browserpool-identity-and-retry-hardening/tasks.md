@@ -10,6 +10,7 @@
 - [x] T8 — `source-ats-gusto-hosted`: the description fallback skips the company `About <Company>` rich-text block. Acceptance: with the `Description` heading relabelled, the parsed description is the real one and never the company blurb.
 - [x] T9 — `apps/api` + `@ever-jobs/models`: add the `circuit_open` `ScrapeReason` and report a breaker short-circuit as that rather than `unknown`. Acceptance: a source rejected with `ERR_SOURCE_CIRCUIT_OPEN` yields `reason: 'circuit_open'` with the site in `detail`.
 - [x] T10 — CI: add `npm run test:scripts` and run the whole `scripts/__tests__` directory, not just `docs-lint` — the Spec 5080 reserve-overlaps allocator tests ran in no job. Acceptance: the `docs-lint` job executes `spec-ranges.spec.ts`.
+- [x] T12 — `dedup-hybrid`: wire the NFR-1 wall-clock assertion in `dedup-hybrid.service.spec.ts` to `DEDUP_PERF_NFR1_MS`, the budget CI already sets and that `dedup-perf.spec.ts` already reads. It was hardcoded to the local 250 ms default, so the documented CI ceiling never reached it and a contended shared runner failed the gating `Test (Feature Plugins)` job on wall-clock alone (observed: 1 451 ms on `main`). Pre-existing since 2026-04-26, unrelated to Spec 5076–5085. Acceptance: `DEDUP_PERF_NFR1_MS=1` fails the assertion and names the budget in the test title; unset keeps 250 ms.
 - [x] T11 — Docs: `docs/index.md` row + corrected footer date (it read `2026-06-28`, ~6 weeks before the change it described), `docs/log.md` entry newest-at-top; `tsc --noEmit` and `lint:docs` clean.
 
 ## Deferred
