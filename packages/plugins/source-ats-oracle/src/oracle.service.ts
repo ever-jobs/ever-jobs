@@ -7,6 +7,8 @@ import {
   LocationDto,
   ScraperInputDto,
   Site,
+  classifyScrapeError,
+  ScrapeDiagnostics,
 } from '@ever-jobs/models';
 import { createHttpClient } from '@ever-jobs/common';
 import {
@@ -112,6 +114,7 @@ export class OracleService implements IScraper {
 
     const collected: OracleRequisition[] = [];
     let totalJobsCount: number | null = null;
+    let diagnostics: ScrapeDiagnostics | undefined;
 
     for (let page = 0; page < ORACLE_MAX_PAGES; page++) {
       if (collected.length >= resultsWanted) break;
@@ -132,6 +135,7 @@ export class OracleService implements IScraper {
         this.logger.warn(
           `OracleService: ${code} — page fetch failed (${tenant.domain} offset=${offset}, status=${status ?? 'n/a'}): ${err?.message ?? err}`,
         );
+        diagnostics = classifyScrapeError(err);
         break;
       }
 
@@ -170,7 +174,7 @@ export class OracleService implements IScraper {
     this.logger.log(
       `OracleService: ${jobs.length} jobs from ${tenant.domain} (resultsWanted=${resultsWanted}, siteNumber=${siteNumber})`,
     );
-    return new JobResponseDto(jobs);
+    return new JobResponseDto(jobs, jobs.length ? undefined : diagnostics);
   }
 
   /**

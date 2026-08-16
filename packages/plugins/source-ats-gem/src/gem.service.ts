@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SourcePlugin } from '@ever-jobs/plugin';
-import {
+import { classifyScrapeError,
   DescriptionFormat,
   IScraper,
   JobPostDto,
@@ -121,7 +121,7 @@ export class GemService implements IScraper {
       this.logger.warn(
         `Gem GraphQL batch failed for ${slug}: ${err.message ?? String(err)}`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
 
     const list = this.pickJobBoardListEnvelope(envelopes);

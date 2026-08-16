@@ -15,6 +15,123 @@
 
 ---
 
+## 2026-08-14 — Spec 5085 — retry logs name their request; `Retry-After` honored
+
+**Change:** the shared `HttpClient` — `createHttpClient` is called from **1,127** plugin packages — logged retries as `Request failed with 429, retrying (1/3) in 1000ms...`: no method, no URL, no host, no plugin. `JobsService` fans scrapers out at concurrency 64 and plugins fan their own detail requests out inside that, so hundreds of these interleave from unrelated requests and none is attributable; the repeated `(1/3)` is many different requests each making a first retry, not one escalating. Now:
+
+```
+[3a4e54f2-…] GET https://acme.wd108.myworkdayjobs.com/wday/cxs/acme/Careers/job/R-1 failed 429, retry 1/3 in 5000ms
+```
+
+- New `AsyncLocalStorage` request context in `@ever-jobs/common` (`runWithRequestId` / `getRequestId`), established by `requestContextMiddleware` in `apps/api` (an inbound `X-Request-Id` is honored, otherwise a uuid is minted). `LoggingInterceptor` reuses that id instead of minting a second unrelated one, so `X-Request-Id`, the `→`/`←` access log and the outbound retry lines carry one id. Outside a request (CLI, MCP, tests) `getRequestId()` is `undefined` and the prefix is omitted.
+- `Retry-After` (delta-seconds or HTTP-date) is honored on retryable statuses, clamped to `retryMaxDelay`, falling back to the computed backoff when absent or unparseable. Previously `429` was retried exactly like a `500` on the configured backoff (linear 1 s × attempt), i.e. hammering a host that had just stated how long to wait. This is a live behavior change for every HTTP plugin, bounded by the existing `retryMaxDelay` ceiling; retry counts, backoff curve and the retryable status set are unchanged.
+- **No repeat suppression.** An earlier proposal to collapse identical consecutive lines (`… x137`) was dropped: with concurrent fan-out, adjacency is an accident of interleaving, not a grouping, so collapsing destroys attribution rather than compressing it. Volume belongs in per-scrape summaries at the caller.
+- Out of scope: Playwright/`BrowserPool` requests do not pass through `HttpClient`; `apps/cli` and `apps/mcp` establish no context.
+- Tests: 5 new `HttpClient` cases (method+URL attribution, correlation-id prefix, `Retry-After` honored, `Retry-After` clamped to `retryMaxDelay`, backoff fallback) against a mocked axios instance with fake timers. `tsc --noEmit` and `lint:docs` clean.
+
+## 2026-08-14 — Spec 5084 — Workday pagination stops on distinct-posting progress, not on server page shape
+
+**Change:** `source-ats-workday` paged until the server returned an empty or short page — both exits are properties of the response. Some tenants answer an **out-of-range offset by re-serving page 1**, so a board whose job count is an exact multiple of `WORKDAY_PAGE_SIZE` (20) never sees a short page and pages forever; `listingsToEnrich.length` counted pushes rather than distinct postings, so re-serving the same page looked like progress and `resultsWanted` became the only reachable exit. Observed on a live tenant with `resultsWanted: 9999`: ~500 list requests, ~20 minutes, then a successful response of ~9999 copies of ~20 jobs, plus one detail request per duplicate entry — hundreds of `429`s from the tenant. Measured, same page size: the wrapping tenant returned `total=20, n=20` byte-identical at offsets 0/20/40/500 (and its *real* second page, reached with `limit=10, offset=10`, reports `total: 0` with 10 genuine new postings); a 24-job tenant returned `n=4` on page 2 then `n=0`, and was never affected. Verified on 2 tenants only.
+
+- Pagination now de-dupes by `externalPath` (`workdayListingKey`, falling back to `title`), counts distinct postings toward `resultsWanted`, and **stops when a page adds zero new postings**, logging the tenant, the offset, the page size and the distinct count. Positive `total` is a fast path (`offset >= total`); a zero/absent `total` is ignored, since a real page can report `total: 0`.
+- No page cap: page count cannot distinguish "many pages because the server repeats itself" from "many pages because the board is large" — measured page-1 totals include `boeing.wd1` 767 and `nvidia.wd5` 2000, so any cap tight enough to bound the bug would silently truncate real boards. Facet-count sums were also rejected as a job-count signal (filter counts, not job counts: one facet group summed to 0 while three summed to 20 on the same response), as was HTML scraping (the board is a 7 KB SPA shell with no requisition ids or count text).
+- Enrichment: de-dupes again immediately before `fetchDetails`, and is **skipped entirely after a pagination failure** — that listing set is untrustworthy and was what funded the 429 storm; the response carries `classifyScrapeError` diagnostics (Spec 5082) instead. Detail failures now name the tenant and add one `N of M detail requests failed` summary per scrape.
+- The shared-client shortcomings this incident exposed — retry warnings that name no method, URL, host or plugin, and 429 retried exactly like 500 without reading `Retry-After` — are **Spec 5085**: they belong to `packages/common` and affect all 1,127 HTTP plugins, not Workday, so they ship separately.
+- Tests: a wrapping tenant with and without a usable `total` (20 jobs, 1-2 list requests, 20 detail requests — not `resultsWanted`), an honest 24-job board (no truncation), a page reporting `total: 0` (still paged), `resultsWanted` below board size, and a throwing pagination (no detail requests, diagnostics preserved). 52/52 Workday, `tsc --noEmit` clean.
+
+## 2026-08-06 — Spec 5083 (follow-up) — truemetalsupply: retry a first click that opens no popup
+
+**Change:** on the live truemetalsupply Wix board the **first** popup click of a page sometimes lands before Thunderbolt has wired the popup handler, so it opens nothing; `collectDialogs` then skipped that trigger and the first real role (Estimator) was silently dropped — the board renders **7** roles but the scrape returned **6**. Reproduced live: clicking Estimator in isolation opens its popup fine, but as the first click in the sequential enumeration its `[role="dialog"]` never appears.
+
+- `source-company-truemetalsupply` — add `TRUEMETALSUPPLY_DIALOG_OPEN_ATTEMPTS = 2`; the click→open step is extracted into `openTriggerDialog`, which re-clicks (after Escape + settle) up to that many times until the popup is visible. Each attempt's visibility wait stays bounded by `TRUEMETALSUPPLY_DIALOG_VISIBLE_TIMEOUT_MS`, so a genuinely non-opening trigger still can't serialize into the navigation timeout.
+- Test: `fakePage` gains an `opensAfter` knob (a popup that only opens on its Nth click); a new case asserts a trigger whose first click opens nothing still yields its role (no first-role drop). 12/12 in the suite; `tsc --noEmit` clean.
+- Live check (production service, real site): `jobs=7 reason=ok elapsed=18.0s` — all seven roles (Project Estimator, True Service Rep, Customer Relationship Manager, Delivery Driver, CDL-A Driver, Warehouse Assoc., Asheville Facility Manager), within the 30 s caller budget.
+
+## 2026-08-05 — Spec 5083 — Headful readiness waits no longer hang the whole request
+
+**Change:** the three headful plugins each gated readiness on a `page.waitForSelector(selector, { timeout: navTimeoutMs })` where `navTimeoutMs` was the full 30 s navigation budget. When the gated element was absent (or attached but never `visible`), the wait burned the entire 30 s even though the page's content was present within ~1 s — so a downstream caller with a 30 s HTTP read timeout reported a client-side `timeout` while the operator could see the page loaded. Root cause (reproduced locally with the plugin stealth init script): gusto-hosted detail pages carry **no** `<script type="application/ld+json">` (waited 30 s; `h1` present at ~0.02 s); truemetalsupply's 8 Wix dialog triggers are attached at ~0.05 s but never Playwright-`visible` (default-state wait burned 30 s, pointlessly — `collectDialogs` enumerates via `locator.count()` regardless); desktopmetal happens to resolve its PDF anchors in ~1.7 s but shares the same fragile pattern.
+
+- `source-ats-gusto-hosted` — add `GUSTO_HOSTED_READY_TIMEOUT_SECONDS = 15`; `fetchRenderedHtml` uses it for the readiness `waitForSelector` (the `goto` keeps the 30 s nav timeout); the posting readiness selector changes from `script[type="application/ld+json"]` to `h1`. `parseDetail` still tries JSON-LD first, then the existing HTML fallback — output unchanged.
+- `source-company-truemetalsupply` — add `TRUEMETALSUPPLY_READY_TIMEOUT_SECONDS = 12` and `TRUEMETALSUPPLY_DIALOG_VISIBLE_TIMEOUT_MS = 6000`; the trigger wait becomes `{ state: 'attached', timeout: readyMs }`; the per-dialog `waitFor({ state: 'visible' })` is bounded by the dialog-visible timeout so one non-opening dialog cannot serialize into 30 s+.
+- `source-company-desktopmetal` — add `DESKTOPMETAL_READY_TIMEOUT_SECONDS = 15`; the listing readiness `waitForSelector` uses it.
+- Tests: +3 (gusto-hosted asserts the detail gate is `h1` with the ready timeout and never the JSON-LD selector; truemetalsupply asserts the trigger wait is `state:'attached'` + bounded timeout; desktopmetal asserts the listing wait uses the ready timeout). 41/41 across the three suites; `tsc --noEmit` + `lint:docs` clean.
+- Breaker-neutral and Spec 5082-compatible: plugins still return `JobResponseDto([], { reason: ... })`, never throw for a slow gate.
+- Downstream: an external caller's `timeout` is its own client-side HTTP read timeout, not a scraper reason; with the server now answering in seconds it stops firing. No code in this repo depends on any external caller.
+
+## 2026-08-05 — Spec 5082 — Per-source zero-job diagnostics (reason + `per_source`)
+
+**Change:** every zero-job outcome used to collapse to a bare `new JobResponseDto([])`, so a blocked board, a browser that failed to launch, and a genuinely empty board were indistinguishable — the only breadcrumb was a generic `... scrape failed (Error)` line in server stdout. Spec 5082 makes the reason a structured field that travels back to the caller.
+
+- `packages/models/src/dtos/scrape-diagnostics.dto.ts` (new) — `ScrapeReason` union (`ok | empty | blocked | browser_unavailable | fetch_error | timeout | bad_input | unknown`), `ScrapeDiagnostics`, `SourceDiagnosticDto`, plus `classifyScrapeError(err)` (maps a thrown error's message to a reason, keeping the real message in `detail`, truncated to 300 chars) and `looksLikeChallenge(html)` (Cloudflare/PerimeterX interstitial detector). Barrelled from `packages/models/src/dtos/index.ts`.
+- `packages/models/src/dtos/job-response.dto.ts` — optional `diagnostics?: ScrapeDiagnostics` (additive; `new JobResponseDto(jobs)` still valid).
+- Plugins `source-ats-gusto-hosted`, `source-company-desktopmetal`, `source-company-truemetalsupply` — outer catch now `classifyScrapeError(err)` and returns `new JobResponseDto([], diagnostics)` while logging `[reason]: detail`; zero-posting paths distinguish `blocked` (challenge HTML) from `empty`; gusto missing/unresolvable input → `bad_input`.
+- `apps/api/src/jobs/jobs.service.ts` — new `searchJobsWithDiagnostics()` returns `{ jobs, perSource }`; one `SourceDiagnosticDto` per settled source (jobs → `ok`, empty → plugin reason or `empty`, rejected → `classifyScrapeError`). `searchJobs()` is now a thin wrapper (six existing callers unchanged).
+- `apps/api/src/jobs/jobs.controller.ts` — `/api/jobs/search` gains additive `per_source` (standard + paginated JSON); `[]` on cache hits (no fan-out ran).
+- Tests: `packages/models/__tests__/scrape-diagnostics.spec.ts`, gusto-hosted diagnostics cases, and `searchJobsWithDiagnostics` cases in `jobs.service.spec.ts`.
+
+**Expanded scope (same spec):** the swallow-into-`[]` pattern was not limited to the three domains observed failing — it existed in every MakeDeeply-authored/reworked plugin (Specs 5001+). Extended breaker-neutral diagnostics to all of them (18 `source-company-*`, 22 `source-ats-*`, and `source-notion-pages`; the ~1,500 upstream-inherited plugins are intentionally left alone).
+
+- Simple/fetch catches now return `new JobResponseDto([], classifyScrapeError(err))` instead of a bare empty (the log line and genuine-`empty` zero-board paths are preserved). Partial-result ATS (`paycom`, `dover`, `icims`) attach the diagnostic only when the result is empty.
+- Control-flow plugins that fall through to a final return (`workday`, `breezyhr`, `rippling`, `oracle`, `successfactors`) capture the classified diagnostic into a scoped variable and attach it only when empty; `adp` emits `bad_input`/`fetch_error` on its guard returns.
+- **Breaker-neutral by design:** plugins return a diagnostic-bearing empty rather than throwing. The Spec 005 circuit breaker keys on the `site` token, which for shared ATS covers many tenants — throwing would let a handful of bad tenants open the circuit and skip healthy co-tenants in the same bulk run.
+- `classifyScrapeError` now folds in `Error.code` and non-`Error` `name`/`code` fields so axios-style `ETIMEDOUT`/`ENOTFOUND` rejections classify as `timeout`/`fetch_error`.
+
+---
+
+## 2026-08-05 — Spec 5081 — Headful browser for company plugins blocked on Cloudflare/Wix
+
+**Change:** added Spec 5081 and applied the Spec 5076 `BrowserPool` headful opt-in to `source-company-desktopmetal` and `source-company-truemetalsupply`.
+
+- `packages/plugins/source-company-desktopmetal/src/desktopmetal.service.ts` — `fetchListingHtml` now calls `BrowserPool.getPage({ proxy, stealth: true, headful: true })`.
+- `packages/plugins/source-company-truemetalsupply/src/truemetalsupply.service.ts` — `fetchOpenings` now calls `BrowserPool.getPage({ proxy, stealth: true, headful: true })` and `collectDialogs` skips hidden Wix triggers and reads each popup by the trigger's `data-popupid`/`id`.
+- Both plugins' unit tests now assert the headful/stealth `BrowserPool.getPage` call.
+- Added `.specify/specs/5081-headful-company-plugins-zero-jobs/{spec,plan,tasks}.md` and updated `docs/index.md`.
+
+## 2026-08-05 — Spec 5080 — Reserve-overlaps minting policy + duplicate-number lint
+
+**Change:** extended the Spec 787 fork range tooling.
+
+- `scripts/spec-ranges.ts` — added an optional `SpecRange.policy` field, an `Allocation { mint, reserved }` type, `reserveOverlapsAllocation()` (band-local: COUNT = Σ(dirs_at_number − 1); reserve the COUNT lowest-available numbers, gaps first; mint the next available), and an `allocateInRange()` dispatcher that keeps the default `max-in-band + 1` (empty reservations) unless a band opts into `reserve-overlaps`.
+- `scripts/next-spec-number.ts` — `computeNextSpecAllocation()` returns `{ mint, reserved }`; `computeNextSpecNumber()` returns the mint. The CLI prints only the mint on stdout and reports reserved slots on stderr.
+- `.specify/ranges.json` — the `MakeDeeply/ever-jobs` row gains `"policy": "reserve-overlaps"` and its start moves `5000 → 5001` (band `5001–5999`) so the never-used `5000` slot isn't surfaced as available; `ever-jobs/ever-jobs` is unchanged.
+- `scripts/docs-lint.ts` — new check #7: two spec directories sharing a leading number fail the lint, except the inherited cross-fork duplicates `{5024, 5025, 5026}` (allow-list doubles as the renumber ledger).
+- `.specify/specs/5076-*` / `5077-*` — dropped stale `Related specs` references to `5075` / `5074` (neither number has a directory on `develop`).
+
+**Why:** the default allocator held no clean renumber targets for numbers duplicated by a cross-fork merge, and `docs-lint` never checked number uniqueness — which is why the upstream OOM specs' `5024/5025/5026` merged in alongside the fork's own `5024/5025/5026` with a green lint. The reserve policy (opt-in, band-local, no global max) fills gaps and holds the COUNT lowest-available numbers open as renumber targets; the duplicate-number lint fails any *new* collision at PR/push time. Both are additive so `ever-jobs/ever-jobs` behavior is byte-for-byte unchanged and the change is upstream-contributable. On the current fork tree the policy reserves `5074/5075/5079` and mints this spec at `5080`. Spec 5080.
+
+---
+
+## 2026-08-05 — Spec 5078 — Restrict Docker publish workflow to the canonical repository
+
+**Change:** `.github/workflows/docker-build-publish.yml` — added `if: ${{ github.repository == 'ever-jobs/ever-jobs' }}` to both the `build` and `build-mcp` jobs.
+
+**Why:** the workflow pushes to `ghcr.io/ever-jobs/*` with the built-in `GITHUB_TOKEN`. Only the canonical repo's token can write to that namespace, so on any fork both jobs build the image and then fail the push with `denied: permission_denied: The requested installation does not exist` — a guaranteed-red workflow and wasted runner minutes on every push to `main`/`stage`/`develop`. The job-level guard makes forks skip the jobs entirely (0 runner minutes) instead of running red; the canonical repo is unaffected (tags, cache, runners, triggers unchanged). Chose the guard over templating the namespace off `github.repository_owner` (which would let forks publish to their own GHCR) as the minimal, presumption-free fix. Spec 5078.
+
+---
+
+## 2026-08-04 — Spec 5077 — Gusto-hosted headful browser + HTML parser fixes
+
+**Change:** `packages/plugins/source-ats-gusto-hosted` now uses the `BrowserPool` headful/persistent-context opt-in and parses rendered Gusto board/detail pages more robustly.
+
+- `GustoHostedService.fetchRenderedHtml` requests `BrowserPool.getPage({ ..., headful: true })` to avoid Cloudflare's ephemeral-headless challenge.
+- `parseBoard` extracts posting titles from the first `h1`–`h6` inside the `/postings/` anchor instead of the concatenated anchor text.
+- `parseDetail` falls back to HTML extraction (company, title, location, employment type, description) when the posting page no longer embeds JSON-LD.
+- Added `material.inc` and `naturaresources.com` board/detail fixtures and two new test cases.
+
+Validation: `npx jest --testPathPatterns=source-ats-gusto-hosted` green; `npx tsc --noEmit -p packages/plugins/source-ats-gusto-hosted/tsconfig.json` clean.
+
+## 2026-08-04 — Spec 5076 — BrowserPool headful / persistent-context opt-in
+
+**Change:** `packages/common/src/browser/browser-pool.ts` now supports a headful, persistent-context browser mode so source plugins can opt out of the default ephemeral headless Chromium for Cloudflare-protected sites.
+
+- `BrowserPageOptions` gains `headful?: boolean` and `userDataDir?: string`.
+- `BrowserPool.getPage()` uses `chromium.launchPersistentContext()` when either flag is requested, preserving cookies/local storage between runs.
+- Default path is `$PLAYWRIGHT_USER_DATA_DIR` or `~/.cache/ever-jobs/chromium-profile`; callers can override with `userDataDir`.
+- Existing default behavior (ephemeral headless) is unchanged.
+- Unit tests added in `packages/common/src/browser/__tests__/browser-pool.spec.ts`.
+
+Validation: `npx jest packages/common` 218/218 green; `npx tsc --noEmit -p packages/common/tsconfig.json` clean.
+
 ## 2026-07-30 — Incident response (**production OOMKill triage** — Specs 5024–5026)
 
 One incident, tracked as a single dated entry; each contributing cause has its own spec and PR.

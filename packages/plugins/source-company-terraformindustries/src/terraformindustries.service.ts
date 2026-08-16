@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
-import {
+import { classifyScrapeError,
   CompensationDto,
   IScraper,
   JobPostDto,
@@ -97,7 +97,7 @@ export class TerraformIndustriesService implements IScraper {
       this.logger.error(
         `Terraform Industries scrape failed (${this.errorLabel(error)})`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(error));
     }
   }
 

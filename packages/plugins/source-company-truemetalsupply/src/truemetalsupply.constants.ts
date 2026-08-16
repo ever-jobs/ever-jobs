@@ -80,5 +80,27 @@ export const TRUEMETALSUPPLY_DEFAULT_RESULTS = 50;
 /** Default per-request/navigation timeout (seconds). */
 export const TRUEMETALSUPPLY_DEFAULT_TIMEOUT_SECONDS = 30;
 
+/**
+ * Readiness-wait timeout (seconds) for the dialog-trigger `waitForSelector`,
+ * kept well below the navigation timeout. The triggers are attached within
+ * ~0.1 s; this only guards against a genuinely absent trigger group.
+ */
+export const TRUEMETALSUPPLY_READY_TIMEOUT_SECONDS = 12;
+
+/**
+ * Per-dialog visibility timeout (ms). A trigger's popup opens within the settle
+ * window; bounding this stops a single non-opening dialog from serializing into
+ * the full navigation timeout when many triggers are present.
+ */
+export const TRUEMETALSUPPLY_DIALOG_VISIBLE_TIMEOUT_MS = 6000;
+
 /** Milliseconds to wait after opening/closing a dialog for it to settle. */
 export const TRUEMETALSUPPLY_DIALOG_SETTLE_MS = 600;
+
+/**
+ * How many times to click a trigger while trying to open its popup. The very
+ * first Wix popup click of a page can land before Thunderbolt has wired the
+ * popup handler, so it opens nothing; a second click (after re-settling) then
+ * succeeds. Without this the first real role on the board is silently dropped.
+ */
+export const TRUEMETALSUPPLY_DIALOG_OPEN_ATTEMPTS = 2;

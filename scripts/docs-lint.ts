@@ -13,6 +13,9 @@
  *   6. (when `.specify/ranges.json` exists) the reserved fork bands are
  *      pairwise non-overlapping, and every spec number falls inside some
  *      registered band — so no fork mints a number outside a reserved lane.
+ *   7. No two spec directories share the same leading number, except a small
+ *      allow-list of numbers already duplicated across forks before this guard
+ *      existed (inherited via an upstream merge; see DUPLICATE_NUMBER_ALLOWLIST).
  *
  * Zero runtime deps — small regex parser. See Q-011 in `docs/questions.md`
  * for the trade-off vs `remark-parse` + `unified`.
@@ -41,6 +44,7 @@ export interface DocLintResult {
   missingFrontmatter: string[];
   overlappingRanges: string[];
   outOfBandSpecs: string[];
+  duplicateSpecNumbers: string[];
   ok: boolean;
 }
 
@@ -75,6 +79,13 @@ const INDEX_EXEMPT = new Set([
 ]);
 
 const TEMPLATE_PREFIX = '.specify/templates/';
+
+// Spec numbers that already carry >1 directory before this guard landed. These
+// were inherited when upstream's OOM/memory specs (which reused the fork's
+// 5024-5026) merged into the fork alongside the fork's own 5024-5026 specs, so
+// both sides' dirs now coexist. New duplicates outside this set must fail; the
+// set shrinks as an inherited duplicate is renumbered away (delete its entry).
+const DUPLICATE_NUMBER_ALLOWLIST = new Set<number>([5024, 5025, 5026]);
 
 const INLINE_LINK_RE = /\[(?:[^\]\\]|\\.)*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 const INLINE_CODE_RE = /`[^`]+`/g;
@@ -297,6 +308,7 @@ export async function lintDocs(repoRoot: string): Promise<DocLintResult> {
     missingFrontmatter: [],
     overlappingRanges: [],
     outOfBandSpecs: [],
+    duplicateSpecNumbers: [],
     ok: true,
   };
 
@@ -370,13 +382,16 @@ export async function lintDocs(repoRoot: string): Promise<DocLintResult> {
   }
   result.missingFrontmatter.sort();
 
+  // Spec-directory listing, read once for both the band check (6) and the
+  // duplicate-number check (7).
+  const specDirs = await fs
+    .readdir(path.join(repoRoot, '.specify', 'specs'), { withFileTypes: true })
+    .catch(() => [] as import('fs').Dirent[]);
+
   // 6. Fork range-registry checks (only when .specify/ranges.json exists).
   const ranges = await loadRanges(repoRoot);
   if (ranges && ranges.length > 0) {
     result.overlappingRanges = findOverlaps(ranges);
-    const specDirs = await fs
-      .readdir(path.join(repoRoot, '.specify', 'specs'), { withFileTypes: true })
-      .catch(() => [] as import('fs').Dirent[]);
     const offenders = new Set<string>();
     for (const e of specDirs) {
       if (!e.isDirectory()) continue;
@@ -389,6 +404,26 @@ export async function lintDocs(repoRoot: string): Promise<DocLintResult> {
     result.outOfBandSpecs = [...offenders].sort();
   }
 
+  // 7. Duplicate spec-number check (independent of ranges.json). Two dirs
+  // sharing a leading number are an error unless the number is allow-listed as
+  // an inherited cross-fork duplicate.
+  const dirsByNumber = new Map<number, string[]>();
+  for (const e of specDirs) {
+    if (!e.isDirectory()) continue;
+    const n = extractSpecNumber(e.name);
+    if (n === null) continue;
+    const list = dirsByNumber.get(n);
+    if (list) list.push(e.name);
+    else dirsByNumber.set(n, [e.name]);
+  }
+  const dupes: string[] = [];
+  for (const [n, dirs] of dirsByNumber) {
+    if (dirs.length > 1 && !DUPLICATE_NUMBER_ALLOWLIST.has(n)) {
+      dupes.push(`${n}: ${[...dirs].sort().join(', ')}`);
+    }
+  }
+  result.duplicateSpecNumbers = dupes.sort();
+
   result.ok =
     result.brokenLinks.length === 0 &&
     result.unindexedDocs.length === 0 &&
@@ -396,7 +431,8 @@ export async function lintDocs(repoRoot: string): Promise<DocLintResult> {
     result.outOfOrderLogEntries.length === 0 &&
     result.missingFrontmatter.length === 0 &&
     result.overlappingRanges.length === 0 &&
-    result.outOfBandSpecs.length === 0;
+    result.outOfBandSpecs.length === 0 &&
+    result.duplicateSpecNumbers.length === 0;
 
   return result;
 }
@@ -440,6 +476,12 @@ export function formatResult(result: DocLintResult): string {
       `✗ ${result.outOfBandSpecs.length} spec(s) outside every reserved range:`,
     );
     for (const s of result.outOfBandSpecs) lines.push(`    ${s}`);
+  }
+  if (result.duplicateSpecNumbers.length) {
+    lines.push(
+      `✗ ${result.duplicateSpecNumbers.length} duplicate spec number(s) (not allow-listed):`,
+    );
+    for (const d of result.duplicateSpecNumbers) lines.push(`    ${d}`);
   }
   if (result.ok) lines.push('✓ Doc-lint passed — no issues.');
   return lines.join('\n');

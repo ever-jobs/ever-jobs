@@ -1,7 +1,7 @@
 import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
-import {
+import { classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -68,7 +68,7 @@ export class PaylocityService implements IScraper {
       pageData = this.parsePageData(this.toHtml(response.data));
     } catch (err: any) {
       this.logger.error(`Paylocity board fetch error for ${guid}: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
 
     const jobs = pageData?.Jobs ?? [];

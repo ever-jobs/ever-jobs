@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SourcePlugin } from '@ever-jobs/plugin';
-import {
+import { classifyScrapeError,
   CompensationDto,
   CompensationInterval,
   getJobTypeFromString,
@@ -94,7 +94,7 @@ export class BuildcoverService implements IScraper {
       return new JobResponseDto(jobs);
     } catch (error: unknown) {
       this.logger.error(`Cover scrape failed (${this.errorLabel(error)})`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(error));
     }
   }
 

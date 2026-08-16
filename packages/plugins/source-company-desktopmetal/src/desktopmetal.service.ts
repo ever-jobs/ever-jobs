@@ -12,6 +12,8 @@ import {
   LocationDto,
   ScraperInputDto,
   Site,
+  classifyScrapeError,
+  looksLikeChallenge,
 } from '@ever-jobs/models';
 import {
   BrowserPool,
@@ -25,6 +27,7 @@ import {
   DESKTOPMETAL_COMPANY_NAME,
   DESKTOPMETAL_DEFAULT_RESULTS,
   DESKTOPMETAL_DEFAULT_TIMEOUT_SECONDS,
+  DESKTOPMETAL_READY_TIMEOUT_SECONDS,
   DESKTOPMETAL_PDF_MAX_BYTES,
   DESKTOPMETAL_PDF_CONCURRENCY,
   DESKTOPMETAL_ORIGIN,
@@ -47,8 +50,15 @@ export class DesktopmetalService implements IScraper, OnModuleDestroy {
       const html = await this.fetchListingHtml(input);
       const { openings, applyEmail } = this.parseListing(html);
       if (openings.length === 0) {
+        if (looksLikeChallenge(html)) {
+          this.logger.warn('Desktop Metal: careers page served a bot challenge');
+          return new JobResponseDto([], {
+            reason: 'blocked',
+            detail: 'careers page response looks like a bot challenge',
+          });
+        }
         this.logger.warn('Desktop Metal: no openings found on the careers page');
-        return new JobResponseDto([]);
+        return new JobResponseDto([], { reason: 'empty' });
       }
 
       const client = createHttpClient({
@@ -103,10 +113,11 @@ export class DesktopmetalService implements IScraper, OnModuleDestroy {
       this.logger.log(`Desktop Metal: scraped ${out.length} jobs`);
       return new JobResponseDto(out);
     } catch (error: unknown) {
+      const diagnostics = classifyScrapeError(error);
       this.logger.error(
-        `Desktop Metal scrape failed (${this.errorLabel(error)})`,
+        `Desktop Metal scrape failed [${diagnostics.reason}]: ${diagnostics.detail ?? this.errorLabel(error)}`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], diagnostics);
     }
   }
 
@@ -116,15 +127,17 @@ export class DesktopmetalService implements IScraper, OnModuleDestroy {
 
   /**
    * Fetch the careers listing HTML. The page is client-rendered and sits behind
-   * a Cloudflare managed challenge, so it is loaded with a stealth headless
-   * browser (a real browser clears the challenge automatically). A proxy is
-   * used when supplied. Isolated so tests can substitute captured HTML.
+   * a Cloudflare managed challenge, so it is loaded with a stealth headful
+   * browser (persistent Chromium context; a real browser clears the challenge
+   * automatically). A proxy is used when supplied. Isolated so tests can
+   * substitute captured HTML.
    */
   protected async fetchListingHtml(input: ScraperInputDto): Promise<string> {
     const proxy = input.proxies?.[0];
     const timeoutMs =
       (input.requestTimeout ?? DESKTOPMETAL_DEFAULT_TIMEOUT_SECONDS) * 1000;
-    const page = await BrowserPool.getPage({ proxy, stealth: true });
+    const readyMs = DESKTOPMETAL_READY_TIMEOUT_SECONDS * 1000;
+    const page = await BrowserPool.getPage({ proxy, stealth: true, headful: true });
     try {
       await page.goto(DESKTOPMETAL_CAREERS_URL, {
         waitUntil: 'domcontentloaded',
@@ -132,7 +145,7 @@ export class DesktopmetalService implements IScraper, OnModuleDestroy {
       });
       await page
         .waitForSelector('a[href*="/uploads/"][href$=".pdf"]', {
-          timeout: timeoutMs,
+          timeout: readyMs,
         })
         .catch(() => undefined);
       return await page.content();

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
-import {
+import { classifyScrapeError,
   CompensationDto,
   CompensationInterval,
   IScraper,
@@ -73,7 +73,7 @@ export class SolideonService implements IScraper {
       return new JobResponseDto(jobs);
     } catch (error: unknown) {
       this.logger.error(`Solideon scrape failed (${this.errorLabel(error)})`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(error));
     }
   }
 

@@ -836,4 +836,57 @@ describe('JobsService', () => {
       expect(job.salarySource).toBeUndefined();
     });
   });
+
+  describe('searchJobsWithDiagnostics — per-source reason (Spec 5082)', () => {
+    /** A scraper that resolves with zero jobs and optional plugin diagnostics. */
+    function emptyScraper(diagnostics?: {
+      reason: string;
+      detail?: string;
+    }): IScraper {
+      return {
+        scrape: jest
+          .fn()
+          .mockResolvedValue(new JobResponseDto([], diagnostics as never)),
+      };
+    }
+
+    it('marks a source with jobs `ok`, a bare-empty source `empty`', async () => {
+      const service = createService([
+        [Site.LINKEDIN, makeScraper([{ title: 'LI job' }])],
+        [Site.INDEED, emptyScraper()],
+      ]);
+      const input = new ScraperInputDto({
+        searchTerm: 'node',
+        siteType: [Site.LINKEDIN, Site.INDEED],
+      });
+      const { jobs, perSource } = await service.searchJobsWithDiagnostics(input);
+      expect(jobs.length).toBe(1);
+      const bySite = Object.fromEntries(perSource.map((s) => [s.site, s.reason]));
+      expect(bySite[Site.LINKEDIN]).toBe('ok');
+      expect(bySite[Site.INDEED]).toBe('empty');
+    });
+
+    it('propagates a plugin-supplied reason (browser_unavailable) verbatim', async () => {
+      const service = createService([
+        [
+          Site.LINKEDIN,
+          emptyScraper({ reason: 'browser_unavailable', detail: 'no chromium' }),
+        ],
+      ]);
+      const input = new ScraperInputDto({ siteType: [Site.LINKEDIN] });
+      const { perSource } = await service.searchJobsWithDiagnostics(input);
+      expect(perSource[0].reason).toBe('browser_unavailable');
+      expect(perSource[0].detail).toBe('no chromium');
+    });
+
+    it('classifies a thrown (rejected) source from its error message', async () => {
+      const service = createService([
+        [Site.LINKEDIN, failingScraper('connect ECONNREFUSED 1.2.3.4:443')],
+      ]);
+      const input = new ScraperInputDto({ siteType: [Site.LINKEDIN] });
+      const { perSource } = await service.searchJobsWithDiagnostics(input);
+      expect(perSource[0].reason).toBe('fetch_error');
+      expect(perSource[0].count).toBe(0);
+    });
+  });
 });

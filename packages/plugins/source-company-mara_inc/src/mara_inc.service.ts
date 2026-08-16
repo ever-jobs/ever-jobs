@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import type { AnyNode } from 'domhandler';
 import { SourcePlugin } from '@ever-jobs/plugin';
-import {
+import { classifyScrapeError,
   getJobTypeFromString,
   IScraper,
   JobPostDto,
@@ -55,7 +55,7 @@ export class MaraIncService implements IScraper {
       return new JobResponseDto(out);
     } catch (error: unknown) {
       this.logger.error(`Mara scrape failed (${this.errorLabel(error)})`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(error));
     }
   }
 

@@ -8,6 +8,7 @@ import {
   LocationDto,
   ScraperInputDto,
   Site,
+  classifyScrapeError,
 } from '@ever-jobs/models';
 import { BrowserPool, markdownConverter, parseLocationList } from '@ever-jobs/common';
 import type { Page } from 'playwright';
@@ -16,8 +17,11 @@ import {
   TRUEMETALSUPPLY_COMPANY_NAME,
   TRUEMETALSUPPLY_DEFAULT_RESULTS,
   TRUEMETALSUPPLY_DEFAULT_TIMEOUT_SECONDS,
+  TRUEMETALSUPPLY_READY_TIMEOUT_SECONDS,
+  TRUEMETALSUPPLY_DIALOG_OPEN_ATTEMPTS,
   TRUEMETALSUPPLY_DIALOG_SELECTOR,
   TRUEMETALSUPPLY_DIALOG_SETTLE_MS,
+  TRUEMETALSUPPLY_DIALOG_VISIBLE_TIMEOUT_MS,
   TRUEMETALSUPPLY_DIALOG_TRIGGER_SELECTOR,
   TRUEMETALSUPPLY_FACILITY_CITIES,
   TRUEMETALSUPPLY_JD_MARKER_MIN,
@@ -51,7 +55,7 @@ export class TrueMetalSupplyService implements IScraper, OnModuleDestroy {
         this.logger.warn(
           'True Metal Supply: no openings found on the careers page',
         );
-        return new JobResponseDto([]);
+        return new JobResponseDto([], { reason: 'empty' });
       }
 
       const jobs = openings.map((opening) => this.toJobPost(opening));
@@ -59,10 +63,11 @@ export class TrueMetalSupplyService implements IScraper, OnModuleDestroy {
       this.logger.log(`True Metal Supply: scraped ${out.length} jobs`);
       return new JobResponseDto(out);
     } catch (error: unknown) {
+      const diagnostics = classifyScrapeError(error);
       this.logger.error(
-        `True Metal Supply scrape failed (${this.errorLabel(error)})`,
+        `True Metal Supply scrape failed [${diagnostics.reason}]: ${diagnostics.detail ?? this.errorLabel(error)}`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], diagnostics);
     }
   }
 
@@ -71,10 +76,10 @@ export class TrueMetalSupplyService implements IScraper, OnModuleDestroy {
   }
 
   /**
-   * Drive a stealth headless browser: open `/careers`, click every dialog
-   * trigger, and capture the rendered popup for each real opening. Isolated so
-   * tests can substitute captured dialogs without a browser. The page is always
-   * closed in `finally`.
+   * Drive a stealth headful browser: open `/careers`, click every visible
+   * dialog trigger, and capture the rendered popup for each real opening.
+   * Isolated so tests can substitute captured dialogs without a browser. The
+   * page is always closed in `finally`.
    */
   protected async fetchOpenings(
     input: ScraperInputDto,
@@ -82,16 +87,22 @@ export class TrueMetalSupplyService implements IScraper, OnModuleDestroy {
     const proxy = input.proxies?.[0];
     const timeoutMs =
       (input.requestTimeout ?? TRUEMETALSUPPLY_DEFAULT_TIMEOUT_SECONDS) * 1000;
+    const readyMs = TRUEMETALSUPPLY_READY_TIMEOUT_SECONDS * 1000;
 
-    const page = await BrowserPool.getPage({ proxy, stealth: true });
+    const page = await BrowserPool.getPage({ proxy, stealth: true, headful: true });
     try {
       await page.goto(TRUEMETALSUPPLY_CAREERS_URL, {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });
+      // The Wix triggers are ATTACHED almost immediately but never become
+      // Playwright-`visible`, so the default (visible) wait burned the whole
+      // navigation timeout. Gate on `attached` with a bounded readiness timeout;
+      // `collectDialogs` enumerates them via `locator.count()` regardless.
       await page
         .waitForSelector(TRUEMETALSUPPLY_DIALOG_TRIGGER_SELECTOR, {
-          timeout: timeoutMs,
+          state: 'attached',
+          timeout: readyMs,
         })
         .catch(() => undefined);
 
@@ -102,8 +113,9 @@ export class TrueMetalSupplyService implements IScraper, OnModuleDestroy {
   }
 
   /**
-   * Click each dialog trigger in turn, read the opened popup, and keep the ones
-   * whose body looks like a job description. Deduped by title.
+   * Click each visible dialog trigger in turn, read the opened popup by its
+   * Wix popup id, and keep the ones whose body looks like a job description.
+   * Deduped by title.
    */
   private async collectDialogs(
     page: Page,
@@ -117,11 +129,13 @@ export class TrueMetalSupplyService implements IScraper, OnModuleDestroy {
     for (let i = 0; i < count; i++) {
       const trigger = triggers.nth(i);
       try {
-        await trigger.scrollIntoViewIfNeeded({ timeout: 5000 });
-        await trigger.click({ timeout: 8000 });
-        await this.sleep(TRUEMETALSUPPLY_DIALOG_SETTLE_MS);
+        const box = await trigger.boundingBox();
+        if (!box || box.width === 0 || box.height === 0) continue;
 
-        const dialog = page.locator(TRUEMETALSUPPLY_DIALOG_SELECTOR).first();
+        await trigger.scrollIntoViewIfNeeded({ timeout: 5000 });
+
+        const popupId = await trigger.getAttribute('data-popupid');
+        const dialog = await this.openTriggerDialog(page, trigger, popupId);
         if ((await dialog.count()) === 0) continue;
 
         const descriptionText = await dialog.innerText().catch(() => '');
@@ -147,6 +161,43 @@ export class TrueMetalSupplyService implements IScraper, OnModuleDestroy {
     }
 
     return openings;
+  }
+
+  /**
+   * Click a trigger and return its popup locator, retrying the click up to
+   * `TRUEMETALSUPPLY_DIALOG_OPEN_ATTEMPTS` times. The first Wix popup click of a
+   * page can land before Thunderbolt wires the handler and open nothing; a
+   * re-click (after Escape + settle) then succeeds. Each attempt's visibility
+   * wait stays bounded so a genuinely non-opening trigger can't serialize into
+   * the navigation timeout.
+   */
+  private async openTriggerDialog(
+    page: Page,
+    trigger: ReturnType<Page['locator']>,
+    popupId: string | null,
+  ): Promise<ReturnType<Page['locator']>> {
+    const dialog = popupId
+      ? page.locator(`[id="${popupId}"]`).first()
+      : page.locator(TRUEMETALSUPPLY_DIALOG_SELECTOR).first();
+
+    for (let attempt = 0; attempt < TRUEMETALSUPPLY_DIALOG_OPEN_ATTEMPTS; attempt++) {
+      await trigger.click({ timeout: 8000 }).catch(() => undefined);
+      await this.sleep(TRUEMETALSUPPLY_DIALOG_SETTLE_MS);
+
+      await dialog
+        .waitFor({
+          state: 'visible',
+          timeout: TRUEMETALSUPPLY_DIALOG_VISIBLE_TIMEOUT_MS,
+        })
+        .catch(() => undefined);
+      if (await dialog.isVisible().catch(() => false)) break;
+
+      // Not open — reset and try once more (first-click-not-wired case).
+      await page.keyboard.press('Escape').catch(() => undefined);
+      await this.sleep(TRUEMETALSUPPLY_DIALOG_SETTLE_MS);
+    }
+
+    return dialog;
   }
 
   private toJobPost(opening: TrueMetalSupplyOpening): JobPostDto {

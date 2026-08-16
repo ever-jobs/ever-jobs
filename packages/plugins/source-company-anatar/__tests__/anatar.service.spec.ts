@@ -260,15 +260,14 @@ describe("AnatarService", () => {
     expect(executive).not.toHaveProperty("jobType");
   });
 
-  it("returns empty results for transport and invalid-response failures", async () => {
+  it("returns empty results with a diagnostic for transport failures", async () => {
     mockGet.mockRejectedValueOnce({ name: "TimeoutError" });
-    await expect(
-      new AnatarService().scrape({} as ScraperInputDto),
-    ).resolves.toEqual({ jobs: [] });
+    const transport = await new AnatarService().scrape({} as ScraperInputDto);
+    expect(transport.jobs).toEqual([]);
+    expect(transport.diagnostics?.reason).toBe("timeout");
 
     mockGet.mockResolvedValueOnce({ data: { not: "html" } });
-    await expect(
-      new AnatarService().scrape({} as ScraperInputDto),
-    ).resolves.toEqual({ jobs: [] });
+    const invalid = await new AnatarService().scrape({} as ScraperInputDto);
+    expect(invalid.jobs).toEqual([]);
   });
 });

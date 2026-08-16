@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { Injectable, Logger } from "@nestjs/common";
 import * as cheerio from "cheerio";
 import { SourcePlugin } from "@ever-jobs/plugin";
-import {
+import { classifyScrapeError,
   IScraper,
   JobPostDto,
   JobResponseDto,
@@ -90,7 +90,7 @@ export class AnatarService implements IScraper {
       return new JobResponseDto(jobs);
     } catch (error: unknown) {
       this.logger.error(`Anatar scrape failed (${this.safeErrorLabel(error)})`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(error));
     }
   }
 

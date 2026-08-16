@@ -1,10 +1,14 @@
 import 'reflect-metadata';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
   DescriptionFormat,
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
+import { BrowserPool } from '@ever-jobs/common';
 import { GustoHostedService } from '../src/gusto-hosted.service';
+import { GUSTO_HOSTED_READY_TIMEOUT_SECONDS } from '../src/gusto-hosted.constants';
 
 const SLUG = 'material-hybrid-manufacturing-inc-ed3a1ae2-cd0f-4b68-b4bb-e8b4e52a3f73';
 
@@ -90,7 +94,7 @@ function detail(o: DetailOpts): string {
 /** Wire a service whose fetch seams serve a board + a per-posting detail map. */
 function serviceWith(
   boardBySlug: Record<string, string>,
-  detailBySlug: Record<string, DetailOpts | null>,
+  detailBySlug: Record<string, DetailOpts | string | null>,
 ): GustoHostedService {
   const service = new GustoHostedService();
   const seams = service as unknown as Seams;
@@ -101,7 +105,9 @@ function serviceWith(
     .spyOn(seams, 'fetchPostingHtml')
     .mockImplementation(async (postingSlug) => {
       const opts = detailBySlug[postingSlug];
-      return opts ? detail(opts) : '';
+      if (opts === null) return '';
+      if (typeof opts === 'string') return opts;
+      return detail(opts);
     });
   return service;
 }
@@ -309,5 +315,140 @@ describe('GustoHostedService', () => {
     const asPlain = await make(DescriptionFormat.PLAIN);
     expect(asPlain.jobs[0].description).toContain('Hello');
     expect(asPlain.jobs[0].description).not.toContain('<strong>');
+  });
+
+  describe('fixture-based regression tests', () => {
+    const fixture = (name: string): string =>
+      readFileSync(join(__dirname, 'fixtures', name), 'utf8');
+
+    it('parses the material.inc Gusto board and detail HTML', async () => {
+      const materialSlug = 'material-hybrid-manufacturing-inc-ed3a1ae2-cd0f-4b68-b4bb-e8b4e52a3f73';
+      const materialDetail = fixture('material-detail.html');
+      const service = serviceWith(
+        { [materialSlug]: fixture('material-board.html') },
+        {
+          'material-hybrid-manufacturing-inc-staff-battery-applications-engineer-d421d87b-e050-454b-95b8-395b7ec46c9a': materialDetail,
+        },
+      );
+
+      const res = await service.scrape(
+        input({ companySlug: materialSlug }),
+      );
+
+      expect(res.jobs).toHaveLength(3);
+      const job = res.jobs.find((j) =>
+        j.title.includes('Staff Battery Applications Engineer'),
+      )!;
+      expect(job.title).toBe('Staff Battery Applications Engineer');
+      expect(job.companyName).toBe('Material Hybrid Manufacturing Inc');
+      expect(job.location?.city).toBe('Miami');
+      expect(job.location?.state).toBe('FL');
+      expect(job.employmentType).toBe('Full time');
+      expect(job.description).toBeTruthy();
+      expect(job.description).toContain('What You');
+    });
+
+    it('parses the naturaresources.com Gusto board and detail HTML', async () => {
+      const naturaSlug = 'natura-resources-llc-629e09d9-d8bf-4616-94a7-b744e4a77616';
+      const naturaDetail = fixture('natura-detail.html');
+      const service = serviceWith(
+        { [naturaSlug]: fixture('natura-board.html') },
+        {
+          'natura-resources-llc-sr-mechnical-engineer-nuclear-5bb2a78d-445e-4c93-aab3-b264a4630a98': naturaDetail,
+        },
+      );
+
+      const res = await service.scrape(input({ companySlug: naturaSlug }));
+
+      expect(res.jobs).toHaveLength(6);
+      const job = res.jobs.find((j) =>
+        j.title.includes('Sr. Mechnical Engineer'),
+      )!;
+      expect(job.title).toBe('Sr. Mechnical Engineer, Nuclear');
+      expect(job.companyName).toBe('Natura Resources LLC');
+      expect(job.location?.city).toBe('Abilene');
+      expect(job.location?.state).toBe('TX');
+      expect(job.employmentType).toBe('Full time');
+      expect(job.description).toBeTruthy();
+      expect(job.description).toContain('Role Authority');
+    });
+  });
+
+  describe('diagnostics (Spec 5082)', () => {
+    it('reports browser_unavailable when the board fetch throws a launch error', async () => {
+      const service = new GustoHostedService();
+      jest
+        .spyOn(service as unknown as Seams, 'fetchBoardHtml')
+        .mockRejectedValue(
+          new Error(
+            "browserType.launchPersistentContext: Executable doesn't exist; run npx playwright install",
+          ),
+        );
+      const res = await service.scrape(input());
+      expect(res.jobs).toHaveLength(0);
+      expect(res.diagnostics?.reason).toBe('browser_unavailable');
+    });
+
+    it('reports blocked when the board serves a bot challenge', async () => {
+      const service = serviceWith(
+        { [SLUG]: '<html><title>Just a moment...</title><div id="cf-challenge"></div></html>' },
+        {},
+      );
+      const res = await service.scrape(input());
+      expect(res.jobs).toHaveLength(0);
+      expect(res.diagnostics?.reason).toBe('blocked');
+    });
+
+    it('reports empty when the board genuinely has no postings', async () => {
+      const service = serviceWith({ [SLUG]: '<html><body><main></main></body></html>' }, {});
+      const res = await service.scrape(input());
+      expect(res.jobs).toHaveLength(0);
+      expect(res.diagnostics?.reason).toBe('empty');
+    });
+
+    it('reports bad_input when neither slug nor url is provided', async () => {
+      const service = new GustoHostedService();
+      const res = await service.scrape(input({ companySlug: undefined }));
+      expect(res.diagnostics?.reason).toBe('bad_input');
+    });
+  });
+
+  describe('detail readiness gate (Spec 5083)', () => {
+    /** Access the protected posting fetch without loosening it to `any`. */
+    interface PostingSeam {
+      fetchPostingHtml: (
+        postingSlug: string,
+        input: ScraperInputDto,
+      ) => Promise<string>;
+    }
+
+    it('gates the detail page on `h1` with the bounded readiness timeout, not the absent JSON-LD', async () => {
+      // Gusto posting pages carry no `application/ld+json`; waiting for it burned
+      // the full navigation timeout on every detail fetch. Assert readiness now
+      // waits for `h1` with the short readiness timeout.
+      const waitForSelector = jest.fn().mockResolvedValue(null);
+      const getPageSpy = jest.spyOn(BrowserPool, 'getPage').mockResolvedValue({
+        goto: jest.fn().mockResolvedValue(undefined),
+        waitForSelector,
+        content: jest.fn().mockResolvedValue('<html><body><h1>Role</h1></body></html>'),
+        close: jest.fn().mockResolvedValue(undefined),
+      } as any);
+
+      const service = new GustoHostedService();
+      await (service as unknown as PostingSeam).fetchPostingHtml('some-posting-slug', input());
+
+      expect(waitForSelector).toHaveBeenCalledWith(
+        'h1',
+        expect.objectContaining({
+          timeout: GUSTO_HOSTED_READY_TIMEOUT_SECONDS * 1000,
+        }),
+      );
+      expect(waitForSelector).not.toHaveBeenCalledWith(
+        'script[type="application/ld+json"]',
+        expect.anything(),
+      );
+
+      getPageSpy.mockRestore();
+    });
   });
 });

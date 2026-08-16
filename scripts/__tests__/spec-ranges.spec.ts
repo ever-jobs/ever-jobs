@@ -8,6 +8,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import {
+  allocateInRange,
   extractSpecNumber,
   findOverlaps,
   findRangeForRepo,
@@ -16,14 +17,26 @@ import {
   nextNumberInRange,
   parseOriginRepo,
   rangeForNumber,
+  reserveOverlapsAllocation,
   SpecRange,
 } from '../spec-ranges';
-import { computeNextSpecNumber } from '../next-spec-number';
+import {
+  computeNextSpecAllocation,
+  computeNextSpecNumber,
+} from '../next-spec-number';
 
 const BANDS: SpecRange[] = [
   { fork: 'ever-jobs', repo: 'ever-jobs/ever-jobs', start: 1, end: 4999 },
   { fork: 'makedeeply', repo: 'MakeDeeply/ever-jobs', start: 5000, end: 5999 },
 ];
+
+const MAKEDEEPLY_RESERVE: SpecRange = {
+  fork: 'makedeeply',
+  repo: 'MakeDeeply/ever-jobs',
+  start: 5001,
+  end: 5999,
+  policy: 'reserve-overlaps',
+};
 
 async function makeRepo(layout: Record<string, string>): Promise<string> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'ever-jobs-ranges-'));
@@ -135,6 +148,82 @@ describe('nextNumberInRange', () => {
   });
 });
 
+describe('reserveOverlapsAllocation', () => {
+  it('reserves the COUNT lowest-available slots (gaps first) and mints the next', () => {
+    // Post-merge shape: 5001..5073 present, 5074/5075 gaps, 5076..5078 present,
+    // and 5024/5025/5026 each duplicated -> overlap debt 3.
+    const existing: number[] = [];
+    for (let n = 5001; n <= 5073; n++) existing.push(n);
+    existing.push(5076, 5077, 5078);
+    existing.push(5024, 5025, 5026); // second copy of each -> 3 overlaps
+    const { mint, reserved } = reserveOverlapsAllocation(
+      existing,
+      MAKEDEEPLY_RESERVE,
+    );
+    expect(reserved).toEqual([5074, 5075, 5079]);
+    expect(mint).toBe(5080);
+  });
+
+  it('reserves nothing and mints the lowest gap when there are no overlaps', () => {
+    const existing = [5000, 5001, 5003]; // gap at 5002, no duplicates
+    const { mint, reserved } = reserveOverlapsAllocation(
+      existing,
+      MAKEDEEPLY_RESERVE,
+    );
+    expect(reserved).toEqual([]);
+    expect(mint).toBe(5002);
+  });
+
+  it('mints band start on an empty band', () => {
+    expect(reserveOverlapsAllocation([], MAKEDEEPLY_RESERVE)).toEqual({
+      mint: 5001,
+      reserved: [],
+    });
+  });
+
+  it('ignores numbers outside the band when counting overlaps', () => {
+    // Duplicate 750 is in the ever-jobs band, not makedeeply's -> no debt here.
+    const existing = [750, 750, 5000, 5001];
+    const { mint, reserved } = reserveOverlapsAllocation(
+      existing,
+      MAKEDEEPLY_RESERVE,
+    );
+    expect(reserved).toEqual([]);
+    expect(mint).toBe(5002);
+  });
+
+  it('signals exhaustion via mint = end + 1 when the band cannot cover debt + mint', () => {
+    const tiny: SpecRange = {
+      fork: 'tiny',
+      repo: 'tiny/x',
+      start: 9000,
+      end: 9001,
+      policy: 'reserve-overlaps',
+    };
+    // 9000 duplicated (debt 1), 9001 taken -> no available slot left.
+    const { mint } = reserveOverlapsAllocation([9000, 9000, 9001], tiny);
+    expect(mint).toBe(9002);
+    expect(mint).toBeGreaterThan(tiny.end);
+  });
+});
+
+describe('allocateInRange', () => {
+  it('uses max-in-band + 1 with no reservations by default', () => {
+    expect(allocateInRange([5001, 5008, 5017, 750], BANDS[1])).toEqual({
+      mint: 5018,
+      reserved: [],
+    });
+  });
+
+  it('dispatches to reserve-overlaps when the band opts in', () => {
+    const existing = [5000, 5001, 5003, 5024, 5024];
+    expect(allocateInRange(existing, MAKEDEEPLY_RESERVE)).toEqual({
+      mint: 5004,
+      reserved: [5002],
+    });
+  });
+});
+
 describe('loadRanges', () => {
   it('returns null when the registry is absent', async () => {
     let root: string | null = null;
@@ -181,6 +270,45 @@ describe('computeNextSpecNumber', () => {
       expect(await computeNextSpecNumber(root)).toBe(5018);
       process.env.SPEC_FORK_REPO = 'ever-jobs/ever-jobs';
       expect(await computeNextSpecNumber(root)).toBe(787);
+    } finally {
+      await rmRf(root);
+    }
+  });
+
+  it('honors a reserve-overlaps band: fills gaps and reserves overlap slots', async () => {
+    let root: string | null = null;
+    try {
+      const layout: Record<string, string> = {
+        '.specify/ranges.json': JSON.stringify({
+          ranges: [
+            { fork: 'ever-jobs', repo: 'ever-jobs/ever-jobs', start: 1, end: 4999 },
+            {
+              fork: 'makedeeply',
+              repo: 'MakeDeeply/ever-jobs',
+              start: 5001,
+              end: 5999,
+              policy: 'reserve-overlaps',
+            },
+          ],
+        }),
+      };
+      // 5001..5073, 5076..5078 present; 5074/5075 are gaps.
+      for (let n = 5001; n <= 5073; n++) {
+        layout[`.specify/specs/${n}-x/spec.md`] = '# x\n';
+      }
+      for (const n of [5076, 5077, 5078]) {
+        layout[`.specify/specs/${n}-x/spec.md`] = '# x\n';
+      }
+      // Second directory for each of 5024/5025/5026 -> overlap debt 3.
+      for (const n of [5024, 5025, 5026]) {
+        layout[`.specify/specs/${n}-dup/spec.md`] = '# x\n';
+      }
+      root = await makeRepo(layout);
+      process.env.SPEC_FORK_REPO = 'makedeeply/ever-jobs';
+      const allocation = await computeNextSpecAllocation(root);
+      expect(allocation.reserved).toEqual([5074, 5075, 5079]);
+      expect(allocation.mint).toBe(5080);
+      expect(await computeNextSpecNumber(root)).toBe(5080);
     } finally {
       await rmRf(root);
     }

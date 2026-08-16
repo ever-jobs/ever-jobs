@@ -4,11 +4,15 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
+import { requestContextMiddleware } from './middleware/request-context.middleware';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
+
+  // ── Request correlation id ─────────────
+  app.use(requestContextMiddleware);
 
   // ── Global validation pipe ─────────────
   app.useGlobalPipes(

@@ -11,7 +11,12 @@ import { JobsController } from '../jobs.controller';
 // ---------------------------------------------------------------------------
 
 function makeJobsService(jobs: JobPostDto[] = []) {
-  return { searchJobs: jest.fn().mockResolvedValue(jobs) };
+  return {
+    searchJobs: jest.fn().mockResolvedValue(jobs),
+    searchJobsWithDiagnostics: jest
+      .fn()
+      .mockResolvedValue({ jobs, perSource: [] }),
+  };
 }
 
 function makeAnalyticsService() {

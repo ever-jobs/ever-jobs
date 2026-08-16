@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
-import {
+import { classifyScrapeError,
   IScraper,
   JobPostDto,
   JobResponseDto,
@@ -95,7 +95,7 @@ export class CanekastService implements IScraper {
       return new JobResponseDto(out);
     } catch (error: unknown) {
       this.logger.error(`CaneKast scrape failed (${this.errorLabel(error)})`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(error));
     }
   }
 

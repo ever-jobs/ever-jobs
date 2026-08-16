@@ -5,13 +5,16 @@ import {
   Logger,
   NestInterceptor,
 } from '@nestjs/common';
+import { getRequestId } from '@ever-jobs/common';
 import { Observable, tap } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 import { Request, Response } from 'express';
 
 /**
  * Global interceptor that:
- *  1. Assigns a unique X-Request-Id to every request
+ *  1. Surfaces the request-scoped correlation id as X-Request-Id (minting one only
+ *     when no request context is in scope) so the access log and the outbound
+ *     request logs the handler causes share one id
  *  2. Logs method, path, status code, and processing time
  *  3. Sets X-Process-Time and X-Request-Id response headers
  *
@@ -30,7 +33,7 @@ export class LoggingInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
 
-    const requestId = uuidv4();
+    const requestId = getRequestId() ?? uuidv4();
     const startTime = Date.now();
 
     this.logger.debug(

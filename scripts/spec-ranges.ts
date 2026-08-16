@@ -19,6 +19,20 @@ export interface SpecRange {
   repo: string;
   start: number;
   end: number;
+  /**
+   * Optional minting strategy for this band. Absent/unknown => the default
+   * `max-in-band + 1` (see `nextNumberInRange`). `"reserve-overlaps"` opts a
+   * fork into the reserve-then-mint strategy (see `reserveOverlapsAllocation`).
+   * The field is additive so a fork picks its own policy from its own row
+   * without changing the shared allocator logic for any other fork.
+   */
+  policy?: string;
+}
+
+/** Result of allocating in a band: the number to mint plus any reserved slots. */
+export interface Allocation {
+  mint: number;
+  reserved: number[];
 }
 
 export interface RangesFile {
@@ -114,6 +128,62 @@ export function findOverlaps(ranges: SpecRange[]): string[] {
 export function nextNumberInRange(existing: number[], r: SpecRange): number {
   const inBand = existing.filter((n) => inRange(n, r));
   return inBand.length ? Math.max(...inBand) + 1 : r.start;
+}
+
+/** The band-local strategy name for the reserve-then-mint policy. */
+export const RESERVE_OVERLAPS_POLICY = 'reserve-overlaps';
+
+/**
+ * Reserve-then-mint allocation, scoped entirely to the band `[r.start, r.end]`:
+ *
+ *   - COUNT   = Σ(occurrences − 1) over every number carrying >1 spec dir
+ *               (the total number of dirs that would have to move to make
+ *               every number in the band unique — i.e. the overlap debt).
+ *   - reserved = the COUNT lowest *available* numbers (gaps included, ascending);
+ *               these are renumber targets held open for the overlapping dirs.
+ *   - mint     = the lowest available number that is not reserved.
+ *
+ * "Available" = a number in the band with zero spec dirs. This fills gaps below
+ * the current max before climbing, and never looks outside the band (no global
+ * max). When the band cannot supply COUNT reservations + one mint, `mint`
+ * comes back as `r.end + 1` so the caller's exhaustion check fires.
+ */
+export function reserveOverlapsAllocation(
+  existing: number[],
+  r: SpecRange,
+): Allocation {
+  const counts = new Map<number, number>();
+  for (const n of existing) {
+    if (inRange(n, r)) counts.set(n, (counts.get(n) ?? 0) + 1);
+  }
+  let overlapDebt = 0;
+  for (const c of counts.values()) if (c > 1) overlapDebt += c - 1;
+
+  const available: number[] = [];
+  for (
+    let n = r.start;
+    n <= r.end && available.length < overlapDebt + 1;
+    n++
+  ) {
+    if (!counts.has(n)) available.push(n);
+  }
+
+  const reserved = available.slice(0, overlapDebt);
+  const mint =
+    available.length > overlapDebt ? available[overlapDebt] : r.end + 1;
+  return { mint, reserved };
+}
+
+/**
+ * Allocate the next number for a band, dispatching on its `policy`:
+ *   - `"reserve-overlaps"` -> reserve-then-mint (`reserveOverlapsAllocation`).
+ *   - anything else (incl. absent) -> default `max-in-band + 1`, no reservations.
+ */
+export function allocateInRange(existing: number[], r: SpecRange): Allocation {
+  if (r.policy === RESERVE_OVERLAPS_POLICY) {
+    return reserveOverlapsAllocation(existing, r);
+  }
+  return { mint: nextNumberInRange(existing, r), reserved: [] };
 }
 
 /** Spec-directory numbers under `.specify/specs/` (unsorted, dedup not applied). */

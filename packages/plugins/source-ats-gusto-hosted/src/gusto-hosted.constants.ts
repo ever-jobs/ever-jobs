@@ -40,6 +40,14 @@ export const GUSTO_HOSTED_DETAIL_CONCURRENCY = 4;
  */
 export const GUSTO_HOSTED_DEFAULT_TIMEOUT_SECONDS = 30;
 
+/**
+ * Readiness-wait timeout (seconds) for `waitForSelector`, kept well below the
+ * navigation timeout (and any caller HTTP timeout). A best-effort readiness gate
+ * must never consume the whole request budget when its selector is absent or
+ * slow — the board clears its Cloudflare challenge in ~3 s, so 15 s is ample.
+ */
+export const GUSTO_HOSTED_READY_TIMEOUT_SECONDS = 15;
+
 /** Builds the tenant board URL from the board slug (`<company>-<uuid>`). */
 export const gustoHostedBoardUrl = (slug: string): string =>
   `${GUSTO_HOSTED_ORIGIN}/boards/${encodeURIComponent(slug)}`;

@@ -12,6 +12,8 @@ import {
   DescriptionFormat,
   getJobTypeFromString,
   getCompensationInterval,
+  classifyScrapeError,
+  ScrapeDiagnostics,
 } from "@ever-jobs/models";
 import {
   createHttpClient,
@@ -66,6 +68,7 @@ export class RipplingService implements IScraper {
 
     const listedJobs: RipplingJob[] = [];
     const seenJobIds = new Set<string>();
+    let diagnostics: ScrapeDiagnostics | undefined;
 
     for (let page = 0; listedJobs.length < resultsWanted; page++) {
       const url = this.buildJobsUrl(companySlug, page);
@@ -83,8 +86,10 @@ export class RipplingService implements IScraper {
         jobs = this.extractJobsFromHtml(html);
       } catch (err: any) {
         const message = `Rippling page ${page} failed for ${companySlug}: ${err.message}`;
-        if (page === 0) this.logger.error(message);
-        else
+        if (page === 0) {
+          this.logger.error(message);
+          diagnostics = classifyScrapeError(err);
+        } else
           this.logger.warn(
             `${message}; returning ${listedJobs.length} partial results`,
           );
@@ -135,7 +140,10 @@ export class RipplingService implements IScraper {
     this.logger.log(
       `Rippling: scraped ${jobPosts.length} jobs for ${companySlug}`,
     );
-    return new JobResponseDto(jobPosts);
+    return new JobResponseDto(
+      jobPosts,
+      jobPosts.length ? undefined : diagnostics,
+    );
   }
 
   private buildJobsUrl(companySlug: string, page: number): string {

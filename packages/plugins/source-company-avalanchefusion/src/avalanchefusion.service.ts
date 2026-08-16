@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
-import {
+import { classifyScrapeError,
   CompensationDto,
   CompensationInterval,
   IScraper,
@@ -93,7 +93,7 @@ export class AvalanchefusionService implements IScraper {
       this.logger.error(
         `Avalanche Energy scrape failed (${this.errorLabel(error)})`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(error));
     }
   }
 

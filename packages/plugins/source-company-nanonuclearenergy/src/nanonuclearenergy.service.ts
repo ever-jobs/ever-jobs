@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
-import {
+import { classifyScrapeError,
   CompensationDto,
   CompensationInterval,
   getJobTypeFromString,
@@ -86,7 +86,7 @@ export class NanonuclearenergyService implements IScraper {
       this.logger.error(
         `NANO Nuclear Energy scrape failed (${this.errorLabel(error)})`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(error));
     }
   }
 
