@@ -111,16 +111,21 @@ export class SuccessFactorsService implements IScraper {
       this.logger.log(
         'SuccessFactors: OData/CSB returned zero, falling back to careersection HTML',
       );
+      // The careersection fallback decides the outcome, so it owns the reported
+      // reason. Step 1's OData error is a routing signal — a tenant that does not
+      // publish OData always errors there — and reporting it would name the
+      // surface we deliberately moved on from instead of the one that failed.
+      const htmlDiags: ScrapeDiagnostics[] = [];
       const htmlJobs = await this.scrapeHtml(
         input,
         instance,
         companyId,
         resultsWanted,
-        diags,
+        htmlDiags,
       );
       return new JobResponseDto(
         htmlJobs,
-        htmlJobs.length ? undefined : diags[0],
+        htmlJobs.length ? undefined : htmlDiags[0],
       );
     }
 

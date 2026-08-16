@@ -15,6 +15,25 @@
 
 ---
 
+## 2026-08-16 — Spec 1678 — persistent-context identity; correlation-id and `Retry-After` hardening
+
+**Change:** six defects found reviewing PR #53 (Specs 5076–5085) before promoting it to production, all in code that shipped in that PR. They share a cause: the new tests mocked every collaborator and asserted only that Playwright/axios had been called, so none of these behaviours was pinned.
+
+- **`BrowserPool` cached persistent contexts on `userDataDir` alone.** All three headful callers omit `userDataDir`, so all three shared one cached context — and `ctxOpts` (proxy, User-Agent, viewport) only applies at launch, so the first caller's options were imposed on every later one. A source configured to egress through a proxy reused a context launched without one and went out direct. Contexts are now keyed on a `PersistentIdentity` (`headful`, `stealth`, `proxy`), each identity getting its own profile directory under the configured root — Chromium locks a profile to one process, so distinct identities need distinct directories for the proxy to be honourable at all.
+- **Liveness was `context.pages().length >= 0`** — true for every array, and `pages()` on a closed context returns `[]` without throwing, so one crash poisoned every later headful call until the pod restarted. Replaced with a `close`-event subscription that evicts the context; the in-flight launch guard is now cleared in a `.finally()`, so a failed launch is retryable.
+- **The stealth init script was re-registered on every `getPage()`** against a reused context, and Playwright replays every registered script into every new page — after N scrapes each page ran N copies. Now once per context. The blank page `launchPersistentContext` opens is disposed once the caller's first real page exists.
+- **`headful` had no kill switch.** `EVER_JOBS_BROWSER_HEADFUL=false` now downgrades to headless with one warning; default unchanged. (Moot in production today, where the runtime image ships no Chromium at all and every browser source reports `browser_unavailable` — but the switch is what keeps headful off until that changes.)
+- **The inbound `X-Request-Id` was adopted verbatim**, then reflected into a response header and interpolated into every outbound retry log line, unbounded. Now ≤128 chars of `[A-Za-z0-9._:-]`, else a minted UUID.
+- **A malformed `Retry-After` discarded the backoff.** `retryAfterMs()` maps an unparseable or past value to `0`, and `?? backoff` only falls back on `null` — so `Retry-After: -30` turned a 429 into an immediate re-request. Now `min(retryMaxDelay, max(backoff, retryAfter ?? 0))`: it may only ever push a retry later.
+
+Also: SuccessFactors reported the step-1 OData error — a routing signal, by its own comment — instead of the careersection failure that actually decided the outcome; the fallback now owns its diagnostic. Gusto-hosted's description fallback took `$('.rich-text-container').first()`, which is the company `About <Company>` blurb (it precedes Description and shares the class), so a missing or relabelled Description heading yielded company boilerplate as the job description. Breaker short-circuits are now a distinct `circuit_open` reason rather than `unknown`. `scripts/__tests__` ran in CI only for `docs-lint`, leaving the Spec 5080 allocator tests executing in no job — `npm run test:scripts` now runs the directory.
+
+**Deferred:** bounding `per_source` (~1650 rows, ~100–200 KB on every fresh response). Real, but response bloat rather than a memory driver, and every fix changes an API contract that shipped days ago — left for a decision.
+
+**Docs:** the `docs/index.md` footer read `2026-06-28`, ~6 weeks before the change it described; corrected.
+
+---
+
 ## 2026-08-14 — Spec 5085 — retry logs name their request; `Retry-After` honored
 
 **Change:** the shared `HttpClient` — `createHttpClient` is called from **1,127** plugin packages — logged retries as `Request failed with 429, retrying (1/3) in 1000ms...`: no method, no URL, no host, no plugin. `JobsService` fans scrapers out at concurrency 64 and plugins fan their own detail requests out inside that, so hundreds of these interleave from unrelated requests and none is attributable; the repeated `(1/3)` is many different requests each making a first retry, not one escalating. Now:
