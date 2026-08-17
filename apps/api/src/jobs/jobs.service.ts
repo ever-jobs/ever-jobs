@@ -3,7 +3,7 @@ import {
   Site, ScraperInputDto, JobPostDto, JobResponseDto, IScraper,
   Country, SalarySource, CompensationDto,
   ERR_SOURCE_CIRCUIT_OPEN,
-  SourceDiagnosticDto, ScrapeReason, classifyScrapeError,
+  SourceDiagnosticDto, ScrapeReason, ScrapeDiagnostics, classifyScrapeError,
 } from '@ever-jobs/models';
 import { extractSalary, convertToAnnual, siteFromDomain, deriveSiteToken } from '@ever-jobs/common';
 import { ConfigService } from '@nestjs/config';
@@ -311,7 +311,14 @@ export class JobsService implements OnModuleInit {
           new SourceDiagnosticDto(site, jobs.length, reason, diag?.detail),
         );
       } else {
-        const diag = classifyScrapeError(result?.reason);
+        // "We deliberately stopped calling this source" is its own operational
+        // state, not an unclassifiable error — the breaker is already tracked
+        // for metrics and logs, so don't collapse it to `unknown` here.
+        const err = result?.reason as { code?: unknown } | undefined;
+        const diag =
+          err?.code === ERR_SOURCE_CIRCUIT_OPEN
+            ? new ScrapeDiagnostics('circuit_open', `circuit open for ${site}`)
+            : classifyScrapeError(result?.reason);
         perSource.push(new SourceDiagnosticDto(site, 0, diag.reason, diag.detail));
       }
     });

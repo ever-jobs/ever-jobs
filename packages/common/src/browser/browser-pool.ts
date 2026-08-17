@@ -6,6 +6,7 @@ import type {
   LaunchOptions,
   BrowserContextOptions,
 } from 'playwright';
+import { createHash } from 'crypto';
 import { homedir } from 'os';
 import { join } from 'path';
 import { STEALTH_INIT_SCRIPT, USER_AGENT_POOL, VIEWPORT_POOL } from './stealth-scripts';
@@ -26,17 +27,33 @@ export interface BrowserPageOptions {
   /**
    * Use a headful (visible) browser instead of the default headless Chromium.
    * Useful for Cloudflare or other bot-detection that rejects headless contexts.
+   *
+   * Honored only when `EVER_JOBS_BROWSER_HEADFUL` is not `false`; see
+   * `headfulEnabled`. A headful request always uses a persistent context.
    */
   headful?: boolean;
   /**
-   * Persistent context profile directory. When omitted and `headful` is true,
-   * a default directory under the user's cache is used.
+   * Root directory for persistent context profiles. Each distinct launch
+   * identity (headful / stealth / proxy) gets its own profile *underneath*
+   * this root — see `profileDirFor`.
    */
   userDataDir?: string;
 }
 
 /**
- * Shared singleton browser pool for headless Chromium scraping.
+ * The inputs that decide whether two persistent-context requests may share one
+ * Chromium profile. Chromium locks a profile directory to a single process, and
+ * these options can only be applied at launch, so requests that disagree on any
+ * of them need separate profiles rather than silent reuse.
+ */
+interface PersistentIdentity {
+  headful: boolean;
+  stealth: boolean;
+  proxy?: string;
+}
+
+/**
+ * Shared singleton browser pool for Chromium scraping.
  *
  * Usage:
  *   const page = await BrowserPool.getPage();
@@ -50,8 +67,19 @@ export interface BrowserPageOptions {
 export class BrowserPool {
   private static browser: Browser | null = null;
   private static launching: Promise<Browser> | null = null;
+  /** Live persistent contexts, keyed by launch identity (see `identityKey`). */
   private static readonly persistentContexts: Map<string, BrowserContext> = new Map();
   private static readonly persistentLaunching: Map<string, Promise<BrowserContext>> = new Map();
+  /**
+   * Contexts Playwright has told us are gone. A `BrowserContext` exposes no
+   * `isConnected()`, so liveness is tracked by subscribing to its `close` event
+   * rather than inferred from a method call that cannot fail.
+   */
+  private static readonly closedContexts = new WeakSet<BrowserContext>();
+  /** Contexts the stealth init script has already been registered on. */
+  private static readonly stealthApplied = new WeakSet<BrowserContext>();
+  /** The blank page `launchPersistentContext` opens for us, pending disposal. */
+  private static readonly initialPages = new WeakMap<BrowserContext, Page[]>();
   private static readonly logger = new Logger(BrowserPool.name);
 
   /** Default Chromium launch options. */
@@ -65,9 +93,18 @@ export class BrowserPool {
     ],
   };
 
-  /** Default persistent context profile directory. */
+  /** Root directory holding persistent context profiles. */
   private static get defaultUserDataDir(): string {
     return process.env.PLAYWRIGHT_USER_DATA_DIR ?? join(homedir(), '.cache', 'ever-jobs', 'chromium-profile');
+  }
+
+  /**
+   * Whether a `headful: true` request is honored. Headful needs a display
+   * server, which no deployed environment has, so this is the kill switch that
+   * forces every caller back onto the headless path without a code change.
+   */
+  private static get headfulEnabled(): boolean {
+    return process.env.EVER_JOBS_BROWSER_HEADFUL !== 'false';
   }
 
   /** Default (non-stealth) User-Agent string. */
@@ -106,40 +143,78 @@ export class BrowserPool {
     return this.launching;
   }
 
+  /** Cache key for a persistent context: the profile root plus its identity. */
+  private static identityKey(userDataDir: string, identity: PersistentIdentity): string {
+    return `${userDataDir}|${identity.headful}|${identity.stealth}|${identity.proxy ?? ''}`;
+  }
+
   /**
-   * Get (or lazily launch) a persistent Chromium context backed by `userDataDir`.
+   * Profile directory for one launch identity, nested under the configured
+   * root. Two requests that disagree on proxy, stealth or headfulness cannot
+   * share a profile — Chromium locks the directory to one process, and a
+   * session pinned to one egress IP must not be replayed through another — so
+   * each identity gets a deterministic sibling directory instead.
+   */
+  private static profileDirFor(userDataDir: string, identity: PersistentIdentity): string {
+    const digest = createHash('sha1')
+      .update(this.identityKey('', identity))
+      .digest('hex')
+      .slice(0, 8);
+    return join(userDataDir, digest);
+  }
+
+  /**
+   * Get (or lazily launch) a persistent Chromium context for one launch
+   * identity. Contexts are cached per identity, never per directory alone —
+   * caching on the directory would silently impose the first caller's proxy,
+   * User-Agent and viewport on every later caller.
    */
   static async getPersistentContext(
     userDataDir: string,
-    headful: boolean,
+    identity: PersistentIdentity,
     ctxOpts: BrowserContextOptions,
   ): Promise<BrowserContext> {
-    const existing = this.persistentContexts.get(userDataDir);
-    if (existing && this.isContextConnected(existing)) return existing;
+    const key = this.identityKey(userDataDir, identity);
 
-    const launching = this.persistentLaunching.get(userDataDir);
+    const existing = this.persistentContexts.get(key);
+    if (existing && this.isContextUsable(existing)) return existing;
+    // A context that closed under us must not be handed out again.
+    if (existing) this.persistentContexts.delete(key);
+
+    const launching = this.persistentLaunching.get(key);
     if (launching) return launching;
 
+    const profileDir = this.profileDirFor(userDataDir, identity);
     const promise = (async () => {
-      try {
-        this.logger.log(`Launching persistent Chromium context (headful=${headful}) at ${userDataDir}…`);
-        const { chromium } = await import('playwright');
-        const context = await chromium.launchPersistentContext(userDataDir, {
-          ...this.DEFAULT_OPTS,
-          ...ctxOpts,
-          headless: headful ? false : this.DEFAULT_OPTS.headless,
-        });
-        this.persistentContexts.set(userDataDir, context);
-        this.logger.log('Persistent Chromium context launched');
-        return context;
-      } catch (err) {
-        this.persistentLaunching.delete(userDataDir);
-        throw err;
-      }
+      this.logger.log(
+        `Launching persistent Chromium context (headful=${identity.headful}) at ${profileDir}…`,
+      );
+      const { chromium } = await import('playwright');
+      const context = await chromium.launchPersistentContext(profileDir, {
+        ...this.DEFAULT_OPTS,
+        ...ctxOpts,
+        headless: identity.headful ? false : this.DEFAULT_OPTS.headless,
+      });
+
+      // `launchPersistentContext` opens a blank page we never asked for. Hold
+      // it until the caller's first real page exists, then dispose of it —
+      // closing every page of a persistent context can take the context down.
+      this.initialPages.set(context, context.pages());
+
+      context.on('close', () => {
+        this.closedContexts.add(context);
+        this.evictContext(context);
+      });
+
+      this.persistentContexts.set(key, context);
+      this.logger.log('Persistent Chromium context launched');
+      return context;
     })();
 
-    this.persistentLaunching.set(userDataDir, promise);
-    return promise;
+    this.persistentLaunching.set(key, promise);
+    // Clear the in-flight guard on both paths: leaving a settled promise in the
+    // map made a failed launch un-retryable until the process restarted.
+    return promise.finally(() => this.persistentLaunching.delete(key));
   }
 
   /**
@@ -148,12 +223,12 @@ export class BrowserPool {
    *
    * @param opts.proxy      — route all traffic through this proxy server
    * @param opts.stealth    — enable anti-bot evasion (UA/viewport rotation, JS patches)
-   * @param opts.headful    — launch a headful persistent context
-   * @param opts.userDataDir — persistent context profile directory
+   * @param opts.headful    — launch a headful persistent context (see `headfulEnabled`)
+   * @param opts.userDataDir — root directory for persistent context profiles
    */
   static async getPage(opts?: BrowserPageOptions): Promise<Page> {
     const stealth = opts?.stealth ?? false;
-    const headful = opts?.headful ?? false;
+    const headful = this.resolveHeadful(opts?.headful ?? false);
     const wantsPersistent = headful || !!opts?.userDataDir;
 
     const ctxOpts: BrowserContextOptions = {
@@ -170,9 +245,12 @@ export class BrowserPool {
 
     if (wantsPersistent) {
       const userDataDir = opts?.userDataDir ?? this.defaultUserDataDir;
-      const context = await this.getPersistentContext(userDataDir, headful, ctxOpts);
+      const identity: PersistentIdentity = { headful, stealth, proxy: opts?.proxy };
+      const context = await this.getPersistentContext(userDataDir, identity, ctxOpts);
       await this.applyStealthToContext(context, stealth);
-      return context.newPage();
+      const page = await context.newPage();
+      await this.disposeInitialPages(context);
+      return page;
     }
 
     const browser = await this.getBrowser();
@@ -186,8 +264,8 @@ export class BrowserPool {
    * Safe to call multiple times.
    */
   static async close(): Promise<void> {
-    for (const [userDataDir, context] of this.persistentContexts) {
-      this.logger.log(`Closing persistent Chromium context ${userDataDir}…`);
+    for (const [key, context] of this.persistentContexts) {
+      this.logger.log(`Closing persistent Chromium context ${key}…`);
       await context.close().catch(() => {});
     }
     this.persistentContexts.clear();
@@ -201,20 +279,54 @@ export class BrowserPool {
     }
   }
 
-  /** Apply the shared stealth init script to a context if requested. */
+  /** Honor `headful` only where a display server can plausibly exist. */
+  private static resolveHeadful(requested: boolean): boolean {
+    if (!requested) return false;
+    if (this.headfulEnabled) return true;
+
+    this.logger.warn(
+      'Headful browser requested but EVER_JOBS_BROWSER_HEADFUL=false — using headless',
+    );
+    return false;
+  }
+
+  /**
+   * Register the shared stealth init script on a context, once. Playwright
+   * accumulates init scripts per context and replays all of them into every new
+   * page, so re-registering on each `getPage()` against a long-lived persistent
+   * context grew without bound.
+   */
   private static async applyStealthToContext(context: BrowserContext, stealth: boolean): Promise<void> {
-    if (stealth) {
-      await context.addInitScript(STEALTH_INIT_SCRIPT);
+    if (!stealth || this.stealthApplied.has(context)) return;
+
+    await context.addInitScript(STEALTH_INIT_SCRIPT);
+    this.stealthApplied.add(context);
+  }
+
+  /** Close the blank page Playwright opened with a persistent context. */
+  private static async disposeInitialPages(context: BrowserContext): Promise<void> {
+    const pending = this.initialPages.get(context);
+    if (!pending?.length) return;
+
+    this.initialPages.delete(context);
+    for (const page of pending) {
+      if (!page.isClosed()) await page.close().catch(() => {});
     }
   }
 
-  /** Best-effort check that a persistent context is still usable. */
-  private static isContextConnected(context: BrowserContext): boolean {
-    try {
-      // BrowserContext does not expose isConnected; ask for pages and swallow failure.
-      return context.pages().length >= 0;
-    } catch {
-      return false;
+  /** Whether a cached persistent context is still usable. */
+  private static isContextUsable(context: BrowserContext): boolean {
+    return !this.closedContexts.has(context);
+  }
+
+  /** Drop a dead context so the next request relaunches instead of reusing it. */
+  private static evictContext(context: BrowserContext): void {
+    for (const [key, cached] of this.persistentContexts) {
+      if (cached === context) {
+        this.persistentContexts.delete(key);
+        this.logger.warn(`Persistent Chromium context closed unexpectedly (${key}) — evicted`);
+        return;
+      }
     }
   }
 }

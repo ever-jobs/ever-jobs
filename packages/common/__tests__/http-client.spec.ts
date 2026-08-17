@@ -106,6 +106,40 @@ describe('HttpClient retry attribution and Retry-After — Spec 5085', () => {
 
     expect(logger.mock.calls[0][0]).toContain('in 1500ms');
   });
+
+  /**
+   * Retry-After may only ever push the retry LATER. A malformed, negative or
+   * already-past value parses to 0 ms, and honouring that verbatim discarded the
+   * backoff and turned a 429 into an immediate re-request.
+   */
+  it.each([
+    ['a malformed value', 'not-a-date'],
+    ['a negative delta', '-30'],
+    ['an already-past HTTP-date', 'Wed, 21 Oct 2015 07:28:00 GMT'],
+    ['an empty value', '   '],
+  ])('keeps the computed backoff for %s', async (_label, header) => {
+    const client = new HttpClient({ retries: 1, retryDelay: 2000 });
+    const logger = jest.spyOn((client as any).logger, 'warn').mockImplementation(() => undefined);
+    mockAxiosRequest
+      .mockRejectedValueOnce(httpError(429, { 'retry-after': header }))
+      .mockResolvedValueOnce({ data: 'ok' });
+
+    await run(client.get('https://acme.example.com/api'));
+
+    expect(logger.mock.calls[0][0]).toContain('in 2000ms');
+  });
+
+  it('never retries sooner than the backoff even when the server asks for less', async () => {
+    const client = new HttpClient({ retries: 1, retryDelay: 5000 });
+    const logger = jest.spyOn((client as any).logger, 'warn').mockImplementation(() => undefined);
+    mockAxiosRequest
+      .mockRejectedValueOnce(httpError(429, { 'retry-after': '1' }))
+      .mockResolvedValueOnce({ data: 'ok' });
+
+    await run(client.get('https://acme.example.com/api'));
+
+    expect(logger.mock.calls[0][0]).toContain('in 5000ms');
+  });
 });
 
 /**

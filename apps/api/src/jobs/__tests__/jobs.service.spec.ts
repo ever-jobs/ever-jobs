@@ -10,6 +10,7 @@ import {
   SalarySource,
   CompensationDto,
   CompensationInterval,
+  ERR_SOURCE_CIRCUIT_OPEN,
 } from '@ever-jobs/models';
 import { PluginRegistry } from '@ever-jobs/plugin';
 
@@ -887,6 +888,30 @@ describe('JobsService', () => {
       const { perSource } = await service.searchJobsWithDiagnostics(input);
       expect(perSource[0].reason).toBe('fetch_error');
       expect(perSource[0].count).toBe(0);
+    });
+
+    /**
+     * "We deliberately stopped calling this source" is a distinct operational
+     * state from "something failed and we can't categorize it" — the breaker is
+     * already separated in the metrics and logs, so the diagnostics must not
+     * collapse it back to `unknown`.
+     */
+    it('reports a breaker short-circuit as `circuit_open`, not `unknown`', async () => {
+      const openBreaker: IScraper = {
+        scrape: jest.fn().mockRejectedValue(
+          Object.assign(new Error(`Circuit open for site ${Site.LINKEDIN}`), {
+            code: ERR_SOURCE_CIRCUIT_OPEN,
+          }),
+        ),
+      };
+      const service = createService([[Site.LINKEDIN, openBreaker]]);
+      const input = new ScraperInputDto({ siteType: [Site.LINKEDIN] });
+
+      const { perSource } = await service.searchJobsWithDiagnostics(input);
+
+      expect(perSource[0].reason).toBe('circuit_open');
+      expect(perSource[0].count).toBe(0);
+      expect(perSource[0].detail).toContain(Site.LINKEDIN);
     });
   });
 });

@@ -348,6 +348,41 @@ describe('GustoHostedService', () => {
       expect(job.description).toContain('What You');
     });
 
+    /**
+     * The company "About <Company>" blurb and the job Description are both
+     * `.rich-text-container`, and About comes first. When the Description
+     * heading does not match, the fallback must not hand the blurb back as the
+     * job's own description.
+     */
+    it('does not fall back to the company About blurb as the description', async () => {
+      const materialSlug = 'material-hybrid-manufacturing-inc-ed3a1ae2-cd0f-4b68-b4bb-e8b4e52a3f73';
+      // Relabel the Description heading so the primary heading match misses and
+      // the fallback is the branch under test.
+      const relabelled = fixture('material-detail.html').replace(
+        '>Description<',
+        '>Role details<',
+      );
+      expect(relabelled).not.toContain('>Description<');
+
+      const service = serviceWith(
+        { [materialSlug]: fixture('material-board.html') },
+        {
+          'material-hybrid-manufacturing-inc-staff-battery-applications-engineer-d421d87b-e050-454b-95b8-395b7ec46c9a':
+            relabelled,
+        },
+      );
+
+      const res = await service.scrape(input({ companySlug: materialSlug }));
+      const job = res.jobs.find((j) =>
+        j.title.includes('Staff Battery Applications Engineer'),
+      )!;
+
+      // Positive assertion first: without it the negative one below would also
+      // hold for an empty description, and the test would pass vacuously.
+      expect(job.description).toContain('What You');
+      expect(job.description).not.toContain('rewriting the rules');
+    });
+
     it('parses the naturaresources.com Gusto board and detail HTML', async () => {
       const naturaSlug = 'natura-resources-llc-629e09d9-d8bf-4616-94a7-b744e4a77616';
       const naturaDetail = fixture('natura-detail.html');
