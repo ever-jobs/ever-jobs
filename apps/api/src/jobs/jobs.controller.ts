@@ -143,6 +143,18 @@ export class JobsController {
      * `all` returns every row. Both are capped, and the summary always reports
      * the full picture regardless of what was returned.
      */
+    /**
+     * Deliberately not `parseNum`: that returns `Number(v) || undefined`, so a
+     * literal `0` is falsy and falls through to the default cap — which would
+     * silently truncate the very request (`?diagnostics_limit=0`) documented as
+     * meaning "no cap". Zero and negatives are passed through for the helper to
+     * interpret; only absent or non-numeric input takes the default.
+     */
+    const parseLimit = (v?: string): number | undefined => {
+      if (v === undefined) return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
     const parseDiagnosticsMode = (v?: string): DiagnosticsMode => {
       if (v === undefined) return 'off';
       const s = v.toLowerCase();
@@ -232,7 +244,7 @@ export class JobsController {
     const diagnostics = summarizeSourceDiagnostics(
       perSource,
       parseDiagnosticsMode(diagnosticsRaw),
-      parseNum(diagnosticsLimitRaw) ?? DEFAULT_DIAGNOSTICS_LIMIT,
+      parseLimit(diagnosticsLimitRaw) ?? DEFAULT_DIAGNOSTICS_LIMIT,
     );
 
     // ── Pagination ────────────────────────

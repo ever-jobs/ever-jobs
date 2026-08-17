@@ -527,5 +527,41 @@ describe('JobsController', () => {
 
       expect(result.per_source).toEqual([]);
     });
+
+    /**
+     * `?diagnostics_limit=0` is the documented "no cap" escape hatch. The generic
+     * `parseNum` helper returns `Number(v) || undefined`, so a literal zero is
+     * falsy and silently fell through to the 200-row default — truncating the
+     * exact request that asked not to be truncated.
+     */
+    it('treats ?diagnostics_limit=0 as no cap, not as the default', async () => {
+      const many = Array.from(
+        { length: 250 },
+        (_, i) => new SourceDiagnosticDto(`s-${i}`, 0, 'blocked', 'nope'),
+      );
+      const jobsService = {
+        searchJobs: jest.fn().mockResolvedValue([]),
+        searchJobsWithDiagnostics: jest.fn().mockResolvedValue({ jobs: [], perSource: many }),
+      };
+      const controller = new JobsController(
+        jobsService as any,
+        makePassthroughAggregator() as any,
+        makeAnalyticsService() as any,
+        makeCacheService(undefined) as any,
+        { get: (_k: string, d?: unknown) => d } as any,
+      );
+
+      const result = await search(controller, 'all', '0');
+
+      expect(result.per_source).toHaveLength(250);
+      expect(result.per_source_summary).toMatchObject({ returned: 250, truncated: 0 });
+    });
+
+    it('falls back to the default cap for a non-numeric limit', async () => {
+      const result = await search(controllerWithDiagnostics(), 'all', 'abc');
+
+      expect(result.per_source).toHaveLength(5);
+      expect(result.per_source_summary.truncated).toBe(0);
+    });
   });
 });
