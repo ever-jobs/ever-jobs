@@ -368,7 +368,19 @@ export class GustoHostedService implements IScraper, OnModuleDestroy {
         .first();
       if (container.length) return container.html() ?? null;
     }
-    const fallback = $('.rich-text-container').first();
+    // Fall back to the first rich-text block that is NOT the company "About
+    // <Company>" blurb. Both sections use `.rich-text-container` and the About
+    // one comes first in document order, so an unqualified `.first()` hands
+    // company boilerplate back as the per-job description.
+    const fallback = $('.rich-text-container')
+      .filter((_i, el) => {
+        const label = $(el)
+          .closest('[data-controller="rich-text"]')
+          .prev('h1, h2, h3, h4, h5, h6')
+          .text();
+        return !/^\s*About\s+(?!the\s+Role)/i.test(label);
+      })
+      .first();
     return fallback.length ? (fallback.html() ?? null) : null;
   }
 

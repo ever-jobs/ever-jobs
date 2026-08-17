@@ -27,8 +27,10 @@ jobs:
       - name: Run docs-lint
         run: npm run lint:docs
 
-      - name: Run docs-lint unit tests
-        run: npx jest --testPathPatterns 'scripts/__tests__/docs-lint' --verbose
+      # The whole directory, not just docs-lint: the spec-ranges allocator and the
+      # probe/scaffold/assemble helpers live here too and ran in no job at all.
+      - name: Run scripts unit tests
+        run: npm run test:scripts
 
   build:
     name: Build & Type-Check

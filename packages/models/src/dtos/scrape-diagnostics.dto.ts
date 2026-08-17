@@ -15,6 +15,8 @@ export type ScrapeReason =
   | 'fetch_error'
   | 'timeout'
   | 'bad_input'
+  /** The breaker was open, so the source was deliberately not called at all. */
+  | 'circuit_open'
   | 'unknown';
 
 /** Reason a single scrape produced the result it did. Optional on a response. */

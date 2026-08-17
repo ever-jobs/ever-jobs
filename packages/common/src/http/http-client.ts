@@ -161,10 +161,12 @@ export class HttpClient {
             ? this.retryDelay * Math.pow(2, attempt)
             : this.retryDelay * (attempt + 1);
           // A server that sent Retry-After has stated its own terms; retrying sooner
-          // (429 especially) only extends the block.
+          // (429 especially) only extends the block. Take whichever wait is longer:
+          // a malformed, negative or already-past Retry-After parses to 0 ms, and
+          // honouring that verbatim would discard the backoff and hammer the host.
           const delay = Math.min(
             this.retryMaxDelay,
-            this.retryAfterMs(error.response?.headers) ?? backoff,
+            Math.max(backoff, this.retryAfterMs(error.response?.headers) ?? 0),
           );
 
           this.logger.warn(`${this.describeRequest(config)} failed ${status}, retry ${attempt + 1}/${this.maxRetries} in ${delay}ms`);
