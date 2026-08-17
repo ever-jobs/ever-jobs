@@ -184,11 +184,23 @@ jobs:
       # documented env overrides (Spec 722 / FR-9, D-5): local defaults stay
       # strict (250 ms / 2 500 ms); CI ceilings still catch the 24x-over
       # class of regression these gates exist for.
+      #
+      # Two DIFFERENT budgets, deliberately:
+      #   DEDUP_PERF_NFR1_MS  — dedup-perf.spec.ts, the authoritative gate. Builds
+      #     the batch once and takes the max over 5 WARMED runs (20-40 ms observed
+      #     here), so it stays tight.
+      #   DEDUP_COLD_NFR1_MS  — the single unwarmed run in dedup-hybrid.service.spec.ts,
+      #     which includes JIT compilation of the whole pipeline. Observed at
+      #     1 251 ms and 1 451 ms on this runner, so a 1 000 ms ceiling failed a
+      #     gating job on warm-up rather than on a regression. 4 000 ms leaves ~2.7x
+      #     headroom over the worst observation while still catching a gross
+      #     regression. Sharing one knob would force the real gate loose.
       - name: Run feature plugin tests
         run: npx jest --testPathPatterns 'packages/plugins/(dedup-hybrid|merge-default|store-memory|liveness-http)/' --verbose
         env:
           DEDUP_PERF_NFR1_MS: '1000'
           DEDUP_PERF_NFR2_MS: '8000'
+          DEDUP_COLD_NFR1_MS: '4000'
 
   docker:
     name: Docker Build
