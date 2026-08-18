@@ -15,6 +15,26 @@
 
 ---
 
+## 2026-08-18 — Spec 1680 — diagnostics semantics; the two backends that gated 300 wrappers
+
+**Change:** first of a five-PR sequence to make source plugins report a real reason instead of collapsing every outcome to `empty`. A census of all **1,839** plugin services found only **45** ever construct a `ScrapeDiagnostics` — 822 use the canonical swallow (`catch` → log → `return { jobs };`), 699 delegate to a backend ATS plugin, and 268 are a tail of other shapes. This PR touches none of them: it fixes the four things every later PR would otherwise hard-code the wrong answers to.
+
+- **`classifyScrapeError` had no 4xx rule.** Only `5\d\d`/`429` mapped to `fetch_error` and `403` to `blocked`; everything else 4xx — **including 404** — fell through to `unknown`. A 404 is what a slug that no longer resolves returns, making it the single most likely failure across ~1,540 scaffolded company boards; reporting the most common and most actionable failure in the tree as "unknown" is the classifier's worst case. Now `bad_input`, with `401`/`407`/`unauthorized` newly matched as `blocked` so auth refusals are not swept into it. Rule order preserved, with explicit non-regression tests pinning 403 → `blocked` and 429 → `fetch_error`.
+- **A partial scrape was reported as a complete one.** `jobs.length > 0 ? 'ok' : …` meant a source that returned 30 postings and *then* hit a 403 was reported `ok` — a partial outage hidden behind a non-zero count, with the error string still passed through in `detail`. New `partial` reason.
+- **Prometheus counted a failed scrape as a success.** `scraperRequestsTotal.inc({ site, status: 'success' })` fired on any resolved promise, and a swallowing plugin resolves normally. The label now derives from `response.diagnostics?.reason`. Without this the whole migration would improve the `per_source` JSON field and nowhere else, leaving every dashboard wrong.
+- **Two backends gated ~295 wrappers.** The 699 delegating `source-company-*` plugins carry no scraping logic and return their backend's result verbatim, so their reported reason is whatever the backend reports: Ashby (218) and Lever (179) reported one, **SmartRecruiters (213) and Recruitee (82) did not**. `smartrecruiters.service.ts:116` was the worst single defect found — `return new JobResponseDto(jobPosts); // Return what we have so far`, i.e. partial results with **no signal at all**, so a page-2 failure was indistinguishable from a complete board. Fixing two files fixes ~295 wrappers with no edits to them. Both `if (!companySlug)` guards now report `bad_input` rather than a bare empty result.
+
+**Plugins deliberately keep resolving, never throwing.** The obvious alternative — let errors propagate so the fan-out's `rejected` branch classifies them — was checked and is disqualifying. `CircuitBreakerService` accounts failures only on rejection, so this change cannot produce a single new `circuit_open` row; but making ~822 plugins throw would trip breakers on any merely-403ing source within five fan-outs (`failureThreshold: 5`), overflow `MAX_SITES = 250` against **1,832** registered sites (leaving ~1,580 sources with an ephemeral breaker entry that accumulates no state and logs an error on every call), and — since the 699 wrappers share four backend hosts — let one 429 trip up to 218 breakers at once.
+
+**Testing note:** 1,505 generated specs assert `result.jobs` only, so they stay green whatever a plugin reports — a green suite is not evidence any of this works. The 15 tests added here are the only ones in the repo that would fail if the contract regressed.
+
+**Editing note:** the tree is mixed-EOL (**293 CRLF files, 154 with a BOM**, no `.gitattributes`). Git Bash strips CR in text mode, which is how that went unnoticed and why a naive LF-anchored regex matches only 805 of the 822 canonical files. Every edit was applied byte-safely and verified with `git diff --numstat` against `--ignore-all-space --numstat`.
+
+**Next:** PR 2 the six scaffolders, PR 3 the 699 delegating specs, PR 4 the 822 canonical services, PR 5 the 268-file tail.
+
+---
+
+
 ## 2026-08-17 — Spec 1679 — opt-in per-source diagnostics; a source-test suite that can finish
 
 **Change:** two problems found while reviewing the Spec 5076–5085 release, both cheap now and awkward later.

@@ -17,6 +17,18 @@ export type ScrapeReason =
   | 'bad_input'
   /** The breaker was open, so the source was deliberately not called at all. */
   | 'circuit_open'
+  /**
+   * Jobs were returned AND something failed - a board that produced 30
+   * postings before a 403 is neither `ok` nor a failure, and calling it `ok`
+   * hides a partial outage behind a non-zero count.
+   */
+  | 'partial'
+  /**
+   * A delegating plugin could not resolve its backend scraper from the
+   * registry. A wiring problem rather than a board problem, and distinct from
+   * `empty` because no request was ever made.
+   */
+  | 'not_registered'
   | 'unknown';
 
 /** Reason a single scrape produced the result it did. Optional on a response. */
@@ -59,6 +71,8 @@ export const ACTIONABLE_SCRAPE_REASONS: readonly ScrapeReason[] = [
   'timeout',
   'bad_input',
   'circuit_open',
+  'partial',
+  'not_registered',
   'unknown',
 ];
 
@@ -182,7 +196,7 @@ export function classifyScrapeError(err: unknown): ScrapeDiagnostics {
     return new ScrapeDiagnostics('timeout', detail);
   }
   if (
-    /\b403\b|forbidden|cloudflare|just a moment|captcha|access denied|blocked|challenge/.test(
+    /\b403\b|\b401\b|\b407\b|unauthorized|forbidden|cloudflare|just a moment|captcha|access denied|blocked|challenge/.test(
       m,
     )
   ) {
@@ -194,6 +208,14 @@ export function classifyScrapeError(err: unknown): ScrapeDiagnostics {
     )
   ) {
     return new ScrapeDiagnostics('fetch_error', detail);
+  }
+  // Any remaining 4xx. 403/401/407 are `blocked` and 429 is `fetch_error`
+  // above, so this is 404/410/400/422 and friends: the request was wrong for
+  // this board, almost always a slug that no longer resolves. Without this a
+  // 404 fell through to `unknown` - and a dead board is the single most likely
+  // failure across the scaffolded company catalogue.
+  if (/\b4\d\d\b|not found/.test(m)) {
+    return new ScrapeDiagnostics('bad_input', detail);
   }
   return new ScrapeDiagnostics('unknown', detail);
 }
