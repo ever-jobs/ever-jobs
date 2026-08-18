@@ -46,6 +46,102 @@ export class SourceDiagnosticDto {
   }
 }
 
+/**
+ * Reasons an operator can act on. `ok` and `empty` are the overwhelming majority
+ * of a full fan-out (~1 800 sources) and say only "this worked" or "this board
+ * had nothing" — carrying them on every response is noise measured in hundreds
+ * of kilobytes.
+ */
+export const ACTIONABLE_SCRAPE_REASONS: readonly ScrapeReason[] = [
+  'blocked',
+  'browser_unavailable',
+  'fetch_error',
+  'timeout',
+  'bad_input',
+  'circuit_open',
+  'unknown',
+];
+
+/** How much of the per-source breakdown a caller asked for. */
+export type DiagnosticsMode = 'off' | 'actionable' | 'all';
+
+/** Default cap on returned rows. Generous — the filter does the real work. */
+export const DEFAULT_DIAGNOSTICS_LIMIT = 200;
+
+/**
+ * Counts that survive filtering and truncation, so a caller can always tell how
+ * much it is NOT seeing.
+ */
+export class ScrapeDiagnosticsSummaryDto {
+  /** Sources in the fan-out, before any filtering. */
+  total: number;
+  /** Rows matching {@link ACTIONABLE_SCRAPE_REASONS}. */
+  actionable: number;
+  /** Rows actually present in `per_source`. */
+  returned: number;
+  /** Rows dropped by the cap (not by the filter). */
+  truncated: number;
+  /** Count of every reason across the full fan-out, including filtered-out rows. */
+  by_reason: Partial<Record<ScrapeReason, number>>;
+
+  constructor(
+    total: number,
+    actionable: number,
+    returned: number,
+    truncated: number,
+    by_reason: Partial<Record<ScrapeReason, number>>,
+  ) {
+    this.total = total;
+    this.actionable = actionable;
+    this.returned = returned;
+    this.truncated = truncated;
+    this.by_reason = by_reason;
+  }
+}
+
+/**
+ * Reduce a full per-source breakdown to what a caller asked for.
+ *
+ * `mode: 'off'` returns nothing but still counts everything, so the summary
+ * remains a cheap, complete picture — a caller that wants totals need not pull
+ * ~1 800 rows to get them.
+ */
+export function summarizeSourceDiagnostics(
+  rows: SourceDiagnosticDto[],
+  mode: DiagnosticsMode = 'off',
+  limit: number = DEFAULT_DIAGNOSTICS_LIMIT,
+): { rows: SourceDiagnosticDto[]; summary: ScrapeDiagnosticsSummaryDto } {
+  const by_reason: Partial<Record<ScrapeReason, number>> = {};
+  for (const row of rows) {
+    by_reason[row.reason] = (by_reason[row.reason] ?? 0) + 1;
+  }
+
+  const actionableRows = rows.filter((r) => ACTIONABLE_SCRAPE_REASONS.includes(r.reason));
+
+  if (mode === 'off') {
+    return {
+      rows: [],
+      summary: new ScrapeDiagnosticsSummaryDto(rows.length, actionableRows.length, 0, 0, by_reason),
+    };
+  }
+
+  const selected = mode === 'all' ? rows : actionableRows;
+  // A non-positive or non-finite limit means "no cap" rather than "return nothing":
+  // silently emptying the payload is the worse failure for a diagnostics channel.
+  const capped = Number.isFinite(limit) && limit > 0 ? selected.slice(0, limit) : selected;
+
+  return {
+    rows: capped,
+    summary: new ScrapeDiagnosticsSummaryDto(
+      rows.length,
+      actionableRows.length,
+      capped.length,
+      selected.length - capped.length,
+      by_reason,
+    ),
+  };
+}
+
 const MAX_DETAIL = 300;
 
 /**
