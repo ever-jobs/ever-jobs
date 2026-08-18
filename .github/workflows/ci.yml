@@ -127,16 +127,23 @@ jobs:
   # 1,221 suites, so the remainder were never exercised and the job could never
   # report a result at all.
   #
-  # Six shards put each at ~300 suites / ~1.4 h — comfortably inside the 120 min
-  # ceiling below — for the same total runner time, and no single job can squat
-  # a pool slot for 6 h again. Verified locally that the shards partition
-  # cleanly: 303+303+303+302+302+302 = 1,815, no overlap and nothing dropped.
+  # Six shards put each at ~300 suites for the same total runner time, and no
+  # single job can squat a pool slot for 6 h again. Verified locally that the
+  # shards partition cleanly: 303+303+303+302+302+302 = 1,815, no overlap and
+  # nothing dropped.
+  #
+  # The 180 min ceiling is set from observation, not estimate. Two runs of the
+  # identical six-way split came in very differently: 1h23m-1h43m across all six
+  # when the pool was quiet, but 2h+ for three of them when it was busy. Same
+  # shard count, so that spread is runner contention rather than the split, and
+  # a 120 min ceiling cancelled those three — killing the suites it exists to
+  # run. 180 min covers the contended case and is still half the platform's 6 h.
   test-sources:
     name: Test (Source Scrapers ${{ matrix.shard }}/6)
     runs-on: ${{ vars.RUNNER_LINUX_X64_4 || 'ubuntu-latest' }}
     needs: build
     continue-on-error: true
-    timeout-minutes: 120
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:

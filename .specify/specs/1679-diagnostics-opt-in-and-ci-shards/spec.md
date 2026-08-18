@@ -90,7 +90,7 @@ construct the controller and call it directly — and inserting ahead of `res` s
 
 ### 4.3 Shard the source-scraper job
 
-Six shards via a matrix and `jest --shard=N/6`, `timeout-minutes: 120`, `fail-fast: false`,
+Six shards via a matrix and `jest --shard=N/6`, `timeout-minutes: 180`, `fail-fast: false`,
 `continue-on-error` retained. ~300 suites and ~1.4 h each, same total runner time, and every suite
 runs. Verified locally that the partition is exact: 303+303+303+302+302+302 = 1 815.
 
