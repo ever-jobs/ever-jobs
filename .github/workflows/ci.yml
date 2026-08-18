@@ -10,6 +10,7 @@ jobs:
   docs-lint:
     name: Docs Lint
     runs-on: ${{ vars.RUNNER_LINUX_X64_4 || 'ubuntu-latest' }}
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -35,6 +36,7 @@ jobs:
   build:
     name: Build & Type-Check
     runs-on: ${{ vars.RUNNER_LINUX_X64_4 || 'ubuntu-latest' }}
+    timeout-minutes: 45
 
     strategy:
       matrix:
@@ -70,6 +72,7 @@ jobs:
   test-fast:
     name: Test (Health & Smoke)
     runs-on: ${{ vars.RUNNER_LINUX_X64_4 || 'ubuntu-latest' }}
+    timeout-minutes: 30
     needs: build
 
     steps:
@@ -91,6 +94,7 @@ jobs:
   test-e2e:
     name: Test (E2E - Live APIs)
     runs-on: ${{ vars.RUNNER_LINUX_X64_8 || 'ubuntu-latest' }}
+    timeout-minutes: 60
     needs: build
     continue-on-error: true
 
@@ -115,11 +119,35 @@ jobs:
         run: npx jest --testPathPatterns 'apps/cli/__tests__' --verbose
         continue-on-error: true
 
+  # Sharded because the source-plugin corpus outgrew a single job. `jest
+  # --listTests` reports 1,815 suites under `packages/plugins/source-`, and at
+  # roughly 17 s of wall-clock apiece that is ~8.5 h — past GitHub's 360-minute
+  # job ceiling. It was NOT hanging: the last unsharded run logged PASS lines
+  # continuously from 11:32 to 17:25 and was killed mid-flight having completed
+  # 1,221 suites, so the remainder were never exercised and the job could never
+  # report a result at all.
+  #
+  # Six shards put each at ~300 suites for the same total runner time, and no
+  # single job can squat a pool slot for 6 h again. Verified locally that the
+  # shards partition cleanly: 303+303+303+302+302+302 = 1,815, no overlap and
+  # nothing dropped.
+  #
+  # The 180 min ceiling is set from observation, not estimate. Two runs of the
+  # identical six-way split came in very differently: 1h23m-1h43m across all six
+  # when the pool was quiet, but 2h+ for three of them when it was busy. Same
+  # shard count, so that spread is runner contention rather than the split, and
+  # a 120 min ceiling cancelled those three — killing the suites it exists to
+  # run. 180 min covers the contended case and is still half the platform's 6 h.
   test-sources:
-    name: Test (Source Scrapers)
+    name: Test (Source Scrapers ${{ matrix.shard }}/6)
     runs-on: ${{ vars.RUNNER_LINUX_X64_4 || 'ubuntu-latest' }}
     needs: build
     continue-on-error: true
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
 
     steps:
       - name: Checkout
@@ -135,13 +163,14 @@ jobs:
         run: npm ci
 
       - name: Run source scraper tests
-        run: npx jest --testPathPatterns 'packages/plugins/source-' --passWithNoTests --verbose
+        run: npx jest --testPathPatterns 'packages/plugins/source-' --shard=${{ matrix.shard }}/6 --passWithNoTests --verbose
         env:
           EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
 
   test-feature-plugins:
     name: Test (Feature Plugins)
     runs-on: ${{ vars.RUNNER_LINUX_X64_4 || 'ubuntu-latest' }}
+    timeout-minutes: 45
     needs: build
 
     steps:
@@ -162,15 +191,28 @@ jobs:
       # documented env overrides (Spec 722 / FR-9, D-5): local defaults stay
       # strict (250 ms / 2 500 ms); CI ceilings still catch the 24x-over
       # class of regression these gates exist for.
+      #
+      # Two DIFFERENT budgets, deliberately:
+      #   DEDUP_PERF_NFR1_MS  — dedup-perf.spec.ts, the authoritative gate. Builds
+      #     the batch once and takes the max over 5 WARMED runs (20-40 ms observed
+      #     here), so it stays tight.
+      #   DEDUP_COLD_NFR1_MS  — the single unwarmed run in dedup-hybrid.service.spec.ts,
+      #     which includes JIT compilation of the whole pipeline. Observed at
+      #     1 251 ms and 1 451 ms on this runner, so a 1 000 ms ceiling failed a
+      #     gating job on warm-up rather than on a regression. 4 000 ms leaves ~2.7x
+      #     headroom over the worst observation while still catching a gross
+      #     regression. Sharing one knob would force the real gate loose.
       - name: Run feature plugin tests
         run: npx jest --testPathPatterns 'packages/plugins/(dedup-hybrid|merge-default|store-memory|liveness-http)/' --verbose
         env:
           DEDUP_PERF_NFR1_MS: '1000'
           DEDUP_PERF_NFR2_MS: '8000'
+          DEDUP_COLD_NFR1_MS: '4000'
 
   docker:
     name: Docker Build
     runs-on: ${{ vars.RUNNER_LINUX_X64_8 || 'ubuntu-latest' }}
+    timeout-minutes: 60
     needs: build
 
     steps:

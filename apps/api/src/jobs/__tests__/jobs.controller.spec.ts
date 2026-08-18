@@ -3,6 +3,7 @@ import {
   ScraperInputDto,
   JobPostDto,
   JobAnalysisDto,
+  SourceDiagnosticDto,
 } from '@ever-jobs/models';
 import { JobsController } from '../jobs.controller';
 
@@ -439,6 +440,128 @@ describe('JobsController', () => {
       expect(analyticsService.analyze).toHaveBeenCalledWith(jobs);
       expect(result.summary).toBeDefined();
       expect(result.summary.totalJobs).toBe(1);
+    });
+  });
+
+  /**
+   * `per_source` is opt-in because a full fan-out covers ~1 800 sources, and a
+   * row for each put hundreds of KB of mostly-`ok`/`empty` noise on every
+   * response. The summary must stay complete regardless of what is returned.
+   */
+  describe('per-source diagnostics (opt-in, filtered, capped)', () => {
+    const perSource: SourceDiagnosticDto[] = [
+      new SourceDiagnosticDto('linkedin', 3, 'ok'),
+      new SourceDiagnosticDto('indeed', 0, 'empty'),
+      new SourceDiagnosticDto('greenhouse', 0, 'blocked', 'cloudflare'),
+      new SourceDiagnosticDto('gusto', 0, 'browser_unavailable', 'no chromium'),
+      new SourceDiagnosticDto('workday', 0, 'circuit_open', 'circuit open for workday'),
+    ];
+
+    /** A controller whose fan-out reports the rows above. */
+    function controllerWithDiagnostics() {
+      const jobs = [makeJob()];
+      const jobsService = {
+        searchJobs: jest.fn().mockResolvedValue(jobs),
+        searchJobsWithDiagnostics: jest.fn().mockResolvedValue({ jobs, perSource }),
+      };
+      return new JobsController(
+        jobsService as any,
+        makePassthroughAggregator() as any,
+        makeAnalyticsService() as any,
+        makeCacheService(undefined) as any,
+        { get: (_k: string, d?: unknown) => d } as any,
+      );
+    }
+
+    /** searchJobs(input, format, paginate, page, page_size, dedup, liveness, legitimacy, res, diagnostics, limit) */
+    const search = (controller: JobsController, diagnostics?: string, limit?: string) =>
+      controller.searchJobs(
+        new ScraperInputDto({ searchTerm: 'node' }),
+        undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+        undefined,
+        diagnostics,
+        limit,
+      ) as any;
+
+    it('returns no rows by default', async () => {
+      const result = await search(controllerWithDiagnostics());
+
+      expect(result.per_source).toEqual([]);
+    });
+
+    it('still reports complete counts by default', async () => {
+      const result = await search(controllerWithDiagnostics());
+
+      expect(result.per_source_summary).toMatchObject({
+        total: 5,
+        actionable: 3,
+        returned: 0,
+        by_reason: { ok: 1, empty: 1, blocked: 1, browser_unavailable: 1, circuit_open: 1 },
+      });
+    });
+
+    it('returns only actionable rows for ?diagnostics=true', async () => {
+      const result = await search(controllerWithDiagnostics(), 'true');
+
+      expect(result.per_source.map((r: SourceDiagnosticDto) => r.site).sort()).toEqual(
+        ['greenhouse', 'gusto', 'workday'],
+      );
+      expect(result.per_source_summary.returned).toBe(3);
+    });
+
+    it('returns every row for ?diagnostics=all', async () => {
+      const result = await search(controllerWithDiagnostics(), 'all');
+
+      expect(result.per_source).toHaveLength(5);
+    });
+
+    it('honours ?diagnostics_limit and reports the truncation', async () => {
+      const result = await search(controllerWithDiagnostics(), 'all', '2');
+
+      expect(result.per_source).toHaveLength(2);
+      expect(result.per_source_summary).toMatchObject({ returned: 2, truncated: 3, total: 5 });
+    });
+
+    it.each(['false', '0', 'no', 'nonsense'])('treats ?diagnostics=%s as off', async (v) => {
+      const result = await search(controllerWithDiagnostics(), v);
+
+      expect(result.per_source).toEqual([]);
+    });
+
+    /**
+     * `?diagnostics_limit=0` is the documented "no cap" escape hatch. The generic
+     * `parseNum` helper returns `Number(v) || undefined`, so a literal zero is
+     * falsy and silently fell through to the 200-row default — truncating the
+     * exact request that asked not to be truncated.
+     */
+    it('treats ?diagnostics_limit=0 as no cap, not as the default', async () => {
+      const many = Array.from(
+        { length: 250 },
+        (_, i) => new SourceDiagnosticDto(`s-${i}`, 0, 'blocked', 'nope'),
+      );
+      const jobsService = {
+        searchJobs: jest.fn().mockResolvedValue([]),
+        searchJobsWithDiagnostics: jest.fn().mockResolvedValue({ jobs: [], perSource: many }),
+      };
+      const controller = new JobsController(
+        jobsService as any,
+        makePassthroughAggregator() as any,
+        makeAnalyticsService() as any,
+        makeCacheService(undefined) as any,
+        { get: (_k: string, d?: unknown) => d } as any,
+      );
+
+      const result = await search(controller, 'all', '0');
+
+      expect(result.per_source).toHaveLength(250);
+      expect(result.per_source_summary).toMatchObject({ returned: 250, truncated: 0 });
+    });
+
+    it('falls back to the default cap for a non-numeric limit', async () => {
+      const result = await search(controllerWithDiagnostics(), 'all', 'abc');
+
+      expect(result.per_source).toHaveLength(5);
+      expect(result.per_source_summary.truncated).toBe(0);
     });
   });
 });

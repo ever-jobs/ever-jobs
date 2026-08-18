@@ -20,6 +20,9 @@ import {
   ScraperInputDto,
   JobPostDto,
   SourceDiagnosticDto,
+  summarizeSourceDiagnostics,
+  DEFAULT_DIAGNOSTICS_LIMIT,
+  type DiagnosticsMode,
   JobAnalysisDto,
   LIVENESS_CHECKER_TOKEN,
   LEGITIMACY_CHECKER_TOKEN,
@@ -84,6 +87,19 @@ export class JobsController {
     description:
       'Cross-source deduplication. Default true — collapses identical or near-duplicate jobs surfaced by multiple sources into one record. Pass false to keep every observation as a separate result (Spec 003 / FR-1).',
   })
+  @ApiQuery({
+    name: 'diagnostics',
+    required: false,
+    description:
+      'Per-source outcome breakdown. Off by default — a full fan-out covers ~1 800 sources, and returning a row for each put hundreds of KB of mostly-`ok`/`empty` noise on every response. `true` returns only actionable reasons (blocked, browser_unavailable, fetch_error, timeout, bad_input, circuit_open, unknown); `all` returns every row. `per_source_summary` always reports the complete picture, including rows not returned.',
+    example: 'true',
+  })
+  @ApiQuery({
+    name: 'diagnostics_limit',
+    required: false,
+    type: Number,
+    description: 'Cap on returned per_source rows (default 200). Non-positive means no cap.',
+  })
   @ApiResponse({ status: 200, description: 'Job search results' })
   @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   async searchJobs(
@@ -96,6 +112,12 @@ export class JobsController {
     @Query('liveness') livenessRaw?: string,
     @Query('legitimacy') legitimacyRaw?: string,
     @Res({ passthrough: true }) res?: Response,
+    // Appended after `res` deliberately. Nest binds these by decorator, so
+    // order is irrelevant at runtime — but the parameter list is positional for
+    // direct callers (the unit tests construct the controller and call it
+    // directly), and inserting ahead of `res` silently shifts it.
+    @Query('diagnostics') diagnosticsRaw?: string,
+    @Query('diagnostics_limit') diagnosticsLimitRaw?: string,
   ) {
     this.logger.log(
       `Search request: sites=${input.siteType?.join(',') ?? 'all'}, term="${input.searchTerm}", location="${input.location}"`,
@@ -114,6 +136,32 @@ export class JobsController {
     };
     const parseNum = (v?: string): number | undefined =>
       v === undefined ? undefined : Number(v) || undefined;
+    /**
+     * `diagnostics` is opt-in: a full fan-out produces ~1 800 rows, so emitting
+     * them by default put hundreds of kilobytes of mostly-`ok`/`empty` noise on
+     * every response. `true` returns only the reasons an operator can act on;
+     * `all` returns every row. Both are capped, and the summary always reports
+     * the full picture regardless of what was returned.
+     */
+    /**
+     * Deliberately not `parseNum`: that returns `Number(v) || undefined`, so a
+     * literal `0` is falsy and falls through to the default cap — which would
+     * silently truncate the very request (`?diagnostics_limit=0`) documented as
+     * meaning "no cap". Zero and negatives are passed through for the helper to
+     * interpret; only absent or non-numeric input takes the default.
+     */
+    const parseLimit = (v?: string): number | undefined => {
+      if (v === undefined) return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const parseDiagnosticsMode = (v?: string): DiagnosticsMode => {
+      if (v === undefined) return 'off';
+      const s = v.toLowerCase();
+      if (s === 'all') return 'all';
+      if (['true', '1', 'yes'].includes(s)) return 'actionable';
+      return 'off';
+    };
 
     // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
     const cacheParams = { ...input, endpoint: 'search' };
@@ -192,6 +240,13 @@ export class JobsController {
       return new StreamableFile(Buffer.from(csvLines, 'utf-8'));
     }
 
+    // ── Per-source diagnostics (opt-in, filtered, capped) ──
+    const diagnostics = summarizeSourceDiagnostics(
+      perSource,
+      parseDiagnosticsMode(diagnosticsRaw),
+      parseLimit(diagnosticsLimitRaw) ?? DEFAULT_DIAGNOSTICS_LIMIT,
+    );
+
     // ── Pagination ────────────────────────
     if (paginate) {
       return {
@@ -204,7 +259,8 @@ export class JobsController {
         deduped: aggregated.deduped,
         raw_count: aggregated.rawCount,
         dedup_metrics: aggregated.dedupMetrics,
-        per_source: perSource,
+        per_source: diagnostics.rows,
+        per_source_summary: diagnostics.summary,
         next_page: page < totalPages ? page + 1 : null,
         previous_page: page > 1 ? page - 1 : null,
       };
@@ -221,7 +277,8 @@ export class JobsController {
       deduped: aggregated.deduped,
       raw_count: aggregated.rawCount,
       dedup_metrics: aggregated.dedupMetrics,
-      per_source: perSource,
+      per_source: diagnostics.rows,
+      per_source_summary: diagnostics.summary,
     };
   }
 
