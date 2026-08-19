@@ -2,6 +2,7 @@ import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -126,7 +127,7 @@ export class TaleezService implements IScraper {
       return new JobResponseDto(jobPosts);
     } catch (err: any) {
       this.logger.error(`Taleez scrape error for ${tenant}: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

@@ -127,6 +127,7 @@ function serviceFile(d: CompanyDescriptor): string {
 import { Injectable, Logger } from '@nestjs/common';
 import {
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
+  classifyScrapeError,
 } from '@ever-jobs/models';
 import { createHttpClient, decodeHtmlEntities, stripHtmlTags } from '@ever-jobs/common';
 
@@ -215,9 +216,14 @@ export class ${d.serviceName} implements IScraper {
       this.logger.log(\`${sq(d.displayName)}: scraped \${jobs.length} jobs\`);
     } catch (err: any) {
       this.logger.error(\`${sq(d.displayName)} scrape failed: \${err.message}\`);
+      // Report WHY, and keep whatever was accumulated: the catch sits outside
+      // the loop, so a board that parsed 30 postings before failing still
+      // returns those 30. Resolving (never throwing) is deliberate - the
+      // breaker counts failures only on rejection.
+      return new JobResponseDto(jobs, classifyScrapeError(err));
     }
 
-    return { jobs };
+    return new JobResponseDto(jobs);
   }
 }
 `;
@@ -665,13 +671,16 @@ describe('${d.serviceName} — Spec ${d.specNo} / T04', () => {
   });
 
   describe('error handling', () => {
-    it('catches an HTTP 500 → empty JobResponseDto, never throws', async () => {
+    it('catches an HTTP 500 → empty JobResponseDto with a reason, never throws', async () => {
       mockGet.mockRejectedValueOnce(new Error('Request failed with status 500'));
       const service = new ${d.serviceName}();
       const result = await service.scrape({
         siteType: [Site.${d.enumKey}],
       } as ScraperInputDto);
       expect(result.jobs).toEqual([]);
+      // Asserting jobs alone proves nothing here: it stays empty whatever the
+      // plugin reported. This is the assertion that pins the diagnostics contract.
+      expect(result.diagnostics?.reason).toBe('fetch_error');
       expect(mockGet).toHaveBeenCalledTimes(1);
     });
 

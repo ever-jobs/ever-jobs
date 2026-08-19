@@ -88,7 +88,14 @@ export class MetricsService implements OnModuleInit {
     this.scraperRequestsTotal = new Counter({
       name: 'ever_jobs_scraper_requests_total',
       help: 'Total number of scraper requests',
-      labelNames: ['site', 'status'], // status: success | error | circuit_open
+      // `status` is `success` for a clean scrape, `error` for a rejected one and
+      // `circuit_open` when the breaker short-circuited. Since Spec 1680 a plugin
+      // that resolves WITH a diagnostic also reports its ScrapeReason here -
+      // `partial` when it still returned jobs, otherwise the reason itself
+      // (`blocked`, `bad_input`, `browser_unavailable`, `fetch_error`, `timeout`,
+      // `empty`, `not_registered`, `unknown`). Previously any resolved promise
+      // counted as `success`, so a fully-failed scrape was recorded as one.
+      labelNames: ['site', 'status'],
       registers: [this.registry],
     });
 

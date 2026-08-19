@@ -2,6 +2,7 @@ import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -151,7 +152,10 @@ export class WorkstreamService implements IScraper {
       return new JobResponseDto(trimmed);
     } catch (err: any) {
       this.logger.error(`Workstream scrape error for ${companyPath}: ${err.message}`);
-      return new JobResponseDto(jobPosts.slice(0, resultsWanted));
+      // Partial results WITH a reason: jobs.length > 0 plus a diagnostic is
+      // inferred as 'partial' upstream, so a mid-scrape failure is no longer
+      // indistinguishable from a complete board.
+      return new JobResponseDto(jobPosts.slice(0, resultsWanted), classifyScrapeError(err));
     }
   }
 

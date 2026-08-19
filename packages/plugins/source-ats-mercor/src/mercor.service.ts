@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SourcePlugin } from '@ever-jobs/plugin';
 import {
+  classifyScrapeError,
   CompensationDto,
   CompensationInterval,
   IScraper,
@@ -94,7 +95,7 @@ export class MercorService implements IScraper {
       this.logger.warn(
         `MercorService: ${MERCOR_ERR_FETCH_FAILED} — explore-page fetch failed (status=${status ?? 'n/a'}): ${err?.message ?? err}`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
 
     if (!Array.isArray(payload.listings)) {

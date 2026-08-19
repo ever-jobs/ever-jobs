@@ -6,6 +6,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -76,7 +77,7 @@ export class StepStoneService implements IScraper, OnModuleDestroy {
       return new JobResponseDto(jobs.slice(0, resultsWanted));
     } catch (err: any) {
       this.logger.error(`StepStone scrape failed: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     } finally {
       if (page) {
         const context = page.context();

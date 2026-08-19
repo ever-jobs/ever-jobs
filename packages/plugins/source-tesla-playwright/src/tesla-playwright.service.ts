@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SourcePlugin } from '@ever-jobs/plugin';
 import {
+  classifyScrapeError,
   IScraper,
   JobPostDto,
   JobResponseDto,
@@ -143,7 +144,7 @@ export class TeslaPlaywrightService implements IScraper {
       this.logger.warn(
         `TeslaPlaywrightService: ${TESLA_PLAYWRIGHT_ERR_FETCH_FAILED} — unexpected error during scrape: ${err?.message ?? err}`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     } finally {
       if (browser) {
         try {

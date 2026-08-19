@@ -100,6 +100,14 @@ describe('scaffold-company-source', () => {
     // defensive trims present
     expect(svc).toContain("(listing.title ?? '').trim()");
     expect(svc).toContain('deptRaw ? deptRaw.trim() : null');
+
+    // Spec 1680 - the generator must not mint the swallowed-error shape again.
+    // 822 services in the tree carry `return { jobs };`, which reports every
+    // failure as an indistinguishable empty board.
+    expect(svc).toContain('classifyScrapeError(err)');
+    expect(svc).toContain('return new JobResponseDto(jobs, classifyScrapeError(err));');
+    expect(svc).toContain('return new JobResponseDto(jobs);');
+    expect(svc).not.toContain('return { jobs };');
   });
 
   it('forces trailing-pad on fixture listing[0] title and department, and empties null departments', () => {

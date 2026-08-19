@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -152,7 +153,10 @@ export class ConcludisService implements IScraper {
         .slice(0, resultsWanted)
         .map((row) => this.mapRow(row, null, host, fallbackCompanyName, input.descriptionFormat))
         .filter((p): p is JobPostDto => p !== null);
-      return new JobResponseDto(partial);
+      // Partial results WITH a reason: jobs.length > 0 plus a diagnostic is
+      // inferred as 'partial' upstream, so a mid-scrape failure is no longer
+      // indistinguishable from a complete board.
+      return new JobResponseDto(partial, classifyScrapeError(err));
     }
   }
 
