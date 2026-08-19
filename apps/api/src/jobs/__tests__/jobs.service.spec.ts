@@ -11,6 +11,7 @@ import {
   CompensationDto,
   CompensationInterval,
   ERR_SOURCE_CIRCUIT_OPEN,
+  ScrapeDiagnostics,
 } from '@ever-jobs/models';
 import { PluginRegistry } from '@ever-jobs/plugin';
 
@@ -912,6 +913,108 @@ describe('JobsService', () => {
       expect(perSource[0].reason).toBe('circuit_open');
       expect(perSource[0].count).toBe(0);
       expect(perSource[0].detail).toContain(Site.LINKEDIN);
+    });
+  });
+  /**
+   * These are the only assertions in the repo that would fail if the plugin
+   * diagnostics contract regressed. 1,505 generated specs assert `result.jobs`
+   * only, so they stay green whatever a plugin reports - a green suite is not
+   * evidence this works.
+   */
+  describe('diagnostics contract (Spec 1680)', () => {
+    /** A scraper that resolves with jobs and/or a diagnostic, never throwing. */
+    function reporting(jobs: Partial<JobPostDto>[], diagnostics?: ScrapeDiagnostics): IScraper {
+      return {
+        scrape: jest.fn().mockResolvedValue(
+          new JobResponseDto(jobs.map((j) => new JobPostDto(j as JobPostDto)), diagnostics),
+        ),
+      };
+    }
+
+    it('propagates a plugin-reported reason instead of flattening it to empty', async () => {
+      const service = createService([
+        [Site.LINKEDIN, reporting([], new ScrapeDiagnostics('blocked', 'HTTP 403'))],
+      ]);
+
+      const { perSource } = await service.searchJobsWithDiagnostics(
+        new ScraperInputDto({ siteType: [Site.LINKEDIN] }),
+      );
+
+      expect(perSource[0].reason).toBe('blocked');
+      expect(perSource[0].detail).toBe('HTTP 403');
+    });
+
+    it('reports jobs-plus-a-diagnostic as partial, not ok', async () => {
+      const service = createService([
+        [Site.LINKEDIN, reporting([{ title: 'One' }], new ScrapeDiagnostics('fetch_error', 'page 2 failed'))],
+      ]);
+
+      const { perSource } = await service.searchJobsWithDiagnostics(
+        new ScraperInputDto({ siteType: [Site.LINKEDIN] }),
+      );
+
+      expect(perSource[0].reason).toBe('partial');
+      expect(perSource[0].count).toBe(1);
+      expect(perSource[0].detail).toBe('page 2 failed');
+    });
+
+    it('still reports a clean non-empty scrape as ok', async () => {
+      const service = createService([[Site.LINKEDIN, reporting([{ title: 'One' }])]]);
+
+      const { perSource } = await service.searchJobsWithDiagnostics(
+        new ScraperInputDto({ siteType: [Site.LINKEDIN] }),
+      );
+
+      expect(perSource[0].reason).toBe('ok');
+    });
+
+    it('still reports a clean zero-job scrape as empty', async () => {
+      const service = createService([[Site.LINKEDIN, reporting([])]]);
+
+      const { perSource } = await service.searchJobsWithDiagnostics(
+        new ScraperInputDto({ siteType: [Site.LINKEDIN] }),
+      );
+
+      expect(perSource[0].reason).toBe('empty');
+    });
+
+    /**
+     * A swallowing plugin resolves normally, so a flat `status: 'success'`
+     * counted a fully-failed scrape as a success and every dashboard built on
+     * this counter was wrong.
+     */
+    it('derives the prometheus status from the diagnostic, not from settling', async () => {
+      const service = createService([
+        [Site.LINKEDIN, reporting([], new ScrapeDiagnostics('blocked', 'HTTP 403'))],
+      ]);
+
+      await service.searchJobsWithDiagnostics(new ScraperInputDto({ siteType: [Site.LINKEDIN] }));
+
+      expect((service as any).metrics.scraperRequestsTotal.inc).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'blocked' }),
+      );
+    });
+
+    it('labels a partial scrape as partial in prometheus', async () => {
+      const service = createService([
+        [Site.LINKEDIN, reporting([{ title: 'One' }], new ScrapeDiagnostics('fetch_error', 'x'))],
+      ]);
+
+      await service.searchJobsWithDiagnostics(new ScraperInputDto({ siteType: [Site.LINKEDIN] }));
+
+      expect((service as any).metrics.scraperRequestsTotal.inc).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'partial' }),
+      );
+    });
+
+    it('keeps status=success when a plugin reports nothing', async () => {
+      const service = createService([[Site.LINKEDIN, reporting([{ title: 'One' }])]]);
+
+      await service.searchJobsWithDiagnostics(new ScraperInputDto({ siteType: [Site.LINKEDIN] }));
+
+      expect((service as any).metrics.scraperRequestsTotal.inc).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'success' }),
+      );
     });
   });
 });

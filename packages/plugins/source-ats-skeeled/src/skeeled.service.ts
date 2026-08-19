@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -111,7 +112,7 @@ export class SkeeledService implements IScraper {
         const status = err?.response?.status;
         if (status === 400 || status === 403 || status === 404) {
           this.logger.warn(`Skeeled board not found (HTTP ${status}) for ${boardId}`);
-          return new JobResponseDto([]);
+          return new JobResponseDto([], classifyScrapeError(err));
         }
         throw err;
       }

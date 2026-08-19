@@ -2,6 +2,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -78,7 +79,7 @@ export class PowertoflyService implements IScraper {
       return new JobResponseDto(jobs);
     } catch (err: any) {
       this.logger.error(`PowerToFly scrape error: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

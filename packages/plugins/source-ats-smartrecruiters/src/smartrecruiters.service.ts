@@ -3,6 +3,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   IScraper,
+  classifyScrapeError,
+  ScrapeDiagnostics,
   ScraperInputDto,
   JobResponseDto,
   JobPostDto,
@@ -39,7 +41,10 @@ export class SmartRecruitersService implements IScraper {
     const companySlug = input.companySlug;
     if (!companySlug) {
       this.logger.warn('No companySlug provided for SmartRecruiters scraper');
-      return new JobResponseDto([]);
+      return new JobResponseDto(
+        [],
+        new ScrapeDiagnostics('bad_input', 'no companySlug provided'),
+      );
     }
 
     // Check for API key: per-request auth overrides env var
@@ -113,7 +118,10 @@ export class SmartRecruitersService implements IScraper {
       return new JobResponseDto(jobPosts);
     } catch (err: any) {
       this.logger.error(`SmartRecruiters scrape error for ${companySlug}: ${err.message}`);
-      return new JobResponseDto(jobPosts); // Return what we have so far
+      // Partial results WITH a reason: `jobs.length > 0` plus a diagnostic is
+      // inferred as `partial` upstream, so a page-2 failure is no longer
+      // indistinguishable from a complete board.
+      return new JobResponseDto(jobPosts, classifyScrapeError(err));
     }
   }
 

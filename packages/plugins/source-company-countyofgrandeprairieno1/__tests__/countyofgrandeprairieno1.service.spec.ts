@@ -184,6 +184,10 @@ describe('CountyOfGrandePrairieNo1Service — SmartRecruiters delegation', () =>
         siteType: [Site.COUNTY_OF_GRANDE_PRAIRIE_NO_1],
       } as ScraperInputDto);
       expect(result.jobs).toHaveLength(0);
+      // jobs alone stays empty whatever the plugin reports, so this is the
+      // assertion that distinguishes a wiring fault from an empty board.
+      expect(result.diagnostics?.reason).toBe('not_registered');
+      expect(result.diagnostics?.detail).toContain('SmartRecruiters');
     });
   });
 

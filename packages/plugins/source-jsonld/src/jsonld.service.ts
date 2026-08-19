@@ -2,6 +2,7 @@ import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -69,7 +70,7 @@ export class JsonLdService implements IScraper {
       html = typeof response.data === 'string' ? response.data : '';
     } catch (err: any) {
       this.logger.error(`JSON-LD fetch error for ${pageUrl}: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
 
     const postings = parseJobPostingLd(html);

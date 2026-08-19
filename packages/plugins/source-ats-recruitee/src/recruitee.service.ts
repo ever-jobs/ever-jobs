@@ -3,6 +3,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   IScraper,
+  classifyScrapeError,
+  ScrapeDiagnostics,
   ScraperInputDto,
   JobResponseDto,
   JobPostDto,
@@ -36,7 +38,10 @@ export class RecruiteeService implements IScraper {
     const companySlug = input.companySlug;
     if (!companySlug) {
       this.logger.warn('No companySlug provided for Recruitee scraper');
-      return new JobResponseDto([]);
+      return new JobResponseDto(
+        [],
+        new ScrapeDiagnostics('bad_input', 'no companySlug provided'),
+      );
     }
 
     // Check for API token: per-request auth overrides env var
@@ -88,7 +93,7 @@ export class RecruiteeService implements IScraper {
       return new JobResponseDto(jobPosts);
     } catch (err: any) {
       this.logger.error(`Recruitee scrape error for ${companySlug}: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

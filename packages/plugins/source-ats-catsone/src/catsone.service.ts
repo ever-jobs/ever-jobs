@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -164,7 +165,7 @@ export class CatsoneService implements IScraper {
       return new JobResponseDto(jobPosts.slice(0, resultsWanted));
     } catch (err: any) {
       this.logger.error(`CATS scrape error for ${tenant.host}: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

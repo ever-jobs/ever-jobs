@@ -2,6 +2,7 @@ import { SourcePlugin } from '@ever-jobs/plugin';
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
 import { createHttpClient, decodeHtmlEntities, stripHtmlTags } from '@ever-jobs/common';
@@ -144,8 +145,13 @@ export class DescriptService implements IScraper {
       this.logger.log(`Descript: scraped ${jobs.length} jobs`);
     } catch (err: any) {
       this.logger.error(`Descript scrape failed: ${err.message}`);
+      // Report WHY, and keep whatever was accumulated: the catch is outside
+      // the loop, so a board that parsed jobs before failing still returns
+      // them. Resolving rather than throwing is deliberate - the breaker
+      // counts failures only on rejection.
+      return new JobResponseDto(jobs, classifyScrapeError(err));
     }
 
-    return { jobs };
+    return new JobResponseDto(jobs);
   }
 }

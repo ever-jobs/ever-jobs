@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -103,7 +104,7 @@ export class EployService implements IScraper {
           this.logger.warn(
             `Eploy datafeed not found (HTTP ${status}) for ${tenantUrl}`,
           );
-          return new JobResponseDto([]);
+          return new JobResponseDto([], classifyScrapeError(err));
         }
         throw err;
       }

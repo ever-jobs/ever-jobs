@@ -2,6 +2,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -83,9 +84,14 @@ export class BoeingService implements IScraper {
       this.logger.log(`Boeing: scraped ${jobs.length} jobs`);
     } catch (err: any) {
       this.logger.error(`Boeing scrape failed: ${err.message}`);
+      // Report WHY, and keep whatever was accumulated: the catch is outside
+      // the loop, so a board that parsed jobs before failing still returns
+      // them. Resolving rather than throwing is deliberate - the breaker
+      // counts failures only on rejection.
+      return new JobResponseDto(jobs, classifyScrapeError(err));
     }
 
-    return { jobs };
+    return new JobResponseDto(jobs);
   }
 
   /**

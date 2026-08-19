@@ -184,6 +184,10 @@ describe('ABInBevService — SmartRecruiters delegation', () => {
         siteType: [Site.AB_INBEV],
       } as ScraperInputDto);
       expect(result.jobs).toHaveLength(0);
+      // jobs alone stays empty whatever the plugin reports, so this is the
+      // assertion that distinguishes a wiring fault from an empty board.
+      expect(result.diagnostics?.reason).toBe('not_registered');
+      expect(result.diagnostics?.detail).toContain('SmartRecruiters');
     });
   });
 

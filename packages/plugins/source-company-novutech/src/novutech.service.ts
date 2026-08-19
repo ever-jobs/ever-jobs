@@ -3,6 +3,7 @@ import { SourcePlugin, PluginRegistry } from '@ever-jobs/plugin';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   IScraper, ScraperInputDto, JobResponseDto, Site,
+  ScrapeDiagnostics,
 } from '@ever-jobs/models';
 
 /**
@@ -47,7 +48,12 @@ export class NovutechService implements IScraper {
       this.logger.error(
         'Recruitee source plugin is not registered; cannot scrape Novutech',
       );
-      return new JobResponseDto([]);
+      // A registry miss is a wiring problem, not an empty board -
+      // not_registered keeps the two distinguishable upstream.
+      return new JobResponseDto(
+        [],
+        new ScrapeDiagnostics('not_registered', 'Recruitee source plugin is not registered'),
+      );
     }
 
     this.logger.log(

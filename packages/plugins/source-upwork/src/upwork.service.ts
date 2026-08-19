@@ -2,6 +2,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -155,7 +156,7 @@ export class UpworkService implements IScraper {
         this.logger.error(`Upwork scrape error: ${err.message}`);
       }
       // Graceful degradation: a failing source must never fail the fan-out.
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

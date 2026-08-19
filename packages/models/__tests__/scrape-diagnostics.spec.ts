@@ -95,4 +95,46 @@ describe('diagnostics DTOs (Spec 5082)', () => {
       detail: 'no chromium',
     });
   });
+  /**
+   * The gap this closes: only 5xx and 429 mapped to `fetch_error` and 403 to
+   * `blocked`, so a 404 fell through to `unknown`. A slug that no longer
+   * resolves is the single most likely failure across the scaffolded company
+   * catalogue, and `unknown` told an operator nothing about it.
+   */
+  describe('4xx responses (Spec 1680)', () => {
+    it.each([
+      ['404 Not Found', 'Request failed with status code 404'],
+      ['410 Gone', 'Request failed with status code 410'],
+      ['400 Bad Request', 'Request failed with status code 400'],
+      ['422 Unprocessable', 'Request failed with status code 422'],
+      ['a worded not-found', 'Board not found for slug acme'],
+    ])('classifies %s as bad_input', (_label, message) => {
+      expect(classifyScrapeError(new Error(message)).reason).toBe('bad_input');
+    });
+
+    it.each([
+      ['401 Unauthorized', 'Request failed with status code 401'],
+      ['407 Proxy Auth Required', 'Request failed with status code 407'],
+    ])('keeps %s as blocked, not bad_input', (_label, message) => {
+      expect(classifyScrapeError(new Error(message)).reason).toBe('blocked');
+    });
+
+    it('still classifies 429 as fetch_error, not bad_input', () => {
+      expect(classifyScrapeError(new Error('Request failed with status code 429')).reason).toBe(
+        'fetch_error',
+      );
+    });
+
+    it('still classifies 403 as blocked', () => {
+      expect(classifyScrapeError(new Error('Request failed with status code 403')).reason).toBe(
+        'blocked',
+      );
+    });
+
+    it('preserves the real message in detail', () => {
+      const d = classifyScrapeError(new Error('Request failed with status code 404'));
+      expect(d.reason).toBe('bad_input');
+      expect(d.detail).toContain('404');
+    });
+  });
 });
