@@ -15,6 +15,31 @@
 
 ---
 
+## 2026-08-19 — Spec 1682 — 699 delegating plugins report a registry miss as `not_registered`
+
+**Change:** PR 3 of 5, and the first at real scale — **1,398 files**.
+
+The 699 delegating `source-company-*` plugins carry no scraping logic: they resolve a backend ATS scraper from the registry and return its result verbatim. Spec 1680 fixed the two silent backends, so these wrappers already inherit a real reason for every *scrape* failure. What remained was their one **independent** failure path — the registry miss — which emitted a bare `new JobResponseDto([])`. Upstream that is indistinguishable from a board with no postings, though it is a wiring fault where no request was ever made. Now `not_registered`, the reason Spec 1680 added and Spec 1681 taught the generators to emit.
+
+Their generated specs were no better: the registry-miss test asserted only `expect(result.jobs).toHaveLength(0)`, true whatever the plugin reports, so it passed before this change and would have passed after a botched one. It now asserts the reason and the backend label.
+
+**Delivered by two validating transforms, not a regex sweep** (`scripts/codemod/delegating-diagnostics.ts` and `-specs.ts`). Mis-transforming a subset of 699 files silently is far worse than transforming none, so each file passes a precondition gate before editing and a postcondition gate before writing — TypeScript's parser used as a *verifier* (`createSourceFile` + `parseDiagnostics`), never as a printer, since `ts-morph` would reprint whole files and bury two real edits in thousands of cosmetic lines. `--expect` is mandatory and the run exits non-zero on any mismatch; anything not understood is skipped and reported rather than partially edited.
+
+**Line endings were treated as load-bearing.** The tree is mixed — 293 CRLF files, 154 with a BOM, no `.gitattributes` — and Git Bash strips CR in text mode, which is how that went unnoticed. Files are read as bytes, normalised in memory only, and written back with their original EOL and BOM. Verified: `git diff --numstat` and `git diff --ignore-all-space --numstat` both report 1,398 files.
+
+**The backend label is derived**, not hard-coded, from the adjacent logger line — so a new backend needs no codemod change, and the seven company names containing an escaped apostrophe (`Raising Cane's`) are handled because the capture ends before the company name. The spec pass reads its label from the sibling service migrated in pass 1, so the two passes cannot disagree.
+
+**Result:** 699 services uniformly `+7/-1`, 699 specs uniformly `+4/0`, zero outliers, no EOL churn, `tsc --noEmit` clean across the monorepo. Backend split matches the census exactly: Ashby 219, SmartRecruiters 217, Lever 180, Recruitee 83.
+
+**Verified by sabotage.** Flipping `not_registered` to `empty` in one migrated service makes its spec fail (`Expected: "not_registered", Received: "empty"`). That check matters because 1,505 generated specs in this tree assert `result.jobs` alone and stay green whatever a plugin reports — a passing suite is not evidence on its own.
+
+**No bot review on this PR:** 1,398 files exceeds Greptile's 100-file limit, so it posts "Too many files changed" and leaves no findings. That is why the mechanical gates carry the weight, and why the diff is exactly two shapes — reviewable by shape rather than by reading 1,398 hunks.
+
+**Next:** PR 4 the 822 canonical-swallow services + 806 specs, PR 5 the 268-file tail.
+
+---
+
+
 ## 2026-08-19 — Spec 1681 — the generators stop minting the swallowed-error shape
 
 **Change:** PR 2 of 5, deliberately ahead of the codemods. Fixing 1,521 generated files while the generators still emit the defect would leave the tree correct only until the next scaffolded batch.

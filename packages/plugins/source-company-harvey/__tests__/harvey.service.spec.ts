@@ -181,6 +181,10 @@ describe('HarveyService — Ashby delegation', () => {
         siteType: [Site.HARVEY],
       } as ScraperInputDto);
       expect(result.jobs).toHaveLength(0);
+      // jobs alone stays empty whatever the plugin reports, so this is the
+      // assertion that distinguishes a wiring fault from an empty board.
+      expect(result.diagnostics?.reason).toBe('not_registered');
+      expect(result.diagnostics?.detail).toContain('Ashby');
     });
   });
 
