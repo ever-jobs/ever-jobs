@@ -193,6 +193,9 @@ describe('CHAOSIndustriesService — Spec 773 / T04', () => {
         siteType: [Site.CHAOS_INDUSTRIES],
       } as ScraperInputDto);
       expect(result.jobs).toEqual([]);
+      // jobs alone stays empty whatever the plugin reports, so this is the
+      // assertion that pins the diagnostics contract. The mock throws a 500.
+      expect(result.diagnostics?.reason).toBe('fetch_error');
       expect(mockGet).toHaveBeenCalledTimes(1);
     });
 
