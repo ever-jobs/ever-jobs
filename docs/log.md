@@ -15,6 +15,27 @@
 
 ---
 
+## 2026-08-19 — Spec 1685 — the last mechanical diagnostics pass, and where the line was drawn
+
+**Change:** the final mechanical pass. Everything after this is hand work, so the job was to draw that line honestly rather than push a codemod past the point where it earns its keep.
+
+**Re-clustering the 164 remaining services changed the picture.** By what the last catch of the brace-matched `scrape()` body actually does: **D=126** (returns the accumulator, no reason), **B=30** (falls through to a later return), **A=5** (no catch at all), **C/F=3** (ambiguous).
+
+**Cluster A was never broken.** Those five let the error propagate, and `JobsService`'s `rejected` branch already calls `classifyScrapeError` — they are the one population where the fan-out's error path works as designed. Counting them as "unmigrated" would have been wrong, and changing them would be a regression.
+
+**Cluster D** is the shape `source-ats-smartrecruiters` had before Spec 1680 fixed it by hand: `return new JobResponseDto(jobPosts); // partial results` — partial results with **no signal at all**, so a page-2 failure was indistinguishable from a complete board. With Spec 1680's `partial` inference, a non-zero count plus a diagnostic now reports `partial` rather than `ok`.
+
+Two anchor lessons, both from a failed first attempt: the common shape carries a **trailing comment**, so an anchor requiring `;$` matched only **2 of 126**; and 47 files return `jobPosts.slice(0, resultsWanted)`, so the argument is captured whole and then verified to have balanced parens and no top-level comma, ensuring an existing second argument can never be mangled.
+
+**Result:** 126 files uniformly `+5/-1`, zero outliers, no EOL churn, `tsc --noEmit` 0 errors, targeted suites green, and an independent re-check (not reusing the codemod's logic) confirming every inserted call's nearest enclosing catch binds `err`.
+
+**Cluster B was attempted and deliberately abandoned.** Its catch has no return, so the reason must reach the terminal return through a variable — a three-point edit: declare, assign, use. The codemod's own gate rejected 31 of 37 candidates as ambiguous (more than one `err` catch, so which should carry the reason is undecidable), and of the 6 it accepted **`tsc` rejected 3** with `Cannot find name 'diagnostics'` — the declaration did not land in the right scope. Six files, half of them wrong, from a transform unlike any of the others. Reverted in full (`tsc` back to 0) and the tool **deleted** rather than left in `scripts/codemod/` for someone to trust later. These want hand edits.
+
+**Final state of the sequence, stated plainly:** **1,801 of 1,839 services report a real reason, 5 are correct by design, and 33 are documented for hand review** — 30 in cluster B and 3 ambiguous. Not "done", but done to the point where a codemod stops being the right tool.
+
+---
+
+
 ## 2026-08-19 — Spec 1684 — the tail cluster whose catch returns a bare empty result
 
 **Change:** PR 5 of 5, the awkward remainder by design. The first four passes were uniform; this one is not, so the work was to find the largest cluster that is genuinely mechanical and stop there rather than force the rest through a regex.

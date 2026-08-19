@@ -3,6 +3,7 @@ import { SourcePlugin } from '@ever-jobs/plugin';
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -133,7 +134,10 @@ export class BreatheHrService implements IScraper {
       return new JobResponseDto(jobPosts);
     } catch (err: any) {
       this.logger.error(`Breathe HR scrape error: ${err.message}`);
-      return new JobResponseDto(jobPosts); // partial results
+      // Partial results WITH a reason: jobs.length > 0 plus a diagnostic is
+      // inferred as 'partial' upstream, so a mid-scrape failure is no longer
+      // indistinguishable from a complete board.
+      return new JobResponseDto(jobPosts, classifyScrapeError(err));
     }
   }
 
