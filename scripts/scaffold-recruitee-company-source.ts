@@ -180,6 +180,7 @@ function serviceFile(d: RecruiteeCompanyDescriptor): string {
     `import { Injectable, Logger, Optional } from '@nestjs/common';\n` +
     `import {\n` +
     `  IScraper, ScraperInputDto, JobResponseDto, Site,\n` +
+    `  ScrapeDiagnostics,\n` +
     `} from '@ever-jobs/models';\n\n` +
     `${doc}\n` +
     `const COMPANY_SLUG = '${sq(d.companySlug)}';\n` +
@@ -201,7 +202,12 @@ function serviceFile(d: RecruiteeCompanyDescriptor): string {
     `      this.logger.error(\n` +
     `        'Recruitee source plugin is not registered; cannot scrape ${sq(d.displayName)}',\n` +
     `      );\n` +
-    `      return new JobResponseDto([]);\n` +
+    `      // A registry miss is a wiring problem, not an empty board -\n` +
+    `      // not_registered keeps the two distinguishable upstream.\n` +
+    `      return new JobResponseDto(\n` +
+    `        [],\n` +
+    `        new ScrapeDiagnostics('not_registered', 'Recruitee source plugin is not registered'),\n` +
+    `      );\n` +
     `    }\n\n` +
     `    this.logger.log(\n` +
     `      \`${sq(d.displayName)}: delegating to Recruitee (slug \${COMPANY_SLUG})\`,\n` +
@@ -587,7 +593,7 @@ function writeFileSafe(abs: string, content: string): void {
   fs.writeFileSync(abs, content);
 }
 
-function scaffoldOne(repoRoot: string, d: RecruiteeCompanyDescriptor): void {
+export function scaffoldOne(repoRoot: string, d: RecruiteeCompanyDescriptor): void {
   const pkgDir = path.join(repoRoot, 'packages', 'plugins', `source-company-${d.slug}`);
   const specDir = path.join(
     repoRoot,

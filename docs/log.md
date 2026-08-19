@@ -15,6 +15,26 @@
 
 ---
 
+## 2026-08-19 — Spec 1681 — the generators stop minting the swallowed-error shape
+
+**Change:** PR 2 of 5, deliberately ahead of the codemods. Fixing 1,521 generated files while the generators still emit the defect would leave the tree correct only until the next scaffolded batch.
+
+Six scaffolders build the company-source catalogue and share **no template module** — each carries its own copy of the emitted code.
+
+- **`scaffold-company-source.ts`** emitted the canonical swallow verbatim (`catch` → log → `return { jobs };`) plus a bare object literal instead of a `JobResponseDto`. That type-checks — both DTO members are public and `diagnostics` is optional, so structural typing accepts it — which is precisely why 822 services drifted without the compiler noticing. Now emits `classifyScrapeError` and returns `new JobResponseDto(jobs, classifyScrapeError(err))`. It passes `jobs`, not `[]`: the catch sits outside the accumulation loop, so a board that parsed 30 postings before failing already returns those 30, and preserving that is a non-regression requirement rather than an improvement.
+- **The five delegating scaffolders** (ashby, lever, recruitee, smartrecruiters, workable — between them the 699 wrappers) emitted `return new JobResponseDto([]);` for a registry miss. A delegating plugin has exactly one independent failure path, and that was it: a wiring fault where no request was ever made, reported upstream as an empty board. They now report `not_registered`, the reason Spec 1680 added for this case.
+- **The generated failure test** asserted `expect(result.jobs).toEqual([])`, which stays true whatever the plugin reports — it passed before this change and would have passed after a botched one. It now also asserts `result.diagnostics?.reason === 'fetch_error'`, matching the 500 its own mock throws.
+- **Five of the six scaffolders had no tests at all.** `scaffoldOne` was module-private, which is the mechanical reason why. Exported, and covered by one parameterised spec across all five backends rather than five near-identical files, so drift between them is obvious.
+
+**Verified end to end, not by substring.** Scaffolded a throwaway plugin, ran `wire-company-source.ts` to add its enum entry, path alias and jest mapper, then ran the *generated plugin's own* suite: **11/11 pass**, including the new diagnostics assertion. Artifacts reverted, leaving only the intended `scripts/` changes. `scripts/__tests__` is **182/182 across 11 suites**, up from 166.
+
+**Gotcha worth recording:** emitted comments must contain no backticks. The templates are TypeScript template literals, so a backtick inside an emitted comment terminates the enclosing string. This bit twice while writing this PR — surfacing as `Cannot find name 'jobs'` and `Cannot find name 'not_registered'` — caught by the compiler through the scaffolders' own suite rather than by review.
+
+**Next:** PR 3 the 699 delegating services + specs, PR 4 the 822 canonical services + 806 specs, PR 5 the 268-file tail.
+
+---
+
+
 ## 2026-08-18 — Spec 1680 — diagnostics semantics; the two backends that gated 300 wrappers
 
 **Change:** first of a five-PR sequence to make source plugins report a real reason instead of collapsing every outcome to `empty`. A census of all **1,839** plugin services found only **45** ever construct a `ScrapeDiagnostics` — 822 use the canonical swallow (`catch` → log → `return { jobs };`), 699 delegate to a backend ATS plugin, and 268 are a tail of other shapes. This PR touches none of them: it fixes the four things every later PR would otherwise hard-code the wrong answers to.
