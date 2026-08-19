@@ -2,6 +2,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -97,7 +98,7 @@ export class FountainService implements IScraper {
       return new JobResponseDto(jobPosts);
     } catch (err: any) {
       this.logger.error(`Fountain scrape error: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

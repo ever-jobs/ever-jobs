@@ -2,6 +2,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -105,7 +106,7 @@ export class TrakstarService implements IScraper {
       this.logger.error(
         `Trakstar scrape error for ${companySlug}: ${err.message}`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

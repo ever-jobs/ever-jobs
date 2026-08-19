@@ -1,6 +1,7 @@
 ﻿import { SourcePlugin } from '@ever-jobs/plugin';
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -98,7 +99,7 @@ export class WellfoundService implements IScraper, OnModuleDestroy {
       return new JobResponseDto(jobPosts);
     } catch (err: any) {
       this.logger.error(`Wellfound scrape failed: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     } finally {
       if (page) {
         const context = page.context();

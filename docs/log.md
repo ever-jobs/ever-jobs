@@ -15,6 +15,31 @@
 
 ---
 
+## 2026-08-19 — Spec 1684 — the tail cluster whose catch returns a bare empty result
+
+**Change:** PR 5 of 5, the awkward remainder by design. The first four passes were uniform; this one is not, so the work was to find the largest cluster that is genuinely mechanical and stop there rather than force the rest through a regex.
+
+**Re-scoping corrected two of my own earlier claims.** The "last catch in the file" classifier conflates the outer `scrape()` catch with per-item catches inside loops and helper-method catches — brace-matching the actual `scrape()` body resolves the 264 remaining services into 68 clusters, most of the large ones being inner catches that are none of this spec's business. And the "~128 accumulator hoists" estimate described a *different, optional* goal: hoisting is only needed to preserve partial results, not to report a reason.
+
+The largest genuinely mechanical cluster — exactly one catch binding `err` whose own block returns `new JobResponseDto([])` — is **100 services**, needing no restructuring at all:
+
+```ts
+      return new JobResponseDto([], classifyScrapeError(err));
+```
+
+**A real bug in the first version, caught only by `tsc`.** It anchored with a regex running from `catch (…) {` to the return, which **silently crossed the catch's closing brace** and rewrote a method-level return in `source-ats-loxo` where `err` is out of scope. That parsed cleanly, so `parseDiagnostics` passed; the count gate passed; the line-delta gate passed; and the catch-variable guard allowed enough slack to span the brace. Only the type-check caught it. The transform now brace-matches each catch block and requires the return to lie strictly inside it, and a postcondition **re-derives that from the output** rather than trusting the input match — precisely the check the first version lacked. `source-ats-loxo` is now correctly skipped.
+
+Catches binding `error`/`e` are skipped rather than renaming someone's variable.
+
+**Result:** 100 files uniformly `+2/-1`, zero outliers; both diff forms report 100 (no EOL churn); `tsc --noEmit` **0 errors**; targeted suites green. Plus an independent re-check, written deliberately *not* to reuse the codemod's own logic so it cannot share a blind spot, confirming every inserted call's nearest enclosing catch binds `err` — 0 violations.
+
+**What remains, stated plainly:** 164 services still report `empty` for real failures — 162 whose `scrape()` has no bare-empty catch return (their catches sit inside loops or helpers, or they rethrow) and 2 with several such returns, flagged for hand review. They are enumerated rather than dropped. The honest end state of this five-PR sequence is **1,721 of 1,839 migrated, 164 documented** — not "done".
+
+**Partial results are untouched.** Plugins in this cluster discard whatever they accumulated when they fail, because the accumulator is declared inside the `try` and is out of scope in the catch. Recovering it needs a per-file hoist and its own review; this spec only makes the failure legible.
+
+---
+
+
 ## 2026-08-19 — Spec 1683 — 822 services stop swallowing their errors
 
 **Change:** PR 4 of 5 and the payload of the sequence — **1,628 files** (822 services + 806 specs).

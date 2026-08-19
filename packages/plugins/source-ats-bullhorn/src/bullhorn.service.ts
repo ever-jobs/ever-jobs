@@ -2,6 +2,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -128,7 +129,7 @@ export class BullhornService implements IScraper {
       this.logger.error(
         `Bullhorn scrape error for cls=${cls}: ${err.message}`,
       );
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

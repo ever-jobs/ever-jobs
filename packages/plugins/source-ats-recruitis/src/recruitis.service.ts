@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -168,7 +169,7 @@ export class RecruitisService implements IScraper {
         );
         return new JobResponseDto(jobPosts.slice(0, resultsWanted));
       } catch {
-        return new JobResponseDto([]);
+        return new JobResponseDto([], classifyScrapeError(err));
       }
     }
   }
