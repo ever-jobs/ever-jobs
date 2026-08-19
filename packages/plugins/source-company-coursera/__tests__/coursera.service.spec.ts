@@ -252,6 +252,9 @@ describe('CourseraService — Spec 068 / T04', () => {
       } as ScraperInputDto);
 
       expect(result.jobs).toEqual([]);
+      // jobs alone stays empty whatever the plugin reports, so this is the
+      // assertion that pins the diagnostics contract. The mock throws a 500.
+      expect(result.diagnostics?.reason).toBe('fetch_error');
       expect(mockGet).toHaveBeenCalledTimes(1);
     });
 

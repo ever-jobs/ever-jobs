@@ -2,6 +2,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
 import { createHttpClient, stripHtmlTags } from '@ever-jobs/common';
@@ -76,8 +77,13 @@ export class ComeetService implements IScraper {
       this.logger.log(`Comeet: scraped ${jobs.length} jobs for ${company}`);
     } catch (err: any) {
       this.logger.error(`Comeet scrape failed for ${company}: ${err.message}`);
+      // Report WHY, and keep whatever was accumulated: the catch is outside
+      // the loop, so a board that parsed jobs before failing still returns
+      // them. Resolving rather than throwing is deliberate - the breaker
+      // counts failures only on rejection.
+      return new JobResponseDto(jobs, classifyScrapeError(err));
     }
 
-    return { jobs };
+    return new JobResponseDto(jobs);
   }
 }

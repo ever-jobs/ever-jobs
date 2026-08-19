@@ -15,6 +15,35 @@
 
 ---
 
+## 2026-08-19 — Spec 1683 — 822 services stop swallowing their errors
+
+**Change:** PR 4 of 5 and the payload of the sequence — **1,628 files** (822 services + 806 specs).
+
+822 plugin services ended `scrape()` by logging the error and then discarding it (`catch` → log → `return { jobs };`). A 403, a DNS failure, a Cloudflare challenge, a dead slug and a genuinely empty board therefore all reached the API as `reason: 'empty'`, since `JobsService` can only infer `empty` when a plugin returns zero jobs with no diagnostics. That is the root cause behind the ≥98% `ok`/`empty` noise measured in Spec 1679, and why the per-source diagnostics were far less informative than they looked.
+
+`return { jobs }` also type-checks against `Promise<JobResponseDto>` — both DTO members are public and `diagnostics` is optional, so structural typing accepts a bare object literal. That is precisely why 822 files drifted without the compiler ever noticing.
+
+Now `return new JobResponseDto(jobs, classifyScrapeError(err))`, with `return new JobResponseDto(jobs)` on the success path.
+
+**`jobs` is passed, never `[]`.** The accumulator is declared before the `try` and filled inside it, and the catch sits outside the loop — so a board that parsed 30 postings before failing returns those 30 *today*. Emitting `JobResponseDto([], …)` would have bundled silent data loss into a diagnostics fix. A precondition enforces `decl < try < catch` and the presence of `jobs.push(` per file rather than trusting the census; all 822 passed independently.
+
+**Plugins keep resolving, never throwing.** `CircuitBreakerService` counts failures only on rejection, so this cannot trip a breaker. Making 822 plugins throw would trip breakers on any merely-403ing source within five fan-outs and overflow `MAX_SITES = 250` against 1,832 registered sites.
+
+**Every file in this population is CRLF** (822/822, 16 also with a BOM), so byte-level handling is the only thing that works here rather than a precaution: read bytes, normalise in memory only, restore EOL and BOM on write.
+
+**The spec pass is gated on its sibling service.** 809 specs match the failure-test anchor but only **806** belong to services in the canonical bucket — the surplus are tail-bucket plugins sharing the generated shape. Asserting `fetch_error` against a service that still swallows would produce a red test that looks like a real regression, so 52 were skipped as `SERVICE_NOT_MIGRATED`.
+
+**Result:** 822 services uniformly `+7/-1`, 806 specs uniformly `+3/0`, zero outliers; both diff forms report 1,628 (no EOL churn); `tsc --noEmit` clean.
+
+**Verified by sabotage:** reverting one migrated service to the swallow makes its spec fail (`Expected: "fetch_error", Received: undefined`). Restored, and the diff distribution re-checked afterwards to prove no residue. That check matters because 1,505 generated specs assert `result.jobs` alone and stay green whatever a plugin reports.
+
+**Operationally visible:** sources that were failing silently will now report `blocked`, `bad_input`, `fetch_error` and friends instead of `empty`, and the Spec 1680 metric labels move with them. That step change is the fix landing, not a regression — but expect it rather than discover it.
+
+**Next:** PR 5, the 268-file tail plus `source-company-tiktok` by hand — clustered by exact catch-tail with a dry run per cluster. Roughly 128 of those return `[]` from the catch and need the accumulator hoisted out of the `try` before the rewrite, and `source-ats-rippling` carries the one spec assertion in the repo that will actually break.
+
+---
+
+
 ## 2026-08-19 — Spec 1682 — 699 delegating plugins report a registry miss as `not_registered`
 
 **Change:** PR 3 of 5, and the first at real scale — **1,398 files**.
