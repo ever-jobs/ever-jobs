@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -70,6 +72,7 @@ export class ReedService implements IScraper {
     });
 
     const jobs: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const seenIds = new Set<string>();
     let offset = input.offset ?? 0;
 
@@ -127,11 +130,12 @@ export class ReedService implements IScraper {
         if (rawJobs.length < take) break;
       } catch (err: any) {
         this.logger.error(`Reed scrape error: ${err.message}`);
+        diagnostics = classifyScrapeError(err);
         break;
       }
     }
 
-    return new JobResponseDto(jobs);
+    return new JobResponseDto(jobs, diagnostics);
   }
 
   private mapJob(raw: ReedJob, descriptionFormat?: DescriptionFormat): JobPostDto | null {

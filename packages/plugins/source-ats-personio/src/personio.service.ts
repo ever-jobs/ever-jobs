@@ -4,6 +4,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import {
   IScraper,
+  classifyScrapeError,
+  ScrapeDiagnostics,
   ScraperInputDto,
   JobResponseDto,
   JobPostDto,
@@ -48,7 +50,10 @@ export class PersonioService implements IScraper {
     const companySlug = input.companySlug;
     if (!companySlug) {
       this.logger.warn('No companySlug provided for Personio scraper');
-      return new JobResponseDto([]);
+      return new JobResponseDto(
+        [],
+        new ScrapeDiagnostics('bad_input', 'no companySlug provided'),
+      );
     }
 
     // Check for API credentials: per-request auth overrides env vars
@@ -101,12 +106,15 @@ export class PersonioService implements IScraper {
         usedDomain = 'com';
       } catch (err: any) {
         this.logger.error(`Personio scrape error for ${companySlug}: ${err.message}`);
-        return new JobResponseDto([]);
+        return new JobResponseDto([], classifyScrapeError(err));
       }
     }
 
     if (!xmlData) {
-      return new JobResponseDto([]);
+      return new JobResponseDto(
+        [],
+        new ScrapeDiagnostics('empty', 'neither Personio domain returned an XML feed'),
+      );
     }
 
     try {
@@ -132,7 +140,7 @@ export class PersonioService implements IScraper {
       return new JobResponseDto(jobPosts);
     } catch (err: any) {
       this.logger.error(`Personio XML parse error for ${companySlug}: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

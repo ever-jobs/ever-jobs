@@ -11,6 +11,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import {
   IScraper,
+  classifyScrapeError,
+  ScrapeDiagnostics,
   ScraperInputDto,
   JobResponseDto,
   JobPostDto,
@@ -47,6 +49,9 @@ export class BuiltInService implements IScraper {
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
     const resultsWanted = input.resultsWanted ?? 15;
+    // The API failure is a ROUTING SIGNAL, not an outcome - the HTML fallback
+    // decides the result. Only surface it if that fallback also yields nothing.
+    let apiFailure: ScrapeDiagnostics | undefined;
 
     // Primary: REST API search
     try {
@@ -57,11 +62,12 @@ export class BuiltInService implements IScraper {
       this.logger.log('BuiltIn API returned zero results, trying HTML fallback');
     } catch (err: any) {
       this.logger.warn(`BuiltIn API failed: ${err.message}, trying HTML fallback`);
+      apiFailure = classifyScrapeError(err);
     }
 
     // Fallback: HTML scraping
     const htmlJobs = await this.scrapeHtml(input, resultsWanted);
-    return new JobResponseDto(htmlJobs);
+    return new JobResponseDto(htmlJobs, htmlJobs.length ? undefined : apiFailure);
   }
 
   // ── Primary: REST API ────────────────────────────────────────────────

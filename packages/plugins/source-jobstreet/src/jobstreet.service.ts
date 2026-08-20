@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -51,6 +53,7 @@ export class JobstreetService implements IScraper {
     client.setHeaders(JOBSTREET_HEADERS);
 
     const jobs: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
 
     this.logger.log(
       `Fetching Jobstreet jobs (resultsWanted=${resultsWanted})`,
@@ -105,10 +108,11 @@ export class JobstreetService implements IScraper {
       }
     } catch (err: any) {
       this.logger.error(`Jobstreet scrape error: ${err.message}`);
+      diagnostics = classifyScrapeError(err);
     }
 
     this.logger.log(`Jobstreet returned ${jobs.length} jobs`);
-    return new JobResponseDto(jobs);
+    return new JobResponseDto(jobs, diagnostics);
   }
 
   /**

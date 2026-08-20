@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -61,6 +63,7 @@ export class FindWorkService implements IScraper {
     });
 
     const jobs: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const seenIds = new Set<string>();
     let nextUrl: string | null = null;
     let isFirstPage = true;
@@ -123,12 +126,13 @@ export class FindWorkService implements IScraper {
         if (!nextUrl) break;
       } catch (err: any) {
         this.logger.error(`FindWork scrape error: ${err.message}`);
+        diagnostics = classifyScrapeError(err);
         break;
       }
     }
 
     this.logger.log(`FindWork returned ${jobs.length} jobs`);
-    return new JobResponseDto(jobs);
+    return new JobResponseDto(jobs, diagnostics);
   }
 
   /**

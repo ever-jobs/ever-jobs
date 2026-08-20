@@ -9,6 +9,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -49,6 +51,7 @@ export class DribbbleService implements IScraper {
     client.setHeaders(HEADERS);
 
     const allJobs: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
 
     try {
       const url = new URL(DRIBBBLE_JOBS_URL);
@@ -70,9 +73,10 @@ export class DribbbleService implements IScraper {
       }
     } catch (err: any) {
       this.logger.error(`Dribbble Jobs scrape failed: ${err.message}`);
+      diagnostics = classifyScrapeError(err);
     }
 
-    return new JobResponseDto(allJobs.slice(0, resultsWanted));
+    return new JobResponseDto(allJobs.slice(0, resultsWanted), diagnostics);
   }
 
   private extractFromNextData(html: string): JobPostDto[] {

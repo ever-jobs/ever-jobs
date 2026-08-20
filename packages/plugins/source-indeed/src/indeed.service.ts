@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -48,6 +50,7 @@ export class IndeedService implements IScraper {
     const apiUrl = `https://apis.indeed.com/graphql`;
 
     const jobList: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const resultsWanted = input.resultsWanted ?? 15;
     let cursor: string | null = null;
     const seenIds = new Set<string>();
@@ -109,11 +112,12 @@ export class IndeedService implements IScraper {
         await randomSleep(this.delay * 1000, (this.delay + this.bandDelay) * 1000);
       } catch (err: any) {
         this.logger.error(`Indeed scrape error: ${err.message}`);
+        diagnostics = classifyScrapeError(err);
         break;
       }
     }
 
-    return new JobResponseDto(jobList);
+    return new JobResponseDto(jobList, diagnostics);
   }
 
   private processJob(job: any, subdomain: string, format?: DescriptionFormat): JobPostDto | null {
