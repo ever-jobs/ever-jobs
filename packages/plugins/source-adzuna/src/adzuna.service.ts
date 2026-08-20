@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -72,7 +74,10 @@ export class AdzunaService implements IScraper {
 
     if (!appId || !appKey) {
       this.logger.warn('Skipping Adzuna search — credentials not configured');
-      return new JobResponseDto([]);
+      return new JobResponseDto(
+        [],
+        new ScrapeDiagnostics('bad_input', 'Adzuna credentials not configured'),
+      );
     }
 
     const resultsWanted = input.resultsWanted ?? ADZUNA_DEFAULT_RESULTS;
@@ -89,6 +94,7 @@ export class AdzunaService implements IScraper {
     client.setHeaders(ADZUNA_HEADERS);
 
     const jobs: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const seenIds = new Set<string>();
     let page = 1;
 
@@ -161,11 +167,12 @@ export class AdzunaService implements IScraper {
         page++;
       } catch (err: any) {
         this.logger.error(`Adzuna scrape error: ${err.message}`);
+        diagnostics = classifyScrapeError(err);
         break;
       }
     }
 
-    return new JobResponseDto(jobs);
+    return new JobResponseDto(jobs, diagnostics);
   }
 
   /**

@@ -3,6 +3,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto,
   LocationDto, DescriptionFormat, Site,
 } from '@ever-jobs/models';
@@ -38,6 +40,7 @@ export class GoogleService implements IScraper {
     const client = createHttpClient(input);
 
     const jobList: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const resultsWanted = input.resultsWanted ?? 15;
     const searchTerm = input.googleSearchTerm ?? input.searchTerm ?? '';
     const query = this.buildQuery(searchTerm, input);
@@ -103,9 +106,10 @@ export class GoogleService implements IScraper {
       }
     } catch (err: any) {
       this.logger.error(`Google Jobs scrape error: ${err.message}`);
+      diagnostics = classifyScrapeError(err);
     }
 
-    return new JobResponseDto(jobList);
+    return new JobResponseDto(jobList, diagnostics);
   }
 
   private buildQuery(searchTerm: string, input: ScraperInputDto): string {

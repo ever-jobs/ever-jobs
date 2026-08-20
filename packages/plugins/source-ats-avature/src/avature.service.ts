@@ -3,6 +3,8 @@ import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
 import {
   IScraper,
+  classifyScrapeError,
+  ScrapeDiagnostics,
   JobPostDto,
   JobResponseDto,
   LocationDto,
@@ -76,6 +78,7 @@ export class AvatureService implements IScraper {
     client.setHeaders(AVATURE_HEADERS);
 
     const collected: AvatureParsedJob[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
 
     for (let page = 0; page < AVATURE_MAX_PAGES; page++) {
       if (collected.length >= resultsWanted) break;
@@ -96,7 +99,9 @@ export class AvatureService implements IScraper {
         );
         // Match upstream behaviour: a single failed page collapses
         // the entire scrape to an empty response (`get_jobs_page`
-        // returns `[]` and `get_all_jobs` breaks the loop).
+        // returns `[]` and `get_all_jobs` breaks the loop). Record WHY
+        // first - the break discards the reason otherwise.
+        diagnostics = classifyScrapeError(err);
         break;
       }
 
@@ -123,7 +128,7 @@ export class AvatureService implements IScraper {
     this.logger.log(
       `Avature: ${jobs.length} jobs from ${tenant.domain} (resultsWanted=${resultsWanted})`,
     );
-    return new JobResponseDto(jobs);
+    return new JobResponseDto(jobs, diagnostics);
   }
 
   /** Resolve `companyUrl` / `companySlug` into a `AvatureTenantContext`. */

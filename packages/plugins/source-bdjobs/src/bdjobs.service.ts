@@ -3,6 +3,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto,
   LocationDto, Country, DescriptionFormat, Site, countryFromString,
 } from '@ever-jobs/models';
@@ -34,6 +36,7 @@ export class BDJobsService implements IScraper {
     client.setHeaders(BDJOBS_HEADERS);
 
     const jobList: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const resultsWanted = input.resultsWanted ?? 15;
     const seenIds = new Set<string>();
     let page = 1;
@@ -82,11 +85,12 @@ export class BDJobsService implements IScraper {
         await randomSleep(this.delay * 1000, (this.delay + this.bandDelay) * 1000);
       } catch (err: any) {
         this.logger.error(`BDJobs scrape error: ${err.message}`);
+        diagnostics = classifyScrapeError(err);
         break;
       }
     }
 
-    return new JobResponseDto(jobList.slice(0, resultsWanted));
+    return new JobResponseDto(jobList.slice(0, resultsWanted), diagnostics);
   }
 
   private findJobListings($: cheerio.CheerioAPI): any[] {

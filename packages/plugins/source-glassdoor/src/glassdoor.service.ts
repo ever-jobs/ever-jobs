@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto,
   DescriptionFormat, Country, Site, getGlassdoorUrl,
 } from '@ever-jobs/models';
@@ -42,6 +44,7 @@ export class GlassdoorService implements IScraper {
     }
 
     const jobList: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const resultsWanted = input.resultsWanted ?? 15;
     let page = 1;
     let paginationCursors: { cursor: string; pageNumber: number }[] = [];
@@ -134,10 +137,11 @@ export class GlassdoorService implements IScraper {
         await randomSleep(this.delay * 1000, (this.delay + this.bandDelay) * 1000);
       } catch (err: any) {
         this.logger.error(`Glassdoor scrape error: ${err.message}`);
+        diagnostics = classifyScrapeError(err);
         break;
       }
     }
 
-    return new JobResponseDto(jobList);
+    return new JobResponseDto(jobList, diagnostics);
   }
 }

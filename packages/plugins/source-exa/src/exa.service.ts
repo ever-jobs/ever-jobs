@@ -4,6 +4,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import Exa from 'exa-js';
 import {
   IScraper,
+  classifyScrapeError,
+  ScrapeDiagnostics,
   ScraperInputDto,
   JobResponseDto,
   JobPostDto,
@@ -61,13 +63,16 @@ export class ExaService implements IScraper {
         exa = new Exa(requestApiKey);
       } catch (err: any) {
         this.logger.error(`Failed to create Exa client from per-request key: ${err.message}`);
-        return new JobResponseDto([]);
+        return new JobResponseDto([], classifyScrapeError(err));
       }
     }
 
     if (!exa) {
       this.logger.warn('Skipping Exa search — client not initialised');
-      return new JobResponseDto([]);
+      return new JobResponseDto(
+        [],
+        new ScrapeDiagnostics('bad_input', 'Exa client not initialised (no API key)'),
+      );
     }
 
     const numResults = input.resultsWanted ?? DEFAULT_NUM_RESULTS;
@@ -116,7 +121,7 @@ export class ExaService implements IScraper {
       return new JobResponseDto(jobs);
     } catch (err: any) {
       this.logger.error(`Exa scrape error: ${err.message}`);
-      return new JobResponseDto([]);
+      return new JobResponseDto([], classifyScrapeError(err));
     }
   }
 

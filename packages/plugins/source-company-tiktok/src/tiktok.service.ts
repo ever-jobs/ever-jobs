@@ -3,6 +3,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import {
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site,
+  classifyScrapeError, ScrapeDiagnostics,
   LocationDto,
 } from '@ever-jobs/models';
 import { BrowserPool } from '@ever-jobs/common';
@@ -28,6 +29,7 @@ export class TikTokService implements IScraper, OnModuleDestroy {
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
     const jobs: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const maxResults = input.resultsWanted ?? 100;
 
     let page;
@@ -63,7 +65,7 @@ export class TikTokService implements IScraper, OnModuleDestroy {
 
       if (!cards.length) {
         this.logger.warn('No job cards found on TikTok search page');
-        return { jobs };
+        return new JobResponseDto(jobs);
       }
 
       // 4. Scroll to load more results if needed (infinite scroll)
@@ -142,6 +144,7 @@ export class TikTokService implements IScraper, OnModuleDestroy {
       this.logger.log(`TikTok: scraped ${jobs.length} jobs`);
     } catch (err: any) {
       this.logger.error(`TikTok scrape failed: ${err.message}`);
+      diagnostics = classifyScrapeError(err);
     } finally {
       if (page) {
         const context = page.context();
@@ -150,7 +153,7 @@ export class TikTokService implements IScraper, OnModuleDestroy {
       }
     }
 
-    return { jobs };
+    return new JobResponseDto(jobs, diagnostics);
   }
 
   async onModuleDestroy(): Promise<void> {

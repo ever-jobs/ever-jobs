@@ -3,6 +3,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -44,6 +46,7 @@ export class LinkedInService implements IScraper {
     client.setHeaders(LINKEDIN_HEADERS);
 
     const jobList: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const resultsWanted = input.resultsWanted ?? 15;
     let start = input.offset ?? 0;
     const seenIds = new Set<string>();
@@ -105,11 +108,12 @@ export class LinkedInService implements IScraper {
           await randomSleep(this.delay * 1000, (this.delay + this.bandDelay) * 1000);
         } catch (err: any) {
           this.logger.warn(`Error fetching description for ${job.jobUrl}: ${err.message}`);
+          diagnostics = classifyScrapeError(err);
         }
       }
     }
 
-    return new JobResponseDto(jobList);
+    return new JobResponseDto(jobList, diagnostics);
   }
 
   private buildSearchParams(input: ScraperInputDto, start: number): Record<string, string | number> {

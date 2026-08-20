@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -89,6 +91,7 @@ export class AdpService implements IScraper {
     const details = await this.fetchDetails(client, listing.host, cid, wanted);
 
     const jobPosts: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     wanted.forEach((job, index) => {
       try {
         const post = this.mapJob(
@@ -103,10 +106,11 @@ export class AdpService implements IScraper {
         }
       } catch (err: any) {
         this.logger.warn(`Error processing ADP job ${job.itemID}: ${err.message}`);
+        diagnostics = classifyScrapeError(err);
       }
     });
 
-    return new JobResponseDto(jobPosts);
+    return new JobResponseDto(jobPosts, diagnostics);
   }
 
   /**

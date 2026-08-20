@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto,
   LocationDto, CompensationDto, CompensationInterval, JobType,
   DescriptionFormat, Site, getJobTypeFromString,
@@ -36,6 +38,7 @@ export class ZipRecruiterService implements IScraper {
     }
 
     const jobList: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const resultsWanted = input.resultsWanted ?? 15;
     let continueToken: string | null = null;
     const seenIds = new Set<string>();
@@ -71,11 +74,12 @@ export class ZipRecruiterService implements IScraper {
         await randomSleep(this.delay * 1000, (this.delay + this.bandDelay) * 1000);
       } catch (err: any) {
         this.logger.error(`ZipRecruiter scrape error: ${err.message}`);
+        diagnostics = classifyScrapeError(err);
         break;
       }
     }
 
-    return new JobResponseDto(jobList);
+    return new JobResponseDto(jobList, diagnostics);
   }
 
   private buildParams(input: ScraperInputDto, continueToken: string | null): Record<string, any> {

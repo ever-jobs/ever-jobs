@@ -3,6 +3,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   IScraper,
+  classifyScrapeError,
+  ScrapeDiagnostics,
   ScraperInputDto,
   JobResponseDto,
   JobPostDto,
@@ -36,12 +38,19 @@ export class LoxoService implements IScraper {
     const companySlug = input.companySlug;
     if (!companySlug) {
       this.logger.warn('No companySlug provided for Loxo scraper');
-      return new JobResponseDto([]);
+      return new JobResponseDto(
+        [],
+        new ScrapeDiagnostics('bad_input', 'no companySlug provided'),
+      );
     }
 
     // ─── Resolve API token: per-request auth overrides env var ────
     const apiToken =
       input.auth?.loxo?.apiToken ?? process.env.LOXO_API_TOKEN ?? null;
+
+    // Whichever surface was tried LAST owns the reported reason: an earlier
+    // failure is a routing signal towards the next one, not the outcome.
+    let diagnostics: ScrapeDiagnostics | undefined;
 
     // ─── Try public endpoint first ───────────────────────────────
     try {
@@ -53,6 +62,7 @@ export class LoxoService implements IScraper {
       this.logger.warn(
         `Loxo public endpoint failed for ${companySlug}: ${err.message}`,
       );
+      diagnostics = classifyScrapeError(err);
     }
 
     // ─── Fall back to authenticated API if token is available ────
@@ -63,10 +73,11 @@ export class LoxoService implements IScraper {
         this.logger.error(
           `Loxo authenticated API also failed for ${companySlug}: ${err.message}`,
         );
+        diagnostics = classifyScrapeError(err);
       }
     }
 
-    return new JobResponseDto([]);
+    return new JobResponseDto([], diagnostics);
   }
 
   /**
