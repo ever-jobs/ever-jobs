@@ -18,7 +18,7 @@ import {
   extractEmails,
   toDateOnly,
 } from '@ever-jobs/common';
-import { NAVJOBS_FEED_URL, NAVJOBS_PUBLIC_TOKEN_URL, NAVJOBS_HEADERS, NAVJOBS_DEFAULT_RESULTS } from './navjobs.constants';
+import { NAVJOBS_FEED_URL, NAVJOBS_PUBLIC_TOKEN_URL, NAVJOBS_HEADERS, NAVJOBS_DEFAULT_RESULTS, NAVJOBS_TOKEN_TIMEOUT_SECONDS } from './navjobs.constants';
 import { NavJobsFeedResponse, NavJobsFeedItem } from './navjobs.types';
 
 @SourcePlugin({
@@ -98,7 +98,7 @@ export class NavJobsService implements IScraper {
     if (this.cachedPublicToken) return this.cachedPublicToken;
 
     try {
-      const client = createHttpClient({ timeout: 10000 });
+      const client = createHttpClient({ timeout: NAVJOBS_TOKEN_TIMEOUT_SECONDS });
       const response = await client.get(NAVJOBS_PUBLIC_TOKEN_URL);
       this.cachedPublicToken = response.data as string;
       this.logger.log('NAV Jobs public token obtained');

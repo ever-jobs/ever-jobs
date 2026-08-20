@@ -38,9 +38,16 @@ export interface HttpClientOptions {
   caCert?: string;
   userAgent?: string;
   retries?: number;
+  /** Base backoff between retries, in MILLISECONDS (default 1000). */
   retryDelay?: number;
   retryBackoff?: 'linear' | 'exponential';
+  /** Ceiling on any single retry wait, in MILLISECONDS (default 30000). */
   retryMaxDelay?: number;
+  /**
+   * Per-request timeout in SECONDS (default 60) -- NOT milliseconds. It is
+   * multiplied by 1000 below, so `timeout: 10000` asks for ~2.8 hours rather
+   * than 10 seconds. The retry delays above are milliseconds; this one is not.
+   */
   timeout?: number;
   /** Minimum delay between requests in seconds (rate limiting) */
   rateDelayMin?: number;
