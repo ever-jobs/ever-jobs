@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -89,6 +91,7 @@ export class AdzunaService implements IScraper {
     client.setHeaders(ADZUNA_HEADERS);
 
     const jobs: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const seenIds = new Set<string>();
     let page = 1;
 
@@ -162,10 +165,11 @@ export class AdzunaService implements IScraper {
       } catch (err: any) {
         this.logger.error(`Adzuna scrape error: ${err.message}`);
         break;
+        diagnostics = classifyScrapeError(err);
       }
     }
 
-    return new JobResponseDto(jobs);
+    return new JobResponseDto(jobs, diagnostics);
   }
 
   /**

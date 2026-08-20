@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto,
   LocationDto, CompensationDto, Country, DescriptionFormat, Site,
   getJobTypeFromString,
@@ -34,6 +36,7 @@ export class NaukriService implements IScraper {
     client.setHeaders(NAUKRI_HEADERS);
 
     const jobList: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const resultsWanted = input.resultsWanted ?? 15;
     const seenIds = new Set<string>();
     let page = Math.floor((input.offset ?? 0) / this.jobsPerPage) + 1;
@@ -87,10 +90,11 @@ export class NaukriService implements IScraper {
       } catch (err: any) {
         this.logger.error(`Naukri scrape error: ${err.message}`);
         break;
+        diagnostics = classifyScrapeError(err);
       }
     }
 
-    return new JobResponseDto(jobList.slice(0, resultsWanted));
+    return new JobResponseDto(jobList.slice(0, resultsWanted), diagnostics);
   }
 
   private processJob(job: any, jobId: string, input: ScraperInputDto): JobPostDto | null {

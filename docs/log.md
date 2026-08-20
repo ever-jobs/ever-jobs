@@ -15,6 +15,33 @@
 
 ---
 
+## 2026-08-20 — Spec 1686 — the last 33, finished by reading them
+
+**Change:** finishes the sequence. Spec 1685 left 33 services labelled "hand review" — correct about the technique, wrong about the implication. It only ever meant "needs per-file judgement rather than a pattern", not that a different pair of hands was required.
+
+These are the services whose `scrape()` catch has **no return**: it logs and falls through to a later `return new JobResponseDto(...)`, so the reason has to be carried in a variable — declare, assign, use. Spec 1685's automatic attempt guessed the declaration point from "the first top-level try" and `tsc` rejected half its output with `Cannot find name 'diagnostics'`.
+
+**The guess is the only part that cannot be automated.** So `apply-fallthrough-diagnostics.ts` takes the judgement per file — the exact line to declare after, the exact accumulator expression, which catch carries the reason, all read from the file — and automates everything else: brace-matching the catch, rewriting the return, adding imports, preserving CRLF/BOM, and re-deriving from the *output* that the assignment landed inside an `err` catch. Those are precisely the things hand-editing 33 files gets wrong.
+
+28 went through that path. **Five were edited directly**, because their shape is genuinely singular:
+
+- **`source-ats-avature`** — accumulator is `collected: AvatureParsedJob[]`, mapped to `jobs` only at the return, and the catch sits inside the pagination loop where it `break`s, discarding the reason.
+- **`source-ats-loxo`** — two surfaces (public, then authenticated). Whichever was tried **last** owns the reason; an earlier failure is a routing signal, not the outcome.
+- **`source-ats-personio`** — two domains (`.de` then `.com`) plus an XML parse stage: three distinct failure points, each meaning something different.
+- **`source-builtin`, `source-dice`** — multi-strategy (API → HTML → Playwright). The API failure is a routing signal, so it is reported **only if every fallback also comes back empty** (`length ? undefined : apiFailure`), mirroring the SuccessFactors fix in Spec 1680.
+- **`source-company-tiktok`** — nested try/finally, and returning a bare `{ jobs }` object rather than a DTO. The last of the canonical bucket.
+
+Guard clauses found while reading were upgraded too — a missing `companySlug`, an uninitialised Exa client, neither Personio domain answering — from a bare empty result to `bad_input`/`empty` with a detail. Those are inputs and configuration failing, not boards with no postings.
+
+**The five with no catch stay untouched.** `source-ats-joincom`, `source-careerbuilder`, `source-monster`, `source-simplyhired` and `source-tesla` let the error propagate, and `JobsService`'s `rejected` branch already classifies it. Changing them would be a regression.
+
+**Final census: 1,827 of 1,832 services report a real reason, 5 delegate to the fan-out by design, 0 unmigrated.** 33 files, `tsc --noEmit` 0 errors, no EOL churn, targeted suites green.
+
+One defect caught mid-flight: the applier's first version indented the assignment to the wrong column — cosmetic, but it would have landed in 15 files, so it was fixed and re-verified before continuing.
+
+---
+
+
 ## 2026-08-19 — Spec 1685 — the last mechanical diagnostics pass, and where the line was drawn
 
 **Change:** the final mechanical pass. Everything after this is hand work, so the job was to draw that line honestly rather than push a codemod past the point where it earns its keep.

@@ -3,6 +3,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto,
   LocationDto, DescriptionFormat, Site,
 } from '@ever-jobs/models';
@@ -44,6 +46,7 @@ export class InternshalaService implements IScraper {
     client.setHeaders(INTERNSHALA_HEADERS);
 
     const jobList: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const resultsWanted = input.resultsWanted ?? 15;
     const searchTerm = input.searchTerm ?? '';
     let page = 1;
@@ -93,12 +96,13 @@ export class InternshalaService implements IScraper {
         }
       } catch (err: any) {
         this.logger.warn(`Error fetching description for ${job.jobUrl}: ${err.message}`);
+        diagnostics = classifyScrapeError(err);
       }
       await randomSleep(this.delay * 1000, (this.delay + this.bandDelay) * 1000);
     }
 
     this.logger.log(`Internshala: found ${jobList.length} jobs/internships`);
-    return new JobResponseDto(jobList);
+    return new JobResponseDto(jobList, diagnostics);
   }
 
   private async fetchDescription(

@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -65,6 +67,7 @@ export class AuthenticJobsService implements IScraper {
     client.setHeaders(AUTHENTICJOBS_HEADERS);
 
     const jobs: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const seenIds = new Set<string>();
     let page = 1;
 
@@ -134,11 +137,12 @@ export class AuthenticJobsService implements IScraper {
       } catch (err: any) {
         this.logger.error(`Authentic Jobs scrape error: ${err.message}`);
         break;
+        diagnostics = classifyScrapeError(err);
       }
     }
 
     this.logger.log(`Authentic Jobs returned ${jobs.length} jobs`);
-    return new JobResponseDto(jobs);
+    return new JobResponseDto(jobs, diagnostics);
   }
 
   /**

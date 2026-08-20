@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -87,6 +89,7 @@ export class JoobleService implements IScraper {
     client.setHeaders(JOOBLE_HEADERS);
 
     const jobs: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const seenIds = new Set<string>();
     let page = 1;
 
@@ -142,10 +145,11 @@ export class JoobleService implements IScraper {
       } catch (err: any) {
         this.logger.error(`Jooble scrape error: ${err.message}`);
         break;
+        diagnostics = classifyScrapeError(err);
       }
     }
 
-    return new JobResponseDto(jobs);
+    return new JobResponseDto(jobs, diagnostics);
   }
 
   private mapJob(raw: JoobleJob, descriptionFormat?: DescriptionFormat): JobPostDto | null {

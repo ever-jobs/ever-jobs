@@ -10,6 +10,8 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import {
   IScraper,
+  classifyScrapeError,
+  ScrapeDiagnostics,
   ScraperInputDto,
   JobResponseDto,
   JobPostDto,
@@ -47,6 +49,10 @@ export class DiceService implements IScraper, OnModuleDestroy {
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
     const resultsWanted = input.resultsWanted ?? 15;
+    // The API failure is a ROUTING SIGNAL towards the fallbacks, not an
+    // outcome. Only the last surface tried decides the result, so this is
+    // reported solely when every fallback also comes back empty.
+    let apiFailure: ScrapeDiagnostics | undefined;
 
     // Primary: JSON API
     try {
@@ -57,6 +63,7 @@ export class DiceService implements IScraper, OnModuleDestroy {
       this.logger.log('Dice API returned zero results, trying HTML fallback');
     } catch (err: any) {
       this.logger.warn(`Dice API failed: ${err.message}, trying HTML fallback`);
+      apiFailure = classifyScrapeError(err);
     }
 
     // Fallback 1: cheerio HTML scraping
@@ -68,7 +75,10 @@ export class DiceService implements IScraper, OnModuleDestroy {
     // Fallback 2: Playwright
     this.logger.log('Dice cheerio returned zero, falling back to Playwright');
     const playwrightJobs = await this.scrapeWithPlaywright(input, resultsWanted);
-    return new JobResponseDto(playwrightJobs);
+    return new JobResponseDto(
+      playwrightJobs,
+      playwrightJobs.length ? undefined : apiFailure,
+    );
   }
 
   // ── Primary: REST API ────────────────────────────────────────────────

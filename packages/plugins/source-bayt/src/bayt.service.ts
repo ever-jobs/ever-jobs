@@ -3,6 +3,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto,
   LocationDto, Country, Site, countryFromString,
 } from '@ever-jobs/models';
@@ -28,6 +30,7 @@ export class BaytService implements IScraper {
     });
 
     const jobList: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const resultsWanted = input.resultsWanted ?? 10;
     let page = 1;
 
@@ -68,10 +71,11 @@ export class BaytService implements IScraper {
       } catch (err: any) {
         this.logger.error(`Bayt scrape error: ${err.message}`);
         break;
+        diagnostics = classifyScrapeError(err);
       }
     }
 
-    return new JobResponseDto(jobList.slice(0, resultsWanted));
+    return new JobResponseDto(jobList.slice(0, resultsWanted), diagnostics);
   }
 
   private extractJob($: cheerio.CheerioAPI, card: cheerio.Cheerio<any>): JobPostDto | null {

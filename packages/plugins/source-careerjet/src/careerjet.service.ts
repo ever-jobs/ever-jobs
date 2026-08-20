@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto,
   LocationDto, CompensationDto, CompensationInterval,
   DescriptionFormat, Site,
@@ -61,6 +63,7 @@ export class CareerJetService implements IScraper {
     client.setHeaders(CAREERJET_HEADERS);
 
     const jobList: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const resultsWanted = input.resultsWanted ?? 15;
     const seenUrls = new Set<string>();
 
@@ -116,10 +119,11 @@ export class CareerJetService implements IScraper {
       } catch (err: any) {
         this.logger.error(`CareerJet scrape error: ${err.message}`);
         break;
+        diagnostics = classifyScrapeError(err);
       }
     }
 
-    return new JobResponseDto(jobList);
+    return new JobResponseDto(jobList, diagnostics);
   }
 
   private processJob(job: CareerJetJob, format?: DescriptionFormat): JobPostDto | null {

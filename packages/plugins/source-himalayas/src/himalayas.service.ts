@@ -2,6 +2,8 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -42,6 +44,7 @@ export class HimalayasService implements IScraper {
     client.setHeaders(HIMALAYAS_HEADERS);
 
     const jobs: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     const seenIds = new Set<string>();
     let offset = input.offset ?? 0;
 
@@ -85,10 +88,11 @@ export class HimalayasService implements IScraper {
       } catch (err: any) {
         this.logger.error(`Himalayas scrape error: ${err.message}`);
         break;
+        diagnostics = classifyScrapeError(err);
       }
     }
 
-    return new JobResponseDto(jobs);
+    return new JobResponseDto(jobs, diagnostics);
   }
 
   private mapJob(raw: HimalayasJob, descriptionFormat?: DescriptionFormat): JobPostDto | null {

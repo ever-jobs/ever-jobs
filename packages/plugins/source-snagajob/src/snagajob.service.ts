@@ -7,6 +7,8 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  classifyScrapeError,
+  ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
@@ -48,6 +50,7 @@ export class SnagajobService implements IScraper {
     client.setHeaders(HEADERS);
 
     const allJobs: JobPostDto[] = [];
+    let diagnostics: ScrapeDiagnostics | undefined;
     let page = 0;
     const maxPages = Math.ceil(resultsWanted / PAGE_SIZE) + 1;
 
@@ -81,10 +84,11 @@ export class SnagajobService implements IScraper {
       } catch (err: any) {
         this.logger.error(`Snagajob error page ${page + 1}: ${err.message}`);
         break;
+        diagnostics = classifyScrapeError(err);
       }
     }
 
-    return new JobResponseDto(allJobs.slice(0, resultsWanted));
+    return new JobResponseDto(allJobs.slice(0, resultsWanted), diagnostics);
   }
 
   private processJob(raw: any): JobPostDto | null {
