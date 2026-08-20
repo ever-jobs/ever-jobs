@@ -87,8 +87,8 @@ export class HimalayasService implements IScraper {
         if (rawJobs.length < limit) break;
       } catch (err: any) {
         this.logger.error(`Himalayas scrape error: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 

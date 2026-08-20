@@ -126,8 +126,8 @@ export class FindWorkService implements IScraper {
         if (!nextUrl) break;
       } catch (err: any) {
         this.logger.error(`FindWork scrape error: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 

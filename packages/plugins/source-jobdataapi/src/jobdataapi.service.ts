@@ -121,8 +121,8 @@ export class JobDataApiService implements IScraper {
         page++;
       } catch (err: any) {
         this.logger.error(`JobDataAPI scrape error: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 

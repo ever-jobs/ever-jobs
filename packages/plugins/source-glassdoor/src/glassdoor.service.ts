@@ -137,8 +137,8 @@ export class GlassdoorService implements IScraper {
         await randomSleep(this.delay * 1000, (this.delay + this.bandDelay) * 1000);
       } catch (err: any) {
         this.logger.error(`Glassdoor scrape error: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 

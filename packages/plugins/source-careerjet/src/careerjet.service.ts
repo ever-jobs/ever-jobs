@@ -118,8 +118,8 @@ export class CareerJetService implements IScraper {
         if (page >= data.pages) break;
       } catch (err: any) {
         this.logger.error(`CareerJet scrape error: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 

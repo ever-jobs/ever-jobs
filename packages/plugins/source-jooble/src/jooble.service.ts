@@ -144,8 +144,8 @@ export class JoobleService implements IScraper {
         if (rawJobs.length < pageSize) break;
       } catch (err: any) {
         this.logger.error(`Jooble scrape error: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 

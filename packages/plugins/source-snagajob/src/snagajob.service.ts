@@ -83,8 +83,8 @@ export class SnagajobService implements IScraper {
         }
       } catch (err: any) {
         this.logger.error(`Snagajob error page ${page + 1}: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 

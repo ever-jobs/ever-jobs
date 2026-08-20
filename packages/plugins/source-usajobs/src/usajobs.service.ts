@@ -150,8 +150,8 @@ export class UsajobsService implements IScraper {
         page++;
       } catch (err: any) {
         this.logger.error(`USAJobs scrape error: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 

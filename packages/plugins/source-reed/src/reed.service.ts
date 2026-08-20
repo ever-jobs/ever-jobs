@@ -130,8 +130,8 @@ export class ReedService implements IScraper {
         if (rawJobs.length < take) break;
       } catch (err: any) {
         this.logger.error(`Reed scrape error: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 

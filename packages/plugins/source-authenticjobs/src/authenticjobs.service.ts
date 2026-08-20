@@ -136,8 +136,8 @@ export class AuthenticJobsService implements IScraper {
         page++;
       } catch (err: any) {
         this.logger.error(`Authentic Jobs scrape error: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 

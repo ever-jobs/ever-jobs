@@ -74,7 +74,10 @@ export class AdzunaService implements IScraper {
 
     if (!appId || !appKey) {
       this.logger.warn('Skipping Adzuna search — credentials not configured');
-      return new JobResponseDto([]);
+      return new JobResponseDto(
+        [],
+        new ScrapeDiagnostics('bad_input', 'Adzuna credentials not configured'),
+      );
     }
 
     const resultsWanted = input.resultsWanted ?? ADZUNA_DEFAULT_RESULTS;
@@ -164,8 +167,8 @@ export class AdzunaService implements IScraper {
         page++;
       } catch (err: any) {
         this.logger.error(`Adzuna scrape error: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 

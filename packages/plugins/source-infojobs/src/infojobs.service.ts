@@ -122,8 +122,8 @@ export class InfoJobsService implements IScraper {
         page++;
       } catch (err: any) {
         this.logger.error(`InfoJobs scrape error: ${err.message}`);
-        break;
         diagnostics = classifyScrapeError(err);
+        break;
       }
     }
 
