@@ -11,6 +11,13 @@
  * Known live tenants used for testing (verified 2026-06-03):
  *   - `companySlug: 'flatchr'`     — Flatchr itself (3 published vacancies)
  *   - `companySlug: 'groupeaudeo'` — Groupe Audeo (2 published vacancies)
+ *
+ * Timeouts: the HTTP client uses a 60s per-request timeout and does not retry
+ * a timeout -- a timeout carries no `error.response.status`, so the retry loop
+ * rethrows after a single attempt. The network tests below must therefore
+ * outlast one full client timeout. At 30s jest killed them first, so upstream
+ * slowness surfaced as a red shard instead of the service catching the error
+ * and returning an empty result with a diagnostic.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { FlatchrModule, FlatchrService } from '@ever-jobs/source-ats-flatchr';
@@ -50,7 +57,7 @@ describe('FlatchrService (E2E)', () => {
       expect((job.atsId ?? '').length).toBeGreaterThan(0);
       expect(job.jobUrl).toBeDefined();
     }
-  }, 30000);
+  }, 120000);
 
   it('should return empty results when neither companySlug nor companyUrl is provided', async () => {
     const input = new ScraperInputDto({
@@ -76,7 +83,7 @@ describe('FlatchrService (E2E)', () => {
     expect(response).toBeDefined();
     expect(Array.isArray(response.jobs)).toBe(true);
     expect(response.jobs.length).toBe(0);
-  }, 30000);
+  }, 120000);
 
   it('should respect the resultsWanted limit', async () => {
     const input = new ScraperInputDto({
@@ -90,5 +97,5 @@ describe('FlatchrService (E2E)', () => {
 
     expect(response).toBeDefined();
     expect(response.jobs.length).toBeLessThanOrEqual(2);
-  }, 30000);
+  }, 120000);
 });
