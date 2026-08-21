@@ -11,6 +11,7 @@ jest.mock('axios', () => ({
   },
 }));
 
+import axios from 'axios';
 import { HttpClient } from '../src/http/http-client';
 import { runWithRequestId } from '../src/context';
 
@@ -244,5 +245,53 @@ describe('HttpClient retry log URL redaction', () => {
     const line = await warnLineFor('https://api.ceipal.com/');
 
     expect(line).toContain('GET https://api.ceipal.com/ failed 429');
+  });
+});
+
+/**
+ * `HttpClientOptions` mixes units -- `timeout` is seconds while `retryDelay` and
+ * `retryMaxDelay` are milliseconds -- and only the rate-delay pair said so. Two
+ * plugins had already written `timeout: 10000` meaning 10s and silently got
+ * ~2.8 hours, which turns a hung host into a request that can only ever be
+ * killed from outside. These pin the contract so a "helpful" unit change to
+ * either side breaks loudly instead of silently.
+ */
+describe('HttpClientOptions unit contract', () => {
+  const created = () => (axios.create as jest.Mock).mock.calls.at(-1)![0];
+
+  beforeEach(() => (axios.create as jest.Mock).mockClear());
+
+  it('reads timeout as SECONDS and hands axios milliseconds', () => {
+    new HttpClient({ timeout: 10 });
+
+    expect(created().timeout).toBe(10_000);
+  });
+
+  it('defaults to 60 seconds when timeout is omitted', () => {
+    new HttpClient({});
+
+    expect(created().timeout).toBe(60_000);
+  });
+
+  it('shows why `timeout: 10000` is the bug it does not look like', () => {
+    new HttpClient({ timeout: 10_000 });
+
+    // 10_000 seconds -- nearly three hours, not the ten seconds it reads as.
+    expect(created().timeout).toBe(10_000_000);
+    expect(created().timeout).toBeGreaterThan(2 * 60 * 60 * 1000);
+  });
+
+  it('reads rateDelayMin/Max as SECONDS', () => {
+    const client = new HttpClient({ rateDelayMin: 2, rateDelayMax: 3 });
+
+    expect((client as any).rateDelayMin).toBe(2000);
+    expect((client as any).rateDelayMax).toBe(3000);
+  });
+
+  it('reads retryDelay and retryMaxDelay as MILLISECONDS, unlike timeout', () => {
+    const client = new HttpClient({ retryDelay: 1500, retryMaxDelay: 20_000 });
+
+    expect((client as any).retryDelay).toBe(1500);
+    expect((client as any).retryMaxDelay).toBe(20_000);
   });
 });
