@@ -14,15 +14,15 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.0",
-    "zod": "^3.23.0",
+    "zod": "^4.4.3",
     "axios": "^1.7.0",
-    "express": "^4.21.2",
+    "express": "^5.2.1",
     "tslib": "^2.8.1"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
+    "typescript": "^7.0.2",
     "ts-node": "^10.9.0",
-    "@types/node": "^20.0.0",
-    "@types/express": "^4.17.21"
+    "@types/node": "^26.1.2",
+    "@types/express": "^5.0.6"
   }
 }
