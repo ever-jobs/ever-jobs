@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Site, IScraper } from '@ever-jobs/models';
+import { normalizeCompanyHost } from '@ever-jobs/common';
 import { IPluginMetadata } from '../interfaces/plugin-metadata.interface';
 
 /**
@@ -13,6 +14,7 @@ export class PluginRegistry {
   private readonly logger = new Logger(PluginRegistry.name);
   private readonly scraperMap = new Map<Site, IScraper>();
   private readonly metadataMap = new Map<Site, IPluginMetadata>();
+  private readonly domainMap = new Map<string, Site>();
 
   /**
    * Register a plugin with its metadata and scraper implementation.
@@ -25,6 +27,42 @@ export class PluginRegistry {
     }
     this.scraperMap.set(meta.site, scraper);
     this.metadataMap.set(meta.site, meta);
+    this.indexCompanyDomains(meta);
+  }
+
+  /**
+   * Index the domains a plugin declares it serves (Spec 5086).
+   *
+   * The first claim on a host wins: a later plugin claiming the same domain is
+   * a declaration bug, and silently rerouting a company's traffic to whichever
+   * plugin happened to register last would be the worst way to surface it.
+   */
+  private indexCompanyDomains(meta: IPluginMetadata): void {
+    for (const raw of meta.companyDomains ?? []) {
+      const host = normalizeCompanyHost(raw ?? '');
+      if (!host) {
+        continue;
+      }
+      const owner = this.domainMap.get(host);
+      if (owner && owner !== meta.site) {
+        this.logger.warn(
+          `Domain ${host} already declared by ${owner}; ignoring claim from ${meta.site}`,
+        );
+        continue;
+      }
+      this.domainMap.set(host, meta.site);
+    }
+  }
+
+  /**
+   * Resolve a company domain or URL to the site that declared it (Spec 5086).
+   *
+   * Returns `undefined` when no plugin declares the host — callers fall back to
+   * deriving a token from the domain.
+   */
+  siteForDomain(domainOrUrl: string): Site | undefined {
+    const host = normalizeCompanyHost(domainOrUrl ?? '');
+    return host ? this.domainMap.get(host) : undefined;
   }
 
   /**

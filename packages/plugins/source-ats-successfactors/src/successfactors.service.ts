@@ -30,13 +30,17 @@ import {
   SF_DELAY_MAX,
   SF_CSB_PAGE_SIZE,
   SF_CSB_MAX_PAGES,
+  SF_CSB_PAGE_CONCURRENCY,
   SF_CSB_DETAIL_CONCURRENCY,
   SF_CSB_JOB_LINK_RE,
+  SF_CSB_DEFAULT_ORIGIN_TEMPLATES,
   parseSfSlug,
   buildSfODataUrl,
   buildSfCareerUrl,
   buildSfCsbTileUrl,
+  buildSfCsbDefaultOrigin,
   resolveCsbBaseUrl,
+  htmlLooksLikeCsb,
 } from './successfactors.constants';
 import {
   SfCsbDetail,
@@ -66,9 +70,15 @@ export class SuccessFactorsService implements IScraper {
       return new JobResponseDto([]);
     }
 
-    const { instance, companyId } = companySlug
-      ? parseSfSlug(companySlug)
-      : { instance: '', companyId: '' };
+    const slugHasColon = (companySlug ?? '').includes(':');
+    const parsed = companySlug ? parseSfSlug(companySlug) : { instance: '', companyId: '' };
+    let { instance, companyId } = parsed;
+    const isBareSlug = !!companySlug && !slugHasColon;
+    // A bare token is a companyId, not a SuccessFactors instance.
+    if (isBareSlug) {
+      instance = '';
+    }
+
     const resultsWanted = input.resultsWanted ?? 100;
     const diags: ScrapeDiagnostics[] = [];
 
@@ -93,14 +103,28 @@ export class SuccessFactorsService implements IScraper {
 
     // 2. Career Site Builder (CSB) portal — the public surface for tenants
     //    without open OData, typically on a custom domain.
-    if (csbBase) {
-      this.logger.log(
-        `SuccessFactors: reading Career Site Builder portal at ${csbBase}`,
+    let effectiveCsbBase = csbBase;
+    if (!effectiveCsbBase && isBareSlug && companyId) {
+      effectiveCsbBase = await this.resolveDefaultCsbBase(
+        input,
+        companyId,
+        diags,
       );
-      const csbJobs = await this.scrapeCsb(input, csbBase, companyId, resultsWanted);
+    }
+
+    if (effectiveCsbBase) {
+      this.logger.log(
+        `SuccessFactors: reading Career Site Builder portal at ${effectiveCsbBase}`,
+      );
+      const csbJobs = await this.scrapeCsb(
+        input,
+        effectiveCsbBase,
+        companyId,
+        resultsWanted,
+      );
       if (csbJobs.length > 0) {
         this.logger.log(
-          `SuccessFactors CSB returned ${csbJobs.length} jobs for ${csbBase}`,
+          `SuccessFactors CSB returned ${csbJobs.length} jobs for ${effectiveCsbBase}`,
         );
         return new JobResponseDto(csbJobs);
       }
@@ -129,7 +153,73 @@ export class SuccessFactorsService implements IScraper {
       );
     }
 
+    // Bare slug: distinguish "we never found a portal" from "we read the
+    // portal and it had nothing". Reporting `bad_input: missing companyUrl`
+    // for a verified-but-empty board blames the caller for a correct request.
+    if (isBareSlug) {
+      if (effectiveCsbBase) {
+        return new JobResponseDto(
+          [],
+          diags[0] ??
+            new ScrapeDiagnostics(
+              'empty',
+              `CSB portal ${effectiveCsbBase} returned no postings`,
+            ),
+        );
+      }
+      return new JobResponseDto(
+        [],
+        diags[0] ??
+          new ScrapeDiagnostics(
+            'bad_input',
+            `missing companyUrl: could not derive SuccessFactors CSB portal for ${companyId}`,
+          ),
+      );
+    }
+
     return new JobResponseDto([], diags[0]);
+  }
+
+  /**
+   * Probe the default SAP CSB origins for a bare companyId and return the first
+   * origin whose root page passes the CSB fingerprint check.
+   */
+  private async resolveDefaultCsbBase(
+    input: ScraperInputDto,
+    companyId: string,
+    diags: ScrapeDiagnostics[],
+  ): Promise<string | null> {
+    for (let i = 0; i < SF_CSB_DEFAULT_ORIGIN_TEMPLATES.length; i++) {
+      const origin = buildSfCsbDefaultOrigin(companyId, i);
+      if (!origin) continue;
+
+      try {
+        const html = await this.fetchCsbProbeHtml(origin, input);
+        if (htmlLooksLikeCsb(html)) {
+          return origin;
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `SuccessFactors default CSB probe failed for ${origin}: ${err.message}`,
+        );
+      }
+    }
+
+    const message = `missing companyUrl: could not derive SuccessFactors CSB portal for ${companyId}`;
+    this.logger.warn(message);
+    diags.push(new ScrapeDiagnostics('bad_input', message));
+    return null;
+  }
+
+  /**
+   * Fetch the root page of a candidate default CSB origin for verification.
+   * Protected so tests can substitute captured HTML without network I/O.
+   */
+  protected async fetchCsbProbeHtml(
+    base: string,
+    input: ScraperInputDto,
+  ): Promise<string> {
+    return this.fetchCsbHtml(`${base.replace(/\/$/, '')}/`, input);
   }
 
   protected async scrapeOData(
@@ -291,7 +381,10 @@ export class SuccessFactorsService implements IScraper {
     return jobs;
   }
 
-  /** Walk CSB tile pages (startrow += page size) until empty, cap, or wanted. */
+  /** Walk CSB tile pages (startrow += page size) until empty, cap, or wanted.
+   *  Pages are fetched in bounded concurrent batches to avoid the serial
+   *  1.5–3 s `randomSleep` between each page.
+   */
   private async collectCsbTiles(
     input: ScraperInputDto,
     base: string,
@@ -299,40 +392,66 @@ export class SuccessFactorsService implements IScraper {
   ): Promise<SfCsbListItem[]> {
     const items: SfCsbListItem[] = [];
     const seen = new Set<string>();
+    let stop = false;
+    let pageIndex = 0;
 
-    for (let page = 0; page < SF_CSB_MAX_PAGES; page++) {
-      if (items.length >= resultsWanted) break;
+    while (!stop && pageIndex < SF_CSB_MAX_PAGES && items.length < resultsWanted) {
+      const batchSize = Math.min(
+        SF_CSB_PAGE_CONCURRENCY,
+        SF_CSB_MAX_PAGES - pageIndex,
+      );
+      const startrows = Array.from(
+        { length: batchSize },
+        (_, i) => (pageIndex + i) * SF_CSB_PAGE_SIZE,
+      );
 
-      const startrow = page * SF_CSB_PAGE_SIZE;
-      let html: string;
-      try {
-        html = await this.fetchCsbTileHtml(base, startrow, input);
-      } catch (err: any) {
-        this.logger.warn(
-          `SuccessFactors CSB: tile fetch failed at startrow ${startrow}: ${err.message}`,
-        );
-        break;
+      const settled = await Promise.allSettled(
+        startrows.map((s) => this.fetchCsbTileHtml(base, s, input)),
+      );
+
+      for (let i = 0; i < settled.length; i++) {
+        if (items.length >= resultsWanted) {
+          stop = true;
+          break;
+        }
+
+        const startrow = startrows[i];
+        const res = settled[i];
+
+        if (res.status === 'rejected') {
+          this.logger.warn(
+            `SuccessFactors CSB: tile fetch failed at startrow ${startrow}: ${res.reason?.message ?? res.reason}`,
+          );
+          stop = true;
+          break;
+        }
+
+        const pageItems = this.parseCsbTiles(res.value, base);
+        if (pageItems.length === 0) {
+          stop = true;
+          break;
+        }
+
+        let added = 0;
+        for (const item of pageItems) {
+          if (seen.has(item.jobId)) continue;
+          seen.add(item.jobId);
+          items.push(item);
+          added += 1;
+        }
+
+        // No new ids on this page → end of list (guards against a portal that
+        // clamps startrow and re-serves the first page).
+        if (added === 0) {
+          stop = true;
+          break;
+        }
       }
 
-      const pageItems = this.parseCsbTiles(html, base);
-      if (pageItems.length === 0) break;
-
-      let added = 0;
-      for (const item of pageItems) {
-        if (seen.has(item.jobId)) continue;
-        seen.add(item.jobId);
-        items.push(item);
-        added += 1;
-      }
-
-      // No new ids on this page → end of list (guards against a portal that
-      // clamps startrow and re-serves the first page).
-      if (added === 0) break;
-
-      await randomSleep(SF_DELAY_MIN, SF_DELAY_MAX);
+      pageIndex += batchSize;
     }
 
-    return items;
+    return items.slice(0, resultsWanted);
   }
 
   /**

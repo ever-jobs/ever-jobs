@@ -90,8 +90,11 @@ export const SF_CSB_PAGE_SIZE = 25;
 /** Hard cap on CSB tile pages walked per scrape (safety bound). */
 export const SF_CSB_MAX_PAGES = 40;
 
+/** Bounded concurrency for CSB tile-page fetches. */
+export const SF_CSB_PAGE_CONCURRENCY = 4;
+
 /** Bounded concurrency for CSB detail-page fan-out. */
-export const SF_CSB_DETAIL_CONCURRENCY = 5;
+export const SF_CSB_DETAIL_CONCURRENCY = 10;
 
 /**
  * Content fingerprints that identify a Career Site Builder page even when the
@@ -164,4 +167,22 @@ export function buildSfCsbTileUrl(
     startrow: String(startrow),
   });
   return `${base.replace(/\/$/, '')}/tile-search-results/?${params.toString()}`;
+}
+
+/** Default CSB origin templates for bare slugs with no explicit companyUrl. */
+export const SF_CSB_DEFAULT_ORIGIN_TEMPLATES: readonly string[] = [
+  'https://{companyId}.jobs.hr.cloud.sap',
+] as const;
+
+/**
+ * Build a default CSB origin from a bare companyId.
+ * The index selects among verified SAP CSB host patterns.
+ */
+export function buildSfCsbDefaultOrigin(
+  companyId: string,
+  index = 0,
+): string | null {
+  const template = SF_CSB_DEFAULT_ORIGIN_TEMPLATES[index];
+  if (!template || !companyId) return null;
+  return template.replace(/{companyId}/g, encodeURIComponent(companyId));
 }
