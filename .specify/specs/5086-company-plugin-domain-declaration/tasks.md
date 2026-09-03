@@ -1,0 +1,8 @@
+# Tasks: 5086 — Company plugins declare the domains they serve
+
+- [x] T1 — `@ever-jobs/common`: export `normalizeCompanyHost(domainOrUrl)` (scheme/path stripped, lower-cased, leading `www.` removed) and use it inside `deriveSiteToken`. Acceptance: existing `site-from-domain` behavior unchanged; bare host, `www.` host and full URL all normalize identically.
+- [x] T2 — `@ever-jobs/plugin`: add optional `companyDomains?: string[]` to `IPluginMetadata`, documented as the company domains a plugin serves. Acceptance: `tsc --noEmit` clean with no plugin changes.
+- [x] T3 — `PluginRegistry`: index declared domains in `register()`; add `siteForDomain(domainOrUrl)`; warn and keep the first claim when two plugins declare the same host. Acceptance: unit tests for declared lookup, URL/`www.` forms, unknown host → `undefined`, duplicate-claim warning.
+- [x] T4 — `JobsService.resolveCompanyDomains`: consult `registry.siteForDomain()` before `siteFromDomain()`; unresolved behavior and message unchanged. Acceptance: unit tests for declaration hit, string-rule fallback, declaration beating a string-rule match, and the unchanged 400.
+- [x] T5 — Declare + retire: `companyDomains` on `source-company-stokespacetechnologies` (`stokespace.com`), `source-company-vardaspace` (`varda.com`), `source-company-divergent` (`divergent.us`), `source-company-nuro` (`nuro.ai`); delete `DOMAIN_TO_TOKEN_EXCEPTIONS` in the same change. Acceptance: all four domains resolve; a test asserts no two registered plugins claim the same host.
+- [x] T6 — Docs: `AGENTS.md` §5 convention for new company plugins whose token is not domain-derived; `docs/index.md` row; `docs/log.md` entry (newest at top); `tsc --noEmit` and `lint:docs` clean.

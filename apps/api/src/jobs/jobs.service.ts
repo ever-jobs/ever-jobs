@@ -417,8 +417,11 @@ export class JobsService implements OnModuleInit {
 
   /**
    * Resolves `companyDomain` values to registered `Site` tokens.
-   * Throws `BadRequestException` for any domain that cannot be resolved,
-   * naming the domain and the derived token so the fix is obvious.
+   *
+   * A plugin that declares the domain wins (`companyDomains`, Spec 5086);
+   * otherwise the token is derived from the domain (Spec 5069). Throws
+   * `BadRequestException` for any domain that neither path resolves, naming the
+   * domain and the derived token so the fix is obvious.
    */
   private resolveCompanyDomains(domains: string[] | undefined): Set<Site> {
     const resolved = new Set<Site>();
@@ -432,7 +435,7 @@ export class JobsService implements OnModuleInit {
       if (!trimmed) {
         continue;
       }
-      const site = siteFromDomain(trimmed);
+      const site = this.registry.siteForDomain(trimmed) ?? siteFromDomain(trimmed);
       if (site) {
         resolved.add(site);
       } else {

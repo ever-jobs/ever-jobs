@@ -4,6 +4,45 @@
 > human-readable audit trail; for source-code history, see `git log`.
 
 ---
+## 2026-08-30 — Spec 5091 — Source Company Plugin: Redwire (rdw.com)
+
+**Change:** Add `source-company-rdw` for Redwire Corporation. Uses `BrowserPool` headful fetch for `https://careers.rdw.com/jobs/search` (Clinch Talent on Rails + Stimulus), parses job cards with Cheerio, follows detail URLs, and extracts JSON-LD `JobPosting` metadata. Registers `Site.RDW = 'rdw'` and declares `companyDomains: ['rdw.com', 'redwirespace.com']` so the legacy redirect domain resolves. Maps title prefixes (`Contract`, `Contractor`, `Temporary`, `Intern`, `Hybrid`, `Remote`, `On Site`) into `JobType`/`workFromHomeType`, and parses `jobLocation[].address` into `LocationDto` (US full-state names → 2-letter codes, 2-letter `addressCountry` for non-US, `addressRegion: 'Remote'` for remote roles).
+
+**Files:** `packages/plugins/source-company-rdw/*`, `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `docs/index.md`.
+
+**Validation:** `npx tsc --noEmit -p packages/plugins/source-company-rdw/tsconfig.json` clean; `npx jest --testPathPatterns source-company-rdw` passes (3/3).
+
+---
+## 2026-08-30 — Spec 5090 — Pinpoint location object fix
+
+**Change:** Update `source-ats-pinpoint` to accept `location` as either a string or an object (`{ name, city, province }`) and derive `isRemote` from `workplace_type` (`remote`/`hybrid`/`onsite`) or an explicit `remote` boolean, falling back to the string location name. Adds unit tests for object location, remote `workplace_type`, string location with boolean `remote`, `resultsWanted`, missing `companySlug`, and missing `url`.
+
+**Files:** `packages/plugins/source-ats-pinpoint/src/pinpoint.service.ts`, `packages/plugins/source-ats-pinpoint/__tests__/pinpoint.service.spec.ts`, `packages/plugins/source-ats-pinpoint/tsconfig.json`.
+
+**Validation:** `npx tsc --noEmit -p packages/plugins/source-ats-pinpoint/tsconfig.json` clean; `npx jest --testPathPatterns source-ats-pinpoint` passes (6/6).
+
+---
+
+
+## 2026-08-30 — Spec 5089 — Source Company Plugin: Stratolaunch
+
+**Change:** Add a `source-company-stratolaunch` plugin backed by the Greenhouse Job Board API (`https://api.greenhouse.io/v1/boards/stratolaunch/jobs?content=true`). Registers `Site.STRATOLAUNCH = 'stratolaunch'`, declares `companyDomains: ['stratolaunch.com']`, and maps title, location, department, description, apply URL, and `first_published` date to `JobPostDto`. Supports `resultsWanted`, `searchTerm`, and `location` filters and handles fetch failures by returning an empty `JobResponseDto` with a diagnostic.
+
+**Files:** `packages/plugins/source-company-stratolaunch/*`, `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`.
+
+**Validation:** Plugin Jest suite passes; `tsc --noEmit` clean for the package.
+
+---
+
+## 2026-08-30 — Spec 5088 — SuccessFactors CSB concurrency
+
+**Change:** Improve `SuccessFactorsService.scrapeCsb()` harvest speed by fetching CSB `tile-search-results` pages in bounded concurrent batches (`SF_CSB_PAGE_CONCURRENCY = 4`) instead of serially with a 1.5–3 s `randomSleep` between pages. Raise `SF_CSB_DETAIL_CONCURRENCY` from `5` to `10`. The page-walk still stops on the first empty, duplicate-only, or failed page, and de-duplicates by `jobId`.
+
+**Files:** `packages/plugins/source-ats-successfactors/src/successfactors.constants.ts`, `successfactors.service.ts`, `__tests__/successfactors-csb.service.spec.ts`.
+
+**Validation:** Plugin Jest suite passes; `tsc --noEmit` clean for the package.
+
+---
 
 > **Run #100 reminder — Q-042 has been pending review since run #84 (~119 runs / ~119 hours of agent wall-clock). Default C continues; user owner please review at convenience.**
 
@@ -14,6 +53,14 @@
 > **Run #250 reminder — Q-042 has been pending review for ~166 runs since run #84. Default C continues; user owner please review at convenience.** (Fourth-reminder threshold per the run #200 forward-pointer convention; next reminder window opens at run #300.)
 
 ---
+
+## 2026-08-30 — Spec 5087 — SuccessFactors bare-slug CSB fallback
+
+**Change:** Add a default CSB origin fallback for SuccessFactors when a bare `companySlug` (no colon) is supplied without an explicit `companyUrl`. The plugin now derives `https://<companyId>.jobs.hr.cloud.sap/`, verifies it with the existing `htmlLooksLikeCsb` check, and uses it as the CSB base. If the origin does not look like a CSB portal, it returns a `bad_input` diagnostic instead of a DNS error.
+
+**Files:** `packages/plugins/source-ats-successfactors/src/successfactors.constants.ts`, `successfactors.service.ts`, `__tests__/successfactors-csb.service.spec.ts`.
+
+**Validation:** Plugin Jest suite 14/14 passing; `tsc --noEmit` clean for the package.
 
 ## 2026-08-20 — Spec 1686 — the last 33, finished by reading them
 
@@ -214,6 +261,18 @@ Also: SuccessFactors reported the step-1 OData error — a routing signal, by it
 **Docs:** the `docs/index.md` footer read `2026-06-28`, ~6 weeks before the change it described; corrected.
 
 ---
+
+## 2026-08-15 — Spec 5086 — company plugins declare the domains they serve
+
+**Change:** addressing a company plugin by `companyDomain` (Spec 5070) resolved the plugin token by string math on the domain (Spec 5069): strip `www.`, strip a trailing `.com`, dots to underscores. That only works when the plugin's `Site` token happens to equal the token derived from the company's domain, and many company plugins are named after the ATS board slug visible in the source they scrape. `stokespace.com` derives `stokespace` while the registered plugin is `stokespacetechnologies`, so the request was rejected — `400 domain stokespace.com → token stokespace is not a registered plugin` — before any scrape, while the same board answers when addressed by `siteType`. Same for `varda.com` / `vardaspace`. Those are 2 of the 28 company-plugin domains checked; with 808 of the 1,540 `source-company-*` plugins Greenhouse-backed and many named by board slug, that is a floor rather than a total.
+
+- `IPluginMetadata` gains an optional `companyDomains?: string[]`. Absent means "resolve me by the string rule", so none of the plugins that resolve today changed. It is an array because one plugin can serve several hosts — an acquired company's domain, a rebrand, a marketing domain — which is a property of the company, not of the caller; callers still address one domain at a time.
+- `PluginRegistry` indexes declared hosts on `register()` and exposes `siteForDomain()`. `siteFromDomain` stays a pure function with no registry access; the shared `normalizeCompanyHost` (scheme/path stripped, lower-cased, `www.` removed) is used by both, so a declaration and a derivation cannot disagree about what the host is. A second plugin claiming a host already claimed is ignored with a warning naming both sites — first claim wins, so a later duplicate cannot silently take over another company's traffic.
+- `JobsService.resolveCompanyDomains` consults the registry, then the string rule. An unresolved domain still throws `BadRequestException` with the same message naming the domain and the derived token.
+- `DOMAIN_TO_TOKEN_EXCEPTIONS` is retired, its two entries migrated in the same change to declarations on the plugins that own them (`divergent.us`, `nuro.ai`), alongside the two new ones (`stokespace.com`, `varda.com`). The map was the observed-mismatch list, not a registry: central, invisible to plugin authors, and one-behind by construction — each new mismatch surfaces only as a rejected request. Two mechanisms answering one question would also need a precedence rule maintained forever.
+- **Not a rename.** Spec 5069 deliberately kept upstream-authored tokens; four packages gain one line inside an existing decorator, and no plugin, folder or `Site` value changes. Also not done: bulk-declaring the 1,536 company plugins that already resolve, and no endpoint exposing the registry (nothing needs one).
+- Known limit: nothing validates that a declared domain belongs to that company, so a typo in an unclaimed namespace misroutes silently. Mitigated by first-claim-wins, the duplicate warning, and a catalogue-wide test asserting no host is declared twice.
+- Tests: 16 across `PluginRegistry` (declared lookup, `www.`/URL forms, multi-domain plugin, undeclared/empty, plugin declaring nothing, duplicate-claim warning, catalogue uniqueness) and `site-from-domain` (`normalizeCompanyHost` forms, and the two former exceptions now deriving unregistered tokens), plus 3 in `JobsService` (declaration hit via a full URL, declaration beating a string-rule match, unresolved still 400). 32/32 `jobs.service`, `tsc --noEmit` and `lint:docs` clean.
 
 ## 2026-08-14 — Spec 5085 — retry logs name their request; `Retry-After` honored
 

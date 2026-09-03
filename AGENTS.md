@@ -138,9 +138,30 @@ export interface IPluginMetadata {
   name: string;           // human-readable
   category: PluginCategory;
   isAts?: boolean;
+  companyDomains?: string[]; // company domains this plugin serves
   description?: string;
 }
 ```
+
+**Company plugins:** callers may address a plugin by the company's domain
+(`companyDomain`), which is otherwise resolved by deriving a token from the
+domain (Spec 5069: strip `www.`, strip a trailing `.com`, dots → underscores).
+If a new company plugin's `Site` token is **not** what that rule derives from the
+company's domain — e.g. the plugin is named after an ATS board slug — declare the
+domain so the plugin stays reachable (Spec 5086):
+
+```ts
+@SourcePlugin({
+  site: Site.STOKE_SPACE,      // token: 'stokespacetechnologies'
+  name: 'Stoke Space',
+  category: 'company',
+  companyDomains: ['stokespace.com'],
+})
+```
+
+List every host the company answers on (acquisitions, rebrands, legacy domains).
+Two plugins must never declare the same host; the first claim wins and the second
+is logged and ignored.
 
 A plugin package MUST contain:
 

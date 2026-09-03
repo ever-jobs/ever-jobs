@@ -39,6 +39,7 @@ const API_URL = 'https://api.greenhouse.io/v1/boards/nuro/jobs';
   site: Site.NURO,
   name: 'Nuro',
   category: 'company',
+  companyDomains: ['nuro.ai'],
 })
 @Injectable()
 export class NuroService implements IScraper {

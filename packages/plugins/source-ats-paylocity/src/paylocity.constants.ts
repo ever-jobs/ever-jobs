@@ -28,8 +28,12 @@ export function paylocityDetailUrl(guid: string, jobId: string | number): string
   return `${PAYLOCITY_BASE}/Details/${encodeURIComponent(String(jobId))}/${encodeURIComponent(guid)}`;
 }
 
-/** Bounded concurrency for per-job detail fetches (Rippling/BambooHR precedent). */
-export const PAYLOCITY_DETAIL_CONCURRENCY = 5;
+/**
+ * Serialize per-job detail fetches. Paylocity detail pages throttle concurrent
+ * requests with HTTP 429 + Retry-After: 30; sequential fetches complete in ~13 s
+ * for a 60-job board without hitting the rate limit.
+ */
+export const PAYLOCITY_DETAIL_CONCURRENCY = 1;
 
 /** Browser-like headers; the board/detail pages are HTML, not JSON. */
 export const PAYLOCITY_HEADERS: Record<string, string> = {

@@ -14,6 +14,7 @@ import {
   ScrapeDiagnostics,
 } from '@ever-jobs/models';
 import { PluginRegistry } from '@ever-jobs/plugin';
+import { normalizeCompanyHost } from '@ever-jobs/common';
 
 // ---------------------------------------------------------------------------
 // Mock ALL source packages before importing JobsService.
@@ -288,7 +289,12 @@ const STUB_ATS_SITES: Site[] = [
  */
 function createService(
   scraperEntries: [Site, IScraper, boolean?][],
-  overrides: { concurrency?: number; deadlineMs?: number } = {},
+  overrides: {
+    concurrency?: number;
+    deadlineMs?: number;
+    /** Hosts declared by plugins via `companyDomains` (Spec 5086). */
+    declaredDomains?: Record<string, Site>;
+  } = {},
 ): JobsService {
   const scraperMap = new Map<Site, IScraper>(
     scraperEntries.map(([site, scraper]) => [site, scraper]),
@@ -308,8 +314,14 @@ function createService(
     debug: jest.fn(),
   };
 
+  const declaredDomains = new Map<string, Site>(
+    Object.entries(overrides.declaredDomains ?? {}) as [string, Site][],
+  );
+
   service.registry = {
     size: scraperMap.size,
+    siteForDomain: (domainOrUrl: string) =>
+      declaredDomains.get(normalizeCompanyHost(domainOrUrl)),
     getScraper: (site: Site) => scraperMap.get(site),
     listSiteKeys: () => [...scraperMap.keys()],
     listAtsSites: () => [
@@ -502,6 +514,59 @@ describe('JobsService', () => {
 
       expect(hyl.scrape).toHaveBeenCalled();
       expect(result.length).toBe(1);
+    });
+
+    it('should resolve a domain declared by a plugin whose token is not derivable (Spec 5086)', async () => {
+      const stoke = makeScraper([{ title: 'Stoke job' }]);
+      const service = createService([[Site.STOKE_SPACE, stoke]], {
+        declaredDomains: { 'stokespace.com': Site.STOKE_SPACE },
+      });
+
+      const input = new ScraperInputDto({
+        searchTerm: 'engineer',
+        companyDomain: ['https://www.stokespace.com/careers/'],
+      });
+      const result = await service.searchJobs(input);
+
+      expect(stoke.scrape).toHaveBeenCalled();
+      expect(result.length).toBe(1);
+    });
+
+    it('should prefer a declared domain over the derived token (Spec 5086)', async () => {
+      const buildcover = makeScraper([{ title: 'Buildcover job' }]);
+      const linkedin = makeScraper([{ title: 'LI job' }]);
+      const service = createService(
+        [
+          [Site.BUILDCOVER, buildcover],
+          [Site.LINKEDIN, linkedin],
+        ],
+        { declaredDomains: { 'buildcover.com': Site.LINKEDIN } },
+      );
+
+      const input = new ScraperInputDto({
+        searchTerm: 'engineer',
+        companyDomain: ['buildcover.com'],
+      });
+      await service.searchJobs(input);
+
+      expect(linkedin.scrape).toHaveBeenCalled();
+      expect(buildcover.scrape).not.toHaveBeenCalled();
+    });
+
+    it('should still throw for a domain no plugin declares or derives (Spec 5086)', async () => {
+      const stoke = makeScraper([{ title: 'Stoke job' }]);
+      const service = createService([[Site.STOKE_SPACE, stoke]], {
+        declaredDomains: { 'stokespace.com': Site.STOKE_SPACE },
+      });
+
+      const input = new ScraperInputDto({
+        searchTerm: 'engineer',
+        companyDomain: ['undeclared-company.io'],
+      });
+
+      await expect(service.searchJobs(input)).rejects.toThrow(
+        /domain `undeclared-company\.io` → token `undeclared-company_io` is not a registered plugin/,
+      );
     });
 
     it('should ignore empty or whitespace-only companyDomain entries', async () => {

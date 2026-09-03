@@ -1691,6 +1691,7 @@ import { QantasGroupModule } from './source-company-qantasgroup';
 import { QuestDiagnosticsModule } from './source-company-questdiagnostics';
 import { RaisingCaneSModule } from './source-company-raisingcanes';
 import { RambollModule } from './source-company-ramboll';
+import { RdwModule } from './source-company-rdw';
 import { RedBullModule } from './source-company-redbull';
 import { RelaisChTeauxModule } from './source-company-relaischteaux';
 import { ReliefInternationalModule } from './source-company-reliefinternational';
@@ -1722,6 +1723,7 @@ import { StatkraftModule } from './source-company-statkraft';
 import { StemXpertModule } from './source-company-stemxpert';
 import { StratasFoodsModule } from './source-company-stratasfoods';
 import { StrategicStaffingSolutionsS3Module } from './source-company-strategicstaffingsolutionss3';
+import { StratolaunchModule } from './source-company-stratolaunch';
 import { StructubeModule } from './source-company-structube';
 import { SuntivaModule } from './source-company-suntiva';
 import { SwissHospitalityModule } from './source-company-swisshospitality';
@@ -3523,6 +3525,7 @@ export const ALL_SOURCE_MODULES = [
   QuestDiagnosticsModule,
   RaisingCaneSModule,
   RambollModule,
+  RdwModule,
   RedBullModule,
   RelaisChTeauxModule,
   ReliefInternationalModule,
@@ -3554,6 +3557,7 @@ export const ALL_SOURCE_MODULES = [
   StemXpertModule,
   StratasFoodsModule,
   StrategicStaffingSolutionsS3Module,
+  StratolaunchModule,
   StructubeModule,
   SuntivaModule,
   SwissHospitalityModule,
