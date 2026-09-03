@@ -102,9 +102,14 @@ describe('declared company domains are unique across the catalogue (Spec 5086)',
     for (const dir of fs.readdirSync(pluginsDir)) {
       for (const host of declarationsFor(dir)) {
         const owner = owners.get(host);
-        if (owner) {
+        // Only a host claimed by two *different* plugins is a bug. One plugin
+        // listing both `example.com` and `www.example.com` normalizes to a
+        // single host, which `PluginRegistry.indexCompanyDomains` accepts
+        // (`owner !== meta.site`); flagging it here reported a plugin as
+        // conflicting with itself.
+        if (owner && owner !== dir) {
           conflicts.push(`${host}: ${owner} and ${dir}`);
-        } else {
+        } else if (!owner) {
           owners.set(host, dir);
         }
       }

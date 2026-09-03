@@ -289,6 +289,27 @@ describe('SuccessFactorsService — Career Site Builder reader', () => {
     expect(res.diagnostics?.detail).toMatch(/missing companyUrl/);
   });
 
+  it('reports `empty`, not `bad_input`, when the derived CSB portal is real but has no postings', async () => {
+    // The probe passes, so `companyUrl` was never the problem: the portal was
+    // found and read, and the board simply had nothing on it. Blaming the
+    // caller's input here sends whoever reads the diagnostic to the wrong fix.
+    const probeBase = 'https://acme.jobs.hr.cloud.sap';
+    const svc = new TestSuccessFactorsService(
+      // No tile pages: the portal answers, and has nothing listed.
+      new Map(),
+      new Map(),
+      new Map([[probeBase, tilePage([tile('1', 'a-role', 'A Role')])]]),
+    );
+
+    const input = new ScraperInputDto();
+    input.companySlug = 'acme';
+
+    const res = await svc.scrape(input);
+    expect(res.jobs).toHaveLength(0);
+    expect(res.diagnostics?.reason).toBe('empty');
+    expect(res.diagnostics?.detail).toContain(probeBase);
+  });
+
   it('still honours a colon slug paired with an explicit companyUrl', async () => {
     const pages = new Map<number, string>([
       [0, tilePage([tile('1408182200', 'A-OH', 'Alpha')])],

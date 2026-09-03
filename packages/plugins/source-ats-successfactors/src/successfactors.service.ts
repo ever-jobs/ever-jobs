@@ -153,9 +153,20 @@ export class SuccessFactorsService implements IScraper {
       );
     }
 
-    // Bare slug with no verifiable CSB portal: return the diagnostic we
-    // collected while probing default origins, or a generic bad_input one.
+    // Bare slug: distinguish "we never found a portal" from "we read the
+    // portal and it had nothing". Reporting `bad_input: missing companyUrl`
+    // for a verified-but-empty board blames the caller for a correct request.
     if (isBareSlug) {
+      if (effectiveCsbBase) {
+        return new JobResponseDto(
+          [],
+          diags[0] ??
+            new ScrapeDiagnostics(
+              'empty',
+              `CSB portal ${effectiveCsbBase} returned no postings`,
+            ),
+        );
+      }
       return new JobResponseDto(
         [],
         diags[0] ??
