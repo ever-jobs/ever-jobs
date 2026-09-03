@@ -9,6 +9,7 @@ import {
   JobResponseDto,
   JobType,
   LocationDto,
+  ScrapeDiagnostics,
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
@@ -22,14 +23,27 @@ import {
 } from '@ever-jobs/common';
 import type { Page } from 'playwright';
 import {
+  RDW_ALLOWED_HOST,
   RDW_CAREERS_URL,
   RDW_COMPANY_NAME,
   RDW_DEFAULT_RESULTS,
   RDW_DEFAULT_TIMEOUT_SECONDS,
   RDW_ORIGIN,
   RDW_SEARCH_PATH,
+  isAllowedRdwUrl,
 } from './rdw.constants';
 import { RdwJobCard } from './rdw.types';
+
+/** Outcome of one board crawl: what was harvested, and what failed. */
+interface RdwCrawl {
+  jobs: JobPostDto[];
+  /** Set when pagination stopped because a search page failed. */
+  searchError?: unknown;
+  searchPage?: number;
+  detailAttempted: number;
+  detailFailed: number;
+  lastDetailError?: unknown;
+}
 
 @SourcePlugin({
   site: Site.RDW,
@@ -47,10 +61,10 @@ export class RdwService implements IScraper, OnModuleDestroy {
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
     try {
-      const jobs = await this.fetchJobs(input);
-      const out = this.applyInput(jobs, input);
+      const crawl = await this.fetchJobs(input);
+      const out = this.applyInput(crawl.jobs, input);
       this.logger.log(`RDW: scraped ${out.length} jobs`);
-      return new JobResponseDto(out);
+      return new JobResponseDto(out, this.crawlDiagnostics(crawl, out));
     } catch (error: unknown) {
       const diagnostics = classifyScrapeError(error);
       this.logger.error(
@@ -60,7 +74,51 @@ export class RdwService implements IScraper, OnModuleDestroy {
     }
   }
 
-  private async fetchJobs(input: ScraperInputDto): Promise<JobPostDto[]> {
+  /**
+   * What a crawl produced, and what went wrong on the way.
+   *
+   * `JobsService` reports a source that returned jobs *and* a diagnostic as
+   * `partial` (Spec 1680), so swallowing a failure here would hide a
+   * half-harvested board behind an `ok` row — and a page-one failure behind
+   * `empty`, which reads as "this board has no jobs".
+   */
+  private crawlDiagnostics(
+    crawl: RdwCrawl,
+    out: JobPostDto[],
+  ): ScrapeDiagnostics | undefined {
+    if (crawl.searchError && crawl.jobs.length === 0) {
+      // Nothing harvested and the board itself failed: report why, not `empty`.
+      return classifyScrapeError(crawl.searchError);
+    }
+
+    if (crawl.searchError || crawl.detailFailed > 0) {
+      const parts: string[] = [];
+      if (crawl.searchError) {
+        parts.push(
+          `search page ${crawl.searchPage} failed (${this.errorLabel(crawl.searchError)})`,
+        );
+      }
+      if (crawl.detailFailed > 0) {
+        parts.push(
+          `${crawl.detailFailed} of ${crawl.detailAttempted} detail requests failed`,
+        );
+      }
+      const cause = classifyScrapeError(
+        crawl.searchError ?? crawl.lastDetailError,
+      );
+      return new ScrapeDiagnostics(cause.reason, parts.join('; '));
+    }
+
+    // Spec 1683: a source that returns nothing still owes a reason.
+    return out.length
+      ? undefined
+      : new ScrapeDiagnostics(
+          'empty',
+          `no postings matched on ${RDW_ORIGIN}${RDW_SEARCH_PATH}`,
+        );
+  }
+
+  private async fetchJobs(input: ScraperInputDto): Promise<RdwCrawl> {
     const proxy = input.proxies?.[0];
     const timeoutMs =
       (input.requestTimeout ?? RDW_DEFAULT_TIMEOUT_SECONDS) * 1000;
@@ -75,10 +133,34 @@ export class RdwService implements IScraper, OnModuleDestroy {
       const jobs: JobPostDto[] = [];
       const seen = new Set<string>();
       let pageNum = 1;
+      let attempted = 0;
+      let failed = 0;
+      let searchError: unknown;
+      let searchPage: number | undefined;
+      let lastDetailError: unknown;
+      // `applyInput` filters after the crawl, so an early stop is only safe
+      // when nothing can filter a later job in.
+      const budget = this.unfilteredBudget(input);
 
       while (true) {
+        if (budget !== null && jobs.length >= budget) {
+          break;
+        }
+
         const searchUrl = this.searchUrl(input, pageNum);
-        const searchHtml = await this.fetchHtml(searchUrl, page, timeoutMs);
+        let searchHtml: string;
+        try {
+          searchHtml = await this.fetchHtml(searchUrl, page, timeoutMs);
+        } catch (error: unknown) {
+          // Keep the pages already harvested: losing 40 jobs because page 3
+          // timed out is worse than returning 40 and saying so.
+          this.logger.warn(
+            `RDW: search page ${pageNum} failed (${this.errorLabel(error)}); keeping ${jobs.length} job(s)`,
+          );
+          searchError = error;
+          searchPage = pageNum;
+          break;
+        }
         const { cards, hasNext } = this.parseSearchPage(searchHtml);
 
         if (cards.length === 0) {
@@ -91,17 +173,36 @@ export class RdwService implements IScraper, OnModuleDestroy {
         }
 
         for (const card of cards) {
+          if (budget !== null && jobs.length >= budget) {
+            break;
+          }
           if (seen.has(card.detailUrl)) {
             continue;
           }
           seen.add(card.detailUrl);
 
-          const detailHtml = await this.fetchHtml(
-            card.detailUrl,
-            page,
-            timeoutMs,
-          );
-          jobs.push(this.toJobPost(card, detailHtml));
+          if (!isAllowedRdwUrl(card.detailUrl)) {
+            this.logger.warn(
+              `RDW: skipping off-site job link \`${card.detailUrl}\` — not on ${RDW_ALLOWED_HOST}`,
+            );
+            continue;
+          }
+
+          attempted += 1;
+          try {
+            const detailHtml = await this.fetchHtml(
+              card.detailUrl,
+              page,
+              timeoutMs,
+            );
+            jobs.push(this.toJobPost(card, detailHtml));
+          } catch (error: unknown) {
+            failed += 1;
+            lastDetailError = error;
+            this.logger.warn(
+              `RDW: detail fetch failed for ${card.detailUrl}: ${this.errorLabel(error)}`,
+            );
+          }
         }
 
         if (!hasNext) {
@@ -110,7 +211,20 @@ export class RdwService implements IScraper, OnModuleDestroy {
         pageNum++;
       }
 
-      return jobs;
+      if (failed > 0) {
+        this.logger.warn(
+          `RDW: ${failed} of ${attempted} detail requests failed`,
+        );
+      }
+
+      return {
+        jobs,
+        searchError,
+        searchPage,
+        detailAttempted: attempted,
+        detailFailed: failed,
+        lastDetailError,
+      };
     } finally {
       await page.close().catch(() => undefined);
     }
@@ -144,9 +258,52 @@ export class RdwService implements IScraper, OnModuleDestroy {
   }
 
   private searchUrl(input: ScraperInputDto, pageNum: number): string {
-    const baseUrl =
-      input.companyUrl || `${RDW_ORIGIN}${RDW_SEARCH_PATH}`;
-    return this.withPage(baseUrl, pageNum);
+    return this.withPage(this.startUrl(input), pageNum);
+  }
+
+  /**
+   * The board URL to start from: the caller's `companyUrl` when it is on
+   * Redwire's own domain, otherwise this plugin's board.
+   *
+   * A company plugin exists to scrape one company, so an off-domain
+   * `companyUrl` is either a mistake or an attempt to aim the browser
+   * elsewhere. Neither deserves a failed scrape — ignore it and say so.
+   */
+  private startUrl(input: ScraperInputDto): string {
+    const fallback = `${RDW_ORIGIN}${RDW_SEARCH_PATH}`;
+    const requested = input.companyUrl?.trim();
+    if (!requested) {
+      return fallback;
+    }
+    if (!isAllowedRdwUrl(requested)) {
+      this.logger.warn(
+        `RDW: ignoring companyUrl \`${requested}\` — not on ${RDW_ALLOWED_HOST}`,
+      );
+      return fallback;
+    }
+    return requested;
+  }
+
+  /**
+   * How many jobs the crawl may stop at, or `null` when a filter is active.
+   *
+   * `applyInput` runs after every page and detail has been fetched, so with no
+   * filter in play the crawl can stop as soon as it holds `offset + wanted`
+   * jobs. With a filter, a job that survives it may sit on any later page.
+   */
+  private unfilteredBudget(input: ScraperInputDto): number | null {
+    const filtered =
+      !!this.normalize(input.searchTerm) ||
+      !!this.normalize(input.location) ||
+      input.isRemote === true ||
+      !!input.jobType;
+    if (filtered) {
+      return null;
+    }
+    return (
+      this.nonNegativeInt(input.offset, 0) +
+      this.nonNegativeInt(input.resultsWanted, RDW_DEFAULT_RESULTS)
+    );
   }
 
   private withPage(url: string, pageNum: number): string {

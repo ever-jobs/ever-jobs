@@ -4,6 +4,75 @@
 > human-readable audit trail; for source-code history, see `git log`.
 
 ---
+
+## 2026-09-03 — Spec 1687 — the browser goes where the plugin says, not where the caller says
+
+**Change:** the two headful company plugins merged from the fork in #83 — `source-company-rdw`
+(Spec 5091) and `source-company-trossenrobotics` (Spec 5092) — drove the shared `BrowserPool`
+Chromium to `input.companyUrl` verbatim, and followed absolute hrefs read off the fetched board
+page unchanged. `companyUrl` carries `@IsString()` and nothing else, and `POST /api/jobs/search`
+runs with `auth.enabled` false by default, so both values are attacker-controlled in the same
+sense the `source-ats-submit4jobs` embed host was in #47. Trossen made the consequence a *read*
+primitive: `extractDescription` falls back to the whole `<body>` of whatever was fetched and
+returns it in `description`.
+
+- Each plugin gains an `isAllowed…Url` predicate over its own registrable domain, called at both
+  places an untrusted string reaches the network. It parses with `URL` and reads `hostname`,
+  which is what rejects `https://evil.com/x.rdw.com`, `https://user@evil.com#.rdw.com` and
+  `file:///etc/passwd`; a raw-string suffix match does not. Fail closed, with a warning naming
+  the rejected value.
+- An off-domain `companyUrl` is ignored rather than fatal — a company plugin's own board is
+  always the right answer — and an off-site href is skipped while the rest of the board returns.
+- One failed detail navigation now costs one job instead of the board (per-card `try`/`catch`
+  plus the `N of M detail requests failed` summary Spec 5084 established), and RDW keeps the
+  pages it already harvested when a later search page fails.
+- RDW stops crawling once it holds `offset + resultsWanted`, but only when `searchTerm`,
+  `location`, `isRemote` and `jobType` are all absent, because `applyInput` filters after the
+  crawl and an early stop would otherwise drop the only matching job.
+- Stratolaunch's `decodeFully` is capped at 3 passes. Decoding to a fixpoint is quadratic in
+  nesting depth on remote input — measured against the real helper at ~0.2 s / ~1.5 s / ~5.4 s
+  for 10 / 30 / 60 KB of nested `&amp;amp;…`, all blocking the event loop — while the live board
+  fixture needs two, so a single pass would have changed output. Its board token must now match
+  `^[A-Za-z0-9_-]+$` before it is interpolated into the Greenhouse API path.
+- A bare SuccessFactors slug whose derived CSB portal is verified and read but lists nothing now
+  reports `empty` naming the portal, instead of `bad_input: missing companyUrl` (Spec 5087) —
+  the caller's input was the one thing that was not wrong.
+- Both new plugins report `empty` rather than a bare empty result (Spec 1683), and the Spec 5086
+  catalogue guard no longer reports a plugin as conflicting with *itself* when it declares both
+  `example.com` and `www.example.com`; `PluginRegistry.indexCompanyDomains` already tolerated it.
+
+Catching those failures created a new way to lie, caught by Greptile on PR #84: a page-one
+timeout returned `empty` ("this board has no jobs") and a half-harvested board returned no
+diagnostic at all, which `JobsService` scores as `ok`. `fetchJobs` now returns the failure
+alongside the jobs, so `scrape` reports the classified cause when nothing was harvested and a
+`N of M detail requests failed` detail when some were — the non-empty-plus-diagnostic pair
+`JobsService` already turns into `partial` (Spec 1680).
+
+**Deliberately not changed:** the shared title-prefix regex, whose optional separator strips the
+first word from ordinary titles ("Remote Sensing Engineer" → "Sensing Engineer"). The fork's own
+fixture asserts the opposite for "Temporary Instructional Designer", so both readings cannot
+hold — recorded as Q-091 rather than silently redefined.
+
+**Files:** `packages/plugins/source-company-{rdw,trossenrobotics}/src/*`,
+`packages/plugins/source-company-stratolaunch/src/stratolaunch.service.ts`,
+`packages/plugins/source-ats-successfactors/src/successfactors.service.ts`,
+`packages/plugin/__tests__/plugin-registry-domains.spec.ts`, three new `*.hardening.spec.ts`
+suites, `.specify/specs/1687-headful-plugin-navigation-allowlist/*`.
+
+**Validation:** `tsc --noEmit -p tsconfig.base.json` clean; `lint:docs` clean; `test:scripts`
+182/182; rdw 26/26, trossenrobotics 23/23, stratolaunch 24/24, successfactors 18/18,
+`packages/plugin` + `apps/api/src/jobs` + `site-from-domain` green.
+
+---
+## 2026-08-30 — Spec 5092 — Source Company Plugin: Trossen Robotics
+
+**Change:** Add `source-company-trossenrobotics` for Trossen Robotics. Uses `BrowserPool` headful browser fetch for `https://www.trossenrobotics.com/careers`, parses rendered Wix job cards with Cheerio, follows detail URLs, and extracts the title, metadata, date, and full description from each `/careers/<slug>` page. Registers `Site.TROSSENROBOTICS = 'trossenrobotics'` and declares `companyDomains: ['trossenrobotics.com', 'www.trossenrobotics.com']`. Maps employment-type tokens (`Full Time`, `Part Time`, etc.), workplace type (`Onsite`/`Remote`/`Hybrid`), and title-based internship detection into `JobType`/`workFromHomeType`.
+
+**Files:** `packages/plugins/source-company-trossenrobotics/*`, `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `docs/index.md`.
+
+**Validation:** `npx tsc --noEmit -p packages/plugins/source-company-trossenrobotics/tsconfig.json` clean; `npx jest --testPathPatterns source-company-trossenrobotics` passes (8/8).
+
+---
 ## 2026-08-30 — Spec 5091 — Source Company Plugin: Redwire (rdw.com)
 
 **Change:** Add `source-company-rdw` for Redwire Corporation. Uses `BrowserPool` headful fetch for `https://careers.rdw.com/jobs/search` (Clinch Talent on Rails + Stimulus), parses job cards with Cheerio, follows detail URLs, and extracts JSON-LD `JobPosting` metadata. Registers `Site.RDW = 'rdw'` and declares `companyDomains: ['rdw.com', 'redwirespace.com']` so the legacy redirect domain resolves. Maps title prefixes (`Contract`, `Contractor`, `Temporary`, `Intern`, `Hybrid`, `Remote`, `On Site`) into `JobType`/`workFromHomeType`, and parses `jobLocation[].address` into `LocationDto` (US full-state names → 2-letter codes, 2-letter `addressCountry` for non-US, `addressRegion: 'Remote'` for remote roles).

@@ -7,13 +7,27 @@ import {
 } from '@ever-jobs/models';
 import { createHttpClient, decodeHtmlEntities, htmlToPlainText } from '@ever-jobs/common';
 
+/**
+ * Greenhouse double-escapes some board content, so one `decodeHtmlEntities`
+ * pass is not always enough — the live board fixture needs two.
+ *
+ * The bound matters: decoding to a fixpoint is quadratic in the nesting depth,
+ * and `content` is remote input. Measured against the real helper, a chain of
+ * nested `&amp;amp;…` costs ~0.2 s at 10 KB, ~1.5 s at 30 KB and ~5.4 s at
+ * 60 KB — all of it blocking the event loop. Three passes clear every real
+ * posting with headroom and make the cost linear.
+ */
+const MAX_ENTITY_DECODE_PASSES = 3;
+
 function decodeFully(html: string): string {
   let prev: string;
   let curr = html;
+  let passes = 0;
   do {
     prev = curr;
     curr = decodeHtmlEntities(curr);
-  } while (curr !== prev);
+    passes += 1;
+  } while (curr !== prev && passes < MAX_ENTITY_DECODE_PASSES);
   return curr;
 }
 
@@ -42,6 +56,9 @@ function decodeFully(html: string): string {
  */
 const API_URL = 'https://api.greenhouse.io/v1/boards/stratolaunch/jobs';
 const DEFAULT_BOARD = 'stratolaunch';
+
+/** A Greenhouse board token: letters, digits, underscore and hyphen only. */
+const GREENHOUSE_BOARD_RE = /^[A-Za-z0-9_-]+$/;
 
 @SourcePlugin({
   site: Site.STRATOLAUNCH,
@@ -145,18 +162,35 @@ export class StratolaunchService implements IScraper {
     return new JobResponseDto(jobs);
   }
 
+  /**
+   * Greenhouse board token to read, from `companySlug`, a Greenhouse URL in
+   * `companyUrl`, or this company's own board.
+   *
+   * The token is interpolated straight into the API path, so anything that is
+   * not a plain board slug is refused: `../`, a query string or an encoded
+   * separator would otherwise re-point the request inside `api.greenhouse.io`.
+   * A rejected value falls back to Stratolaunch's board rather than failing the
+   * scrape — this is a company plugin, and its own board is always the right
+   * answer.
+   */
   private resolveBoard(input: ScraperInputDto): string {
-    if (input.companySlug) {
-      return input.companySlug;
+    const requested = input.companySlug?.trim() || this.boardFromUrl(input);
+    if (!requested) {
+      return DEFAULT_BOARD;
     }
-    if (input.companyUrl) {
-      const match = input.companyUrl.match(
-        /(?:job-boards|boards)\.greenhouse\.io\/([^/]+)/,
+    if (!GREENHOUSE_BOARD_RE.test(requested)) {
+      this.logger.warn(
+        `Stratolaunch: ignoring board token \`${requested}\` — not a Greenhouse board slug`,
       );
-      if (match && match[1]) {
-        return match[1];
-      }
+      return DEFAULT_BOARD;
     }
-    return DEFAULT_BOARD;
+    return requested;
+  }
+
+  private boardFromUrl(input: ScraperInputDto): string {
+    const match = input.companyUrl?.match(
+      /(?:job-boards|boards)\.greenhouse\.io\/([^/?#]+)/,
+    );
+    return match?.[1]?.trim() ?? '';
   }
 }
