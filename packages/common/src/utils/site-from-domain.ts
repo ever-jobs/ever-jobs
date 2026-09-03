@@ -1,16 +1,6 @@
 import { Site } from '@ever-jobs/models';
 
 /**
- * Hardcoded upstream exceptions for domains whose plugin token does not follow
- * the Spec 5069 rule. These plugins predate the domain-token convention and are
- * kept as-is to avoid merge conflicts with upstream.
- */
-const DOMAIN_TO_TOKEN_EXCEPTIONS: Readonly<Record<string, string>> = {
-  'divergent.us': 'divergent',
-  'nuro.ai': 'nuro',
-};
-
-/**
  * Extract the hostname from a raw string that may be a full URL, a protocol-
  * relative URL, or a bare domain.
  */
@@ -28,6 +18,18 @@ function extractHost(domainOrUrl: string): string {
 }
 
 /**
+ * Normalize a company domain or URL to a bare, comparable host: scheme and path
+ * stripped, lower-cased, leading `www.` removed.
+ *
+ * Shared by `deriveSiteToken` and by the plugin registry's declared-domain index
+ * (Spec 5086), so a plugin's declaration and a caller's domain can never
+ * disagree about what the host is.
+ */
+export function normalizeCompanyHost(domainOrUrl: string): string {
+  return extractHost(domainOrUrl).toLowerCase().replace(/^www\./i, '');
+}
+
+/**
  * Derive the plugin token string from a company domain or URL without checking
  * whether it is registered as a `Site` value. Used to build clear error messages
  * when a domain cannot be resolved.
@@ -35,18 +37,14 @@ function extractHost(domainOrUrl: string): string {
  * Rule (Spec 5069):
  * 1. Lower-case and trim.
  * 2. Strip a leading `www.` and any scheme/path.
- * 3. Apply hardcoded exceptions (`divergent.us` → `divergent`, `nuro.ai` → `nuro`).
- * 4. Strip a trailing `.com`.
- * 5. Replace every remaining `.` with `_`.
+ * 3. Strip a trailing `.com`.
+ * 4. Replace every remaining `.` with `_`.
+ *
+ * A plugin whose token does not follow this rule declares its domains instead
+ * (`IPluginMetadata.companyDomains`, Spec 5086).
  */
 export function deriveSiteToken(domainOrUrl: string): string {
-  let host = extractHost(domainOrUrl).toLowerCase();
-  host = host.replace(/^www\./i, '');
-
-  const exception = DOMAIN_TO_TOKEN_EXCEPTIONS[host];
-  if (exception) {
-    return exception;
-  }
+  let host = normalizeCompanyHost(domainOrUrl);
 
   if (host.endsWith('.com')) {
     host = host.slice(0, -4);

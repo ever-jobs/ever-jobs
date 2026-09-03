@@ -48,6 +48,7 @@ const API_URL = 'https://api.greenhouse.io/v1/boards/stokespacetechnologies/jobs
   site: Site.STOKE_SPACE,
   name: 'Stoke Space',
   category: 'company',
+  companyDomains: ['stokespace.com'],
 })
 @Injectable()
 export class StokeSpaceService implements IScraper {

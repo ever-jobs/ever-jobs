@@ -49,6 +49,7 @@ const API_URL = 'https://api.greenhouse.io/v1/boards/vardaspace/jobs';
   site: Site.VARDA_SPACE_INDUSTRIES,
   name: 'Varda Space Industries',
   category: 'company',
+  companyDomains: ['varda.com'],
 })
 @Injectable()
 export class VardaSpaceIndustriesService implements IScraper {

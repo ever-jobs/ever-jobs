@@ -44,6 +44,7 @@ const API_URL = 'https://api.greenhouse.io/v1/boards/divergent/jobs';
   site: Site.DIVERGENT,
   name: 'Divergent',
   category: 'company',
+  companyDomains: ['divergent.us'],
 })
 @Injectable()
 export class DivergentService implements IScraper {

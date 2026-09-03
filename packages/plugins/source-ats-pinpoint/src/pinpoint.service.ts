@@ -17,6 +17,34 @@ import { createHttpClient, stripHtmlTags } from '@ever-jobs/common';
 export class PinpointService implements IScraper {
   private readonly logger = new Logger(PinpointService.name);
 
+  private normalizeLocation(raw: any): LocationDto | null {
+    if (raw == null) return null;
+
+    if (typeof raw === 'string') {
+      const city = raw.trim();
+      return city ? new LocationDto({ city }) : null;
+    }
+
+    if (typeof raw === 'object') {
+      const city = String(raw.name ?? raw.city ?? raw.province ?? '').trim();
+      const state = String(raw.province ?? '').trim() || undefined;
+      return city ? new LocationDto({ city, ...(state ? { state } : {}) }) : null;
+    }
+
+    return null;
+  }
+
+  private deriveIsRemote(attrs: any, locationText: string): boolean {
+    if (typeof attrs.remote === 'boolean') return attrs.remote;
+
+    const workplaceType = String(attrs.workplace_type ?? '').toLowerCase();
+    if (workplaceType === 'remote') return true;
+
+    if (locationText.toLowerCase().includes('remote')) return true;
+
+    return false;
+  }
+
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
     const company = input.companySlug;
     if (!company) {
@@ -50,10 +78,8 @@ export class PinpointService implements IScraper {
         const jobId = listing.id ?? attrs.id ?? '';
         const id = `pinpoint-${company}-${jobId}`;
 
-        const locationStr = attrs.location_name ?? attrs.location ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const location = this.normalizeLocation(attrs.location_name ?? attrs.location);
+        const locationText = location?.city ?? '';
 
         jobs.push(
           new JobPostDto({
@@ -67,7 +93,7 @@ export class PinpointService implements IScraper {
               ? stripHtmlTags(attrs.description)
               : null,
             datePosted: attrs.published_at ?? attrs.created_at ?? null,
-            isRemote: attrs.remote ?? (locationStr?.toLowerCase().includes('remote') ?? false),
+            isRemote: this.deriveIsRemote(attrs, locationText),
             department: attrs.department_name ?? attrs.department ?? null,
             atsId: String(jobId),
             atsType: 'pinpoint',

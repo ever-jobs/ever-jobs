@@ -166,6 +166,7 @@
       "@ever-jobs/source-company-structube": ["packages/plugins/source-company-structube/src/index.ts"],
       "@ever-jobs/source-company-strategicstaffingsolutionss3": ["packages/plugins/source-company-strategicstaffingsolutionss3/src/index.ts"],
       "@ever-jobs/source-company-stratasfoods": ["packages/plugins/source-company-stratasfoods/src/index.ts"],
+      "@ever-jobs/source-company-stratolaunch": ["packages/plugins/source-company-stratolaunch/src/index.ts"],
       "@ever-jobs/source-company-stemxpert": ["packages/plugins/source-company-stemxpert/src/index.ts"],
       "@ever-jobs/source-company-statkraft": ["packages/plugins/source-company-statkraft/src/index.ts"],
       "@ever-jobs/source-company-stanfordmedicinechildrenshealth": ["packages/plugins/source-company-stanfordmedicinechildrenshealth/src/index.ts"],
@@ -196,6 +197,7 @@
       "@ever-jobs/source-company-relaischteaux": ["packages/plugins/source-company-relaischteaux/src/index.ts"],
       "@ever-jobs/source-company-redbull": ["packages/plugins/source-company-redbull/src/index.ts"],
       "@ever-jobs/source-company-ramboll": ["packages/plugins/source-company-ramboll/src/index.ts"],
+      "@ever-jobs/source-company-rdw": ["packages/plugins/source-company-rdw/src/index.ts"],
       "@ever-jobs/source-company-raisingcanes": ["packages/plugins/source-company-raisingcanes/src/index.ts"],
       "@ever-jobs/source-company-questdiagnostics": ["packages/plugins/source-company-questdiagnostics/src/index.ts"],
       "@ever-jobs/source-company-qantasgroup": ["packages/plugins/source-company-qantasgroup/src/index.ts"],
@@ -1861,6 +1863,7 @@
       "@ever-jobs/source-company-terminusindustrials": ["packages/plugins/source-company-terminusindustrials/src/index.ts"],
       "@ever-jobs/source-company-mara_inc": ["packages/plugins/source-company-mara_inc/src/index.ts"],
       "@ever-jobs/source-company-vightaero": ["packages/plugins/source-company-vightaero/src/index.ts"],
+      "@ever-jobs/source-company-trossenrobotics": ["packages/plugins/source-company-trossenrobotics/src/index.ts"],
       "@ever-jobs/source-tesla": ["packages/plugins/source-tesla/src/index.ts"],
       "@ever-jobs/source-tesla-playwright": ["packages/plugins/source-tesla-playwright/src/index.ts"]
     }

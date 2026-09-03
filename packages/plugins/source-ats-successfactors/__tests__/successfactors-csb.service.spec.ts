@@ -4,6 +4,7 @@ import {
   htmlLooksLikeCsb,
   resolveCsbBaseUrl,
   buildSfCsbTileUrl,
+  buildSfCsbDefaultOrigin,
   SF_CSB_JOB_LINK_RE,
 } from '../src/successfactors.constants';
 
@@ -69,6 +70,7 @@ class TestSuccessFactorsService extends SuccessFactorsService {
   constructor(
     private readonly pages: Map<number, string>,
     private readonly details: Map<string, string>,
+    private readonly probes: Map<string, string> = new Map(),
   ) {
     super();
   }
@@ -89,6 +91,10 @@ class TestSuccessFactorsService extends SuccessFactorsService {
       if (url.includes(`/${jobId}/`)) return html;
     }
     return '';
+  }
+
+  protected async fetchCsbProbeHtml(base: string): Promise<string> {
+    return this.probes.get(base) ?? '';
   }
 }
 
@@ -132,6 +138,13 @@ describe('SuccessFactors constants (CSB helpers)', () => {
     expect(htmlLooksLikeCsb('<html><body>marketing site</body></html>')).toBe(
       false,
     );
+  });
+
+  it('builds a default CSB origin from a bare companyId', () => {
+    expect(buildSfCsbDefaultOrigin('acme')).toBe(
+      'https://acme.jobs.hr.cloud.sap',
+    );
+    expect(buildSfCsbDefaultOrigin('')).toBeNull();
   });
 });
 
@@ -231,6 +244,88 @@ describe('SuccessFactorsService — Career Site Builder reader', () => {
     expect(res.jobs[0].title).toBe('Solo Role');
   });
 
+  it('falls back to a default SAP CSB origin for a bare slug with no companyUrl', async () => {
+    const probeBase = 'https://acme.jobs.hr.cloud.sap';
+    const pages = new Map<number, string>([
+      [
+        0,
+        tilePage([
+          tile(
+            '1408182200',
+            'Springfield-Quality-Assurance-Engineer-IL-62704',
+            'Quality Assurance Engineer',
+          ),
+        ]),
+      ],
+    ]);
+    const details = new Map<string, string>([['1408182200', DETAIL]]);
+    const probes = new Map<string, string>([[probeBase, pages.get(0)!]]);
+
+    const svc = new TestSuccessFactorsService(pages, details, probes);
+
+    const input = new ScraperInputDto();
+    input.companySlug = 'acme';
+    input.resultsWanted = 10;
+
+    const res = await svc.scrape(input);
+    expect(res.jobs).toHaveLength(1);
+    expect(res.jobs[0].title).toBe('Quality Assurance Engineer');
+  });
+
+  it('returns a diagnostic when a bare slug has no verifiable default CSB origin', async () => {
+    const svc = new TestSuccessFactorsService(
+      new Map(),
+      new Map(),
+      new Map([['https://acme.jobs.hr.cloud.sap', '<html><body>marketing site</body></html>']]),
+    );
+
+    const input = new ScraperInputDto();
+    input.companySlug = 'acme';
+
+    const res = await svc.scrape(input);
+    expect(res.jobs).toHaveLength(0);
+    expect(res.diagnostics).toBeDefined();
+    expect(res.diagnostics?.reason).toBe('bad_input');
+    expect(res.diagnostics?.detail).toMatch(/missing companyUrl/);
+  });
+
+  it('reports `empty`, not `bad_input`, when the derived CSB portal is real but has no postings', async () => {
+    // The probe passes, so `companyUrl` was never the problem: the portal was
+    // found and read, and the board simply had nothing on it. Blaming the
+    // caller's input here sends whoever reads the diagnostic to the wrong fix.
+    const probeBase = 'https://acme.jobs.hr.cloud.sap';
+    const svc = new TestSuccessFactorsService(
+      // No tile pages: the portal answers, and has nothing listed.
+      new Map(),
+      new Map(),
+      new Map([[probeBase, tilePage([tile('1', 'a-role', 'A Role')])]]),
+    );
+
+    const input = new ScraperInputDto();
+    input.companySlug = 'acme';
+
+    const res = await svc.scrape(input);
+    expect(res.jobs).toHaveLength(0);
+    expect(res.diagnostics?.reason).toBe('empty');
+    expect(res.diagnostics?.detail).toContain(probeBase);
+  });
+
+  it('still honours a colon slug paired with an explicit companyUrl', async () => {
+    const pages = new Map<number, string>([
+      [0, tilePage([tile('1408182200', 'A-OH', 'Alpha')])],
+    ]);
+    const svc = new TestSuccessFactorsService(pages, new Map());
+
+    const input = new ScraperInputDto();
+    input.companySlug = 'sap:ACME';
+    input.companyUrl = 'https://careers.example.com';
+    input.resultsWanted = 10;
+
+    const res = await svc.scrape(input);
+    expect(res.jobs).toHaveLength(1);
+    expect(res.jobs[0].title).toBe('Alpha');
+  });
+
   it('returns empty when neither companySlug nor companyUrl is provided', async () => {
     const svc = new TestSuccessFactorsService(new Map(), new Map());
     const res = await svc.scrape(new ScraperInputDto());
@@ -243,5 +338,74 @@ describe('SuccessFactorsService — Career Site Builder reader', () => {
     input.companyUrl = 'https://careers.example.com';
     const res = await svc.scrape(input);
     expect(res.jobs).toHaveLength(0);
+  });
+
+  it('fetches tile pages in concurrent batches and stops on the first empty page', async () => {
+    const pages = new Map<number, string>([
+      [0, tilePage([tile('100', 'A-OH', 'Alpha'), tile('101', 'B-OH', 'Beta')])],
+      [25, tilePage([tile('102', 'C-OH', 'Gamma')])],
+      [50, tilePage([])],
+    ]);
+    const svc = new TestSuccessFactorsService(pages, new Map());
+
+    const input = new ScraperInputDto();
+    input.companyUrl = 'https://careers.example.com';
+    input.resultsWanted = 50;
+
+    const res = await svc.scrape(input);
+    expect(res.jobs.map((j) => j.atsId).sort()).toEqual(['100', '101', '102']);
+  });
+
+  it('stops when a concurrent batch contains a duplicate-only page', async () => {
+    const pages = new Map<number, string>([
+      [0, tilePage([tile('100', 'A-OH', 'Alpha')])],
+      [25, tilePage([tile('100', 'A-OH', 'Alpha')])],
+      [50, tilePage([tile('101', 'B-OH', 'Beta')])],
+    ]);
+    const svc = new TestSuccessFactorsService(pages, new Map());
+
+    const input = new ScraperInputDto();
+    input.companyUrl = 'https://careers.example.com';
+    input.resultsWanted = 50;
+
+    const res = await svc.scrape(input);
+    expect(res.jobs.map((j) => j.atsId).sort()).toEqual(['100']);
+  });
+
+  it('fetches CSB detail pages with bounded concurrency', async () => {
+    const tiles = Array.from({ length: 20 }, (_, i) =>
+      tile(String(i + 1), `role-${i + 1}-OH`, `Role ${i + 1}`),
+    );
+    const pages = new Map<number, string>([[0, tilePage(tiles)]]);
+    const details = new Map<string, string>();
+    for (let i = 1; i <= 20; i++) {
+      details.set(String(i), DETAIL);
+    }
+
+    let active = 0;
+    let maxActive = 0;
+
+    class ConcurrencyService extends TestSuccessFactorsService {
+      protected async fetchCsbDetailHtml(url: string): Promise<string> {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return super.fetchCsbDetailHtml(url);
+        } finally {
+          active -= 1;
+        }
+      }
+    }
+
+    const svc = new ConcurrencyService(pages, details);
+    const input = new ScraperInputDto();
+    input.companyUrl = 'https://careers.example.com';
+    input.resultsWanted = 20;
+
+    const res = await svc.scrape(input);
+    expect(res.jobs).toHaveLength(20);
+    expect(maxActive).toBeGreaterThan(1);
+    expect(maxActive).toBeLessThanOrEqual(10);
   });
 });
