@@ -10,5 +10,6 @@
 - [x] T8 — `empty` instead of `bad_input` for a verified-but-empty SuccessFactors CSB portal. Acceptance: the diagnostic names the portal; the unverifiable-origin case still reports `bad_input: missing companyUrl`.
 - [x] T9 — `empty` diagnostic when either new plugin returns no jobs (Spec 1683).
 - [x] T10 — Spec 5086 catalogue guard: a host declared twice by the *same* plugin is not a conflict. Acceptance: `source-company-trossenrobotics` declaring `trossenrobotics.com` and `www.trossenrobotics.com` passes; two different plugins claiming one host still fails.
+- [x] T10b — Crawl failures reach the response. Acceptance: a page-one failure reports the classified cause rather than `empty`; a partial harvest returns its jobs plus a `N of M detail requests failed` diagnostic, which `JobsService` scores as `partial` (Spec 1680). Raised by Greptile on PR #84.
 - [x] T11 — Docs: this spec/plan/tasks, `docs/index.md` row + footer, `docs/log.md` entry, `docs/questions.md` entry for the title-prefix conflict; `lint:docs` clean.
 - [x] T12 — Verify: `tsc --noEmit -p tsconfig.base.json` clean, touched suites green, `npm run test:scripts` green.

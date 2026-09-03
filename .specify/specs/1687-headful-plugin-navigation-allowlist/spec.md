@@ -72,6 +72,13 @@ Three further defects in the same family of plugins, found in the same review:
   "Remote Sensing Engineer" loses its first word — but the fork's own fixture asserts that
   "Temporary Instructional Designer" *is* stripped without one. Both cannot hold. Left for the
   fork to settle rather than silently redefined, and recorded in `docs/questions.md`.
+- **D-08 — A swallowed failure is worse than a lost job.** Catching per-card and per-page errors
+  (D-03) creates a new way to lie: a page-one timeout would return `empty` ("this board has no
+  jobs") and a half-harvested board would return no diagnostic at all, which `JobsService` scores
+  as `ok`. `fetchJobs` therefore returns the failure alongside the jobs, and `scrape` reports the
+  classified cause when nothing was harvested, or a `N of M detail requests failed` detail when
+  some were — the non-empty-plus-diagnostic pair `JobsService` already turns into `partial`
+  (Spec 1680). Raised by Greptile on PR #84.
 
 ## 3. Non-goals
 
@@ -92,3 +99,5 @@ Three further defects in the same family of plugins, found in the same review:
 - A 60 KB nested-entity chain returns in well under a second.
 - A Stratolaunch board token that is not `^[A-Za-z0-9_-]+$` falls back to its own board.
 - A verified-but-empty SuccessFactors CSB portal reports `empty`, naming the portal.
+- A board whose first page fails reports the classified cause, never `empty`; a board that lost
+  some detail pages returns its jobs *and* a diagnostic naming the count.

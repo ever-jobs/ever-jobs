@@ -29,6 +29,14 @@ import {
 } from './trossenrobotics.constants';
 import { TrossenroboticsJobCard } from './trossenrobotics.types';
 
+/** Outcome of one careers-page crawl: what was harvested, and what failed. */
+interface TrossenroboticsCrawl {
+  jobs: JobPostDto[];
+  detailAttempted: number;
+  detailFailed: number;
+  lastDetailError?: unknown;
+}
+
 @SourcePlugin({
   site: Site.TROSSENROBOTICS,
   name: 'Trossen Robotics',
@@ -47,19 +55,10 @@ export class TrossenroboticsService
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
     try {
-      const jobs = await this.fetchJobs(input);
-      const out = this.applyInput(jobs, input);
+      const crawl = await this.fetchJobs(input);
+      const out = this.applyInput(crawl.jobs, input);
       this.logger.log(`Trossen Robotics: scraped ${out.length} jobs`);
-      // Spec 1683: a source that returns nothing still owes a reason.
-      return new JobResponseDto(
-        out,
-        out.length
-          ? undefined
-          : new ScrapeDiagnostics(
-              'empty',
-              `no postings matched on ${TROSSENROBOTICS_CAREERS_URL}`,
-            ),
-      );
+      return new JobResponseDto(out, this.crawlDiagnostics(crawl, out));
     } catch (error: unknown) {
       const diagnostics = classifyScrapeError(error);
       this.logger.error(
@@ -69,7 +68,37 @@ export class TrossenroboticsService
     }
   }
 
-  private async fetchJobs(input: ScraperInputDto): Promise<JobPostDto[]> {
+  /**
+   * What a crawl produced, and what went wrong on the way.
+   *
+   * `JobsService` reports a source that returned jobs *and* a diagnostic as
+   * `partial` (Spec 1680), so a swallowed detail failure would hide a
+   * half-harvested board behind an `ok` row.
+   */
+  private crawlDiagnostics(
+    crawl: TrossenroboticsCrawl,
+    out: JobPostDto[],
+  ): ScrapeDiagnostics | undefined {
+    if (crawl.detailFailed > 0) {
+      const cause = classifyScrapeError(crawl.lastDetailError);
+      return new ScrapeDiagnostics(
+        cause.reason,
+        `${crawl.detailFailed} of ${crawl.detailAttempted} detail requests failed`,
+      );
+    }
+
+    // Spec 1683: a source that returns nothing still owes a reason.
+    return out.length
+      ? undefined
+      : new ScrapeDiagnostics(
+          'empty',
+          `no postings matched on ${TROSSENROBOTICS_CAREERS_URL}`,
+        );
+  }
+
+  private async fetchJobs(
+    input: ScraperInputDto,
+  ): Promise<TrossenroboticsCrawl> {
     const proxy = input.proxies?.[0];
     const timeoutMs =
       (input.requestTimeout ?? TROSSENROBOTICS_DEFAULT_TIMEOUT_SECONDS) * 1000;
@@ -93,6 +122,7 @@ export class TrossenroboticsService
       const seen = new Set<string>();
       let attempted = 0;
       let failed = 0;
+      let lastDetailError: unknown;
 
       for (const card of cards) {
         if (seen.has(card.detailUrl)) {
@@ -118,6 +148,7 @@ export class TrossenroboticsService
         } catch (error: unknown) {
           // One unreachable detail page must not discard the rest of the board.
           failed += 1;
+          lastDetailError = error;
           this.logger.warn(
             `Trossen Robotics: detail fetch failed for ${card.detailUrl}: ${this.errorLabel(error)}`,
           );
@@ -130,7 +161,12 @@ export class TrossenroboticsService
         );
       }
 
-      return jobs;
+      return {
+        jobs,
+        detailAttempted: attempted,
+        detailFailed: failed,
+        lastDetailError,
+      };
     } finally {
       await page.close().catch(() => undefined);
     }

@@ -41,6 +41,13 @@ returns it in `description`.
   catalogue guard no longer reports a plugin as conflicting with *itself* when it declares both
   `example.com` and `www.example.com`; `PluginRegistry.indexCompanyDomains` already tolerated it.
 
+Catching those failures created a new way to lie, caught by Greptile on PR #84: a page-one
+timeout returned `empty` ("this board has no jobs") and a half-harvested board returned no
+diagnostic at all, which `JobsService` scores as `ok`. `fetchJobs` now returns the failure
+alongside the jobs, so `scrape` reports the classified cause when nothing was harvested and a
+`N of M detail requests failed` detail when some were — the non-empty-plus-diagnostic pair
+`JobsService` already turns into `partial` (Spec 1680).
+
 **Deliberately not changed:** the shared title-prefix regex, whose optional separator strips the
 first word from ordinary titles ("Remote Sensing Engineer" → "Sensing Engineer"). The fork's own
 fixture asserts the opposite for "Temporary Instructional Designer", so both readings cannot
@@ -53,7 +60,7 @@ hold — recorded as Q-091 rather than silently redefined.
 suites, `.specify/specs/1687-headful-plugin-navigation-allowlist/*`.
 
 **Validation:** `tsc --noEmit -p tsconfig.base.json` clean; `lint:docs` clean; `test:scripts`
-182/182; rdw 23/23, trossenrobotics 22/22, stratolaunch 24/24, successfactors 18/18,
+182/182; rdw 26/26, trossenrobotics 23/23, stratolaunch 24/24, successfactors 18/18,
 `packages/plugin` + `apps/api/src/jobs` + `site-from-domain` green.
 
 ---

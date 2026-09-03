@@ -146,6 +146,45 @@ describe('RdwService — navigation hardening', () => {
     const result = await service.scrape(new ScraperInputDto({}));
 
     expect(result.jobs.map((j) => j.title)).toEqual(['Good Role']);
+    // Jobs AND a failure: `JobsService` reports this row as `partial`
+    // (Spec 1680), which it cannot do if the plugin reports nothing.
+    expect(result.diagnostics).toBeDefined();
+    expect(result.diagnostics?.detail).toContain(
+      '1 of 2 detail requests failed',
+    );
+  });
+
+  it('reports why the board failed rather than calling it empty', async () => {
+    (service as any).fetchHtml = jest.fn(async () => {
+      throw new Error('net::ERR_CONNECTION_TIMED_OUT');
+    });
+
+    const result = await service.scrape(new ScraperInputDto({}));
+
+    expect(result.jobs).toEqual([]);
+    // `empty` would read as "this board has no jobs"; page one never loaded.
+    expect(result.diagnostics?.reason).not.toBe('empty');
+  });
+
+  it('keeps earlier pages and reports the failure when a later page fails', async () => {
+    (service as any).fetchHtml = jest.fn(async (url: string) => {
+      if (url.includes('page=2')) {
+        throw new Error('net::ERR_CONNECTION_TIMED_OUT');
+      }
+      if (url.includes('/jobs/search')) {
+        // `hasNext` stays true, so the crawl tries page 2.
+        return searchPage(card('/jobs/first-1', 'First', '1')).replace(
+          'Displaying <b>1 - 2</b> of <b>2</b>',
+          'Displaying <b>1 - 1</b> of <b>9</b>',
+        );
+      }
+      return DETAIL;
+    });
+
+    const result = await service.scrape(new ScraperInputDto({}));
+
+    expect(result.jobs.map((j) => j.title)).toEqual(['First']);
+    expect(result.diagnostics?.detail).toContain('search page 2 failed');
   });
 
   it('reports `empty` rather than nothing when the board has no postings', async () => {

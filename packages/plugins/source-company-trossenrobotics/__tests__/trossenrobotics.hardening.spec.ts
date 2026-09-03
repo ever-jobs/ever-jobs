@@ -120,6 +120,11 @@ describe('TrossenroboticsService — navigation hardening', () => {
 
     expect(result.jobs).toHaveLength(1);
     expect(result.jobs[0].jobUrl).toContain('/careers/good-role');
+    // Jobs AND a failure: `JobsService` reports this row as `partial`
+    // (Spec 1680), which it cannot do if the plugin reports nothing.
+    expect(result.diagnostics?.detail).toContain(
+      '1 of 2 detail requests failed',
+    );
   });
 
   it('reports `empty` rather than nothing when the careers page has no postings', async () => {

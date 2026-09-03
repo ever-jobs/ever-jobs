@@ -34,6 +34,17 @@ import {
 } from './rdw.constants';
 import { RdwJobCard } from './rdw.types';
 
+/** Outcome of one board crawl: what was harvested, and what failed. */
+interface RdwCrawl {
+  jobs: JobPostDto[];
+  /** Set when pagination stopped because a search page failed. */
+  searchError?: unknown;
+  searchPage?: number;
+  detailAttempted: number;
+  detailFailed: number;
+  lastDetailError?: unknown;
+}
+
 @SourcePlugin({
   site: Site.RDW,
   name: 'Redwire Corporation',
@@ -50,19 +61,10 @@ export class RdwService implements IScraper, OnModuleDestroy {
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
     try {
-      const jobs = await this.fetchJobs(input);
-      const out = this.applyInput(jobs, input);
+      const crawl = await this.fetchJobs(input);
+      const out = this.applyInput(crawl.jobs, input);
       this.logger.log(`RDW: scraped ${out.length} jobs`);
-      // Spec 1683: a source that returns nothing still owes a reason.
-      return new JobResponseDto(
-        out,
-        out.length
-          ? undefined
-          : new ScrapeDiagnostics(
-              'empty',
-              `no postings matched on ${RDW_ORIGIN}${RDW_SEARCH_PATH}`,
-            ),
-      );
+      return new JobResponseDto(out, this.crawlDiagnostics(crawl, out));
     } catch (error: unknown) {
       const diagnostics = classifyScrapeError(error);
       this.logger.error(
@@ -72,7 +74,51 @@ export class RdwService implements IScraper, OnModuleDestroy {
     }
   }
 
-  private async fetchJobs(input: ScraperInputDto): Promise<JobPostDto[]> {
+  /**
+   * What a crawl produced, and what went wrong on the way.
+   *
+   * `JobsService` reports a source that returned jobs *and* a diagnostic as
+   * `partial` (Spec 1680), so swallowing a failure here would hide a
+   * half-harvested board behind an `ok` row — and a page-one failure behind
+   * `empty`, which reads as "this board has no jobs".
+   */
+  private crawlDiagnostics(
+    crawl: RdwCrawl,
+    out: JobPostDto[],
+  ): ScrapeDiagnostics | undefined {
+    if (crawl.searchError && crawl.jobs.length === 0) {
+      // Nothing harvested and the board itself failed: report why, not `empty`.
+      return classifyScrapeError(crawl.searchError);
+    }
+
+    if (crawl.searchError || crawl.detailFailed > 0) {
+      const parts: string[] = [];
+      if (crawl.searchError) {
+        parts.push(
+          `search page ${crawl.searchPage} failed (${this.errorLabel(crawl.searchError)})`,
+        );
+      }
+      if (crawl.detailFailed > 0) {
+        parts.push(
+          `${crawl.detailFailed} of ${crawl.detailAttempted} detail requests failed`,
+        );
+      }
+      const cause = classifyScrapeError(
+        crawl.searchError ?? crawl.lastDetailError,
+      );
+      return new ScrapeDiagnostics(cause.reason, parts.join('; '));
+    }
+
+    // Spec 1683: a source that returns nothing still owes a reason.
+    return out.length
+      ? undefined
+      : new ScrapeDiagnostics(
+          'empty',
+          `no postings matched on ${RDW_ORIGIN}${RDW_SEARCH_PATH}`,
+        );
+  }
+
+  private async fetchJobs(input: ScraperInputDto): Promise<RdwCrawl> {
     const proxy = input.proxies?.[0];
     const timeoutMs =
       (input.requestTimeout ?? RDW_DEFAULT_TIMEOUT_SECONDS) * 1000;
@@ -89,6 +135,9 @@ export class RdwService implements IScraper, OnModuleDestroy {
       let pageNum = 1;
       let attempted = 0;
       let failed = 0;
+      let searchError: unknown;
+      let searchPage: number | undefined;
+      let lastDetailError: unknown;
       // `applyInput` filters after the crawl, so an early stop is only safe
       // when nothing can filter a later job in.
       const budget = this.unfilteredBudget(input);
@@ -108,6 +157,8 @@ export class RdwService implements IScraper, OnModuleDestroy {
           this.logger.warn(
             `RDW: search page ${pageNum} failed (${this.errorLabel(error)}); keeping ${jobs.length} job(s)`,
           );
+          searchError = error;
+          searchPage = pageNum;
           break;
         }
         const { cards, hasNext } = this.parseSearchPage(searchHtml);
@@ -147,6 +198,7 @@ export class RdwService implements IScraper, OnModuleDestroy {
             jobs.push(this.toJobPost(card, detailHtml));
           } catch (error: unknown) {
             failed += 1;
+            lastDetailError = error;
             this.logger.warn(
               `RDW: detail fetch failed for ${card.detailUrl}: ${this.errorLabel(error)}`,
             );
@@ -165,7 +217,14 @@ export class RdwService implements IScraper, OnModuleDestroy {
         );
       }
 
-      return jobs;
+      return {
+        jobs,
+        searchError,
+        searchPage,
+        detailAttempted: attempted,
+        detailFailed: failed,
+        lastDetailError,
+      };
     } finally {
       await page.close().catch(() => undefined);
     }
