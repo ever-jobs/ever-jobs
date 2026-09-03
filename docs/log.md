@@ -4,6 +4,15 @@
 > human-readable audit trail; for source-code history, see `git log`.
 
 ---
+## 2026-08-30 — Spec 5092 — Source Company Plugin: Trossen Robotics
+
+**Change:** Add `source-company-trossenrobotics` for Trossen Robotics. Uses `BrowserPool` headful browser fetch for `https://www.trossenrobotics.com/careers`, parses rendered Wix job cards with Cheerio, follows detail URLs, and extracts the title, metadata, date, and full description from each `/careers/<slug>` page. Registers `Site.TROSSENROBOTICS = 'trossenrobotics'` and declares `companyDomains: ['trossenrobotics.com', 'www.trossenrobotics.com']`. Maps employment-type tokens (`Full Time`, `Part Time`, etc.), workplace type (`Onsite`/`Remote`/`Hybrid`), and title-based internship detection into `JobType`/`workFromHomeType`.
+
+**Files:** `packages/plugins/source-company-trossenrobotics/*`, `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `docs/index.md`.
+
+**Validation:** `npx tsc --noEmit -p packages/plugins/source-company-trossenrobotics/tsconfig.json` clean; `npx jest --testPathPatterns source-company-trossenrobotics` passes (8/8).
+
+---
 ## 2026-08-30 — Spec 5091 — Source Company Plugin: Redwire (rdw.com)
 
 **Change:** Add `source-company-rdw` for Redwire Corporation. Uses `BrowserPool` headful fetch for `https://careers.rdw.com/jobs/search` (Clinch Talent on Rails + Stimulus), parses job cards with Cheerio, follows detail URLs, and extracts JSON-LD `JobPosting` metadata. Registers `Site.RDW = 'rdw'` and declares `companyDomains: ['rdw.com', 'redwirespace.com']` so the legacy redirect domain resolves. Maps title prefixes (`Contract`, `Contractor`, `Temporary`, `Intern`, `Hybrid`, `Remote`, `On Site`) into `JobType`/`workFromHomeType`, and parses `jobLocation[].address` into `LocationDto` (US full-state names → 2-letter codes, 2-letter `addressCountry` for non-US, `addressRegion: 'Remote'` for remote roles).

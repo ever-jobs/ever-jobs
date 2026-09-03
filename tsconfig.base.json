@@ -1863,6 +1863,7 @@
       "@ever-jobs/source-company-terminusindustrials": ["packages/plugins/source-company-terminusindustrials/src/index.ts"],
       "@ever-jobs/source-company-mara_inc": ["packages/plugins/source-company-mara_inc/src/index.ts"],
       "@ever-jobs/source-company-vightaero": ["packages/plugins/source-company-vightaero/src/index.ts"],
+      "@ever-jobs/source-company-trossenrobotics": ["packages/plugins/source-company-trossenrobotics/src/index.ts"],
       "@ever-jobs/source-tesla": ["packages/plugins/source-tesla/src/index.ts"],
       "@ever-jobs/source-tesla-playwright": ["packages/plugins/source-tesla-playwright/src/index.ts"]
     }

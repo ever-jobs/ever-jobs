@@ -1843,6 +1843,8 @@
 ||| 5090 | [source-ats-pinpoint-location-object](../.specify/specs/5090-source-ats-pinpoint-location-object/spec.md) — [plan](../.specify/specs/5090-source-ats-pinpoint-location-object/plan.md) — [tasks](../.specify/specs/5090-source-ats-pinpoint-location-object/tasks.md) | Done. Fixes `source-ats-pinpoint` so it parses `location` as an object (`{ name, city, province }`) rather than a string, derives `isRemote` from `workplace_type` / `remote`, and returns jobs for tenants like `impulsespace`. |
 | 5091 | [source-company-rdw](../.specify/specs/5091-source-company-rdw/spec.md) — [plan](../.specify/specs/5091-source-company-rdw/plan.md) — [tasks](../.specify/specs/5091-source-company-rdw/tasks.md) | Done. Adds a `source-company-rdw` plugin for Redwire Corporation (`rdw.com`, legacy `redwirespace.com`). It scrapes `careers.rdw.com/jobs/search` via `BrowserPool` headful fetch, parses Clinch Talent job cards with Cheerio, extracts JSON-LD `JobPosting` detail pages, and maps title-prefix role types, workplace types, and US/non-US locations. |
 
+|| 5092 | [source-company-trossenrobotics](../.specify/specs/5092-source-company-trossenrobotics/spec.md) -- [plan](../.specify/specs/5092-source-company-trossenrobotics/plan.md) -- [tasks](../.specify/specs/5092-source-company-trossenrobotics/tasks.md) | Done. Adds a `source-company-trossenrobotics` plugin for Trossen Robotics (`trossenrobotics.com`). It scrapes the Wix careers list at `https://www.trossenrobotics.com/careers` with a headless browser, parses rendered job cards and detail pages, and maps title, metadata, description, job type, workplace type, and date posted to `JobPostDto`. |
+
 ## 8. Templates
 
 | File                                                           | Purpose             |
