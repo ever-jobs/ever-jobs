@@ -905,6 +905,22 @@ npx jest packages/common/__tests__/helpers.spec.ts --no-coverage
 npx jest --verbose --no-coverage --testPathPatterns __tests__
 ```
 
+#### Browser tests (opt-in)
+
+Browser-backed sources (TikTok, StepStone, Dice/SimplyHired fallbacks, Desktop Metal, …) need the Chromium build that matches the installed Playwright version. `*.browser-spec.ts` files use real Chromium and are excluded from `npm test` and CI:
+
+```bash
+npx playwright install chromium   # once, and after every Playwright upgrade
+
+# All browser tests: offline BrowserPool smoke test + live browser-backed sources
+npm run test:browser
+
+# Only the offline smoke test
+npm run test:browser -- --testPathPatterns browser-pool
+```
+
+The live test opens a visible Chrome window for headful sources; set `EVER_JOBS_BROWSER_HEADFUL=false` to force headless.
+
 ---
 
 ## ChatGPT & LLM Integration
