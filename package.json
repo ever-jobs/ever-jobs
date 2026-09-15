@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "npx nx run-many --target=build --all",
-    "start:dev": "npx nx run api:start:dev",
+    "start:dev": "nest start api --watch",
     "cli": "npx ts-node -r tsconfig-paths/register apps/cli/src/main.ts",
     "lint": "npx nx run-many --target=lint --all",
     "test": "jest",

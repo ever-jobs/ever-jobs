@@ -8,6 +8,8 @@ import { requestContextMiddleware } from './middleware/request-context.middlewar
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Close modules and connections cleanly on SIGINT/SIGTERM (e.g. Ctrl+C in dev).
+  app.enableShutdownHooks();
   const config = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
