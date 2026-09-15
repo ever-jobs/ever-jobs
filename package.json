@@ -11,7 +11,7 @@
   "scripts": {
     "build": "npx nx run-many --target=build --all",
     "start:dev": "nest start api --watch",
-    "cli": "npx ts-node -r tsconfig-paths/register apps/cli/src/main.ts",
+    "cli": "npx ts-node --project tsconfig.base.json -r tsconfig-paths/register apps/cli/src/main.ts",
     "lint": "npx nx run-many --target=lint --all",
     "test": "jest",
     "test:e2e": "jest --testPathPatterns e2e-spec",
