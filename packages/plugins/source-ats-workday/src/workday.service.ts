@@ -78,7 +78,10 @@ export class WorkdayService implements IScraper {
           appliedFacets: {},
           limit: WORKDAY_PAGE_SIZE,
           offset,
-          searchText: '',
+          // Workday filters server-side on searchText. Without it a large tenant
+          // (thousands of postings) returns its newest listings regardless of the
+          // query, so resultsWanted is spent on irrelevant roles.
+          searchText: input.searchTerm?.trim() ?? '',
         };
 
         const response = await client.post(apiUrl, payload);

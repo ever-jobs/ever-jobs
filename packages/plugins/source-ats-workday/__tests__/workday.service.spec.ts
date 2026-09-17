@@ -183,6 +183,35 @@ describe('WorkdayService — Spec 720 / T05', () => {
     });
   });
 
+  describe('search text', () => {
+    it('sends the trimmed searchTerm as Workday searchText', async () => {
+      mockPost.mockResolvedValueOnce({ data: { total: 0, jobPostings: [] } });
+      await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'tesla:5:Tesla',
+        searchTerm: '  java developer ',
+      } as ScraperInputDto);
+
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.stringContaining('/wday/cxs/tesla/Tesla/jobs'),
+        expect.objectContaining({ searchText: 'java developer' }),
+      );
+    });
+
+    it('sends an empty searchText when no searchTerm is given', async () => {
+      mockPost.mockResolvedValueOnce({ data: { total: 0, jobPostings: [] } });
+      await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'tesla:5:Tesla',
+      } as ScraperInputDto);
+
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ searchText: '' }),
+      );
+    });
+  });
+
   describe('detail enrichment — Spec 5004', () => {
     const DETAIL_PAGE = {
       total: 1,
