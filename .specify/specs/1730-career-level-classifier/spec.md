@@ -91,7 +91,7 @@ tech company but a senior individual contributor at a bank.
 | ID     | Requirement | Target |
 | ------ | ----------- | ------ |
 | NFR-1  | Cost per job | O(title + 3,000 description chars); no allocation proportional to the full description |
-| NFR-2  | Throughput | 30,000 jobs (typical keyword-less fan-out) classified in < 2 s on one core (measured by a test) |
+| NFR-2  | Throughput | 30,000 jobs (typical keyword-less fan-out) classified in < 2 s on one core; CI bound 10 s (measured figure in §12.4) |
 | NFR-3  | Precision on `internship` and `new_grad` over the fixture | ≥ 0.95 |
 | NFR-4  | Default payload | unchanged except for the additive `careerLevel` field |
 
@@ -171,11 +171,11 @@ matching class wins; within a class the strongest confidence wins):
 
 | # | Level | Title cues (word-bounded) | Guards (cue ignored) |
 | - | ----- | ------------------------- | -------------------- |
-| 1 | `internship` | `intern(s)`, `internship(s)`, `extern(ship)`, `co-op`/`coop`, `summer analyst/associate/intern/student/clerk`, *season + year* (`Summer 2026`, `Fall '26`), `working student`, `werkstudent`, `student worker/assistant/researcher/…`, `praktikant/praktikum`, `stagiaire`, `becario`, `pasante`, `prácticas`, `estagiário`, `tirocinante`, `thesis`, industrial/year/summer `placement`, `year in industry`, `spring week`, `graduate research/teaching assistant`, `graduate assistant`, `undergraduate research/student`, 实习, インターン, 인턴 | never `internal`, `international`, `internet`, `interne`, `internist`, `cooperative`; co-op followed by retail nouns (`food`, `store`, `funeral`, `pharmacy`, …); season+year with `camp`, `seasonal`, `lifeguard`, `pool`, `start`; **program-admin context** (below) |
-| 2 | `new_grad` | `new grad(uate)`, `NCG`, `recent grad(uate)`, `university/college/campus grad/graduate/hire`, `early career(s)`, `early in career`, `class of 20xx`, `fresher(s)`, `graduate` + role/program noun (`Graduate Engineer`, `Graduate Programme`, `Graduate Nurse`), trailing `… Graduate`, `20xx graduate`, `nurse resident/residency`, `rotational program` | `post-graduate`; `graduate school/studies/admissions/medical`; program-admin context |
+| 1 | `internship` | `intern(s)`, `internship(s)`, `extern(ship)`, `co-op`/`coop`, `summer analyst/associate/intern/student/clerk`, *season + year* (`Summer 2026`, `Fall '26`), `working student`, `werkstudent`, `student worker/assistant/researcher/…`, `praktikant/praktikum`, `stagiaire`, `becario`, `pasante`, `prácticas`, `estagiário`, `tirocinante`, `thesis`, industrial/year/summer `placement`, `year in industry`, `spring week`, French `stage` (segment start + French preposition, or a whole segment), `research experience for undergraduates` / `REU`, `graduate research/teaching assistant`, `graduate assistant`, `undergraduate research/student`, 实习, インターン, 인턴 | never `internal`, `international`, `internet`, `interne`, `internist`, `cooperative`; co-op followed by retail nouns (`food`, `store`, `funeral`, `pharmacy`, …); season+year with `camp`, `seasonal`, `lifeguard`, `pool`, `start`; **program-admin context** (below) |
+| 2 | `new_grad` | `new grad(uate)`, `NCG`, `recent grad(uate)`, `university/college/campus grad/graduate/hire`, `early career(s)`, `early in career`, `early talent`, `class of 20xx`, `fresher(s)`, `graduate` + role/program noun (`Graduate Engineer`, `Graduate Programme`, `Graduate Nurse`), trailing `… Graduate`, `20xx graduate`, `nurse resident/residency`, `rotational program` | `post-graduate`; `graduate school/studies/admissions/medical`; program-admin context |
 | 3 | `executive` | `vice president`, `VP`, `SVP`, `EVP`, `AVP`, `president`, `chief … officer`, `CEO/CFO/CTO/COO/CIO/CMO/CISO/CHRO`, other `chief …`, `executive director`, `managing director`, `managing/general/founding/senior/equity partner`, bare `Partner`, `founder`/`co-founder` | **bank corporate title**: VP/AVP together with an IC role noun (`Vice President, Software Engineer`) → `senior`; `chief of staff` → `director`; `business/HR/talent/finance… partner`, `account/sales executive`, `executive assistant` never executive |
 | 4 | `director` | `director`, `head of`, `chief of staff`, school `principal` / `assistant principal` | `funeral director` |
-| 5 | `manager` | `manager`/`mgr` (not an IC-manager compound), `supervisor`, `foreman`, `team/shift/crew lead(er)`, `head chef/coach` | IC-manager compounds: `product`, `program`, `project`, `account`, `case`, `community`, `customer/client success`, `relationship`, `portfolio`, `partner`, `territory`, `category`, `campaign`, `content`, `engagement`, `product marketing` + manager |
+| 5 | `manager` | `manager`/`mgr` (not an IC-manager compound), `supervisor`, `foreman`, `team/shift/crew lead(er)`, `head chef/coach`, `executive chef` | IC-manager compounds: `product`, `program`, `project`, `account`, `case`, `community`, `customer/client success`, `relationship`, `portfolio`, `partner`, `territory`, `category`, `campaign`, `content`, `engagement`, `product marketing` + manager |
 | 6 | `principal` | `principal` + role, `distinguished …`, `technical fellow`, `associate principal` | school principal (→ director) |
 | 7 | `staff` | `staff` + tech role (`software`, `engineer`, `data`, `ML`, `research`, `designer`, `product`, `security`, `SRE`, …) | `staff nurse/RN/pharmacist/attorney/writer`, `member of technical staff`, `staff accountant/auditor` (→ entry), `chief of staff` |
 | 8 | `senior` | `senior`, `sr`, `snr`, `lead` + role / `tech lead` / `… lead`, numerals `III`/`3` (low), `IV`/`V`/`4`/`5` (medium) | `senior living/care/center/services/home/housing/community/citizen/high/secondary/school`; `lead generation`, `lead abatement/paint` |
@@ -196,8 +196,10 @@ not the role itself, when (a) an admin noun (`recruiter`, `coordinator`, `manage
 segment (`manager` counts only when not part of an IC-manager compound other than
 `program`), (b) it is preceded by `of`/`for` in a title that also names an admin/leadership
 noun (`Head of Early Careers`), (c) it is plural and the title names an admin/leadership noun
-(`Director, Internships`), or (d) the title names a recruiting role (`recruiter`,
-`talent acquisition`, `admissions`, …) in a different segment (`Campus Recruiter - New Grad`).
+(`Director, Internships`), or (d) the title names a recruiting or programme-staff role
+(`recruiter`, `sourcer`, `admissions`, `registrar`, `dean`, `educator`, `preceptor`) in a
+different segment (`Campus Recruiter - New Grad`, `Nurse Educator - New Graduate Residency`).
+A recruiting word in the *same* segment as the cue is the role (`Talent Acquisition Intern`).
 So *Senior Intern Program Manager* is `senior`, *Internship Coordinator* is `unknown`, while
 *Program Manager Intern* and *Talent Acquisition Intern* stay `internship`.
 
@@ -278,5 +280,96 @@ Recorded in `docs/questions.md`:
 - `packages/plugins/legitimacy-detector` (Spec 740) — the pure/explainable feature-plugin pattern
   this follows.
 - `apps/api/src/jobs/jobs.aggregator.ts` — wiring point.
-- Evaluation results: `evaluation.md` in this folder (regenerate with
-  `npx ts-node --project tsconfig.base.json -r tsconfig-paths/register scripts/career-level-eval.ts`).
+- Evaluation report: §12 below; regenerate with
+  `npx ts-node --project tsconfig.base.json -r tsconfig-paths/register scripts/career-level-eval.ts [all|design|holdout]`.
+
+## 12. Evaluation results (2026-09-25)
+
+The fixture (`packages/plugins/career-level-classifier/__tests__/fixtures/career-level.fixture.ts`)
+has three parts:
+
+| Part | Cases | How it was built |
+| ---- | ----: | ---------------- |
+| Design titles | 332 | Written alongside the rules, including every tricky negative named in the task. |
+| Context cases | 17 | Title silent or conflicting; `jobType` / `employmentType` / `jobLevel` / `experienceRange` / description decide, plus incidental-mention negatives. |
+| Held-out titles | 174 | Labelled under the same policy **before the classifier was first run on them**. |
+
+The design set scores 100% by construction, so it proves the guards work but says nothing about
+generalisation. **The held-out first run is the honest estimate:**
+
+### 12.1 Held-out set — first run, before any rule change
+
+Cases: **174** — correct: **170** — accuracy: **0.977**
+
+| Level | Support | Predicted | TP | Precision | Recall |
+| ----- | ------: | --------: | -: | --------: | -----: |
+| `internship` | 32 | 30 | 30 | **1.000** | 0.938 |
+| `new_grad` | 22 | 21 | 21 | **1.000** | 0.955 |
+| `entry` | 13 | 13 | 13 | 1.000 | 1.000 |
+| `mid` | 9 | 9 | 9 | 1.000 | 1.000 |
+| `senior` | 16 | 16 | 16 | 1.000 | 1.000 |
+| `staff` | 7 | 7 | 7 | 1.000 | 1.000 |
+| `principal` | 7 | 7 | 7 | 1.000 | 1.000 |
+| `manager` | 16 | 15 | 15 | 1.000 | 0.938 |
+| `director` | 9 | 9 | 9 | 1.000 | 1.000 |
+| `executive` | 11 | 11 | 11 | 1.000 | 1.000 |
+| `unknown` | 32 | 36 | 32 | 0.889 | 1.000 |
+
+The four misses were all recall gaps (a level fell to `unknown`), never a wrong level:
+
+- "Stage - Assistant(e) Chef de Projet Marketing" (French *stage* = internship) → `unknown`
+- "Research Experience for Undergraduates (REU)" → `unknown`
+- "Early Talent - Software Engineer" → `unknown`
+- "Executive Chef" (runs the kitchen) → `unknown`
+
+Rules added afterwards (so the held-out set is no longer blind): French `stage` only at the start of
+a segment followed by a French preposition or as a whole segment (never *Stage Manager* /
+*Stage Hand*); `research experience for undergraduates` / `REU`; `early talent` (with the usual
+program-admin guard); `executive chef` → manager; and `educator` / `preceptor` as programme-staff
+nouns (*Nurse Educator - New Graduate Residency* is not a new-grad role).
+
+### 12.2 Whole fixture after those fixes
+
+Cases: **523** — correct: **523** — accuracy: **1.000**
+
+| Level | Support | Predicted | TP | Precision | Recall |
+| ----- | ------: | --------: | -: | --------: | -----: |
+| `internship` | 87 | 87 | 87 | 1.000 | 1.000 |
+| `new_grad` | 62 | 62 | 62 | 1.000 | 1.000 |
+| `entry` | 46 | 46 | 46 | 1.000 | 1.000 |
+| `mid` | 31 | 31 | 31 | 1.000 | 1.000 |
+| `senior` | 55 | 55 | 55 | 1.000 | 1.000 |
+| `staff` | 19 | 19 | 19 | 1.000 | 1.000 |
+| `principal` | 22 | 22 | 22 | 1.000 | 1.000 |
+| `manager` | 42 | 42 | 42 | 1.000 | 1.000 |
+| `director` | 28 | 28 | 28 | 1.000 | 1.000 |
+| `executive` | 29 | 29 | 29 | 1.000 | 1.000 |
+| `unknown` | 102 | 102 | 102 | 1.000 | 1.000 |
+
+Confusion matrix (rows = gold label, columns = prediction): the diagonal only —
+`int 87, ng 62, ent 46, mid 31, sen 55, stf 19, prn 22, mgr 42, dir 28, exe 29, unk 102`.
+
+### 12.3 What these numbers do and do not show
+
+- One author wrote the rules and both label sets. The labels are not an independent human
+  annotation, and the fixture is not a sample of real traffic. Expect lower real-world recall,
+  mostly as `unknown` on unusual phrasings, which is the failure mode the precedence is designed
+  for. The first-run precision of 1.000 on the two early-career classes is the figure that matters
+  for NFR-3.
+- CI thresholds (`career-level.evaluation.spec.ts`) are the contract, not the current score:
+  precision ≥ 0.95 and recall ≥ 0.90 on `internship` and `new_grad`, accuracy ≥ 0.90, checked on
+  the whole fixture **and** on the held-out part alone. A further test asserts that no gold
+  non-early-career case is ever labelled `internship` / `new_grad`.
+- The next honest step is a sample of real `/api/jobs/search` titles labelled by someone else
+  (open issue).
+
+### 12.4 Cost (NFR-2)
+
+30,000 jobs, each with a fixture title and a 3.2 KB description, in plain Node 24 on the shared
+build workstation (Xeon E5-1660 v3, **89% CPU load from other agents' builds at the time**):
+**2.7–3.1 s** (about 90–100 µs/job; roughly 12 µs title + 60 µs description). That misses the 2 s
+target on a loaded machine and was not re-measured idle. The CI test bounds it at 10 s. The first
+implementation took 24 s under jest. The fixes were: no `String.prototype.matchAll` (it clones the
+RegExp on every call), literal-needle gates before every rule, one alternation pass over the
+description instead of ~30 `includes` scans, and a whitespace pass that no longer rewrites every
+single space.

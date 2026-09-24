@@ -356,6 +356,7 @@ All settings are configurable via environment variables. Copy `.env.example` to 
 | `LOG_LEVEL`            | `info`      | Logging level                  |
 | `ENABLE_SWAGGER`       | `true`      | Enable Swagger UI              |
 | `PORT`                 | `3001`      | Server port                    |
+| `EVER_JOBS_CLASSIFY_CAREER_LEVEL` | `true` | Attach `careerLevel` to every returned job; `false` removes it ([Career level](#career-level)) |
 
 See [`.env.example`](.env.example) for the full list.
 
@@ -686,6 +687,35 @@ client keeps receiving progress lines, so a long deadline no longer risks an idl
 the deadline (or `EVER_JOBS_MAX_JOBS_PER_SEARCH`) cut short is reported on the NDJSON `end` line as
 `"complete":false` with its `stopReason` — see "Was the crawl complete?" above.
 
+#### Career level
+
+Every job in every response format carries a server-computed `careerLevel` (Spec 1730): JSON,
+paginated JSON, CSV (`careerLevel.level`, `careerLevel.confidence` and `careerLevel.reasons`
+columns) and GraphQL (`careerLevel { level confidence reasons }`).
+
+```json
+"careerLevel": {
+  "level": "internship",
+  "confidence": "high",
+  "reasons": ["title: \"intern\"", "corroborated by jobType: internship"]
+}
+```
+
+- `level` is one of `internship`, `new_grad`, `entry`, `mid`, `senior`, `staff`, `principal`,
+  `manager`, `director`, `executive` or `unknown`. `confidence` is `high`, `medium` or `low`.
+- Deterministic and in-process: no network, no LLM. The title decides; the source `jobType` /
+  `employmentType` / `jobLevel` / `experienceRange` fields, then the first 3,000 description
+  characters, fill in only when the title is silent, and otherwise just move the confidence. The
+  source fields themselves are never modified.
+- Guarded against the usual false friends: *Internal Audit Manager*, *International Sales*,
+  *Staff Nurse*, *Senior Living*, *Lead Generation*, *Associate Director*. *Intern Program Manager*
+  and *Campus Recruiter* run early-career programmes; they are not early-career roles.
+- Filter server-side with `"careerLevels": ["internship", "new_grad"]` in the request body
+  (GraphQL: `careerLevels: [...]`). Unknown values are rejected. `count` is post-filter.
+- Operators can switch the field off with `EVER_JOBS_CLASSIFY_CAREER_LEVEL=false`; an explicit
+  `careerLevels` filter is still honoured.
+- Rules, evaluation and decisions: [Spec 1730](.specify/specs/1730-career-level-classifier/spec.md).
+
 ### `POST /api/jobs/analyze`
 
 Search and analyze jobs — returns summary statistics, company intelligence, and per-site comparison.
@@ -729,6 +759,7 @@ All parameters are optional. When `siteType` is omitted, search + company scrape
 | `caCert`                   | `string`   | —          | Path to CA certificate for proxies                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `userAgent`                | `string`   | —          | Custom User-Agent string                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `clientIp`                 | `string`   | —          | Client IP address for sources that require it (e.g. CareerJet). Also useful for proxy rotation strategies                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `careerLevels`             | `string[]` | —          | Keep only jobs whose server-computed `careerLevel.level` is in the list: `internship`, `new_grad`, `entry`, `mid`, `senior`, `staff`, `principal`, `manager`, `director`, `executive`, `unknown`. Unknown values → 400. See [Career level](#career-level) |
 
 ---
 
@@ -782,7 +813,12 @@ JobPost
 ├── companyRating                (Naukri)
 ├── companyReviewsCount          (Naukri)
 ├── vacancyCount                 (Naukri)
-└── workFromHomeType             (Naukri)
+├── workFromHomeType             (Naukri)
+│
+└── careerLevel                  (every job; server-computed, Spec 1730)
+    ├── level                    internship | new_grad | entry | mid | senior | staff | principal | manager | director | executive | unknown
+    ├── confidence               high | medium | low
+    └── reasons[]
 ```
 
 ---

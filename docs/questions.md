@@ -10,6 +10,65 @@
 
 ---
 
+## Q-106 — `careerLevels` filter semantics when classification is switched off; is `unknown` filterable? (Spec 1730)
+
+**Context:** `EVER_JOBS_CLASSIFY_CAREER_LEVEL=false` is the operator kill-switch that removes
+`careerLevel` from every job. A caller may still send `careerLevels: ["internship"]`. Separately,
+`unknown` is a level in the contract, so it could be asked for too.
+
+**Options:**
+
+- **A. Honour the filter anyway.** Classify transiently, filter, and attach nothing. The caller gets
+  what they asked for, but cannot see why a job survived.
+- **B. Ignore the filter** when the switch is off. This is silent: the caller believes the list is
+  filtered and it is not.
+- **C. Reject with 400** when the switch is off. Loud and honest, but it turns an operator
+  decision into a client-visible error.
+- For `unknown`: **filterable** (useful to audit what the rules miss) vs **not accepted**.
+
+**Default (proceeding):** **A**, and `unknown` is filterable. The switch exists to strip the
+field and its cost from the default path. An explicit filter is a deliberate request, and B would
+fail silently. The filter never mutates the cached raw fan-out, and `careerLevelFilteredOut`
+reports how many jobs it removed.
+
+---
+
+## Q-105 — Career-level taxonomy boundaries (Spec 1730)
+
+**Context:** The C7 contract names the eleven levels but leaves several boundaries to the
+implementation. Each choice below changes which jobs an "internship" or "new grad" filter returns.
+
+**Decisions (default — proceeding), with the alternative for each:**
+
+1. **Apprenticeship → `entry`**, not `internship`. An apprenticeship is a paid, employed training
+   contract, often multi-year (electrician, software apprenticeships, UK degree apprenticeships),
+   not a temporary student placement. *Alternative:* `internship`, if the owner wants early-career
+   filters to include them.
+2. **Graduate research/teaching assistant, graduate assistant → `internship`**, never
+   `new_grad`. These are appointments held while enrolled. *Alternative:* `unknown`.
+3. **Bank corporate titles:** `VP` / `AVP` alongside an IC role noun (`Vice President, Software
+   Engineer`, `Data Analyst - AVP`) → `senior` (medium). Otherwise `VP`, `SVP` and `EVP` →
+   `executive`. *Alternative:* always `executive`, which mislabels most quant/bank engineering
+   postings.
+4. **Distinguished engineer / technical fellow → `principal`** (the top IC rung); `executive`
+   stays for management. Postdoc → `entry`. School principal / assistant principal → `director`.
+   Chief of staff → `director`.
+5. **Level numerals:** `I`/`1` → entry, `II`/`2` → mid, `III`/`3` → senior (low confidence,
+   because companies disagree), `IV`/`V` → senior (medium). A range (`I/II`) takes the lower bound at
+   low confidence. `Tier N` and `Level N support` are support tiers, not seniority.
+6. **Product / program / project / account / case / customer-success "manager" titles are IC
+   roles.** Without another modifier they are `unknown`; `Senior Product Manager` is senior and
+   `Group Product Manager` is manager. *Alternative:* `mid` at low confidence.
+7. **`Lead` → `senior`** (medium). `Team/shift/crew lead`, `supervisor` and `foreman` → `manager`.
+   `Head of` → `director`. `Head/executive chef` → `manager`.
+8. **Partner:** bare `Partner` and `managing/general/founding/senior/equity partner` →
+   `executive`. `Business/HR/talent/finance partner` and `Partner Engineer` are not levels.
+9. **Labelling policy for the fixture:** a label is what the posting explicitly states.
+   Seniority implied only by the occupation (Barista, Warehouse Associate, Registered Nurse) is
+   `unknown`.
+
+---
+
 ## Q-104 — Should the JSON result order stop being "by site name"? (Specs 1720, 1721)
 
 **Context:** `JobsService` sorts the fan-out by `site` name, then `datePosted` desc, before any

@@ -121,6 +121,50 @@ another lane's date-only entry of the same day.
 
 ---
 
+## 2026-09-25 — Spec 1730 — every job says what level it is for
+
+**Change:** a deterministic career-level classifier (cross-repo contract C7). Every job in every
+response now carries `careerLevel: { level, confidence, reasons }`, where `level` is one of
+internship / new_grad / entry / mid / senior / staff / principal / manager / director /
+executive / unknown. Hust wanted an "internships / new grad" filter, and until now the only level
+data came from a few sources: LinkedIn `jobLevel`, Naukri `experienceRange`, and `jobType` on a
+handful of boards. The 181 ATS adapters and the company plugins say nothing, even though the level
+is almost always in the title.
+
+- **New feature plugin** `packages/plugins/career-level-classifier`, shaped like
+  `legitimacy-detector`: a pure rule engine plus a service bound under
+  `CAREER_LEVEL_CLASSIFIER_TOKEN`. Title first, then structured source fields, then the first
+  3,000 description characters. Lower-ranked evidence only fills a silent title or moves the
+  confidence. Source fields are read, never mutated.
+- **Wired once**, in `JobsAggregator.aggregateRaw` after dedup (the old body is now the private
+  `dedupAndPersist`, unchanged). The controller's and resolver's only change is passing
+  `careerLevels` through, so the NDJSON stream another lane is adding inherits the field.
+- **`careerLevels` request filter** (REST body, GraphQL input; unknown values are rejected), and
+  **`EVER_JOBS_CLASSIFY_CAREER_LEVEL`** (default `true`). With the switch off, an explicit filter is
+  still honoured (Q-106).
+- **Precision guards:** word boundaries (*Internal*, *International*, *Internet*, *Internist*,
+  *Cooperative*), audience/industry guards (*Senior Living*, *Junior High*, *Co-op Food*), IC
+  "manager" titles, bank `VP` corporate titles, and a program-admin guard. That guard is what keeps
+  *Senior Intern Program Manager* at senior and *Internship Coordinator* at unknown, while
+  *Program Manager Intern* stays an internship.
+- **Evaluation:** 523 labelled cases. The 174 held-out titles were labelled before the first run and
+  scored 170/174, with precision 1.000 on internship and new_grad; all four misses fell to
+  `unknown`. CI enforces precision ≥ 0.95 and recall ≥ 0.90 on both early-career classes. Taxonomy
+  decisions (apprenticeship → entry, graduate assistantships → internship, bank VP → senior,
+  distinguished/fellow → principal, numerals) are in **Q-105**.
+
+**Cost:** the first cut took 24 s for 30k jobs under jest, because `matchAll` clones the RegExp
+on every call and ~30 `includes` scans ran over every description. After fixing both: 2.7–3.1 s in
+plain Node on the shared workstation at 89% load. That misses the 2 s idle target and was not
+re-measured idle (spec §12.4).
+
+**Files:** `packages/plugins/career-level-classifier/**`, `packages/models/src/interfaces/career-level-classifier.interface.ts`,
+`packages/models/src/dtos/{job-post,scraper-input}.dto.ts`, `apps/api/src/jobs/{jobs.aggregator,jobs.module,jobs.controller,jobs.resolver,gql-types}.ts`,
+`apps/api/src/config/configuration.ts`, `scripts/career-level-eval.ts`, `tsconfig.base.json`, `jest.config.js`,
+`.specify/specs/1730-career-level-classifier/*`, README, `.env.example`.
+
+---
+
 ## 2026-09-25 — Spec 1721 FR-15..FR-18 — the NDJSON end line says when the crawl was incomplete
 
 **Why:** an integration check of the list-mode branch against its consumer found a contract gap:
