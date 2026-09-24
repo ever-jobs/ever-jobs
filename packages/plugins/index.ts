@@ -1924,6 +1924,37 @@ import { MarvellModule } from './source-company-marvell';
 import { GeneralMotorsModule } from './source-company-generalmotors';
 import { WarnerBrosDiscoveryModule } from './source-company-warnerbrosdiscovery';
 import { ModernaModule } from './source-company-moderna';
+import { HudsonRiverTradingModule } from './source-company-hudsonrivertrading';
+import { JumpTradingModule } from './source-company-jumptrading';
+import { OptiverModule } from './source-company-optiver';
+import { DrwModule } from './source-company-drw';
+import { AkunaCapitalModule } from './source-company-akunacapital';
+import { FiveRingsModule } from './source-company-fiverings';
+import { OldMissionModule } from './source-company-oldmissioncapital';
+import { XtxMarketsModule } from './source-company-xtxmarkets';
+import { Point72Module } from './source-company-point72';
+import { BridgewaterModule } from './source-company-bridgewater';
+import { RadixTradingModule } from './source-company-radixtrading';
+import { HeadlandsTechModule } from './source-company-headlandstech';
+import { BelvedereTradingModule } from './source-company-belvederetrading';
+import { ChicagoTradingModule } from './source-company-chicagotrading';
+import { FlowTradersModule } from './source-company-flowtraders';
+import { MavenSecuritiesModule } from './source-company-mavensecurities';
+import { QubeRtModule } from './source-company-qube_rt';
+import { GResearchModule } from './source-company-gresearch';
+import { ArrowstreetCapitalModule } from './source-company-arrowstreetcapital';
+import { VoleonModule } from './source-company-voleon';
+import { WorldQuantModule } from './source-company-worldquant';
+import { SchonfeldModule } from './source-company-schonfeld';
+import { GenevaTradingModule } from './source-company-genevatrading';
+import { VaticLabsModule } from './source-company-vaticlabs';
+import { SigModule } from './source-company-sig';
+import { TowerResearchCapitalModule } from './source-company-towerresearchcapital';
+import { ImcModule } from './source-company-imc';
+import { JaneStreetModule } from './source-company-janestreet';
+import { SquarepointModule } from './source-company-squarepoint';
+import { VirtuModule } from './source-company-virtu';
+import { GravitonResearchCapitalModule } from './source-company-gravitonresearchcapital';
 export const ALL_SOURCE_MODULES = [
   FourDayWeekModule,
   AcademiccareersModule,
@@ -3841,4 +3872,35 @@ export const ALL_SOURCE_MODULES = [
   GeneralMotorsModule,
   WarnerBrosDiscoveryModule,
   ModernaModule,
+  HudsonRiverTradingModule,
+  JumpTradingModule,
+  OptiverModule,
+  DrwModule,
+  AkunaCapitalModule,
+  FiveRingsModule,
+  OldMissionModule,
+  XtxMarketsModule,
+  Point72Module,
+  BridgewaterModule,
+  RadixTradingModule,
+  HeadlandsTechModule,
+  BelvedereTradingModule,
+  ChicagoTradingModule,
+  FlowTradersModule,
+  MavenSecuritiesModule,
+  QubeRtModule,
+  GResearchModule,
+  ArrowstreetCapitalModule,
+  VoleonModule,
+  WorldQuantModule,
+  SchonfeldModule,
+  GenevaTradingModule,
+  VaticLabsModule,
+  SigModule,
+  TowerResearchCapitalModule,
+  ImcModule,
+  JaneStreetModule,
+  SquarepointModule,
+  VirtuModule,
+  GravitonResearchCapitalModule,
 ];
