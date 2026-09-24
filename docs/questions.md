@@ -10,6 +10,95 @@
 
 ---
 
+## Q-109 — Company sources the lane could not cover through a supported public board (Specs 1736, 1737)
+
+**Context:** Specs 1736/1737 only generate plugins for boards verified live on
+an ATS Ever Jobs already supports. Of the owner's lists, these were not
+coverable that way on 2026-09-24: **Workday list** — Dell (its Workday site
+`dell:1:External` answers HTTP 422; careers appear to have moved to Oracle HCM
+at `enterpriseplatform.dell.com`), Qualcomm (its Workday site answers
+0 postings; careers moved to `careers.qualcomm.com`), NetApp (site name not
+found, HTTP 422), Lockheed Martin, L3Harris, UnitedHealth Group, Citi, AMD,
+Texas Instruments, Honeywell, ExxonMobil (no public Workday site found), and
+Adobe's university site (HTTP 403 to anonymous requests). **Quant list** —
+Citadel, Citadel Securities, D. E. Shaw (own careers sites), Two Sigma (Avature
+portal at `/careers/OpenRoles`; the Avature adapter's fixed
+`/careers/SearchJobs/` path answers 404 there), Millennium (Workday site
+empty; moved to `career.mlp.com`), AQR (Workday answers 401), Balyasny
+(Salesforce Experience Cloud site), PEAK6, Wolverine, Man Group (no public
+board found). Boeing and NVIDIA already have company plugins.
+
+**Options:**
+
+- **A. Record the gaps, cover nothing else in this lane (default — proceeding).**
+  Every generated plugin rests on a live verification record; nothing is
+  guessed.
+- **B. Bespoke scrapers** for the own-site firms (Citadel, Citadel Securities,
+  D. E. Shaw), only if each exposes a simple public JSON/HTML listing with no
+  login, captcha or bot wall. Needs one spec per firm and a fresh politeness
+  review.
+- **C. Adapter work**: a configurable listing path in `source-ats-avature`
+  (Two Sigma), and company plugins on `source-ats-oracle` for Dell and other
+  Oracle-HCM employers.
+
+**Default:** A. B and C are listed as follow-up tasks in Specs 1736 T7 and
+1737 T5.
+
+---
+
+## Q-108 — Where do company-tier / industry tags live? (Specs 1735–1737)
+
+**Context:** The owner wants the Workday employers and the quant firms tagged
+so a later company-tier feature can select them. `IPluginMetadata` has no tag
+or tier field. The crawl-policy lane (Spec 1690) is editing the same interface
+in parallel, so adding a field here would collide.
+
+**Options:**
+
+- **A. New optional `tags?: string[]` on `IPluginMetadata`**, surfaced by
+  `/api/sources`. Cleanest, but a concurrent edit of a core interface.
+- **B. Machine-greppable suffix in `description`** —
+  `Tags: segment=<segment>; industry=<industry-slug>.` — plus the committed
+  seed `scripts/seeds/ats-delegate-companies.json` as the machine-readable
+  source of the same tags, HQ and domains (default — proceeding).
+- **C. A separate tier registry** in `@ever-jobs/models` keyed by `Site`.
+
+**Default:** B now (segments `workday-enterprise`, `quant-trading`); migrate to
+A once Spec 1690 has landed — every tagged plugin is generated, so the move is
+a re-scaffold (Spec 1735 T8).
+
+---
+
+## Q-107 — Should delegating company plugins filter by keyword, given the Workday adapter ignores `searchTerm`? (Specs 1735, 1736)
+
+**Context:** The new plugins pass every caller input to the ATS adapter
+untouched. `source-ats-workday` sends `searchText: ''` whatever the
+`searchTerm`, pages 20 postings at a time with a 1–2 s sleep, and fetches one
+detail per posting (5 in flight) up to `resultsWanted`. So each of the 56
+Workday boards added here returns its newest postings regardless of the
+keyword and costs about `resultsWanted / 20 + resultsWanted` requests per
+search that includes it (e.g. ~105 for `resultsWanted = 100`). Greenhouse,
+Lever and Ashby boards are one request each; iCIMS pages at 20.
+
+**Options:**
+
+- **A. Pure delegation (default — proceeding).** Same behaviour as the ~700
+  existing delegating plugins; list mode (no keyword) returns the board, which
+  is what the consumer's full sync wants; per-host pacing is the crawl-policy
+  lane's job (Spec 1690).
+- **B. Post-filter in each plugin** by title/department. Correct results for
+  keyword searches but no saving: the adapter has already fetched and enriched
+  every posting.
+- **C. Pass `searchTerm` to Workday's `searchText` in the adapter**, so a
+  keyword search is filtered server-side and only matching postings are
+  enriched. Fixes relevance and cost for every Workday tenant at once; an
+  adapter change, outside this lane.
+
+**Default:** A, with C recommended as the follow-up (Spec 1736 T6). Operators
+can drop the batch from the default fan-out with `EVER_JOBS_DISABLED_SOURCES`.
+
+---
+
 ## Q-096 — Shared location parser: known mis-splits carried in from the fork (Spec 1689)
 
 **Context:** The fork-sync review (Spec 1689, lane A4) found shared-parser outputs that no
