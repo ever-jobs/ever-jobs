@@ -1,7 +1,7 @@
 import { Resolver, Query, Args } from '@nestjs/graphql';
-import { Logger } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JobPostDto, Site } from '@ever-jobs/models';
+import { CAREER_LEVELS, isCareerLevel, JobPostDto, Site } from '@ever-jobs/models';
 import { JobsService } from './jobs.service';
 import { JobsAggregator } from './jobs.aggregator';
 import { CacheService } from '../cache/cache.service';
@@ -60,11 +60,27 @@ export class JobsResolver {
       `GraphQL searchJobs: term=${describeTerm(input)}, location="${input.location ?? ''}"`,
     );
 
+    // Spec 1730 — the REST DTO rejects unknown levels via class-validator. The GraphQL input
+    // types carry no class-validator metadata (and the global pipe runs with `whitelist: true`,
+    // so decorating one field would affect the undecorated ones), so validate explicitly.
+    const unknownLevels = (input.careerLevels ?? []).filter((l) => !isCareerLevel(l));
+    if (unknownLevels.length) {
+      throw new BadRequestException(
+        `careerLevels: unknown value(s) ${unknownLevels.join(', ')}; expected any of ${CAREER_LEVELS.join(', ')}`,
+      );
+    }
+
     // Cache stores RAW fan-out — dedup runs per-request.
     // The endpoint key is bumped to v2 so any v1 entries (which were
     // written before T15 wired dedup into the resolver) are invalidated.
+    // `careerLevels` filters after the cache (Spec 1730), so it is not part of the key.
     const dedup = input.dedup ?? true;
-    const cacheParams = { ...input, endpoint: 'graphql-search-v2', dedup: undefined };
+    const cacheParams = {
+      ...input,
+      endpoint: 'graphql-search-v2',
+      dedup: undefined,
+      careerLevels: undefined,
+    };
     const cached = await this.cacheService.get<JobPostDto[]>(cacheParams);
 
     let rawJobs: JobPostDto[];
@@ -109,7 +125,11 @@ export class JobsResolver {
 
     // Spec 5024 — same opt-out as the REST path (`EVER_JOBS_PERSIST_SEARCH`).
     const persist = this.configService.get<boolean>('store.persistSearch', true);
-    const aggregated = await this.aggregator.aggregateRaw(rawJobs, { dedup, persist });
+    const aggregated = await this.aggregator.aggregateRaw(rawJobs, {
+      dedup,
+      persist,
+      careerLevels: input.careerLevels,
+    });
 
     this.logger.log(
       `GraphQL searchJobs: returning ${aggregated.jobs.length} jobs (raw=${aggregated.rawCount}, deduped=${aggregated.deduped}, cached=${fromCache})`,

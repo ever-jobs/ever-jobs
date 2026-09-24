@@ -151,6 +151,16 @@ export default () => {
       dir: process.env.PLUGINS_DIR || null,
     },
 
+    // Career level (Spec 1730, contract C7)
+    careerLevel: {
+      /**
+       * Attach `careerLevel` ({ level, confidence, reasons }) to every job the search returns,
+       * computed in-process after dedup. Default `true`; `false` removes the field from every
+       * response. An explicit `careerLevels` request filter is still honoured when `false`.
+       */
+      classify: parseBool(process.env.EVER_JOBS_CLASSIFY_CAREER_LEVEL, true),
+    },
+
     // Logging
     logLevel: process.env.LOG_LEVEL || 'info',
     environment: process.env.NODE_ENV || 'development',

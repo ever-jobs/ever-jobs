@@ -1,11 +1,18 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
+  CAREER_LEVEL_CLASSIFIER_TOKEN,
   CanonicalJob,
+  type CareerLevel,
+  type CareerLevelInput,
+  type CareerLevelVerdict,
   DEDUP_ENGINE_TOKEN,
   DedupMetrics,
+  ICareerLevelClassifier,
   IDedupEngine,
   IJobObservationStore,
   IJobStore,
+  isCareerLevel,
   JOB_OBSERVATION_STORE_TOKEN,
   JOB_STORE_TOKEN,
   JobPostDto,
@@ -46,6 +53,14 @@ export interface AggregateOptions {
    * "when nothing is bound the aggregator is a pass-through").
    */
   readonly persist?: boolean;
+
+  /**
+   * Keep only jobs whose `careerLevel.level` is in this list (Spec 1730, FR-8). Applied after
+   * dedup and classification; `undefined` or `[]` means no filter. Values outside
+   * `CAREER_LEVELS` are ignored here — the REST DTO / GraphQL resolver reject them first.
+   * Callers pass `careerLevels: input.careerLevels`; `aggregate()` reads it from the input.
+   */
+  readonly careerLevels?: ReadonlyArray<string>;
 }
 
 /**
@@ -87,6 +102,11 @@ export interface AggregateResult {
    * body.
    */
   readonly persistError?: { readonly code: string; readonly message: string };
+  /**
+   * Number of jobs the `careerLevels` filter removed (Spec 1730). Present only when a filter
+   * ran; `jobs` / `outputCount` are then post-filter.
+   */
+  readonly careerLevelFilteredOut?: number;
 }
 
 /**
@@ -138,6 +158,14 @@ export class JobsAggregator {
     @Optional() @Inject(JOB_STORE_TOKEN) private readonly jobStore?: IJobStore,
     @Optional() @Inject(JOB_OBSERVATION_STORE_TOKEN)
     private readonly observationStore?: IJobObservationStore,
+    /**
+     * Spec 1730 — career-level classifier. Optional like the other bindings: when unbound
+     * (tests, a deployment that dropped the plugin) jobs are returned unclassified.
+     */
+    @Optional() @Inject(CAREER_LEVEL_CLASSIFIER_TOKEN)
+    private readonly careerLevelClassifier?: ICareerLevelClassifier,
+    /** Reads `careerLevel.classify` (`EVER_JOBS_CLASSIFY_CAREER_LEVEL`); absent → enabled. */
+    @Optional() private readonly configService?: ConfigService,
   ) {}
 
   /**
@@ -150,7 +178,81 @@ export class JobsAggregator {
     options: AggregateOptions = {},
   ): Promise<AggregateResult> {
     const rawJobs = await this.jobsService.searchJobs(input);
-    return this.aggregateRaw(rawJobs, options);
+    return this.aggregateRaw(rawJobs, {
+      ...options,
+      careerLevels: options.careerLevels ?? input.careerLevels,
+    });
+  }
+
+  /**
+   * Dedup (and persist) an already-fanned-out list, then attach `careerLevel` to every returned
+   * job and apply the optional `careerLevels` filter (Spec 1730).
+   *
+   * Classification runs here — once, after dedup, on the jobs that are actually returned — so
+   * every response shape built from this result (JSON, pagination, CSV, NDJSON, GraphQL)
+   * carries the field without format-specific code. See {@link dedupAndPersist} for the
+   * dedup / persistence contract, which is unchanged.
+   */
+  async aggregateRaw(
+    rawJobs: JobPostDto[],
+    options: AggregateOptions = {},
+  ): Promise<AggregateResult> {
+    const result = await this.dedupAndPersist(rawJobs, options);
+    return this.applyCareerLevel(result, options);
+  }
+
+  /**
+   * Spec 1730 — attach `careerLevel` (unless `EVER_JOBS_CLASSIFY_CAREER_LEVEL=false`) and apply
+   * the `careerLevels` filter. Never throws: a classifier failure logs and returns the jobs
+   * unclassified and unfiltered. Never mutates the input array (it may be the cached fan-out);
+   * a filter returns a new array. The source `jobType` / `jobLevel` fields are left untouched.
+   */
+  private applyCareerLevel(
+    result: AggregateResult,
+    options: AggregateOptions,
+  ): AggregateResult {
+    const attach = this.configService?.get<boolean>('careerLevel.classify', true) ?? true;
+    const wanted = new Set<CareerLevel>((options.careerLevels ?? []).filter(isCareerLevel));
+    const filter = wanted.size > 0;
+    if (!attach && !filter) return result;
+    if (!this.careerLevelClassifier) {
+      if (filter) {
+        this.logger.warn(
+          'careerLevels filter requested but no ICareerLevelClassifier is bound — returning unfiltered results',
+        );
+      }
+      return result;
+    }
+
+    let verdicts: CareerLevelVerdict[];
+    try {
+      verdicts = this.careerLevelClassifier.classifyBatch(result.jobs.map(careerLevelInputOf));
+    } catch (err) {
+      this.logger.warn(
+        `career-level classification failed; returning jobs unclassified: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return result;
+    }
+
+    if (attach) {
+      result.jobs.forEach((job, i) => {
+        job.careerLevel = verdicts[i];
+      });
+    }
+    if (!filter) return result;
+
+    // Q-106: with attachment switched off the filter is still honoured (the verdicts above are
+    // transient); the caller asked for it explicitly.
+    const kept = result.jobs.filter((_, i) => wanted.has(verdicts[i]!.level));
+    this.logger.log(
+      `careerLevels [${[...wanted].join(',')}]: ${result.jobs.length} → ${kept.length}`,
+    );
+    return {
+      ...result,
+      jobs: kept,
+      outputCount: kept.length,
+      careerLevelFilteredOut: result.jobs.length - kept.length,
+    };
   }
 
   /**
@@ -164,7 +266,7 @@ export class JobsAggregator {
    *   4. dedup pass per-request (this method)
    *   5. (T11) persist post-dedup canonical + observations
    */
-  async aggregateRaw(
+  private async dedupAndPersist(
     rawJobs: JobPostDto[],
     options: AggregateOptions = {},
   ): Promise<AggregateResult> {
@@ -494,6 +596,18 @@ export async function stampDedupKeys(jobs: JobPostDto[]): Promise<void> {
     const key = dedupKeyForJob(job);
     if (key !== undefined) job.dedupKey = key;
   }
+}
+
+/** The classifier's view of a job — only the fields it reads (Spec 1730, FR-3). */
+function careerLevelInputOf(job: JobPostDto): CareerLevelInput {
+  return {
+    title: job.title,
+    description: job.description,
+    jobType: job.jobType,
+    employmentType: job.employmentType,
+    jobLevel: job.jobLevel,
+    experienceRange: job.experienceRange,
+  };
 }
 
 /**

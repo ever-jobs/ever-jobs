@@ -484,7 +484,14 @@ export class JobsController {
     // off by default, on by default for an explicitly selected durable store).
     // The fallback below only applies when no configuration is loaded at all.
     const persist = this.configService.get<boolean>('store.persistSearch', true);
-    const aggregated = await this.aggregator.aggregateRaw(rawJobs, { dedup, persist });
+    // Spec 1730 — careerLevel is attached inside the aggregator; only the
+    // filter is passed. JSON and NDJSON both come through here, so the filter
+    // applies identically to both.
+    const aggregated = await this.aggregator.aggregateRaw(rawJobs, {
+      dedup,
+      persist,
+      careerLevels: input.careerLevels,
+    });
 
     this.logger.log(
       `Returning ${aggregated.jobs.length} jobs (raw=${aggregated.rawCount}, deduped=${aggregated.deduped}, cached=${fromCache})`,

@@ -96,6 +96,13 @@ export class SearchJobsInput {
   @IsOptional()
   @IsBoolean()
   dedup?: boolean;
+
+  @Field(() => [String], {
+    nullable: true,
+    description:
+      'Keep only jobs whose careerLevel.level is in this list (Spec 1730): internship, new_grad, entry, mid, senior, staff, principal, manager, director, executive, unknown. Unknown values are rejected.',
+  })
+  careerLevels?: string[];
 }
 
 /** ISO alpha-2 -> Country, from each country's Indeed API code (first wins). */
@@ -193,6 +200,23 @@ export class CompensationGql {
   interval?: string;
 }
 
+@ObjectType({
+  description: 'Server-computed career level (Spec 1730). Same shape as the REST `careerLevel`.',
+})
+export class CareerLevelGql {
+  @Field({
+    description:
+      'internship | new_grad | entry | mid | senior | staff | principal | manager | director | executive | unknown',
+  })
+  level!: string;
+
+  @Field({ description: 'high | medium | low' })
+  confidence!: string;
+
+  @Field(() => [String], { description: 'Short, human-readable reasons naming the rules that fired.' })
+  reasons!: string[];
+}
+
 @ObjectType()
 export class JobPostGql {
   @Field(() => ID, { nullable: true })
@@ -265,6 +289,9 @@ export class JobPostGql {
       'from different sources or runs has the same key (Spec 1721).',
   })
   dedupKey?: string;
+
+  @Field(() => CareerLevelGql, { nullable: true })
+  careerLevel?: CareerLevelGql;
 }
 
 @ObjectType({
