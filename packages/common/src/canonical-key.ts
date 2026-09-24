@@ -257,3 +257,66 @@ export function canonicalJobId(
     .update(canonicalKey(input, options), 'utf8')
     .digest('hex');
 }
+
+/**
+ * Structural location shape accepted by {@link formatJobLocation}: a
+ * `LocationDto` instance *or* the plain object it becomes after a JSON / Redis
+ * cache round-trip (which drops the `displayLocation()` method).
+ */
+export interface JobLocationLike {
+  readonly city?: string | null;
+  readonly state?: string | null;
+  readonly country?: unknown;
+  readonly displayLocation?: () => string;
+}
+
+/**
+ * Render a job location into the flat `"city, state, country"` string the
+ * canonicaliser expects (Spec 003; shared since Spec 1721 so the dedup engine
+ * and the API's `dedupKey` can never disagree).
+ *
+ * Prefers `displayLocation()` when present (the user-visible rendering);
+ * otherwise joins the parts in the same order. `Country` is a string enum, so
+ * both branches produce identical output for the same data — which is what
+ * makes a key computed from a cached plain object equal the one computed from
+ * the live DTO.
+ */
+export function formatJobLocation(loc: JobLocationLike | null | undefined): string {
+  if (!loc) return '';
+  if (typeof loc.displayLocation === 'function') {
+    return loc.displayLocation();
+  }
+  const parts: string[] = [];
+  if (loc.city) parts.push(loc.city);
+  if (loc.state) parts.push(loc.state);
+  if (loc.country) parts.push(typeof loc.country === 'string' ? loc.country : String(loc.country));
+  return parts.join(', ');
+}
+
+/** The job fields {@link dedupKeyForJob} reads. */
+export interface DedupKeyJobInput {
+  readonly title?: string | null;
+  readonly companyName?: string | null;
+  readonly location?: JobLocationLike | null;
+}
+
+/**
+ * Stable cross-source key for one job posting (Spec 1721 / contract C9):
+ * `canonicalJobId({ company, title, location })` — the exact key the dedup
+ * engine buckets on. Independent of `site`, source id, URL, letter case,
+ * punctuation and legal-suffix noise, so the same posting seen on a job board
+ * and on the company's ATS, today and tomorrow, gets the same key.
+ *
+ * Returns `undefined` when the job has neither a title nor a company — such a
+ * key would collide across unrelated postings.
+ */
+export function dedupKeyForJob(job: DedupKeyJobInput): string | undefined {
+  const title = job.title ?? '';
+  const company = job.companyName ?? '';
+  if (title.trim() === '' && company.trim() === '') return undefined;
+  return canonicalJobId({
+    title,
+    company,
+    location: formatJobLocation(job.location),
+  });
+}

@@ -74,6 +74,14 @@ export class JobPostDto {
   // Site identifier (filled in during aggregation)
   site?: string | null;
 
+  /**
+   * Stable cross-source identity of the posting (Spec 1721): sha-256 of the
+   * normalised `company|title|location` triple — the same `canonicalJobId` the
+   * dedup engine clusters on. The same posting seen via different sources or
+   * on different runs gets the same key. Stamped on every returned job.
+   */
+  dedupKey?: string | null;
+
   // Corpus signals (Spec 740) — opt-in via ?liveness=true / ?legitimacy=true; absent by default.
   // Shapes mirror what the Hust frontend already consumes (forward-compatible).
   liveness?: {

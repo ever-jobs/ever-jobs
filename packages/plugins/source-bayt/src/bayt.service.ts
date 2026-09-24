@@ -14,6 +14,9 @@ import { createHttpClient, randomSleep } from '@ever-jobs/common';
   site: Site.BAYT,
   name: 'Bayt',
   category: 'regional',
+  // Spec 1720 — the term is a URL path segment (`/jobs/<term>-jobs/`); an
+  // empty term builds `/jobs/-jobs/`, which is not a listing page.
+  requiresSearchTerm: true,
 })
 @Injectable()
 export class BaytService implements IScraper {

@@ -13,7 +13,7 @@ import {
   SourceObservation,
   provenance,
 } from '@ever-jobs/models';
-import { canonicalJobId, canonicalKey, normalizeCompany, normalizeLocation, normalizeTitle } from '@ever-jobs/common';
+import { canonicalJobId, canonicalKey, formatJobLocation, normalizeCompany, normalizeLocation, normalizeTitle } from '@ever-jobs/common';
 
 import { YieldBudget, yieldToEventLoop } from './cooperative';
 import { HashStrategy } from './strategies/hash-strategy';
@@ -373,14 +373,10 @@ function jobToObservation(raw: JobPostDto): SourceObservation | null {
  * Render `LocationDto` into the flat string the canonicaliser expects.
  * `displayLocation()` is the canonical UI rendering already; we lean on it
  * here to avoid drifting from the user-visible shape.
+ *
+ * Delegates to the shared `formatJobLocation` (Spec 1721) so the key this
+ * engine clusters on and the `dedupKey` the API returns are one function.
  */
 function formatLocation(loc: NonNullable<JobPostDto['location']>): string {
-  if (typeof (loc as { displayLocation?: () => string }).displayLocation === 'function') {
-    return (loc as { displayLocation: () => string }).displayLocation();
-  }
-  const parts: string[] = [];
-  if (loc.city) parts.push(loc.city);
-  if (loc.state) parts.push(loc.state);
-  if (loc.country) parts.push(typeof loc.country === 'string' ? loc.country : String(loc.country));
-  return parts.join(', ');
+  return formatJobLocation(loc);
 }

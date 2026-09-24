@@ -1,7 +1,8 @@
-import { IsOptional, IsString, IsBoolean, IsNumber, IsArray, IsEnum, ValidateNested } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsNumber, IsArray, IsEnum, IsIn, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Site } from '../enums/site.enum';
+import { SITE_CATEGORIES, SiteCategory } from '../enums/site-category.enum';
 import { JobType } from '../enums/job-type.enum';
 import { DescriptionFormat } from '../enums/description-format.enum';
 import { Country } from '../enums/country.enum';
@@ -14,6 +15,25 @@ export class ScraperInputDto {
   @IsEnum(Site, { each: true })
   siteType?: Site[];
 
+  // Spec 1720 — select sources by plugin metadata category. Ignored when
+  // `siteType`/`companyDomain` resolve to at least one site.
+  @ApiPropertyOptional({
+    enum: SITE_CATEGORIES,
+    isArray: true,
+    description:
+      'Restrict the default fan-out to plugins whose metadata category is one of these values. ' +
+      'Ignored when `siteType` or `companyDomain` selects at least one site. ATS plugins still need `companySlug` ' +
+      '(without it the default fan-out excludes them, so `["ats"]` alone selects nothing). Unknown values → 400.',
+    example: ['job-board', 'remote'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsIn(SITE_CATEGORIES, {
+    each: true,
+    message: `siteCategories must contain only: ${SITE_CATEGORIES.join(', ')}`,
+  })
+  siteCategories?: SiteCategory[];
+
   @ApiPropertyOptional({
     description: 'Company domains to resolve to registered Site tokens. Each domain is mapped via the Spec 5069 rule (e.g. boomsupersonic.com → boomsupersonic, hyl.io → hyl_io). Resolved tokens are unioned with siteType. Domains that do not map to a registered Site token produce a 400 only when no valid siteType or resolvable domain remains; otherwise they are returned as per-source diagnostics.',
     isArray: true,
@@ -24,7 +44,12 @@ export class ScraperInputDto {
   @IsString({ each: true })
   companyDomain?: string[];
 
-  @ApiPropertyOptional({ description: 'Search term / keywords' })
+  @ApiPropertyOptional({
+    description:
+      'Search term / keywords. Omit it (or send null, "" or whitespace) for LIST MODE (Spec 1720): no keyword ' +
+      'filter anywhere — every selected source returns what it can list, up to `resultsWanted` per source. ' +
+      'Sources that cannot list without a keyword return nothing in list mode.',
+  })
   @IsOptional()
   @IsString()
   searchTerm?: string;
