@@ -1,4 +1,5 @@
 import { resolveFanoutDeadlineMs, resolveLivenessConfig } from './search-config';
+import { resolvePersistSearch } from './store-config';
 
 /**
  * Central configuration factory.
@@ -86,13 +87,13 @@ export default () => {
     store: {
       /**
        * Persist the post-dedup canonical corpus on every `/api/jobs/search`
-       * (and the GraphQL equivalent). Defaults to `true` — the historical
-       * behaviour. Operators running the `memory` backend SHOULD set
-       * `EVER_JOBS_PERSIST_SEARCH=false`: with an in-process store the write
-       * is a pure sink (nothing in `apps/api` reads the corpus back) and it
-       * pins every job description for the process lifetime.
+       * (and the GraphQL equivalent). Spec 1722: an explicit
+       * `EVER_JOBS_PERSIST_SEARCH` always wins; unset, it is `false` for the
+       * `memory` backend (a pure heap sink nothing reads back) and `true`
+       * when a durable backend is explicitly selected via `EVER_JOBS_STORE`
+       * (`sqlite` / `postgres`).
        */
-      persistSearch: parseBool(process.env.EVER_JOBS_PERSIST_SEARCH, true),
+      persistSearch: resolvePersistSearch(process.env),
       /**
        * Hard ceiling on rows retained by an in-process store backend.
        * Bounds RSS regardless of {@link persistSearch}; see

@@ -1,94 +1,72 @@
-import { Logger, Type } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  Provider,
+  Type,
+} from '@nestjs/common';
 import { ERR_STORE_NOT_FOUND, IJobStore } from '@ever-jobs/models';
 import { StoreRegistryError } from '@ever-jobs/plugin';
 import { InMemoryJobStore } from '@ever-jobs/store-memory';
-import { SqliteDrizzleJobStore } from '@ever-jobs/store-sqlite-drizzle';
-import { PostgresPrismaJobStore } from '@ever-jobs/store-postgres-prisma';
+import {
+  STORE_SQLITE_DRIZZLE_CONFIG,
+  SqliteDrizzleJobStore,
+  StoreSqliteDrizzleConfig,
+} from '@ever-jobs/store-sqlite-drizzle';
+import {
+  PostgresPrismaJobStore,
+  PrismaJobsClient,
+  STORE_POSTGRES_PRISMA_CONFIG,
+  StorePostgresPrismaConfig,
+} from '@ever-jobs/store-postgres-prisma';
+import {
+  DEFAULT_STORE_ID,
+  ERR_STORE_BACKEND_DOWN,
+  EVER_JOBS_STORE_ENV_VAR,
+  KNOWN_STORE_IDS,
+  KnownStoreId,
+  StoreConfigError,
+  redactDatabaseUrl,
+  resolvePersistSearch,
+  resolvePostgresUrl,
+  resolveSqlitePath,
+  resolveStoreSelection,
+} from '../config/store-config';
 
 /**
- * Spec 004 / T12 — `EVER_JOBS_STORE` env-var bootstrap factory.
+ * Spec 004 / T12 — `EVER_JOBS_STORE` env-var bootstrap factory; made
+ * functional from the environment alone by Spec 1722.
  *
- * Reads `EVER_JOBS_STORE` synchronously and resolves the single
- * `@StorePlugin()`-decorated backend class to pass to
- * `StoreModule.forActive(...)`. Choice of "lazy resolve by id" over
- * "eager declare every backend" is locked in by Q-019 (Option C):
+ * Two steps, both run synchronously at module evaluation in `app.module.ts`
+ * so a misconfiguration fails before any HTTP listener is attached
+ * (Spec 004 §7.3):
  *
- *   1. Cold-start cost is proportional to the active backend
- *      (NFR-4 budgets 750 ms; eager-all would pay for
- *      `better-sqlite3` native bindings even in `memory` mode).
- *   2. Unknown id surfaces an `ERR_STORE_NOT_FOUND` whose message
- *      names the three known ids literally — better operator UX
- *      than the registry's generic `Registered ids: [...]` payload
- *      when the typo is close to a real id (e.g. `postres`).
- *   3. The fail-fast happens BEFORE NestJS module construction,
- *      mirroring `StoreModule.forActive`'s own pre-validation of
- *      empty / undecorated backends. Spec 004 §7.3 places
- *      `ERR_STORE_NOT_FOUND` at bootstrap, not at request time —
- *      this factory is where that contract is honoured.
+ *   1. {@link resolveStoreBootstrap} — which backend (`EVER_JOBS_STORE`, alias
+ *      `EVER_JOBS_STORE_PLUGIN`, package names accepted) and whether the search
+ *      path persists (`EVER_JOBS_PERSIST_SEARCH`, defaulting from the backend).
+ *   2. {@link resolveStoreProviders} — the config providers the chosen backend
+ *      needs, resolved from env (`EVER_JOBS_STORE_SQLITE_PATH`,
+ *      `EVER_JOBS_STORE_DATABASE_URL` / `DATABASE_URL`). A missing required
+ *      variable throws {@link StoreConfigError} (`ERR_STORE_CONFIG_MISSING`).
  *
- * Postgres opt-in is by *config*, not by *code*. The stock build
- * recognises `EVER_JOBS_STORE=postgres` and selects
- * `PostgresPrismaJobStore`, but the service constructor fails fast
- * if `STORE_POSTGRES_PRISMA_CONFIG` is unbound (Spec 004 / T10
- * decision 2). The operator wires that config in their own root
- * module / `.env` at the same time they set
- * `EVER_JOBS_STORE=postgres`.
+ * Choice of "lazy resolve by id" over "eager declare every backend" is locked
+ * in by Q-019 (Option C). Prisma in particular is only `require`d when
+ * `postgres` is selected.
  *
  * @see {@link KNOWN_STORE_IDS} — the literal set of recognised ids.
- * @see {@link DEFAULT_STORE_ID} — fallback when env-var is absent.
- * @see {@link resolveStoreBootstrap} — the factory itself.
+ * @see {@link DEFAULT_STORE_ID} — fallback when no selector is set.
  */
 
-/**
- * Environment-variable name read by {@link resolveStoreBootstrap}.
- * Exported for testability — tests pass a synthetic `env` map and
- * key off the same constant the production code reads.
- */
-export const EVER_JOBS_STORE_ENV_VAR = 'EVER_JOBS_STORE';
+export { DEFAULT_STORE_ID, EVER_JOBS_STORE_ENV_VAR, KNOWN_STORE_IDS };
+export type { KnownStoreId };
 
 /**
- * Fallback store id when `EVER_JOBS_STORE` is unset or an empty
- * string. Picks `memory` because (a) zero-config / zero-deps,
- * (b) every existing test that doesn't care about persistence keeps
- * working, (c) Spec 004 §10's "in-memory store always available
- * for tests" decision is honoured by the bootstrap path itself.
- */
-export const DEFAULT_STORE_ID = 'memory';
-
-/**
- * Literal set of store ids the stock build recognises. Each maps to
- * exactly one `@StorePlugin()`-decorated class via {@link STORE_BACKEND_BY_ID}.
- * Operator-facing error messages enumerate these ids so a typo like
- * `EVER_JOBS_STORE=postres` returns "did you mean memory / sqlite /
- * postgres?" rather than the registry's generic listing.
- *
- * Exported as a `readonly` tuple so a future admin endpoint
- * (`GET /api/storage/backends`) can render the same source of truth
- * without re-deriving it from the keys of {@link STORE_BACKEND_BY_ID}.
- */
-export const KNOWN_STORE_IDS = ['memory', 'sqlite', 'postgres'] as const;
-
-/**
- * Type alias for any of the recognised store ids. Narrows the
- * factory's return value so downstream callers can switch
- * exhaustively at compile time.
- */
-export type KnownStoreId = (typeof KNOWN_STORE_IDS)[number];
-
-/**
- * Map of recognised store id → `@StorePlugin()`-decorated backend
- * class. The map is the single source of truth for the
- * "id → class" relationship; if a future spec adds a fourth
- * backend, this is the only place to wire it (and append to
- * {@link KNOWN_STORE_IDS}).
- *
- * Each value MUST be a class decorated with `@StorePlugin({ id })`
- * where the decorator's `id` matches the map key — otherwise
- * `StoreModule.forActive` will raise `ERR_STORE_BACKEND_NOT_DECORATED`
- * at boot. We don't double-check that invariant here because the
- * decorator's metadata is the contract `StoreModule` validates;
- * adding a redundant runtime check would just hide a real wiring
- * bug behind a friendlier error.
+ * Map of recognised store id → `@StorePlugin()`-decorated backend class. The
+ * single source of truth for the "id → class" relationship; a fourth backend
+ * is wired here and in `KNOWN_STORE_IDS` / `STORE_ID_ALIASES`.
  */
 const STORE_BACKEND_BY_ID: Readonly<Record<KnownStoreId, Type<IJobStore>>> = {
   memory: InMemoryJobStore,
@@ -96,95 +74,260 @@ const STORE_BACKEND_BY_ID: Readonly<Record<KnownStoreId, Type<IJobStore>>> = {
   postgres: PostgresPrismaJobStore,
 };
 
-/**
- * Result of {@link resolveStoreBootstrap}. The factory hands back
- * the *resolved* id (after defaulting) plus the single backend
- * class to wire into `StoreModule.forActive(id, { backends: [class] })`.
- */
+/** Result of {@link resolveStoreBootstrap}. */
 export interface ResolvedStoreBootstrap {
-  /** Resolved id — equals the env-var value when set, else
-   *  {@link DEFAULT_STORE_ID}. Always a member of
-   *  {@link KNOWN_STORE_IDS} (unknown ids throw before this is
-   *  returned). */
+  /** Resolved id — always a member of {@link KNOWN_STORE_IDS}. */
   readonly id: KnownStoreId;
-  /** `@StorePlugin()`-decorated backend class corresponding to
-   *  `id`. Pass as the sole element of `StoreModule.forActive`'s
-   *  `backends:` option. */
+  /** `@StorePlugin()`-decorated backend class for `StoreModule.forActive`. */
   readonly backendClass: Type<IJobStore>;
+  /** A selector variable was set (vs. the silent `memory` default). */
+  readonly explicit: boolean;
+  /**
+   * Effective `EVER_JOBS_PERSIST_SEARCH` (Spec 1722): explicit value wins,
+   * otherwise `true` only for an explicitly selected durable backend. The
+   * same value `configuration.ts` exposes as `store.persistSearch`.
+   */
+  readonly persistSearch: boolean;
 }
 
 /**
- * Resolve the active store backend from `EVER_JOBS_STORE`.
+ * Resolve the active store backend.
  *
- * Behaviour:
+ *   - Nothing set → `memory`, persistence off (the stock and our deployment's
+ *     behaviour).
+ *   - `EVER_JOBS_STORE` / `EVER_JOBS_STORE_PLUGIN` = `memory|sqlite|postgres`
+ *     or a plugin package name (`store-postgres-prisma`, …) → that backend.
+ *   - Unknown id → {@link StoreRegistryError} `ERR_STORE_NOT_FOUND`, naming
+ *     the recognised ids (operator dashboards grep the code literally).
+ *   - Both selectors set to different backends → {@link StoreConfigError}
+ *     `ERR_STORE_CONFLICT`.
  *
- *   - Env-var unset / empty / whitespace-only → resolves to
- *     {@link DEFAULT_STORE_ID} (`memory`). Mirrors Spec 004 §10's
- *     "in-memory store always available for tests" decision.
- *   - Env-var matches one of {@link KNOWN_STORE_IDS} → resolves to
- *     the corresponding backend class.
- *   - Env-var matches no known id → throws
- *     {@link StoreRegistryError} with code
- *     {@link ERR_STORE_NOT_FOUND} and a message naming the
- *     recognised ids verbatim. Operator dashboards / log alerts
- *     grep `ERR_STORE_NOT_FOUND` literally.
- *
- * The factory is pure: same input env → same output. `env`
- * defaults to `process.env` so production code calls
- * `resolveStoreBootstrap()` with no argument; tests pass a
- * synthetic record so the suite never mutates the global env.
- *
- * @param env — environment map; defaults to `process.env`.
- * @returns the resolved id + backend class.
- * @throws {@link StoreRegistryError} (`ERR_STORE_NOT_FOUND`) on
- *         unrecognised id.
+ * Pure apart from one warning log: same env → same result. `env` defaults to
+ * `process.env`; tests pass a synthetic record.
  */
 export function resolveStoreBootstrap(
   env: NodeJS.ProcessEnv = process.env,
 ): ResolvedStoreBootstrap {
-  const raw = env[EVER_JOBS_STORE_ENV_VAR];
-  const trimmed = typeof raw === 'string' ? raw.trim() : '';
-  const id = trimmed.length === 0 ? DEFAULT_STORE_ID : trimmed;
-
-  if (!isKnownStoreId(id)) {
-    throw new StoreRegistryError(
-      `${EVER_JOBS_STORE_ENV_VAR}=${JSON.stringify(raw)} does not match any built-in store id. ` +
-        `Known ids: [${KNOWN_STORE_IDS.join(', ')}]. ` +
-        `Set ${EVER_JOBS_STORE_ENV_VAR} to one of those, or unset it to use the default ('${DEFAULT_STORE_ID}').`,
-      ERR_STORE_NOT_FOUND,
-    );
+  let selection;
+  try {
+    selection = resolveStoreSelection(env);
+  } catch (err) {
+    // Keep the Spec 004 / T12 contract: an unknown id is a StoreRegistryError.
+    if (err instanceof StoreConfigError && err.code === ERR_STORE_NOT_FOUND) {
+      throw new StoreRegistryError(err.message, ERR_STORE_NOT_FOUND);
+    }
+    throw err;
   }
+  const persistSearch = resolvePersistSearch(env);
 
-  // Spec 5024 — the `memory` backend is documented as "dev / tests, no
-  // persistence" and retains every persisted row in-process. Reaching it by
-  // *omission* in a production deployment is almost always an accident, and
-  // it presents as a slow OOMKill rather than an obvious failure. Warn loudly
-  // at bootstrap so it shows up in startup logs instead of in a post-mortem.
-  // Deliberately a warning, not a throw: `memory` is a legitimate choice for
-  // a stateless deployment that also sets `EVER_JOBS_PERSIST_SEARCH=false`.
-  if (id === DEFAULT_STORE_ID && env.NODE_ENV === 'production') {
-    const explicit = trimmed.length > 0;
+  // Spec 5024, narrowed by Spec 1722 — the in-memory backend retains every
+  // persisted row in-process. That is only a hazard when something actually
+  // writes to it, which since Spec 1722 requires opting in explicitly.
+  if (selection.id === 'memory' && persistSearch && env.NODE_ENV === 'production') {
     new Logger('StoreBootstrap').warn(
-      `${EVER_JOBS_STORE_ENV_VAR} resolved to '${DEFAULT_STORE_ID}'` +
-        `${explicit ? '' : ` (unset — defaulted)`} while NODE_ENV=production. ` +
-        `The in-memory backend keeps every persisted canonical job and observation ` +
-        `in the process heap for its lifetime. Set EVER_JOBS_PERSIST_SEARCH=false ` +
-        `to stop the interactive search path writing to it, bound it with ` +
-        `EVER_JOBS_STORE_MAX_ROWS, or select a durable backend via ` +
-        `${EVER_JOBS_STORE_ENV_VAR}.`,
+      `EVER_JOBS_PERSIST_SEARCH is on while the store is '${DEFAULT_STORE_ID}' and NODE_ENV=production. ` +
+        `The in-memory backend keeps every persisted canonical job and observation in the process heap ` +
+        `(bounded by EVER_JOBS_STORE_MAX_ROWS) and nothing reads it back. Select a durable backend via ` +
+        `${EVER_JOBS_STORE_ENV_VAR}=postgres|sqlite, or unset EVER_JOBS_PERSIST_SEARCH.`,
     );
   }
 
   return {
-    id,
-    backendClass: STORE_BACKEND_BY_ID[id],
+    id: selection.id,
+    backendClass: STORE_BACKEND_BY_ID[selection.id],
+    explicit: selection.explicit,
+    persistSearch,
   };
 }
 
 /**
- * Type-guard for {@link KnownStoreId}. Avoids `(KNOWN_STORE_IDS as readonly string[]).includes(id)`
- * gymnastics at every call-site.
+ * DI token for the connected Prisma client of the Postgres store. Exported so
+ * tests and operators' own modules can reach the same client.
  */
-function isKnownStoreId(id: string): id is KnownStoreId {
-  return (KNOWN_STORE_IDS as readonly string[]).includes(id);
+export const POSTGRES_STORE_CLIENT = 'EVER_JOBS_POSTGRES_STORE_CLIENT';
+
+/** Minimal surface of a generated `PrismaClient` this bootstrap relies on. */
+export type ConnectablePrismaClient = PrismaJobsClient & {
+  $connect(): Promise<void>;
+};
+
+/** Constructor of a generated `PrismaClient`. */
+export type PrismaClientCtor = new (options: { datasourceUrl: string }) => ConnectablePrismaClient;
+
+/** How to generate the client — repeated in every Prisma-related error. */
+const PRISMA_GENERATE_HINT =
+  'Run `npm run store:postgres:generate` (prisma generate for packages/plugins/store-postgres-prisma) ' +
+  'after installing dependencies.';
+
+/**
+ * Load `PrismaClient` from `@prisma/client` at call time, so no deployment
+ * that does not select `postgres` ever loads Prisma.
+ *
+ * @throws {@link StoreConfigError} `ERR_STORE_BACKEND_DOWN` when the package
+ *         is missing or exports no constructor.
+ */
+export function loadPrismaClientCtor(): PrismaClientCtor {
+  let mod: { PrismaClient?: unknown };
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    mod = require('@prisma/client');
+  } catch (err) {
+    throw new StoreConfigError(
+      `EVER_JOBS_STORE=postgres needs the @prisma/client package: ${
+        err instanceof Error ? err.message : String(err)
+      }. ${PRISMA_GENERATE_HINT}`,
+      ERR_STORE_BACKEND_DOWN,
+    );
+  }
+  if (typeof mod?.PrismaClient !== 'function') {
+    throw new StoreConfigError(
+      `@prisma/client exports no PrismaClient. ${PRISMA_GENERATE_HINT}`,
+      ERR_STORE_BACKEND_DOWN,
+    );
+  }
+  return mod.PrismaClient as PrismaClientCtor;
+}
+
+/**
+ * Remove anything credential-shaped from a driver error before it reaches a
+ * log: the full URL and the decoded password, if the URL carried one.
+ */
+function scrubSecrets(message: string, url: string): string {
+  let out = message.split(url).join(redactDatabaseUrl(url));
+  try {
+    const password = decodeURIComponent(new URL(url).password);
+    if (password.length >= 3) out = out.split(password).join('***');
+  } catch {
+    // unparsable URL — nothing more to scrub
+  }
+  return out;
+}
+
+/**
+ * Construct and connect a Prisma client for the store (Spec 1722 FR-7).
+ *
+ * Connecting at boot is what turns a wrong host, port, password or database
+ * into a failed deploy instead of a stream of `persistError`s on every
+ * search (Q-102). The message names the host and database only.
+ *
+ * @throws {@link StoreConfigError} `ERR_STORE_BACKEND_DOWN`
+ */
+export async function connectPostgresStoreClient(
+  url: string,
+  loadCtor: () => PrismaClientCtor = loadPrismaClientCtor,
+): Promise<ConnectablePrismaClient> {
+  const Ctor = loadCtor();
+  let client: ConnectablePrismaClient;
+  try {
+    client = new Ctor({ datasourceUrl: url });
+  } catch (err) {
+    throw new StoreConfigError(
+      `Could not construct the Prisma client for the Postgres store: ${scrubSecrets(
+        err instanceof Error ? err.message : String(err),
+        url,
+      )}. ${PRISMA_GENERATE_HINT}`,
+      ERR_STORE_BACKEND_DOWN,
+    );
+  }
+  try {
+    await client.$connect();
+  } catch (err) {
+    await client.$disconnect().catch(() => undefined);
+    throw new StoreConfigError(
+      `Postgres store unreachable at ${redactDatabaseUrl(url)}: ${scrubSecrets(
+        err instanceof Error ? err.message : String(err),
+        url,
+      )}. Check EVER_JOBS_STORE_DATABASE_URL / DATABASE_URL, and that the schema exists ` +
+        '(`npm run store:postgres:migrate`).',
+      ERR_STORE_BACKEND_DOWN,
+    );
+  }
+  new Logger('StoreBootstrap').log(`Postgres store connected: ${redactDatabaseUrl(url)}`);
+  return client;
+}
+
+/**
+ * Disconnects the store's Prisma client when the Nest application closes, so
+ * `app.close()` (and Jest) never leaves a pool open.
+ */
+@Injectable()
+export class PostgresStoreClientLifecycle implements OnModuleDestroy {
+  constructor(
+    @Inject(POSTGRES_STORE_CLIENT)
+    private readonly client: Pick<ConnectablePrismaClient, '$disconnect'>,
+  ) {}
+
+  async onModuleDestroy(): Promise<void> {
+    await this.client.$disconnect().catch(() => undefined);
+  }
+}
+
+/** Options for {@link resolveStoreProviders}; test seams only. */
+export interface ResolveStoreProvidersOptions {
+  /** Replace the lazy `@prisma/client` loader (tests inject a fake). */
+  readonly loadPrismaClient?: () => PrismaClientCtor;
+}
+
+/**
+ * Config providers the selected backend needs, for
+ * `StoreModule.forActive(id, { backends, providers })` (Spec 1722).
+ *
+ *   - `memory` → none.
+ *   - `sqlite` → `STORE_SQLITE_DRIZZLE_CONFIG` = `{ databaseUrl: <path> }`;
+ *     the parent directory is created on first use.
+ *   - `postgres` → a connected Prisma client under {@link POSTGRES_STORE_CLIENT},
+ *     `STORE_POSTGRES_PRISMA_CONFIG` = `{ client }`, and a lifecycle provider
+ *     that disconnects on shutdown.
+ *
+ * Required variables are read **synchronously here**, so a missing one fails
+ * at module evaluation, before Nest constructs anything.
+ *
+ * @throws {@link StoreConfigError} `ERR_STORE_CONFIG_MISSING` / `ERR_STORE_CONFIG_INVALID`
+ */
+export function resolveStoreProviders(
+  id: KnownStoreId,
+  env: NodeJS.ProcessEnv = process.env,
+  options: ResolveStoreProvidersOptions = {},
+): Provider[] {
+  switch (id) {
+    case 'memory':
+      return [];
+    case 'sqlite': {
+      const databaseUrl = resolveSqlitePath(env);
+      return [
+        {
+          provide: STORE_SQLITE_DRIZZLE_CONFIG,
+          useFactory: (): StoreSqliteDrizzleConfig => {
+            if (databaseUrl !== ':memory:') {
+              fs.mkdirSync(path.dirname(path.resolve(databaseUrl)), { recursive: true });
+            }
+            new Logger('StoreBootstrap').log(`SQLite store: ${databaseUrl}`);
+            return { databaseUrl };
+          },
+        },
+      ];
+    }
+    case 'postgres': {
+      const url = resolvePostgresUrl(env);
+      const loadCtor = options.loadPrismaClient ?? loadPrismaClientCtor;
+      return [
+        {
+          provide: POSTGRES_STORE_CLIENT,
+          useFactory: () => connectPostgresStoreClient(url, loadCtor),
+        },
+        {
+          provide: STORE_POSTGRES_PRISMA_CONFIG,
+          useFactory: (client: ConnectablePrismaClient): StorePostgresPrismaConfig => ({
+            client,
+          }),
+          inject: [POSTGRES_STORE_CLIENT],
+        },
+        PostgresStoreClientLifecycle,
+      ];
+    }
+    default: {
+      const unreachable: never = id;
+      throw new StoreConfigError(`Unhandled store id ${String(unreachable)}`, ERR_STORE_NOT_FOUND);
+    }
+  }
 }

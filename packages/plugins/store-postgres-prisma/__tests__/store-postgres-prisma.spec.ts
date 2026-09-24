@@ -163,6 +163,25 @@ describe('PostgresPrismaJobStore — always-on contract', () => {
 const RUN_PG_TESTS = process.env.RUN_PG_TESTS === '1';
 const describeIfPg = RUN_PG_TESTS ? describe : describe.skip;
 
+/**
+ * Spec 1722 — run the same suite against an existing Postgres instead of a
+ * Testcontainers one (no Docker needed): set `RUN_PG_TESTS=1` and
+ * `EVER_JOBS_TEST_PG_URL=postgresql://…/<db>`. The suite TRUNCATEs its tables
+ * before every test, so it refuses any database whose name does not contain
+ * "test" — pointing it at a real corpus by mistake must not wipe it.
+ */
+const EXTERNAL_PG_URL = process.env.EVER_JOBS_TEST_PG_URL?.trim() || undefined;
+
+function assertDisposableDatabase(url: string): void {
+  const dbName = decodeURIComponent(new URL(url).pathname.replace(/^\//, ''));
+  if (!/test/i.test(dbName)) {
+    throw new Error(
+      `EVER_JOBS_TEST_PG_URL points at database "${dbName}"; this suite truncates its tables, ` +
+        'so it only runs against a database whose name contains "test".',
+    );
+  }
+}
+
 describeIfPg('PostgresPrismaJobStore — Testcontainers-backed (RUN_PG_TESTS=1)', () => {
   // Container handle, prisma client, and current pg URL — populated by
   // beforeAll, torn down by afterAll. Typed loosely (`any`) because
@@ -175,24 +194,41 @@ describeIfPg('PostgresPrismaJobStore — Testcontainers-backed (RUN_PG_TESTS=1)'
   beforeAll(async () => {
     // Dynamic-require so this file parses cleanly when the packages
     // aren't installed (sandbox / RUN_PG_TESTS unset path).
-    const tc = require('testcontainers');
     const PrismaClientCtor: new (
       args: Record<string, unknown>,
     ) => PrismaJobsClient & {
       $executeRawUnsafe(sql: string, ...args: unknown[]): Promise<number>;
+      $queryRawUnsafe<T = unknown>(sql: string, ...args: unknown[]): Promise<T>;
     } = require('@prisma/client').PrismaClient;
 
-    // Spin up a single Postgres for the suite. Per-test containers
-    // would dominate runtime; we instead truncate-in-beforeEach (below)
-    // for fresh state across tests.
-    pgContainer = await new tc.PostgreSqlContainer('postgres:16-alpine')
-      .withDatabase('ever_jobs_test')
-      .withUsername('ever_jobs')
-      .withPassword('ever_jobs')
-      .start();
-
-    const databaseUrl = pgContainer.getConnectionUri();
+    let databaseUrl: string;
+    if (EXTERNAL_PG_URL) {
+      assertDisposableDatabase(EXTERNAL_PG_URL);
+      databaseUrl = EXTERNAL_PG_URL;
+    } else {
+      const tc = require('testcontainers');
+      // Spin up a single Postgres for the suite. Per-test containers
+      // would dominate runtime; we instead truncate-in-beforeEach (below)
+      // for fresh state across tests.
+      pgContainer = await new tc.PostgreSqlContainer('postgres:16-alpine')
+        .withDatabase('ever_jobs_test')
+        .withUsername('ever_jobs')
+        .withPassword('ever_jobs')
+        .start();
+      databaseUrl = pgContainer.getConnectionUri();
+    }
     prisma = new PrismaClientCtor({ datasourceUrl: databaseUrl });
+
+    // An external database may already carry the schema (e.g. applied with
+    // `npm run store:postgres:migrate`); only replay the migration when the
+    // tables are absent.
+    const existing = (await prisma.$queryRawUnsafe(
+      `SELECT to_regclass('public.canonical_job')::text AS t`,
+    )) as Array<{ t: string | null }>;
+    if (existing[0]?.t) {
+      prismaClient = prisma as PrismaJobsClient;
+      return;
+    }
 
     // Apply the schema. We replay `0_init/migration.sql` directly via
     // raw exec rather than running `prisma migrate deploy` because the
@@ -204,22 +240,24 @@ describeIfPg('PostgresPrismaJobStore — Testcontainers-backed (RUN_PG_TESTS=1)'
       '../prisma/migrations/0_init/migration.sql',
     );
     const migrationSql = fs.readFileSync(migrationPath, 'utf8');
+    // Strip line comments BEFORE deciding whether a chunk is empty. The
+    // previous filter dropped every chunk that merely *started* with a
+    // comment — which is every CREATE TABLE in 0_init (each is preceded by
+    // a comment block) — so the replay created indexes on tables that did
+    // not exist. Found by Spec 1722 running this suite for the first time
+    // against a real database.
     const statements = migrationSql
       .split(/;\s*\n/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.startsWith('--'));
+      .map((chunk) =>
+        chunk
+          .split('\n')
+          .filter((line) => !line.trim().startsWith('--'))
+          .join('\n')
+          .trim(),
+      )
+      .filter((stmt) => stmt.length > 0);
     for (const stmt of statements) {
-      // Strip leading line comments inside the statement so the SQL
-      // sent to Postgres is comment-free (defensive — Postgres tolerates
-      // line comments, but the explicit strip avoids a bad split that
-      // hands the driver a half-comment-half-statement).
-      const cleaned = stmt
-        .split('\n')
-        .filter((line) => !line.trim().startsWith('--'))
-        .join('\n')
-        .trim();
-      if (cleaned.length === 0) continue;
-      await prisma.$executeRawUnsafe(cleaned);
+      await prisma.$executeRawUnsafe(stmt);
     }
 
     prismaClient = prisma as PrismaJobsClient;
