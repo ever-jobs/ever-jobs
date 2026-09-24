@@ -24,6 +24,7 @@ import {
   getIndeedDomain,
 } from '@ever-jobs/models';
 import { regionNameFromCode } from '../../packages/common/src/utils/country-name';
+import { matchRemoteInGeo } from '../../packages/common/src/utils/location-parser';
 
 type WorkFromHomeType = 'Hybrid' | 'Remote' | 'Hybrid or Remote';
 
@@ -167,8 +168,10 @@ function remoteFlags(normalized: string): {
  */
 const QUALIFIER_PREFIX_RE =
   /^(?:hybrid|remote|onsite|on-site|offsite|any office)\b\s*[-–—]\s*/i;
+// `(?<!\s)`: match only from the head of a whitespace run (linear; same
+// matches) — mirrors the production parser's Spec 1689 hardening
 const QUALIFIER_SUFFIX_RE =
-  /\s*[-–—]\s*(?:remote|hybrid|onsite|on-site|offsite)\b\s*$/i;
+  /(?<!\s)\s*[-–—]\s*(?:remote|hybrid|onsite|on-site|offsite)\b\s*$/i;
 
 function affixStrip(s: string): string {
   return s.replace(QUALIFIER_PREFIX_RE, '').replace(QUALIFIER_SUFFIX_RE, '').replace(/\s+/g, ' ').trim();
@@ -212,9 +215,12 @@ function parseSingleLabel(
   if (!cleaned) return null;
 
   // 'Remote in <country>' / 'Remote - <country>'
-  const remoteIn = /^(?:remote|hybrid)\b(?:[\s-]*\w+)*?\s+in\s+(.+)$/i.exec(cleaned);
-  if (remoteIn) {
-    const c = normalizeCountryOnlyV2(remoteIn[1]);
+  // linear matcher shared with the production parser: the former
+  // `/^(?:remote|hybrid)\b(?:[\s-]*\w+)*?\s+in\s+(.+)$/i` was exponential on
+  // 'Remote …' labels without ' in ' (Spec 1689)
+  const remoteIn = matchRemoteInGeo(cleaned);
+  if (remoteIn !== null) {
+    const c = normalizeCountryOnlyV2(remoteIn);
     if (c) return { location: new LocationDto({ country: c }), firm: true };
   }
   const remoteDash = /^(?:remote|hybrid)\s*[-–—]\s*(.+)$/i.exec(cleaned);
@@ -282,7 +288,7 @@ function parseCommaParts(
     if (qf && (normalizeCountryOnlyV2(qf[1]) || normalizeUsStateV2(qf[1]))) {
       parts[i] = qf[1].trim();
     }
-    const d = /^(.*?)\s+-\s+(.+)$/.exec(parts[i]);
+    const d = /^(.*?)(?<!\s)\s+-\s+(.+)$/.exec(parts[i]);
     if (!d) continue;
     let prefixCountry: string | null = null;
     try {
@@ -516,7 +522,7 @@ function tryWordSplit(
   // must keep Oregon, not treat 'OR' as a connector
   const parts: string[] = [];
   const conns: string[] = [];
-  const connRe = /\s+(&|\/|and|or)\s+/gi;
+  const connRe = /(?<!\s)\s+(&|\/|and|or)\s+/gi;
   let m: RegExpExecArray | null;
   let last = 0;
   while ((m = connRe.exec(cleaned))) {

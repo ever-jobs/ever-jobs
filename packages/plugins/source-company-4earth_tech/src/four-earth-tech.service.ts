@@ -9,13 +9,21 @@ import {
   ScrapeDiagnostics,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient, extractJobType, parseLocationText } from '@ever-jobs/common';
 import {
+  createHttpClient,
+  describeUrlForLog,
+  extractJobType,
+  parseLocationText,
+  pinUrlToHosts,
+} from '@ever-jobs/common';
+import {
+  FOUR_EARTH_TECH_ALLOWED_HOSTS,
   FOUR_EARTH_TECH_CAREERS_URL,
   FOUR_EARTH_TECH_CHUNK_RE,
   FOUR_EARTH_TECH_COMPANY_NAME,
   FOUR_EARTH_TECH_DEFAULT_TIMEOUT_SECONDS,
   FOUR_EARTH_TECH_JOBS_ARRAY_RE,
+  FOUR_EARTH_TECH_MAX_LITERAL_CHARS,
   FOUR_EARTH_TECH_ORIGIN,
 } from './four-earth-tech.constants';
 import { FourEarthJobEntry, FourEarthJobSection } from './four-earth-tech.types';
@@ -54,9 +62,11 @@ export class FourEarthTechService implements IScraper {
       proxies: input.proxies,
       caCert: input.caCert,
       requestTimeout: input.requestTimeout ?? FOUR_EARTH_TECH_DEFAULT_TIMEOUT_SECONDS,
+      // Spec 1689 — re-pin every redirect hop, not just the first URL
+      allowedRedirectHosts: FOUR_EARTH_TECH_ALLOWED_HOSTS,
     });
 
-    const careersUrl = this.normalize(input.companyUrl) || FOUR_EARTH_TECH_CAREERS_URL;
+    const careersUrl = this.careersUrl(input);
     const shellRes = await client.get<string>(careersUrl);
     const chunkUrl = this.chunkUrl(String(shellRes.data ?? ''));
     if (!chunkUrl) return [];
@@ -66,6 +76,28 @@ export class FourEarthTechService implements IScraper {
     return entries
       .map((entry) => this.toJobPost(entry, careersUrl))
       .filter((job): job is JobPostDto => job !== null);
+  }
+
+  /**
+   * The careers page to fetch: the caller's `companyUrl` when it is on
+   * 4earth.tech (or a subdomain), otherwise this plugin's board.
+   *
+   * Pin-or-ignore (Spec 1689), as `source-company-rdw` does: a company plugin
+   * scrapes one company, so an off-domain, internal or malformed `companyUrl`
+   * is a mistake or an attempt to aim our HTTP client elsewhere. Neither
+   * deserves a failed scrape — ignore it and say so. `http:` is upgraded.
+   */
+  private careersUrl(input: ScraperInputDto): string {
+    const requested = this.normalize(input.companyUrl);
+    if (!requested) return FOUR_EARTH_TECH_CAREERS_URL;
+    const pinned = pinUrlToHosts(requested, FOUR_EARTH_TECH_ALLOWED_HOSTS, { upgradeHttp: true });
+    if (!pinned) {
+      this.logger.debug(
+        `4Earth: ignoring companyUrl on host \`${describeUrlForLog(requested)}\` - not an https URL on ${FOUR_EARTH_TECH_ALLOWED_HOSTS.join(', ')}`,
+      );
+      return FOUR_EARTH_TECH_CAREERS_URL;
+    }
+    return pinned;
   }
 
   /** `/assets/Careers-{hash}.js` referenced by the careers shell. */
@@ -130,12 +162,14 @@ export class FourEarthTechService implements IScraper {
   /**
    * Slice from the opening bracket at `openIdx` through its match,
    * skipping over string literals (single/double quotes + escapes).
-   * Returns the bracket-inclusive text, or null when unbalanced.
+   * Returns the bracket-inclusive text, or null when unbalanced or longer
+   * than {@link FOUR_EARTH_TECH_MAX_LITERAL_CHARS} (Spec 1689 size cap).
    */
   private balancedSlice(src: string, openIdx: number): string | null {
     let depth = 0;
     let quote: string | null = null;
-    for (let i = openIdx; i < src.length; i++) {
+    const end = Math.min(src.length, openIdx + FOUR_EARTH_TECH_MAX_LITERAL_CHARS);
+    for (let i = openIdx; i < end; i++) {
       const ch = src[i];
       if (quote) {
         if (ch === '\\') i++;
@@ -180,9 +214,20 @@ export class FourEarthTechService implements IScraper {
     return out;
   }
 
-  /** `key: "…"` or `key: '…'` inside an object literal; unescaped value or null. */
+  /**
+   * `key: "…"` or `key: '…'` inside an object literal; unescaped value or null.
+   *
+   * The two body alternatives are disjoint (Spec 1689): an escape starts with
+   * a backslash, a plain character never is one. The fork's
+   * `(?:\\.|(?:(?!\1).))*` let a backslash match either branch, so a run of
+   * backslashes before a line break backtracked exponentially (64 of them
+   * would pin the event loop for hours). A plain character still excludes
+   * line terminators, exactly as `.` did.
+   */
   private scalarField(objText: string, key: string): string | null {
-    const re = new RegExp(`\\b${key}\\s*:\\s*(["'])((?:\\\\.|(?:(?!\\1).))*)\\1`);
+    const re = new RegExp(
+      `\\b${key}\\s*:\\s*(["'])((?:\\\\.|(?!\\1)[^\\\\\\n\\r\\u2028\\u2029])*)\\1`,
+    );
     const m = re.exec(objText);
     return m ? this.unescapeJs(m[2]) : null;
   }

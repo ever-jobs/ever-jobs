@@ -11,6 +11,9 @@ const gotoMock = jest.fn();
 const evaluateMock = jest.fn();
 const getPageMock = jest.fn();
 const closeMock = jest.fn();
+const pageCloseMock = jest.fn();
+const contextCloseMock = jest.fn();
+const contextBrowserMock = jest.fn();
 jest.mock('@ever-jobs/common', () => {
   const actual = jest.requireActual('@ever-jobs/common');
   return {
@@ -24,6 +27,7 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { MundaneCoService } from '../src/mundane-co.service';
+import { MUNDANE_ALLOWED_HOSTS } from '../src/mundane-co.constants';
 
 function respondOk(bundle: string = bundleJs): void {
   getMock.mockImplementation((url: string) => {
@@ -39,9 +43,26 @@ describe('MundaneCoService', () => {
     getMock.mockReset();
     gotoMock.mockReset().mockResolvedValue(undefined);
     evaluateMock.mockReset().mockResolvedValue('Rendered Airtable job description.');
-    getPageMock.mockReset().mockResolvedValue({ goto: gotoMock, evaluate: evaluateMock });
+    pageCloseMock.mockReset().mockResolvedValue(undefined);
+    contextCloseMock.mockReset().mockResolvedValue(undefined);
+    contextBrowserMock.mockReset().mockReturnValue({});
+    getPageMock.mockReset().mockResolvedValue({
+      goto: gotoMock,
+      evaluate: evaluateMock,
+      close: pageCloseMock,
+      context: () => ({ browser: contextBrowserMock, close: contextCloseMock }),
+    });
     closeMock.mockReset().mockResolvedValue(undefined);
     service = new MundaneCoService();
+    // The Airtable hydrate wait is real time (2.5 s per form); skip it here.
+    jest.spyOn(service as unknown as { delay(ms: number): Promise<void> }, 'delay').mockResolvedValue(
+      undefined,
+    );
+  });
+
+  afterEach(() => {
+    delete process.env.MUNDANE_CO_CLOSE_BROWSER_POOL_AFTER_SCRAPE;
+    jest.restoreAllMocks();
   });
 
   it('maps all 10 embedded jobs and skips non-apply decoy entries', async () => {
@@ -143,5 +164,141 @@ describe('MundaneCoService', () => {
 
     const sliced = await service.scrape(new ScraperInputDto({ resultsWanted: 3, offset: 2 }));
     expect(sliced.jobs).toHaveLength(3);
+  });
+
+  describe('browser lifecycle (Spec 1689)', () => {
+    it('never closes the shared BrowserPool from scrape()', async () => {
+      respondOk();
+      await service.scrape(new ScraperInputDto({ resultsWanted: 9999 }));
+      respondOk('var x = 1;');
+      await service.scrape(new ScraperInputDto({}));
+      getMock.mockRejectedValue(new Error('ECONNREFUSED'));
+      await service.scrape(new ScraperInputDto({}));
+      expect(closeMock).not.toHaveBeenCalled();
+    });
+
+    it('closes the shared BrowserPool on module destroy', async () => {
+      await service.onModuleDestroy();
+      expect(closeMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the old per-scrape pool shutdown behind MUNDANE_CO_CLOSE_BROWSER_POOL_AFTER_SCRAPE', async () => {
+      process.env.MUNDANE_CO_CLOSE_BROWSER_POOL_AFTER_SCRAPE = 'true';
+      respondOk();
+      await service.scrape(new ScraperInputDto({}));
+      expect(closeMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes the page and its own context after rendering descriptions', async () => {
+      respondOk();
+      await service.scrape(new ScraperInputDto({ resultsWanted: 9999 }));
+      expect(getPageMock).toHaveBeenCalledTimes(1);
+      expect(pageCloseMock).toHaveBeenCalledTimes(1);
+      expect(contextCloseMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes the page even when every render throws', async () => {
+      respondOk();
+      gotoMock.mockRejectedValue(new Error('net::ERR_TIMED_OUT'));
+      const res = await service.scrape(new ScraperInputDto({ resultsWanted: 9999 }));
+      expect(res.jobs).toHaveLength(10);
+      expect(pageCloseMock).toHaveBeenCalledTimes(1);
+      expect(contextCloseMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a shared persistent context open', async () => {
+      contextBrowserMock.mockReturnValue(null);
+      respondOk();
+      await service.scrape(new ScraperInputDto({ resultsWanted: 9999 }));
+      expect(pageCloseMock).toHaveBeenCalledTimes(1);
+      expect(contextCloseMock).not.toHaveBeenCalled();
+    });
+
+    it('opens no browser when there is no Airtable form to render', async () => {
+      respondOk(
+        '{title:"Engineer",category:"Development",location:"Remote",url:"https://www.linkedin.com/jobs/view/1/"}',
+      );
+      const res = await service.scrape(new ScraperInputDto({}));
+      expect(res.jobs).toHaveLength(1);
+      expect(getPageMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('apply-link host checks (Spec 1689)', () => {
+    const entry = (title: string, url: string) =>
+      `{title:"${title}",category:"Research",location:"Remote",url:"${url}"}`;
+
+    it('drops entries whose apply link only mentions airtable.com/linkedin.com off-host', async () => {
+      respondOk(
+        [
+          entry('Path trick', 'http://10.0.0.5/airtable.com/app/pagEvil1/form'),
+          entry('Lookalike', 'https://airtable.com.evil.example/app/pagEvil2/form'),
+          entry('Query trick', 'https://evil.example/?next=https://airtable.com/app/pagEvil3'),
+          entry('LinkedIn path trick', 'https://evil.example/linkedin.com/jobs/view/1'),
+          entry('Userinfo', 'https://airtable.com@169.254.169.254/app/pagEvil4/form'),
+          entry('Real', 'https://airtable.com/appX/pagRealForm1/form'),
+        ].join(','),
+      );
+      const res = await service.scrape(new ScraperInputDto({ resultsWanted: 9999 }));
+      expect(res.jobs.map((j) => j.title)).toEqual(['Real']);
+      expect(gotoMock).toHaveBeenCalledTimes(1);
+      expect(gotoMock.mock.calls[0][0]).toBe('https://airtable.com/appX/pagRealForm1/form');
+    });
+
+    it('opens an http Airtable form over https', async () => {
+      respondOk(entry('Http form', 'http://airtable.com/appX/pagHttpForm/form'));
+      const res = await service.scrape(new ScraperInputDto({}));
+      expect(res.jobs[0].id).toBe('mundane_co-pagHttpForm');
+      expect(gotoMock.mock.calls[0][0]).toBe('https://airtable.com/appX/pagHttpForm/form');
+    });
+  });
+
+  describe('companyUrl pin-or-ignore (Spec 1689)', () => {
+    it('fetches an on-domain companyUrl', async () => {
+      respondOk();
+      await service.scrape(new ScraperInputDto({ companyUrl: 'https://www.mundane.co/join-us' }));
+      expect(getMock.mock.calls[0][0]).toBe('https://www.mundane.co/join-us');
+    });
+
+    it.each([
+      ['off-domain', 'https://evil.example/join-us'],
+      ['lookalike', 'https://mundane.co.evil.example/'],
+      ['internal IP', 'http://192.168.1.183:4873/'],
+      ['dotless', 'http://minio/'],
+    ])('ignores a %s companyUrl and fetches the default page', async (_label, companyUrl) => {
+      respondOk();
+      const res = await service.scrape(new ScraperInputDto({ companyUrl, resultsWanted: 9999 }));
+      expect(getMock.mock.calls[0][0]).toBe('https://mundane.co/join-us');
+      expect(res.jobs).toHaveLength(10);
+    });
+  });
+});
+
+describe('MundaneCoService companyUrl hygiene (Spec 1689)', () => {
+  afterEach(() => getMock.mockReset());
+
+  it('logs only the host of a refused companyUrl, never its credentials or query', () => {
+    const svc = new MundaneCoService();
+    const debug = jest
+      .spyOn((svc as unknown as { logger: { debug: (m: string) => void } }).logger, 'debug')
+      .mockImplementation(() => undefined);
+    (svc as unknown as { careersUrl(input: ScraperInputDto): string }).careersUrl(
+      new ScraperInputDto({ companyUrl: 'https://user:s3cret@evil.example/x?token=t0k' }),
+    );
+    const logged = debug.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged).toContain('evil.example');
+    expect(logged).not.toMatch(/s3cret|t0k|user:/);
+  });
+
+  it('pins every redirect hop to the plugin allowlist', async () => {
+    const { createHttpClient } = jest.requireMock('@ever-jobs/common') as {
+      createHttpClient: jest.Mock;
+    };
+    createHttpClient.mockClear();
+    getMock.mockRejectedValue(new Error('ECONNREFUSED'));
+    await new MundaneCoService().scrape(new ScraperInputDto({})).catch(() => undefined);
+    expect(createHttpClient).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedRedirectHosts: MUNDANE_ALLOWED_HOSTS }),
+    );
   });
 });

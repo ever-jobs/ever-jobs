@@ -2,6 +2,12 @@ export const SOUNDRYX_COMPANY_NAME = 'Soundryx';
 export const SOUNDRYX_ORIGIN = 'https://soundryx.com';
 export const SOUNDRYX_CAREERS_URL = `${SOUNDRYX_ORIGIN}/careers/`;
 export const SOUNDRYX_DEFAULT_TIMEOUT_SECONDS = 30;
+/**
+ * Hosts this plugin may fetch — mirrors `companyDomains` (Spec 1689). A
+ * caller-supplied `companyUrl` elsewhere is ignored in favour of
+ * {@link SOUNDRYX_CAREERS_URL}, and index tiles linking elsewhere are skipped.
+ */
+export const SOUNDRYX_ALLOWED_HOSTS: readonly string[] = ['soundryx.com'];
 /** Careers index tiles: `a.srx-tile.is-link` → `href="/careers/NNNNN-slug/"`. */
 export const SOUNDRYX_TILE_SELECTOR = 'a.srx-tile.is-link';
 export const SOUNDRYX_TILE_TITLE_SELECTOR = 'h3';

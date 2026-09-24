@@ -37,6 +37,20 @@ import {
 } from './eightfold.types';
 
 /**
+ * Per-scrape state. `jobsPath` is the endpoint the tenant answers on,
+ * resolved on the first page: some tenants gate `/api/apply/v2/jobs` behind
+ * authorization ("Not authorized for PCSX") while leaving `/api/pcsx/search`
+ * open, others are the reverse. It is remembered for the rest of ONE scrape
+ * so later pages hit the working endpoint directly. It must never live on the
+ * service: Nest providers are singletons, so an instance field would leak
+ * tenant A's endpoint into tenant B's scrape and race between concurrent
+ * scrapes.
+ */
+interface EightfoldScrapeContext {
+  jobsPath: string | null;
+}
+
+/**
  * Eightfold AI ("PCSX" / SmartApply) careers scraper — generic, multi-tenant.
  *
  * Resolves a tenant from `companySlug` (→ `https://{slug}.eightfold.ai`) or an
@@ -76,12 +90,16 @@ export class EightfoldService implements IScraper {
     const resultsWanted = input.resultsWanted ?? 100;
     const seen = new Set<string>();
     const jobPosts: JobPostDto[] = [];
+    // Endpoint resolution is per scrape (per tenant), never on the singleton
+    // service — see EightfoldScrapeContext.
+    const ctx: EightfoldScrapeContext = { jobsPath: null };
 
     try {
       this.logger.log(`Fetching Eightfold jobs for tenant: ${host} (domain=${domain})`);
 
-      // First page → positions + true total count.
-      const first = await this.fetchPage(client, host, domain, 0);
+      // First page → positions + true total count. It also resolves the
+      // endpoint (ctx.jobsPath) before the concurrent fan-out below reads it.
+      const first = await this.fetchPage(client, host, domain, 0, ctx);
       this.collect(first.positions, companySlug, companyName, host, input.descriptionFormat, seen, jobPosts);
 
       const total = Math.min(first.count || jobPosts.length, resultsWanted);
@@ -96,7 +114,7 @@ export class EightfoldService implements IScraper {
         for (let i = 0; i < offsets.length; i += EIGHTFOLD_MAX_CONCURRENCY) {
           const chunk = offsets.slice(i, i + EIGHTFOLD_MAX_CONCURRENCY);
           const settled = await Promise.allSettled(
-            chunk.map((start) => this.fetchPage(client, host, domain, start)),
+            chunk.map((start) => this.fetchPage(client, host, domain, start, ctx)),
           );
           for (const result of settled) {
             if (result.status === 'fulfilled') {
@@ -132,19 +150,16 @@ export class EightfoldService implements IScraper {
   }
 
   /**
-   * Endpoint the tenant answers on, resolved on the first page: some tenants
-   * gate `/api/apply/v2/jobs` behind authorization ("Not authorized for
-   * PCSX") while leaving `/api/pcsx/search` open. Remembered so later pages
-   * hit the working endpoint directly instead of paying a doomed request.
+   * Fetch one positions page; returns its positions and the tenant total count.
+   * Resolves the working endpoint into `ctx.jobsPath` on the first success so
+   * later pages of the SAME scrape skip the doomed request.
    */
-  private jobsPath: string | null = null;
-
-  /** Fetch one positions page; returns its positions and the tenant total count. */
   private async fetchPage(
     client: ReturnType<typeof createHttpClient>,
     host: string,
     domain: string,
     start: number,
+    ctx: EightfoldScrapeContext,
   ): Promise<{ positions: EightfoldPosition[]; count: number }> {
     const params = new URLSearchParams({
       domain,
@@ -154,8 +169,8 @@ export class EightfoldService implements IScraper {
       num: String(EIGHTFOLD_PAGE_SIZE),
       sort_by: 'timestamp',
     });
-    const paths = this.jobsPath
-      ? [this.jobsPath]
+    const paths = ctx.jobsPath
+      ? [ctx.jobsPath]
       : [EIGHTFOLD_JOBS_PATH, EIGHTFOLD_PCSX_SEARCH_PATH];
     let lastError: unknown = null;
     for (const path of paths) {
@@ -164,7 +179,7 @@ export class EightfoldService implements IScraper {
         const response = await client.get(url);
         const payload = this.unwrapPositionsAndCount(response.data);
         if (payload) {
-          this.jobsPath = path;
+          ctx.jobsPath = path;
           return payload;
         }
       } catch (err) {

@@ -173,3 +173,79 @@ describe('EightfoldService endpoint resolution', () => {
     expect(pcsxCalls.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+/**
+ * Spec 1689 (fork-sync hardening): the resolved endpoint is per scrape, not
+ * per service. Nest providers are singletons, so ONE EightfoldService serves
+ * every tenant — these tests deliberately reuse a single instance.
+ */
+describe('EightfoldService endpoint resolution is scoped per scrape', () => {
+  const PCSX_ONLY_HOST = 'https://pcsxonly.eightfold.ai';
+  const V2_ONLY_HOST = 'https://v2only.eightfold.ai';
+  const PCSX_JOB: EightfoldPosition = { ...POSITION, id: 1, displayJobId: 'PCSX-1', name: 'PCSX Job' };
+  const V2_JOB: EightfoldPosition = { ...POSITION, id: 2, displayJobId: 'V2-1', name: 'V2 Job' };
+
+  let service: EightfoldService;
+  let getMock: jest.Mock;
+
+  /**
+   * Tenant `pcsxonly` gates SmartApply with a 200 "Not authorized" body and
+   * serves PCSX; tenant `v2only` is the reverse. Neither ever throws, so a
+   * leaked endpoint shows up as a silent empty board (the reported failure).
+   */
+  const routeByTenant = (url: string) => {
+    const gate = { data: { message: 'Not authorized for PCSX' } };
+    if (url.startsWith(PCSX_ONLY_HOST)) {
+      return Promise.resolve(url.includes(EIGHTFOLD_PCSX_SEARCH_PATH) ? { data: pcsxBody([PCSX_JOB], 1) } : gate);
+    }
+    if (url.startsWith(V2_ONLY_HOST)) {
+      return Promise.resolve(url.includes(EIGHTFOLD_JOBS_PATH) ? { data: { positions: [V2_JOB], count: 1 } } : gate);
+    }
+    return Promise.reject(new Error('unexpected url ' + url));
+  };
+
+  const tenant = (slug: string) => new ScraperInputDto({ companySlug: slug, resultsWanted: 50 });
+
+  beforeEach(() => {
+    service = new EightfoldService();
+    getMock = jest.fn(routeByTenant);
+    (createHttpClient as jest.Mock).mockReturnValue({ get: getMock, setHeaders: jest.fn() });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('a PCSX-only tenant does not pin the endpoint for a later v2-only tenant', async () => {
+    const a = await service.scrape(tenant('pcsxonly'));
+    const b = await service.scrape(tenant('v2only'));
+
+    expect(a.jobs.map((j) => j.atsId)).toEqual(['PCSX-1']);
+    expect(b.jobs.map((j) => j.atsId)).toEqual(['V2-1']);
+    // Tenant B started from the primary endpoint again, not tenant A's PCSX.
+    const bCalls = getMock.mock.calls.map((c) => c[0] as string).filter((u) => u.startsWith(V2_ONLY_HOST));
+    expect(bCalls).toHaveLength(1);
+    expect(bCalls[0]).toContain(EIGHTFOLD_JOBS_PATH);
+  });
+
+  it('a v2-only tenant does not suppress the PCSX fallback for a later PCSX-only tenant', async () => {
+    const b = await service.scrape(tenant('v2only'));
+    const a = await service.scrape(tenant('pcsxonly'));
+
+    expect(b.jobs.map((j) => j.atsId)).toEqual(['V2-1']);
+    expect(a.jobs.map((j) => j.atsId)).toEqual(['PCSX-1']);
+  });
+
+  it('concurrent scrapes of different tenants on one instance do not race', async () => {
+    const [a, b] = await Promise.all([service.scrape(tenant('pcsxonly')), service.scrape(tenant('v2only'))]);
+
+    expect(a.jobs.map((j) => j.atsId)).toEqual(['PCSX-1']);
+    expect(b.jobs.map((j) => j.atsId)).toEqual(['V2-1']);
+  });
+
+  it('keeps no endpoint state on the service instance', async () => {
+    await service.scrape(tenant('pcsxonly'));
+
+    expect(Object.prototype.hasOwnProperty.call(service, 'jobsPath')).toBe(false);
+  });
+});

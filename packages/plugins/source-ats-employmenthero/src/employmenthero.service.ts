@@ -30,6 +30,7 @@ import {
   EMPLOYMENTHERO_REMOTE_TYPE,
   EMPLOYMENTHERO_REMOTE_REGEX,
   employmentHeroJobsUrl,
+  employmentHeroLocationHeuristicsEnabled,
   employmentHeroPositionUrl,
 } from './employmenthero.constants';
 import {
@@ -435,7 +436,26 @@ export class EmploymentHeroService implements IScraper {
     const cleaned = this.cleanText(value);
     if (!cleaned) return { city: null, state: null };
     const parsed = parseLocationText(cleaned).location;
-    return { city: parsed?.city ?? null, state: parsed?.state ?? null };
+    const state = parsed?.state ?? null;
+    return {
+      city: parsed?.city ?? null,
+      state: state && employmentHeroLocationHeuristicsEnabled() ? this.stripPostcode(state) : state,
+    };
+  }
+
+  /**
+   * Strip a trailing postcode token from a region ("NSW 2000" → "NSW",
+   * "SouthEast E1" → "SouthEast") — Spec 1689 restores this pre-5125 step,
+   * which the shared parser does not do (EMPLOYMENTHERO_LOCATION_HEURISTICS
+   * =false turns it off). A token only counts as a postcode when it carries a
+   * digit, so region words ("New South Wales") are never clipped; a region
+   * that is nothing but a postcode ("SW1A 1AA") is kept as-is.
+   */
+  private stripPostcode(region: string): string {
+    const postcodeToken = /^(?=[A-Z0-9]*\d)[A-Z0-9]{2,8}$/i;
+    const tokens = region.split(/\s+/).filter(Boolean);
+    while (tokens.length > 0 && postcodeToken.test(tokens[tokens.length - 1])) tokens.pop();
+    return tokens.length > 0 ? tokens.join(' ') : region;
   }
 
   /**

@@ -36,6 +36,13 @@ export interface CanonicalJob {
   /** Union of every observation's `offices[]`, deduped on `id` then
    *  `name|text`. Absent when no observation carried offices. */
   readonly offices?: ReadonlyArray<OfficeDto>;
+
+  /** ISO-3166 alpha-2 country an ATS declared for the posting (e.g. "NL"),
+   *  verbatim from `JobPostDto.countryCode` — the head observation's when it
+   *  has one, else the first observation's that does (Spec 1689). Posting-level
+   *  metadata, not the parsed country of `location`. Absent when no
+   *  observation carried one. */
+  readonly countryCode?: string;
   readonly description?: string;
   /** The "primary" URL — picked by the merge resolver from `sources[].url`. */
   readonly url: string;

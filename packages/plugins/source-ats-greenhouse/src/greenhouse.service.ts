@@ -578,7 +578,9 @@ export class GreenhouseService implements IScraper {
    */
   private officeGeoFromName(name: string | null): Partial<OfficeDto> {
     if (!name) return {};
-    const noParen = name.replace(/\s*\([^()]*\)/g, '').trim();
+    // `(?<!\s)`: a match starts at the head of its whitespace run (the same
+    // matches; a long run is no longer rescanned from every position — Spec 1689)
+    const noParen = name.replace(/(?<!\s)\s*\([^()]*\)/g, '').trim();
     const tail = noParen.split(' - ').pop()?.trim() ?? '';
     if (!tail) return {};
     if (/\bremote\b|\b(?:any|multiple|various)\s+locations?\b/i.test(tail)) {

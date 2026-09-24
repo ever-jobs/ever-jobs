@@ -3,6 +3,7 @@ import * as cheerio from 'cheerio';
 import { SourcePlugin } from '@ever-jobs/plugin';
 import {
   classifyScrapeError,
+  Country,
   getJobTypeFromString,
   IScraper,
   JobPostDto,
@@ -12,12 +13,13 @@ import {
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient, markdownConverter, parseLocationText } from '@ever-jobs/common';
+import { createHttpClient, markdownConverter, normalizeUsState, parseLocationText } from '@ever-jobs/common';
 import {
   THINKORBITAL_CAREERS_URL,
   THINKORBITAL_COMPANY_NAME,
   THINKORBITAL_DEFAULT_RESULTS,
   THINKORBITAL_DEFAULT_TIMEOUT_SECONDS,
+  thinkorbitalLocationHeuristicsEnabled,
 } from './thinkorbital.constants';
 
 interface ParsedSection {
@@ -216,7 +218,43 @@ export class ThinkorbitalService implements IScraper {
   private parseLocation(raw: string): LocationDto | null {
     const text = this.normalize(raw);
     if (!text) return null;
-    return parseLocationText(text).location;
+    const parsed = parseLocationText(text).location;
+    return thinkorbitalLocationHeuristicsEnabled() ? this.applyUsHeuristics(text, parsed) : parsed;
+  }
+
+  /**
+   * ThinkOrbital location heuristics (Spec 1689 — restores the data Spec 5125
+   * dropped; THINKORBITAL_LOCATION_HEURISTICS=false turns them off):
+   *  - a US state named anywhere after the city ("Boulder, Colorado or
+   *    Washington, DC Area") fills a missing state, with the first comma
+   *    segment as the city (the pre-5125 resolveStateName behaviour);
+   *  - a missing country is filled with `Country.USA`: ThinkOrbital only hires
+   *    in the US, so the country is known even when the label omits it.
+   * Fields the shared parser found always win; only gaps are filled.
+   */
+  private applyUsHeuristics(text: string, parsed: LocationDto | null): LocationDto {
+    let location = parsed ?? new LocationDto({});
+    if (!location.state) {
+      const parts = text.split(',').map((part) => this.normalize(part)).filter(Boolean);
+      const state = parts.length >= 2 ? this.resolveStateName(parts.slice(1).join(', ')) : null;
+      if (state) {
+        location = new LocationDto({ ...location, city: parts[0], state });
+      }
+    }
+    if (!location.country) location.country = Country.USA;
+    return location;
+  }
+
+  /** First US state (name or code) among "Colorado or Texas"-style segments, as its code. */
+  private resolveStateName(raw: string): string | null {
+    // `(?<!\s)`: the connector match starts at the head of its whitespace
+    // run (same splits; no per-position rescan of a long run — Spec 1689)
+    const segments = raw.split(/[,;]|(?<!\s)\s+(?:or|and|&)\s+/).map((s) => this.normalize(s));
+    for (const segment of segments) {
+      const code = segment ? normalizeUsState(segment) : null;
+      if (code) return code;
+    }
+    return null;
   }
 
   private resolveJobType(employmentType: string): JobType | null {

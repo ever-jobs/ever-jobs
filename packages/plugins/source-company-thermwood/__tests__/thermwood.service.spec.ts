@@ -17,6 +17,7 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { ThermwoodService } from '../src/thermwood.service';
+import { THERMWOOD_ALLOWED_HOSTS } from '../src/thermwood.constants';
 
 function respondWith(payload: unknown): void {
   getMock.mockResolvedValue({ data: payload });
@@ -133,5 +134,60 @@ describe('ThermwoodService', () => {
       new ScraperInputDto({ resultsWanted: 1, offset: 1 }),
     );
     expect(paged.jobs).toHaveLength(1);
+  });
+
+  describe('companyUrl pin-or-ignore (Spec 1689)', () => {
+    it('fetches the on-domain override it was given', async () => {
+      respondWith(careersHtml);
+      await service.scrape(
+        new ScraperInputDto({ companyUrl: 'https://www.thermwood.com/custom.htm' }),
+      );
+      expect(getMock).toHaveBeenCalledWith('https://www.thermwood.com/custom.htm');
+    });
+
+    it.each([
+      ['off-domain', 'https://evil.example/employment.htm'],
+      ['fragment trick', 'https://evil.example#.thermwood.com'],
+      ['internal IP', 'http://172.16.0.10/'],
+      ['IPv6 loopback', 'http://[::1]/'],
+      ['dotless name', 'http://intranet/jobs'],
+    ])('ignores a %s companyUrl and fetches the default board', async (_label, companyUrl) => {
+      respondWith(careersHtml);
+      const res = await service.scrape(new ScraperInputDto({ companyUrl }));
+      expect(getMock).toHaveBeenCalledTimes(1);
+      expect(getMock).toHaveBeenCalledWith(
+        'https://www.thermwood.com/employment-opportunities.htm',
+      );
+      expect(res.jobs[0].jobUrl).toBe('https://www.thermwood.com/employment-opportunities.htm');
+    });
+  });
+});
+
+describe('ThermwoodService companyUrl hygiene (Spec 1689)', () => {
+  afterEach(() => getMock.mockReset());
+
+  it('logs only the host of a refused companyUrl, never its credentials or query', () => {
+    const svc = new ThermwoodService();
+    const debug = jest
+      .spyOn((svc as unknown as { logger: { debug: (m: string) => void } }).logger, 'debug')
+      .mockImplementation(() => undefined);
+    (svc as unknown as { careersUrl(input: ScraperInputDto): string }).careersUrl(
+      new ScraperInputDto({ companyUrl: 'https://user:s3cret@evil.example/x?token=t0k' }),
+    );
+    const logged = debug.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged).toContain('evil.example');
+    expect(logged).not.toMatch(/s3cret|t0k|user:/);
+  });
+
+  it('pins every redirect hop to the plugin allowlist', async () => {
+    const { createHttpClient } = jest.requireMock('@ever-jobs/common') as {
+      createHttpClient: jest.Mock;
+    };
+    createHttpClient.mockClear();
+    getMock.mockRejectedValue(new Error('ECONNREFUSED'));
+    await new ThermwoodService().scrape(new ScraperInputDto({})).catch(() => undefined);
+    expect(createHttpClient).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedRedirectHosts: THERMWOOD_ALLOWED_HOSTS }),
+    );
   });
 });

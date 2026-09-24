@@ -17,6 +17,7 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { GetMaxSpaceService } from '../src/getmaxspace.service';
+import { GETMAXSPACE_ALLOWED_HOSTS } from '../src/getmaxspace.constants';
 
 function respondWith(payload: unknown): void {
   getMock.mockResolvedValue({ data: payload });
@@ -109,5 +110,58 @@ describe('GetMaxSpaceService', () => {
     );
     expect(searched.jobs).toHaveLength(1);
     expect(searched.jobs[0].title).toBe('Senior Mechanical Engineer');
+  });
+
+  describe('companyUrl pin-or-ignore (Spec 1689)', () => {
+    it('accepts an on-domain companyUrl', async () => {
+      respondWith(careersHtml);
+      await service.scrape(
+        new ScraperInputDto({ companyUrl: 'https://getmaxspace.com/careers?utm=1' }),
+      );
+      expect(getMock).toHaveBeenCalledWith('https://getmaxspace.com/careers?utm=1');
+    });
+
+    it.each([
+      ['off-domain', 'https://evil.example/careers'],
+      ['lookalike', 'https://www.getmaxspace.com.evil.example/careers'],
+      ['internal IP', 'http://192.168.1.200:8006/api2/json'],
+      ['decimal loopback', 'http://2130706433/'],
+      ['metadata host', 'http://metadata.google.internal/computeMetadata/v1/'],
+    ])('ignores a %s companyUrl and fetches the default board', async (_label, companyUrl) => {
+      respondWith(careersHtml);
+      const res = await service.scrape(new ScraperInputDto({ companyUrl, resultsWanted: 9999 }));
+      expect(getMock).toHaveBeenCalledTimes(1);
+      expect(getMock).toHaveBeenCalledWith('https://www.getmaxspace.com/careers');
+      expect(res.jobs).toHaveLength(5);
+    });
+  });
+});
+
+describe('GetMaxSpaceService companyUrl hygiene (Spec 1689)', () => {
+  afterEach(() => getMock.mockReset());
+
+  it('logs only the host of a refused companyUrl, never its credentials or query', () => {
+    const svc = new GetMaxSpaceService();
+    const debug = jest
+      .spyOn((svc as unknown as { logger: { debug: (m: string) => void } }).logger, 'debug')
+      .mockImplementation(() => undefined);
+    (svc as unknown as { careersUrl(input: ScraperInputDto): string }).careersUrl(
+      new ScraperInputDto({ companyUrl: 'https://user:s3cret@evil.example/x?token=t0k' }),
+    );
+    const logged = debug.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged).toContain('evil.example');
+    expect(logged).not.toMatch(/s3cret|t0k|user:/);
+  });
+
+  it('pins every redirect hop to the plugin allowlist', async () => {
+    const { createHttpClient } = jest.requireMock('@ever-jobs/common') as {
+      createHttpClient: jest.Mock;
+    };
+    createHttpClient.mockClear();
+    getMock.mockRejectedValue(new Error('ECONNREFUSED'));
+    await new GetMaxSpaceService().scrape(new ScraperInputDto({})).catch(() => undefined);
+    expect(createHttpClient).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedRedirectHosts: GETMAXSPACE_ALLOWED_HOSTS }),
+    );
   });
 });

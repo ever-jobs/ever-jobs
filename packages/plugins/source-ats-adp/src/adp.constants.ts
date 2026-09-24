@@ -32,6 +32,29 @@ export function adpListUrl(host: string, cid: string, skip = 0): string {
 export const ADP_PAGE_SIZE = 20;
 
 /**
+ * Env var capping how many requisition-list pages (first page included) one
+ * scrape may fetch. A politeness / safety bound on top of the resultsWanted
+ * early stop. `1` restores the pre-pagination behaviour (first page only).
+ */
+export const ADP_MAX_LIST_PAGES_ENV = 'ADP_MAX_LIST_PAGES';
+
+/** Default list-page cap: 100 pages × 20 = 2,000 requisitions. */
+export const ADP_DEFAULT_MAX_LIST_PAGES = 100;
+
+/**
+ * Parse a raw `ADP_MAX_LIST_PAGES` value. Unset/blank → the default; a
+ * positive integer → that cap; anything else → null so the caller can warn
+ * and fall back to the default.
+ */
+export function parseAdpMaxListPages(raw: string | null | undefined): number | null {
+  const v = (raw ?? '').trim();
+  if (!v) return ADP_DEFAULT_MAX_LIST_PAGES;
+  if (!/^\d+$/.test(v)) return null;
+  const n = Number(v);
+  return Number.isSafeInteger(n) && n >= 1 ? n : null;
+}
+
+/**
  * Build the per-requisition detail endpoint for a host + company `cid`. The list
  * feed omits the posting body; `requisitionDescription` lives only here.
  */

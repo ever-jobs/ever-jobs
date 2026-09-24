@@ -126,3 +126,17 @@ export const CATSONE_HEADERS: Record<string, string> = {
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129 Safari/537.36',
   'Accept-Language': 'en-US,en;q=0.9',
 };
+
+/**
+ * Env toggle for CATS location heuristics (Spec 1689), layered on top of the
+ * shared parser: parenthetical qualifiers ("Leeds (Head Office), UK") are
+ * stripped before parsing — the pre-5125 behaviour — so they never end up in
+ * the city. `false` / `0` / `off` / `no` → shared-parser output only (Spec
+ * 5125); unset or anything else → heuristics on.
+ */
+export const CATSONE_LOCATION_HEURISTICS_ENV = 'CATSONE_LOCATION_HEURISTICS';
+
+export function catsoneLocationHeuristicsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = (env[CATSONE_LOCATION_HEURISTICS_ENV] ?? '').trim().toLowerCase();
+  return !(v === 'false' || v === '0' || v === 'off' || v === 'no');
+}

@@ -1,11 +1,13 @@
+import { Logger } from '@nestjs/common';
 import { LocationDto } from '@ever-jobs/models';
 import {
   COUNTRY_CONFIG,
   Country,
-  countryFromString,
   getIndeedDomain,
 } from '@ever-jobs/models';
 import { regionNameFromCode } from './country-name';
+
+const logger = new Logger('LocationParser');
 
 const US_STATE_AND_TERRITORY_CODES = new Set([
   'AA',
@@ -229,6 +231,198 @@ const COUNTRY_ALPHA3: Record<string, string> = {
  */
 const BARE_STATE_NAME_COLLISIONS = new Set(['washington', 'new york', 'georgia']);
 
+/**
+ * Subdivisions (lower-case names and codes) that pin an ambiguous tail code —
+ * one that is both a US state and an ISO country — to its COUNTRY reading
+ * even when US-state-first is on: 'Toronto, Ontario, CA' is Canada,
+ * 'Berlin, Berlin, DE' is Germany. Keyed by the tail code. Only the codes
+ * boards actually pair with a regional middle part are listed; anything not
+ * listed falls back to the US-state reading.
+ */
+const NON_US_SUBDIVISIONS_BY_TAIL_CODE: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  CA: new Set([
+    'alberta', 'ab', 'british columbia', 'bc', 'manitoba', 'mb',
+    'new brunswick', 'nb', 'newfoundland', 'newfoundland and labrador', 'nl',
+    'nova scotia', 'ns', 'ontario', 'on', 'prince edward island', 'pe', 'pei',
+    'quebec', 'québec', 'qc', 'saskatchewan', 'sk', 'northwest territories',
+    'nt', 'nunavut', 'nu', 'yukon', 'yt',
+  ]),
+  DE: new Set([
+    'baden-württemberg', 'baden-wurttemberg', 'baden-wuerttemberg', 'bavaria',
+    'bayern', 'berlin', 'brandenburg', 'bremen', 'hamburg', 'hesse', 'hessen',
+    'lower saxony', 'niedersachsen', 'mecklenburg-vorpommern',
+    'mecklenburg-western pomerania', 'north rhine-westphalia',
+    'nordrhein-westfalen', 'rhineland-palatinate', 'rheinland-pfalz',
+    'saarland', 'saxony', 'sachsen', 'saxony-anhalt', 'sachsen-anhalt',
+    'schleswig-holstein', 'thuringia', 'thüringen', 'thueringen',
+  ]),
+  IN: new Set([
+    'andhra pradesh', 'assam', 'bihar', 'chandigarh', 'chhattisgarh', 'delhi',
+    'new delhi', 'nct', 'national capital territory of delhi', 'goa',
+    'gujarat', 'haryana', 'himachal pradesh', 'jammu and kashmir', 'jharkhand',
+    'karnataka', 'kerala', 'madhya pradesh', 'maharashtra', 'odisha', 'orissa',
+    'puducherry', 'punjab', 'rajasthan', 'tamil nadu', 'tamilnadu', 'telangana',
+    'uttar pradesh', 'uttarakhand', 'west bengal',
+  ]),
+  IL: new Set([
+    'tel aviv', 'tel aviv district', 'tel aviv-yafo', 'jerusalem',
+    'jerusalem district', 'haifa', 'haifa district', 'center district',
+    'central district', 'northern district', 'southern district',
+    // district names as boards print them without 'District'
+    // ('Petah Tikva, Central, IL') — consulted only for an 'IL' tail
+    'central', 'center', 'northern', 'southern', 'judea and samaria',
+  ]),
+  CO: new Set([
+    'antioquia', 'atlántico', 'atlantico', 'bogotá', 'bogota', 'bogotá d.c.',
+    'bogota d.c.', 'bogotá dc', 'bogota dc', 'distrito capital', 'bolívar',
+    'bolivar', 'cundinamarca', 'santander', 'valle del cauca', 'risaralda',
+    'caldas',
+  ]),
+  AR: new Set([
+    'buenos aires', 'caba', 'ciudad autónoma de buenos aires',
+    'ciudad autonoma de buenos aires', 'córdoba', 'cordoba', 'mendoza',
+    'santa fe', 'tucumán', 'tucuman',
+  ]),
+  ID: new Set([
+    'jakarta', 'dki jakarta', 'special capital region of jakarta', 'bali',
+    'banten', 'west java', 'jawa barat', 'east java', 'jawa timur',
+    'central java', 'jawa tengah', 'yogyakarta', 'north sumatra',
+    'sumatera utara',
+  ]),
+  MA: new Set([
+    'casablanca-settat', 'rabat-salé-kénitra', 'rabat-sale-kenitra',
+    'marrakech-safi', 'fès-meknès', 'fes-meknes', 'tanger-tétouan-al hoceïma',
+    'tanger-tetouan-al hoceima', 'grand casablanca',
+  ]),
+  PA: new Set(['panamá', 'panama', 'panamá oeste', 'panama oeste', 'colón', 'colon']),
+  AE: new Set([
+    'dubai', 'abu dhabi', 'sharjah', 'ajman', 'fujairah', 'ras al khaimah',
+    'umm al quwain',
+  ]),
+};
+
+/* ────────────────────────────────────────────────────────────────────── *
+ *  Options and environment (fork-sync hardening, Spec 1689)
+ * ────────────────────────────────────────────────────────────────────── */
+
+/** Default cap on a label's length before heuristics are skipped. */
+export const DEFAULT_MAX_LOCATION_LABEL_LENGTH = 256;
+
+/** Environment variables that set the parser's process-wide defaults. */
+export const LOCATION_PARSER_ENV = {
+  /** Integer; a `;`/`|` site chunk longer than this is kept verbatim. 0 = no cap. Default 256. */
+  maxLabelLength: 'EVER_JOBS_LOCATION_MAX_LABEL_LENGTH',
+  /**
+   * 'true' restores the legacy `{ city: 'Remote', country }` for remote-only
+   * input. Default false (the fork's output) — an open owner decision, see
+   * docs/questions.md; deployments that want the legacy output set it.
+   */
+  emitRemoteCity: 'EVER_JOBS_LOCATION_REMOTE_CITY',
+  /** 'false' restores the legacy opt-in default of `allowBareStateProvince`. Default true. */
+  allowBareStateProvince: 'EVER_JOBS_LOCATION_BARE_STATE',
+  /** 'false' restores the ISO-country-first reading of ambiguous codes. Default true. */
+  preferUsStateCode: 'EVER_JOBS_LOCATION_PREFER_US_STATE',
+  /**
+   * 'true' also reads a lone ambiguous code after a comma'd qualifier
+   * ('Remote, CA', 'Hybrid, DE') as the US state. Default false (the country).
+   */
+  preferUsStateAfterQualifier: 'EVER_JOBS_LOCATION_PREFER_US_STATE_AFTER_QUALIFIER',
+} as const;
+
+interface ResolvedParseLocationOptions {
+  readonly allowBareStateProvince: boolean;
+  readonly emitRemoteCity: boolean;
+  readonly preferUsStateCode: boolean;
+  readonly preferUsStateAfterQualifier: boolean;
+  /** 0 = no cap */
+  readonly maxLabelLength: number;
+}
+
+let cachedEnvDefaults: ResolvedParseLocationOptions | null = null;
+
+function readBooleanEnv(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const value = raw.trim().toLowerCase();
+  if (value === 'true' || value === '1' || value === 'yes' || value === 'on') {
+    return true;
+  }
+  if (value === 'false' || value === '0' || value === 'no' || value === 'off') {
+    return false;
+  }
+  logger.warn(
+    `Ignoring ${name}=${JSON.stringify(raw)} (expected true/false); using ${fallback}`,
+  );
+  return fallback;
+}
+
+function readLengthEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const value = Number(raw.trim());
+  if (Number.isInteger(value) && value >= 0) return value;
+  logger.warn(
+    `Ignoring ${name}=${JSON.stringify(raw)} (expected an integer >= 0); using ${fallback}`,
+  );
+  return fallback;
+}
+
+function envDefaults(): ResolvedParseLocationOptions {
+  if (cachedEnvDefaults) return cachedEnvDefaults;
+  cachedEnvDefaults = {
+    allowBareStateProvince: readBooleanEnv(
+      LOCATION_PARSER_ENV.allowBareStateProvince,
+      true,
+    ),
+    emitRemoteCity: readBooleanEnv(LOCATION_PARSER_ENV.emitRemoteCity, false),
+    preferUsStateCode: readBooleanEnv(
+      LOCATION_PARSER_ENV.preferUsStateCode,
+      true,
+    ),
+    preferUsStateAfterQualifier: readBooleanEnv(
+      LOCATION_PARSER_ENV.preferUsStateAfterQualifier,
+      false,
+    ),
+    maxLabelLength: readLengthEnv(
+      LOCATION_PARSER_ENV.maxLabelLength,
+      DEFAULT_MAX_LOCATION_LABEL_LENGTH,
+    ),
+  };
+  return cachedEnvDefaults;
+}
+
+/**
+ * Forget the cached environment defaults so the next parse re-reads
+ * `EVER_JOBS_LOCATION_*`. The env is read once per process otherwise; tests
+ * that change it call this before and after.
+ */
+export function resetLocationParserEnvCache(): void {
+  cachedEnvDefaults = null;
+}
+
+/** Per-call options win; anything unset falls back to the env defaults. */
+function resolveOptions(
+  options?: ParseLocationOptions,
+): ResolvedParseLocationOptions {
+  const env = envDefaults();
+  if (!options) return env;
+  const cap = options.maxLabelLength;
+  return {
+    allowBareStateProvince:
+      options.allowBareStateProvince ?? env.allowBareStateProvince,
+    emitRemoteCity: options.emitRemoteCity ?? env.emitRemoteCity,
+    preferUsStateCode: options.preferUsStateCode ?? env.preferUsStateCode,
+    preferUsStateAfterQualifier:
+      options.preferUsStateAfterQualifier ?? env.preferUsStateAfterQualifier,
+    maxLabelLength:
+      typeof cap === 'number' && Number.isFinite(cap) && cap >= 0
+        ? Math.floor(cap)
+        : env.maxLabelLength,
+  };
+}
+
 /** Qualifier-flavored text is never a site name ('Hybrid possible', 'On-site'). */
 const QUALIFIER_WORD_RE =
   /\b(?:hybrid|remote|on-?site|offsite|telecommut\w*|work\s+from\s+home|wfh)\b/i;
@@ -260,15 +454,22 @@ function splitCityDescriptor(
   only: string,
 ): { city: string; name: string } | null {
   const words = only.split(/\s+/);
-  for (let cut = 1; cut < words.length; cut++) {
-    const tail = words.slice(cut);
-    if (!tail.every((w) => SITE_DESCRIPTOR_RE.test(w))) continue;
-    const city = words.slice(0, cut).join(' ');
-    if (isBareCityCandidate(city)) {
-      return { city, name: tail.join(' ') };
-    }
+  // first index from which every word to the end is a descriptor — O(n),
+  // instead of re-testing every tail per cut
+  let firstDescriptor = words.length;
+  while (
+    firstDescriptor > 0 &&
+    SITE_DESCRIPTOR_RE.test(words[firstDescriptor - 1])
+  ) {
+    firstDescriptor--;
   }
-  return null;
+  // the shortest city prefix wins; a longer prefix only adds characters, so
+  // if the shortest one is not a bare-city candidate no longer one is either
+  const cut = Math.max(1, firstDescriptor);
+  if (cut >= words.length) return null;
+  const city = words.slice(0, cut).join(' ');
+  if (!isBareCityCandidate(city)) return null;
+  return { city, name: words.slice(cut).join(' ') };
 }
 
 /** Every word is a site descriptor ('Corp Hqtrs', 'HQ') — a site, not a city. */
@@ -293,6 +494,11 @@ export interface ParsedLocationList {
   workFromHomeType: WorkFromHomeType | null;
 }
 
+/**
+ * Per-call parser options. Every field is optional; an unset field takes the
+ * process-wide default from its `EVER_JOBS_LOCATION_*` env var (read once,
+ * see {@link LOCATION_PARSER_ENV} / {@link resetLocationParserEnvCache}).
+ */
 export interface ParseLocationOptions {
   /**
    * When false, a lone token that exactly matches a known US state/territory
@@ -301,8 +507,67 @@ export interface ParseLocationOptions {
    * with prominent cities ('Washington', 'New York', 'Georgia') are exempt and
    * remain cities. Named generically (state/province) so the flag can later
    * cover non-US subdivisions without another signature change.
+   *
+   * Env default: `EVER_JOBS_LOCATION_BARE_STATE` (default true; `false`
+   * restores the pre-fork opt-in behaviour for every caller).
    */
   allowBareStateProvince?: boolean;
+  /**
+   * When true, remote-only input with no concrete site ('Remote',
+   * ['Remote', 'United States'], 'Remote - US') yields the legacy
+   * `{ city: 'Remote', country }` as the merged `location` — the pre-fork
+   * parser's output, which REST, GraphQL `location { city }` and MCP
+   * consumers read 'Remote' from. False (the default) is the fork's reading:
+   * qualifiers live in the flags (`remoteMentioned` / `workFromHomeType`)
+   * only and no city is minted. `locations[]` is unaffected either way, and
+   * so is the canonical key (its remote bucket reads `isRemote`).
+   *
+   * The default is the fork's because 79 fork plugin spec files pin it, and
+   * neither value reproduces develop 574bd922 for the ~940 plugins the fork
+   * migrated onto this parser (they emitted the raw label, e.g. 'Remote - US',
+   * as the city). Kept open for the owner in docs/questions.md.
+   *
+   * Env default: `EVER_JOBS_LOCATION_REMOTE_CITY` (default false).
+   */
+  emitRemoteCity?: boolean;
+  /**
+   * How a 2-letter code that is BOTH a US state and an ISO country ('CA',
+   * 'IL', 'CO', 'IN', 'DE', …) reads where the fork read it as a country:
+   * the tail of a 3+-part label ('Downtown, Los Angeles, CA'), 'Remote in CO',
+   * 'Remote - CO' and 'Remote CO'. Default true = US state, unless the label
+   * carries a non-US signal: a middle part naming a non-US country, a known
+   * subdivision of the code's country ('Toronto, Ontario, CA'), a bare
+   * short region code in a middle part ('Bengaluru, KA, IN',
+   * 'Cologne, NW, DE', 'Chennai, TN, IN' — a US label names one state), or
+   * a first part naming the code's own country
+   * ('Colombia, Medellín, CO'). A city named after another country stays US
+   * ('Peru, Miami County, IN'). False restores the fork's ISO-country-first
+   * reading.
+   *
+   * Env default: `EVER_JOBS_LOCATION_PREFER_US_STATE` (default true).
+   */
+  preferUsStateCode?: boolean;
+  /**
+   * Also read a lone ambiguous code left after a comma'd qualifier
+   * ('Remote, CA', 'Hybrid, DE', 'Remote, IN') as the US state — like a bare
+   * 'CA' label — instead of the country (Canada / Germany / India, the
+   * fork's reading). Only consulted when `preferUsStateCode` is on.
+   *
+   * Env default: `EVER_JOBS_LOCATION_PREFER_US_STATE_AFTER_QUALIFIER`
+   * (default false).
+   */
+  preferUsStateAfterQualifier?: boolean;
+  /**
+   * A site chunk (one `;`/`|`-separated piece of a label, after whitespace
+   * collapsing) longer than this many characters skips every heuristic and is
+   * kept verbatim as one entry (`{ text, name }`), which bounds the per-chunk
+   * CPU on hostile or runaway input. Applied per chunk, not to the whole
+   * label, so a long multi-site list ('Austin, TX; Denver, CO; …') keeps its
+   * structured sites. 0 = no cap.
+   *
+   * Env default: `EVER_JOBS_LOCATION_MAX_LABEL_LENGTH` (default 256).
+   */
+  maxLabelLength?: number;
 }
 
 function countryDisplay(country: Country): string | null {
@@ -319,6 +584,35 @@ function countryDisplay(country: Country): string | null {
 }
 
 /**
+ * COUNTRY_CONFIG name/alias -> display name, built once at module load.
+ * Mirrors `countryFromString` exactly (same keys, first configured country
+ * wins) without its throw-on-miss path, which cost ~70 µs per miss and ran
+ * several times per label. `null` marks a configured name with no display.
+ */
+const COUNTRY_NAME_DISPLAY: ReadonlyMap<string, string | null> = (() => {
+  const map = new Map<string, string | null>();
+  for (const country of Object.keys(COUNTRY_CONFIG) as Country[]) {
+    const display = countryDisplay(country);
+    for (const name of COUNTRY_CONFIG[country].names.split(',')) {
+      if (!map.has(name)) map.set(name, display);
+    }
+  }
+  return map;
+})();
+
+/** Memoized `regionNameFromCode` for upper-case alpha-2 codes (≤ 676 keys). */
+const REGION_NAME_CACHE = new Map<string, string | null>();
+
+function regionNameCached(code: string): string | null {
+  let name = REGION_NAME_CACHE.get(code);
+  if (name === undefined) {
+    name = regionNameFromCode(code);
+    REGION_NAME_CACHE.set(code, name);
+  }
+  return name;
+}
+
+/**
  * Recognize a country token in country-slot context: COUNTRY_CONFIG names and
  * aliases, ISO alpha-2, explicit alpha-3 map, and the pragmatic `'korea'` alias
  * (job boards mean South Korea).
@@ -327,15 +621,10 @@ export function normalizeCountryOnly(value: string): string | null {
   const normalized = value.trim().toLowerCase().replace(/\./g, '');
   if (!normalized) return null;
   if (normalized === 'korea') return 'South Korea';
-  try {
-    const country = countryFromString(normalized);
-    const display = countryDisplay(country);
-    if (display) return display;
-  } catch {
-    /* not a configured alias */
-  }
+  const display = COUNTRY_NAME_DISPLAY.get(normalized);
+  if (display) return display;
   if (/^[a-z]{2}$/.test(normalized)) {
-    const name = regionNameFromCode(normalized.toUpperCase());
+    const name = regionNameCached(normalized.toUpperCase());
     if (name) return name;
   }
   if (/^[a-z]{3}$/.test(normalized)) {
@@ -343,6 +632,89 @@ export function normalizeCountryOnly(value: string): string | null {
     if (name) return name;
   }
   return null;
+}
+
+/**
+ * One canonical display name for a country value in ANY of the forms sources
+ * use — config names/aliases ('usa', 'united states'), ISO alpha-2 ('US'),
+ * alpha-3 ('USA', 'GBR') and `Country` enum keys ('UNITEDARABEMIRATES').
+ * Returns null when the value is not recognizably a country. Used to make
+ * dedup keys agree across sources ('USA' / 'US' / 'United States').
+ */
+export function canonicalCountryName(
+  value: string | null | undefined,
+): string | null {
+  if (!value) return null;
+  const byName = normalizeCountryOnly(value);
+  if (byName) return byName;
+  const key = value.trim().toUpperCase();
+  if (Object.prototype.hasOwnProperty.call(COUNTRY_CONFIG, key)) {
+    return countryDisplay(key as Country);
+  }
+  return null;
+}
+
+/** 'CA' / 'il' — a 2-letter token that is a US state/territory code. */
+function isUsStateCodeToken(value: string): boolean {
+  const trimmed = value.trim();
+  return (
+    /^[A-Za-z]{2}$/.test(trimmed) &&
+    US_STATE_AND_TERRITORY_CODES.has(trimmed.toUpperCase())
+  );
+}
+
+const US_COUNTRY_DISPLAY = 'United States';
+
+/** A short ALL-CAPS token — the shape of a regional code ('KA', 'NW', 'ANT'). */
+const SHORT_REGION_CODE_RE = /^[A-Z]{2,3}$/;
+
+/**
+ * A bare short ALL-CAPS region code in a MIDDLE part, before an ambiguous tail
+ * code. A US 'City, County, ST' label never has one: it would be a foreign
+ * region ('Bengaluru, KA, IN', 'Cologne, NW, DE', 'Medellin, ANT, CO') or a
+ * second state-shaped code ('Chennai, TN, IN' — Tamil Nadu, not Tennessee,
+ * since a US label names one state). Names for the US ('USA') and site
+ * descriptors ('HQ') are not region codes.
+ */
+function isMiddleRegionCode(part: string): boolean {
+  const trimmed = part.trim();
+  return (
+    SHORT_REGION_CODE_RE.test(trimmed) &&
+    normalizeCountryOnly(trimmed) !== US_COUNTRY_DISPLAY &&
+    !SITE_DESCRIPTOR_RE.test(trimmed)
+  );
+}
+
+/**
+ * US-state-first check for an ambiguous tail code ('CA', 'IL', 'CO', …) in a
+ * 'City, Middle…, XX' label (`others` = every part before the tail). The
+ * state reading wins unless the label carries a non-US signal:
+ *  - any part is a known subdivision of the code's country
+ *    ('Toronto, Ontario, CA', 'Berlin, Berlin, DE');
+ *  - a middle part names a non-US country ('Haifa, Israel, IL');
+ *  - a middle part is a bare short regional code
+ *    ('Bengaluru, KA, IN', 'Cologne, NW, DE', 'Chennai, TN, IN');
+ *  - the first part names the code's own country ('Colombia, Medellín, CO').
+ * The first part is otherwise the city slot, and a US city may be named after
+ * another country, so it never vetoes on its own: 'Peru, Miami County, IN' and
+ * 'Mexico, Audrain County, MO' stay Indiana / Missouri.
+ */
+function usStateTailWins(tail: string, others: readonly string[]): boolean {
+  const code = tail.trim().toUpperCase();
+  const pinned = NON_US_SUBDIVISIONS_BY_TAIL_CODE[code];
+  const tailCountry = normalizeCountryOnly(code);
+  for (let i = 0; i < others.length; i++) {
+    const part = others[i];
+    if (pinned?.has(part.trim().toLowerCase())) return false;
+    const named = normalizeCountryOnly(part);
+    if (i === 0) {
+      if (named && named === tailCountry) return false;
+      continue;
+    }
+    if (named && named !== US_COUNTRY_DISPLAY) return false;
+    if (isMiddleRegionCode(part)) return false;
+  }
+  return true;
 }
 
 export function normalizeUsState(value: string): string | null {
@@ -371,7 +743,9 @@ function usSubdivision(value: string): string | null {
 function bareLabelWithStateSuffix(
   only: string,
 ): { city: string; state: string } | null {
-  const m = /^(.+?)\s+([A-Za-z.]{2,6})$/.exec(only.trim());
+  // `(?<!\s)`: split at the head of the last whitespace run (same match as
+  // the lazy group alone, without rescanning a long run per position)
+  const m = /^(.+?)(?<!\s)\s+([A-Za-z.]{2,6})$/.exec(only.trim());
   if (!m) return null;
   const st = normalizeUsState(m[2]);
   if (!st || !isBareCityCandidate(m[1])) return null;
@@ -413,14 +787,32 @@ function remoteFlags(normalized: string): {
 /** Qualifier affixes joined to geography without spaces ('Hybrid- Fremont'). */
 const QUALIFIER_PREFIX_RE =
   /^(?:hybrid|remote|onsite|on-site|offsite|any office)\b\s*[-–—]\s*/i;
+// `(?<!\s)` starts a match only at the head of a whitespace run, so a long
+// run (e.g. from stripped '(1)' serial markers) is scanned once, not once
+// per position — same matches as without it, linear instead of quadratic
 const QUALIFIER_SUFFIX_RE =
-  /\s*[-–—]\s*(?:remote|hybrid|onsite|on-site|offsite)\b\s*$/i;
+  /(?<!\s)\s*[-–—]\s*(?:remote|hybrid|onsite|on-site|offsite)\b\s*$/i;
+
+/** One character of the separators trimmed from a chunk's edges. */
+const EDGE_SEPARATOR_CHAR_RE = /[\s/&|;,]/;
+
+/**
+ * Trim separator runs from both ends. Index-based: the former
+ * `/^[…]+|[…]+$/g` replace rescanned a trailing run from every position
+ * (quadratic — 20k chars of '/ ' took ~0.6 s).
+ */
+function trimEdgeSeparators(s: string): string {
+  let start = 0;
+  let end = s.length;
+  while (start < end && EDGE_SEPARATOR_CHAR_RE.test(s[start])) start++;
+  while (end > start && EDGE_SEPARATOR_CHAR_RE.test(s[end - 1])) end--;
+  return start === 0 && end === s.length ? s : s.slice(start, end);
+}
 
 function affixStrip(s: string): string {
-  return s
-    .replace(QUALIFIER_PREFIX_RE, '')
-    .replace(QUALIFIER_SUFFIX_RE, '')
-    .replace(/^[\s\/&|;,]+|[\s\/&|;,]+$/g, '')
+  return trimEdgeSeparators(
+    s.replace(QUALIFIER_PREFIX_RE, '').replace(QUALIFIER_SUFFIX_RE, ''),
+  )
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -471,25 +863,107 @@ interface SingleParse {
   blob?: string;
 }
 
+const REMOTE_HEAD_RE = /^(?:remote|hybrid)\b/i;
+/** longest prefix of the characters the legacy middle group could consume */
+const REMOTE_IN_MIDDLE_RE = /^[\s\w-]*/;
+/** an ' in ' separator starting at the head of its whitespace run */
+const REMOTE_IN_SEPARATOR_RE = /(?<!\s)\s+in\s+/gi;
+const WORD_CHAR_RE = /\w/;
+// built from a string: some transpilers emit a raw U+2028 inside a regex
+// literal, which JS parses as a line break
+const LINE_TERMINATOR_RE = new RegExp('[\\n\\r\\u2028\\u2029]');
+
+/**
+ * 'Remote in <geo>' / 'Hybrid - full time in <geo>' — returns `<geo>` or null.
+ *
+ * Linear-time equivalent of the fork's
+ * `/^(?:remote|hybrid)\b(?:[\s-]*\w+)*?\s+in\s+(.+)$/i`, whose nested
+ * quantifier split every run of word characters 2^(n-1) ways when there was
+ * no ' in ' (a 53-char 'Remote …' label ran past 60 s). Same matches: the
+ * middle between the qualifier and ' in ' may only hold word characters,
+ * whitespace and '-', must end on a word character (or be empty), and the
+ * EARLIEST such ' in ' wins. Exported for its differential test.
+ */
+export function matchRemoteInGeo(cleaned: string): string | null {
+  const head = REMOTE_HEAD_RE.exec(cleaned);
+  if (!head) return null;
+  const rest = cleaned.slice(head[0].length);
+  const middleLimit = REMOTE_IN_MIDDLE_RE.exec(rest)?.[0].length ?? 0;
+  // the legacy `(.+)$` cannot cross a line terminator ('.' excludes it): a
+  // capture must start after the last one
+  let lastTerminator = -1;
+  for (let i = rest.length - 1; i >= 0; i--) {
+    if (LINE_TERMINATOR_RE.test(rest[i])) {
+      lastTerminator = i;
+      break;
+    }
+  }
+  const separator = new RegExp(REMOTE_IN_SEPARATOR_RE.source, 'gi');
+  let m: RegExpExecArray | null;
+  while ((m = separator.exec(rest))) {
+    // candidates may overlap ('- in in X': the 2nd ' in ' reuses the 1st
+    // one's trailing space), so resume one past this candidate's start
+    separator.lastIndex = m.index + 1;
+    // the middle rest[0, index) must lie inside the allowed-character prefix
+    if (m.index > middleLimit) return null;
+    if (m.index !== 0 && !WORD_CHAR_RE.test(rest[m.index - 1])) continue;
+    const geoStart = m.index + m[0].length;
+    if (geoStart < rest.length) {
+      if (geoStart > lastTerminator) return rest.slice(geoStart);
+      continue;
+    }
+    // untrimmed tail ('Remote in  '): like the legacy `\s+(.+)$`, the
+    // trailing run gives its last character to the capture when it can
+    const trailing = m[0].length - m[0].trimEnd().length;
+    if (trailing >= 2 && geoStart - 1 > lastTerminator) return m[0].slice(-1);
+  }
+  return null;
+}
+
+/**
+ * The geo after a 'Remote in' / 'Remote -' qualifier. With
+ * `preferUsStateCode`, a US-state code ('Remote in CO') reads as the state
+ * before the ISO-country lookup (Colombia), and a full state name
+ * ('Remote in Texas') resolves to its code. Without it: country only (the
+ * fork's reading).
+ */
+function remoteQualifiedGeo(
+  geo: string,
+  opts: ResolvedParseLocationOptions,
+): LocationDto | null {
+  const trimmed = geo.trim();
+  if (opts.preferUsStateCode && isUsStateCodeToken(trimmed)) {
+    return new LocationDto({ state: trimmed.toUpperCase() });
+  }
+  const c = normalizeCountryOnly(trimmed);
+  if (c) return new LocationDto({ country: c });
+  if (
+    opts.preferUsStateCode &&
+    !BARE_STATE_NAME_COLLISIONS.has(trimmed.toLowerCase())
+  ) {
+    const st = usSubdivision(trimmed);
+    if (st) return new LocationDto({ state: st });
+  }
+  return null;
+}
+
 /** Parse ONE clean label into a geographic entry. Right-to-left consumption. */
 function parseSingleLabel(
   cleaned: string,
-  options?: ParseLocationOptions,
+  opts: ResolvedParseLocationOptions,
 ): SingleParse | null {
   if (!cleaned) return null;
 
   // 'Remote in <country>' / 'Remote - <country>'
-  const remoteIn = /^(?:remote|hybrid)\b(?:[\s-]*\w+)*?\s+in\s+(.+)$/i.exec(
-    cleaned,
-  );
-  if (remoteIn) {
-    const c = normalizeCountryOnly(remoteIn[1]);
-    if (c) return { location: new LocationDto({ country: c }), firm: true };
+  const remoteIn = matchRemoteInGeo(cleaned);
+  if (remoteIn !== null) {
+    const loc = remoteQualifiedGeo(remoteIn, opts);
+    if (loc) return { location: loc, firm: true };
   }
   const remoteDash = /^(?:remote|hybrid)\s*[-–—]\s*(.+)$/i.exec(cleaned);
   if (remoteDash) {
-    const c = normalizeCountryOnly(remoteDash[1]);
-    if (c) return { location: new LocationDto({ country: c }), firm: true };
+    const loc = remoteQualifiedGeo(remoteDash[1], opts);
+    if (loc) return { location: loc, firm: true };
   }
 
   // 'Remote United States' / 'Hybrid Austin' — qualifier word fused with a
@@ -499,6 +973,13 @@ function parseSingleLabel(
   );
   if (fused) {
     const geo = fused[1].trim();
+    // 'Remote CA' — an ambiguous code reads as the US state first
+    if (opts.preferUsStateCode && isUsStateCodeToken(geo)) {
+      return {
+        location: new LocationDto({ state: geo.toUpperCase() }),
+        firm: true,
+      };
+    }
     const c = normalizeCountryOnly(geo);
     if (c) return { location: new LocationDto({ country: c }), firm: true };
     const st = usSubdivision(geo);
@@ -512,7 +993,7 @@ function parseSingleLabel(
       ? normalizeUsState(cleaned)
       : null;
     if (bareState) {
-      if (options?.allowBareStateProvince === false) {
+      if (!opts.allowBareStateProvince) {
         return { location: new LocationDto({ city: cleaned }), firm: false };
       }
       return {
@@ -531,7 +1012,7 @@ function parseSingleLabel(
 
   if (parts.length === 1 && !cleaned.includes(' - ')) {
     const only = parts[0];
-    if (options?.allowBareStateProvince !== false) {
+    if (opts.allowBareStateProvince) {
       if (!BARE_STATE_NAME_COLLISIONS.has(only.toLowerCase())) {
         const bareState = usSubdivision(only);
         if (bareState) {
@@ -579,7 +1060,7 @@ function parseSingleLabel(
     return { location: new LocationDto({ city: only }), firm: false };
   }
 
-  return parseCommaParts(parts, options);
+  return parseCommaParts(parts, opts);
 }
 
 /**
@@ -589,7 +1070,7 @@ function parseSingleLabel(
  */
 function parseCommaParts(
   rawParts: string[],
-  options?: ParseLocationOptions,
+  opts: ResolvedParseLocationOptions,
 ): SingleParse | null {
   const parts = [...rawParts];
 
@@ -655,16 +1136,13 @@ function parseCommaParts(
       }
     }
 
-    const d = /^(.*?)\s+-\s+(.+)$/.exec(parts[i]);
+    // `(?<!\s)`: the separator starts at the head of its whitespace run
+    // (same matches; keeps a long run from being rescanned per position)
+    const d = /^(.*?)(?<!\s)\s+-\s+(.+)$/.exec(parts[i]);
     if (!d) continue;
-    let prefixCountry: string | null = null;
-    try {
-      prefixCountry = countryDisplay(
-        countryFromString(d[1].trim().toLowerCase()),
-      );
-    } catch {
-      /* not a country-name prefix */
-    }
+    // config names/aliases only (as countryFromString), never bare codes
+    const prefixCountry =
+      COUNTRY_NAME_DISPLAY.get(d[1].trim().toLowerCase()) ?? null;
     if (prefixCountry) {
       country = country ?? prefixCountry;
       parts[i] = d[2].trim();
@@ -704,31 +1182,49 @@ function parseCommaParts(
     };
   }
 
-  // trailing country (name / alpha-2 / alpha-3) — in the tail slot a valid
-  // ISO code wins over a US-state reading ('Toronto, Ontario, CA' -> Canada);
-  // labels like 'X, County, GA' with a US-state tail do not occur as single
-  // comma labels (only as list rows handled by the separators).
+  // trailing country (name / alpha-2 / alpha-3).
   // (a 'ST - X' prefix sets state early, so a 2-part '…, <country>' tail
   // reaches this block instead of the 'City, Country' branch below)
   if (parts.length >= 3 || (parts.length === 2 && dashPrefixState)) {
     const tail = parts[parts.length - 1];
     let c = country ?? normalizeCountryOnly(tail);
     // a 2-letter tail that is BOTH a US state and an ISO country ('CA','GA','IL')
-    // reads as the US state when the middle part itself contains a US-state code
-    // ('Pueblo, CO Penrose, CO'); otherwise the country wins.
-    if (
-      c &&
-      /^[A-Za-z]{2}$/.test(tail) &&
-      US_STATE_AND_TERRITORY_CODES.has(tail.toUpperCase()) &&
-      parts
-        .slice(0, -1)
-        .some(
+    if (c && isUsStateCodeToken(tail)) {
+      const others = parts.slice(0, -1);
+      // US-state-first: a BARE code in a middle part ('Chennai, TN, IN') is a
+      // region before a country, not the 'Pueblo, CO Penrose, CO' shape below
+      const bareMiddleCode =
+        opts.preferUsStateCode && others.slice(1).some(isMiddleRegionCode);
+      if (
+        !bareMiddleCode &&
+        others.some(
           (p) =>
             /\b[A-Z]{2}\b/.test(p) &&
             Boolean(normalizeUsState(p.split(' ')[0])),
         )
-    ) {
-      c = null;
+      ) {
+        // the middle part itself carries a US-state code
+        // ('Pueblo, CO Penrose, CO') -> the tail is the US state
+        c = null;
+      } else if (
+        !country &&
+        opts.preferUsStateCode &&
+        usStateTailWins(tail, others)
+      ) {
+        // 'Downtown, Los Angeles, CA' / 'Springfield, Sangamon County, IL'
+        // -> the US state, not Canada / Israel. A literal US part
+        // ('United States, San Diego, CA') is the country, not the city.
+        c = null;
+        const usIdx = others.findIndex(
+          (p) => normalizeCountryOnly(p) === US_COUNTRY_DISPLAY,
+        );
+        if (usIdx >= 0) {
+          country = US_COUNTRY_DISPLAY;
+          parts.splice(usIdx, 1);
+        }
+      }
+      // otherwise (option off, or 'Toronto, Ontario, CA') the ISO country
+      // wins — the fork's reading
     }
     if (!country && c) {
       country = c;
@@ -755,7 +1251,17 @@ function parseCommaParts(
   // 'City, Subdivision' — verbatim subdivision when not US/country
   if (parts.length === 2 && !state) {
     const [city, sub] = parts;
-    const c = normalizeCountryOnly(sub);
+    const subCountry = normalizeCountryOnly(sub);
+    // once a tail country is read, a short code before it is that country's
+    // region, not a second country: 'Munich, BY, DE' is Bavaria (not
+    // Belarus), 'Chennai, TN, IN' Tamil Nadu (not Tunisia)
+    const c =
+      subCountry &&
+      country &&
+      subCountry !== country &&
+      SHORT_REGION_CODE_RE.test(sub.trim())
+        ? null
+        : subCountry;
     if (c) {
       // 'NY, USA' / 'Arizona, USA' / 'Puerto Rico, USA' — a US subdivision
       // in the city slot is a state, not a city. Collision names stay
@@ -858,6 +1364,28 @@ function parseCommaParts(
       if (!country) return null;
       return { location: new LocationDto({ country }), firm: true };
     }
+    // 'Remote, CA' — opt-in (`preferUsStateAfterQualifier`): a lone
+    // ambiguous code left after a qualifier reads as the US state first,
+    // like a bare 'CA' label (the bare-state option decides state vs city).
+    // Off by default: 'Remote, DE' / 'Hybrid, CA' keep the fork's country.
+    if (
+      opts.preferUsStateCode &&
+      opts.preferUsStateAfterQualifier &&
+      !state &&
+      isUsStateCodeToken(only)
+    ) {
+      const bare = opts.allowBareStateProvince;
+      return {
+        location: new LocationDto({
+          city: bare ? undefined : only,
+          state: bare ? only.trim().toUpperCase() : undefined,
+          country: country ?? undefined,
+          name: asSiteName(siteName),
+        }),
+        firm: bare || Boolean(country),
+        blob,
+      };
+    }
     const c = normalizeCountryOnly(only);
     if (c) {
       return {
@@ -872,7 +1400,7 @@ function parseCommaParts(
     }
     const st =
       !state &&
-      options?.allowBareStateProvince !== false &&
+      opts.allowBareStateProvince &&
       !BARE_STATE_NAME_COLLISIONS.has(only.toLowerCase())
         ? usSubdivision(only)
         : null;
@@ -888,7 +1416,7 @@ function parseCommaParts(
       };
     }
     const split =
-      !state && options?.allowBareStateProvince !== false
+      !state && opts.allowBareStateProvince
         ? bareLabelWithStateSuffix(only)
         : null;
     if (split) {
@@ -995,6 +1523,9 @@ function isBareCityCandidate(value: string): boolean {
   return /^[A-Z][A-Za-z.' -]*$/.test(value.trim());
 }
 
+/** Per-call memoized `parseSingleLabel` (one options set per list parse). */
+type LabelParser = (label: string) => SingleParse | null;
+
 /**
  * Split a label on word connectors ' & ' ' and ' ' or ' ' / ' (all require
  * spaces). Validation: every part must be a qualifier or a firm parse —
@@ -1004,13 +1535,14 @@ function isBareCityCandidate(value: string): boolean {
  */
 function tryWordSplit(
   cleaned: string,
-  options?: ParseLocationOptions,
+  parse: LabelParser,
 ): string[] | null {
   // 'or'/'and' never split on an ALL-CAPS 2-letter token — 'Portland, OR / X'
   // must keep Oregon, not treat 'OR' as a connector
   const parts: string[] = [];
   const conns: string[] = [];
-  const connRe = /\s+(&|\/|and|or)\s+/gi;
+  // `(?<!\s)`: a connector match starts at the head of its whitespace run
+  const connRe = /(?<!\s)\s+(&|\/|and|or)\s+/gi;
   let m: RegExpExecArray | null;
   let last = 0;
   while ((m = connRe.exec(cleaned))) {
@@ -1031,7 +1563,7 @@ function tryWordSplit(
       firm = true;
       continue;
     }
-    const parsed = parseSingleLabel(part, options);
+    const parsed = parse(part);
     if (parsed?.firm) {
       firm = true;
       continue;
@@ -1056,7 +1588,7 @@ function tryWordSplit(
  */
 function tryCommaGroupSplit(
   cleaned: string,
-  options?: ParseLocationOptions,
+  parse: LabelParser,
 ): string[] | null {
   const parts = cleaned
     .split(',')
@@ -1072,7 +1604,7 @@ function tryCommaGroupSplit(
   }
   const allFirm = groups.every((g) => {
     if (isWorkplaceQualifierOnly(g, true)) return true;
-    const parsed = parseSingleLabel(g, options);
+    const parsed = parse(g);
     if (!parsed?.firm) return false;
     // pair groups additionally need a *recognized* subdivision — a verbatim
     // 'City, Subdivision' is too weak ('BMS Test and Trials, Pascagoula')
@@ -1101,15 +1633,32 @@ export function parseLocationList(
   rawLocations: Array<string | null | undefined>,
   options?: ParseLocationOptions,
 ): ParsedLocationList {
+  const opts = resolveOptions(options);
   const concrete: Array<{
     location: LocationDto;
     label: string;
     key: string;
     blob?: string;
+    /** over-cap label kept verbatim, heuristics skipped */
+    verbatim?: boolean;
   }> = [];
   const seen = new Set<string>();
+  /** city|state key -> index in `concrete` (was a findIndex per entry: O(k²)) */
+  const csIndex = new Map<string, number>();
   let remoteMentioned = false;
   let workFromHomeType: WorkFromHomeType | null = null;
+
+  // parts are re-parsed by the split validators and again by emit(); one
+  // parse per distinct string per call
+  const memo = new Map<string, SingleParse | null>();
+  const parse: LabelParser = (label) => {
+    let parsed = memo.get(label);
+    if (parsed === undefined) {
+      parsed = parseSingleLabel(label, opts);
+      memo.set(label, parsed);
+    }
+    return parsed;
+  };
 
   const addEntry = (normalized: string, location: LocationDto, blob?: string) => {
     const label = [location.city, location.state, location.country]
@@ -1122,14 +1671,8 @@ export function parseLocationList(
       .filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
       .join('|')
       .toLowerCase();
-    const existingIdx = concrete.findIndex(
-      (c) =>
-        [c.location.city, c.location.state]
-          .filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
-          .join('|')
-          .toLowerCase() === csKey,
-    );
-    if (existingIdx >= 0) {
+    const existingIdx = csIndex.get(csKey);
+    if (existingIdx !== undefined) {
       const existing = concrete[existingIdx];
       if (!existing.location.country && location.country) {
         const dto = new LocationDto({ ...location });
@@ -1148,20 +1691,38 @@ export function parseLocationList(
     seen.add(key);
     const dto = new LocationDto({ ...location });
     if (normalized !== label) dto.text = normalized;
+    csIndex.set(csKey, concrete.length);
     concrete.push({ location: dto, label, key, blob });
+  };
+
+  /** over-cap label: one verbatim entry, no heuristics run on it */
+  const addVerbatim = (normalized: string) => {
+    const key = `\u0000verbatim|${normalized.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    concrete.push({
+      location: new LocationDto({
+        name: asSiteName(normalized),
+        text: normalized,
+      }),
+      label: normalized,
+      key,
+      blob: normalized,
+      verbatim: true,
+    });
   };
 
   const emit = (segment: string) => {
     if (isWorkplaceQualifierOnly(segment, true)) return;
     // word separators first ('Denver, CO & San Francisco, CA' etc.)
-    const wordParts = tryWordSplit(segment, options) ?? [segment];
+    const wordParts = tryWordSplit(segment, parse) ?? [segment];
     for (const wp of wordParts) {
       if (isWorkplaceQualifierOnly(wp, true)) continue;
       // then comma-packed groups
-      const groups = tryCommaGroupSplit(wp, options) ?? [wp];
+      const groups = tryCommaGroupSplit(wp, parse) ?? [wp];
       for (const g of groups) {
         if (isWorkplaceQualifierOnly(g, true)) continue;
-        const parsed = parseSingleLabel(g, options);
+        const parsed = parse(g);
         if (!parsed) continue;
         addEntry(g, parsed.location, parsed.blob);
       }
@@ -1181,19 +1742,30 @@ export function parseLocationList(
 
     if (isWorkplaceQualifierOnly(normalized, true)) continue;
 
-    // ';' and '|' are unambiguous list separators — split first, then extract
+    // ';' and '|' are unambiguous list separators — split first, then extract.
+    // The length cap applies per chunk (one site), so a long multi-site list
+    // keeps every structured site; only an over-cap chunk goes verbatim.
     for (const chunk of normalized.split(/\s*[;|]+\s*/)) {
-      const cleaned = extractGeo(chunk.trim());
+      const trimmed = chunk.trim();
+      if (!trimmed) continue;
+      if (opts.maxLabelLength > 0 && trimmed.length > opts.maxLabelLength) {
+        addVerbatim(trimmed);
+        continue;
+      }
+      const cleaned = extractGeo(trimmed);
       if (cleaned) emit(cleaned);
     }
   }
 
+  // bare 'Los Angeles' collapses into a 'Los Angeles, CA' entry — the set of
+  // cities that carry a state is computed once (was rebuilt per entry)
+  const citiesWithState = new Set<string>();
+  for (const { location } of concrete) {
+    const city = location.city?.trim().toLowerCase();
+    if (city && location.state) citiesWithState.add(city);
+  }
   const filteredConcrete = concrete.filter(
-    (item) =>
-      !isBareCityDuplicate(
-        item,
-        concrete.map((candidate) => candidate.location),
-      ),
+    (item) => !isBareCityDuplicate(item, citiesWithState),
   );
   const locations = filteredConcrete.map(({ location }) => location);
   const labels = filteredConcrete.map(({ label }) => label);
@@ -1231,8 +1803,22 @@ export function parseLocationList(
   const commonCountry = sole !== null && !veto ? sole : null;
   /** merged city blob excludes country-only entries */
   const siteLabels = filteredConcrete
-    .filter(({ location: l }) => l.city || l.state)
+    .filter(({ location: l, verbatim }) => l.city || l.state || verbatim)
     .map((item) => item.blob ?? item.label);
+
+  // legacy opt-in: remote-only input (no concrete site) -> { city: 'Remote' }
+  if (opts.emitRemoteCity && remoteMentioned && siteLabels.length === 0) {
+    return {
+      location: new LocationDto({
+        city: 'Remote',
+        country: commonCountry ?? undefined,
+      }),
+      locations,
+      labels,
+      remoteMentioned,
+      workFromHomeType,
+    };
+  }
 
   if (locations.length === 0) {
     return {
@@ -1268,6 +1854,48 @@ export function parseLocationList(
   return { location: merged, locations, labels, remoteMentioned, workFromHomeType };
 }
 
+/** One character of an address head run: `[A-Za-z\s]`. */
+const ADDRESS_HEAD_CHAR_RE = /[A-Za-z\s]/;
+const ADDRESS_LETTER_RE = /[A-Za-z]/;
+/** Sticky tails, tried at each comma: ', ST 12345' / ', ST[ 12345]'. */
+const US_ADDRESS_TAIL_ZIP_RE = /,\s+[A-Z]{2}\s+\d{5}/y;
+const US_ADDRESS_TAIL_OPTIONAL_ZIP_RE = /,\s+[A-Z]{2}(?:\s+\d{5})?/y;
+
+/**
+ * The first US 'City, ST ZIP' / 'City, ST' snippet in free text (a meta
+ * description, a whole detail page), found in linear time (Spec 1689). It is
+ * the same leftmost match as the regexes plugins ran with `.exec` over
+ * third-party HTML:
+ *  - zip 'required': `/[A-Za-z\s]+,\s+[A-Z]{2}\s+\d{5}/`
+ *  - zip 'optional': `/[A-Za-z][A-Za-z\s]+,\s+[A-Z]{2}(?:\s+\d{5})?/`
+ * Unanchored, those rescanned a long letters-and-spaces stretch from every
+ * start position — quadratic, 21.8 s on 110 KB of unpunctuated prose. A comma
+ * ends a head run, so each run's only candidate is the comma right after it:
+ * this walks the commas left to right, tries the tail there, and extends the
+ * head leftwards once for the first comma whose tail matches.
+ */
+export function findUsAddressSnippet(
+  text: string,
+  zip: 'required' | 'optional',
+): string | null {
+  const tail = zip === 'required' ? US_ADDRESS_TAIL_ZIP_RE : US_ADDRESS_TAIL_OPTIONAL_ZIP_RE;
+  for (let comma = text.indexOf(','); comma >= 0; comma = text.indexOf(',', comma + 1)) {
+    tail.lastIndex = comma;
+    if (!tail.test(text)) continue;
+    let start = comma;
+    while (start > 0 && ADDRESS_HEAD_CHAR_RE.test(text[start - 1])) start--;
+    if (zip === 'optional') {
+      // the head opens on a letter and has at least one more character
+      while (start < comma && !ADDRESS_LETTER_RE.test(text[start])) start++;
+      if (comma - start < 2) continue;
+    } else if (start === comma) {
+      continue;
+    }
+    return text.slice(start, tail.lastIndex);
+  }
+  return null;
+}
+
 /**
  * Parse a single location label (or a small multi-site string) into the merged
  * geographic view plus workplace flags. Shares the list pipeline so separators
@@ -1295,9 +1923,14 @@ function mergeWorkFromHomeType(
   return 'Hybrid or Remote';
 }
 
+/**
+ * A bare city ('Los Angeles') that another entry already carries WITH a state.
+ * `citiesWithState` holds the lower-cased cities of every state-bearing
+ * entry; the item itself has no state, so it can never match itself.
+ */
 function isBareCityDuplicate(
   item: { location: LocationDto; label: string },
-  locations: LocationDto[],
+  citiesWithState: ReadonlySet<string>,
 ): boolean {
   const city = item.location.city?.trim().toLowerCase();
   if (
@@ -1308,10 +1941,5 @@ function isBareCityDuplicate(
   ) {
     return false;
   }
-  return locations.some(
-    (candidate) =>
-      candidate !== item.location &&
-      candidate.city?.trim().toLowerCase() === city &&
-      Boolean(candidate.state),
-  );
+  return citiesWithState.has(city);
 }

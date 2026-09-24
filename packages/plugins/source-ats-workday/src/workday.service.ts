@@ -6,6 +6,7 @@ import {
   ScraperInputDto,
   JobResponseDto,
   JobPostDto,
+  LocationDto,
   CompensationDto,
   Site,
   DescriptionFormat,
@@ -17,6 +18,7 @@ import {
   markdownConverter,
   extractEmails,
   parseLocationList,
+  regionNameFromCode,
   randomSleep,
   salaryToCompensation,
 } from '@ever-jobs/common';
@@ -29,6 +31,7 @@ import {
   buildWorkdayDetailUrl,
   parseWorkdayPostedOn,
   workdayListingKey,
+  readAtsCountryOverlay,
 } from './workday.constants';
 import {
   WorkdayJobDetail,
@@ -263,7 +266,9 @@ export class WorkdayService implements IScraper {
 
     // Location: route every label (primary + additional + summary) through the
     // shared parser so multi-location postings are split, then fold in the
-    // requisition's ISO-2 country code when the US-only parser left it bare.
+    // requisition's ISO-2 country code when the parser left it bare (Spec 1689
+    // overlay, default ON; EVER_JOBS_ATS_COUNTRY_OVERLAY=false keeps the code
+    // in `countryCode` only).
     // `locationsText` is sometimes a bare "N Locations" count rather than a
     // place; drop it so the parser doesn't treat the count as a location.
     const summaryText = listing.locationsText?.trim();
@@ -276,8 +281,14 @@ export class WorkdayService implements IScraper {
       summaryText && !/^\d+\s+locations?$/i.test(summaryText) ? summaryText : null,
     ].map((label) => label?.replace(/_/g, ' ').replace(/\s+/g, ' ').trim() || null);
     const parsedLocations = parseLocationList(locationLabels);
-    const location = parsedLocations.location;
-    const locations = parsedLocations.locations;
+    const countryCode = info?.jobRequisitionLocation?.country?.alpha2Code;
+    const overlayCountry = readAtsCountryOverlay();
+    const location = overlayCountry
+      ? this.applyCountry(parsedLocations.location, countryCode)
+      : parsedLocations.location;
+    const locations = overlayCountry
+      ? this.applyCountryToSingleSite(parsedLocations.locations, countryCode)
+      : parsedLocations.locations;
 
     // Remote detection: Workday's remoteType enum, plus the parsed labels.
     const remoteType = [info?.remoteType, listing.remoteType]
@@ -326,7 +337,7 @@ export class WorkdayService implements IScraper {
       ...(workFromHomeType ? { workFromHomeType } : {}),
       site: Site.WORKDAY,
       // ATS-specific fields
-      countryCode: info?.jobRequisitionLocation?.country?.alpha2Code ?? null,
+      countryCode: countryCode ?? null,
       atsId,
       atsType: 'workday',
       department: info?.jobFamily?.[0]?.name ?? subtitleTexts[0] ?? null,
@@ -342,6 +353,37 @@ export class WorkdayService implements IScraper {
     if (format === DescriptionFormat.HTML) return html;
     if (format === DescriptionFormat.MARKDOWN) return markdownConverter(html);
     return htmlToPlainText(html);
+  }
+
+  /**
+   * Fold the requisition's ISO-2 country code into the parsed location when the
+   * parser did not already derive a country. Uses the runtime CLDR table via
+   * `regionNameFromCode`, mirroring the Lever pass; an unresolvable code leaves
+   * the location untouched. Restored by Spec 1689 after Spec 5118 removed it —
+   * gated by `EVER_JOBS_ATS_COUNTRY_OVERLAY`.
+   */
+  private applyCountry(
+    location: LocationDto | null,
+    countryCode: string | null | undefined,
+  ): LocationDto | null {
+    const country = regionNameFromCode(countryCode);
+    if (!country) return location;
+    if (!location) return new LocationDto({ country });
+    if (location.country) return location;
+    return new LocationDto({ ...location, country });
+  }
+
+  /**
+   * Apply {@link applyCountry} to a single-site `locations[]` so it agrees with
+   * `location`. The requisition country describes the primary site only, so a
+   * multi-site list is left as parsed.
+   */
+  private applyCountryToSingleSite(
+    locations: LocationDto[],
+    countryCode: string | null | undefined,
+  ): LocationDto[] {
+    if (locations.length !== 1) return locations;
+    return [this.applyCountry(locations[0], countryCode) ?? locations[0]];
   }
 
   /**

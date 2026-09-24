@@ -16,7 +16,9 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  normalizeCountryOnly,
   parseLocationText,
+  stripParentheticals,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -31,6 +33,7 @@ import {
   CLEVERCONNECT_OFFER_MARKER,
   CLEVERCONNECT_OFFER_ID_REGEX,
   CLEVERCONNECT_REMOTE_REGEX,
+  cleverConnectLocationHeuristicsEnabled,
 } from './cleverconnect.constants';
 import {
   CleverConnectJob,
@@ -526,11 +529,46 @@ export class CleverConnectService implements IScraper {
       return { city: null, state: null, country: null };
     }
 
+    if (cleverConnectLocationHeuristicsEnabled()) {
+      const locality = this.splitDashLocality(text);
+      if (locality) return locality;
+    }
+
     const parsed = parseLocationText(text).location;
     return {
       city: parsed?.city ?? null,
       state: parsed?.state ?? null,
       country: parsed?.country ?? null,
+    };
+  }
+
+  /**
+   * The board's "City (dept) - Region[, Country]" locality shape (Spec 1689
+   * restores this pre-5125 split; CLEVERCONNECT_LOCATION_HEURISTICS=false
+   * turns it off): the head before the spaced dash, minus the parenthesised
+   * département code, is the city; the tail is the region (state); a trailing
+   * comma token is the country (normalised when recognisable). Returns null —
+   * deferring to the shared parser — for labels without a spaced dash.
+   */
+  private splitDashLocality(
+    text: string,
+  ): { city: string | null; state: string | null; country: string | null } | null {
+    let body = text;
+    let country: string | null = null;
+    const commaParts = body.split(',').map((p) => this.cleanText(p)).filter((p): p is string => !!p);
+    if (commaParts.length > 1) {
+      country = commaParts[commaParts.length - 1];
+      body = commaParts.slice(0, commaParts.length - 1).join(', ');
+    }
+    const dashParts = body.split(/\s[-–]\s/).map((p) => this.cleanText(p)).filter((p): p is string => !!p);
+    if (dashParts.length < 2) return null;
+    // linear strip; same result as the former quadratic /\s*\([^)]*\)\s*/g
+    const city = this.cleanText(stripParentheticals(dashParts[0], ' ', { space: 'around' }));
+    if (!city || this.isRemoteToken(city)) return null;
+    return {
+      city,
+      state: dashParts[dashParts.length - 1],
+      country: country ? normalizeCountryOnly(country) ?? country : null,
     };
   }
 

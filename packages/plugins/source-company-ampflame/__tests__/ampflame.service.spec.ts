@@ -17,6 +17,7 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { AmpflameService } from '../src/ampflame.service';
+import { AMPFLAME_ALLOWED_HOSTS } from '../src/ampflame.constants';
 
 function respondWith(payload: unknown): void {
   getMock.mockResolvedValue({ data: payload });
@@ -134,5 +135,58 @@ describe('AmpflameService', () => {
     );
     expect(located.jobs).toHaveLength(1);
     expect(located.jobs[0].location?.state).toBe('IL');
+  });
+
+  describe('companyUrl pin-or-ignore (Spec 1689)', () => {
+    it('accepts an on-domain subdomain companyUrl and upgrades http', async () => {
+      respondWith(careersHtml);
+      await service.scrape(new ScraperInputDto({ companyUrl: 'http://www.ampflame.com/about/' }));
+      expect(getMock).toHaveBeenCalledWith('https://www.ampflame.com/about/');
+    });
+
+    it.each([
+      ['off-domain', 'https://evil.example/about/'],
+      ['lookalike', 'https://notampflame.com/about/'],
+      ['userinfo smuggling', 'https://ampflame.com@10.0.0.5/'],
+      ['internal IP', 'http://10.0.0.5/about/'],
+      ['IPv4-mapped loopback', 'https://[::ffff:127.0.0.1]/'],
+      ['malformed', 'ht!tp://::::'],
+    ])('ignores a %s companyUrl and fetches the default board', async (_label, companyUrl) => {
+      respondWith(careersHtml);
+      const res = await service.scrape(new ScraperInputDto({ companyUrl, resultsWanted: 9999 }));
+      expect(getMock).toHaveBeenCalledTimes(1);
+      expect(getMock).toHaveBeenCalledWith('https://ampflame.com/about/');
+      expect(res.jobs).toHaveLength(3);
+      expect(res.jobs[0].jobUrl).toBe('https://ampflame.com/about/');
+    });
+  });
+});
+
+describe('AmpflameService companyUrl hygiene (Spec 1689)', () => {
+  afterEach(() => getMock.mockReset());
+
+  it('logs only the host of a refused companyUrl, never its credentials or query', () => {
+    const svc = new AmpflameService();
+    const debug = jest
+      .spyOn((svc as unknown as { logger: { debug: (m: string) => void } }).logger, 'debug')
+      .mockImplementation(() => undefined);
+    (svc as unknown as { careersUrl(input: ScraperInputDto): string }).careersUrl(
+      new ScraperInputDto({ companyUrl: 'https://user:s3cret@evil.example/x?token=t0k' }),
+    );
+    const logged = debug.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged).toContain('evil.example');
+    expect(logged).not.toMatch(/s3cret|t0k|user:/);
+  });
+
+  it('pins every redirect hop to the plugin allowlist', async () => {
+    const { createHttpClient } = jest.requireMock('@ever-jobs/common') as {
+      createHttpClient: jest.Mock;
+    };
+    createHttpClient.mockClear();
+    getMock.mockRejectedValue(new Error('ECONNREFUSED'));
+    await new AmpflameService().scrape(new ScraperInputDto({})).catch(() => undefined);
+    expect(createHttpClient).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedRedirectHosts: AMPFLAME_ALLOWED_HOSTS }),
+    );
   });
 });

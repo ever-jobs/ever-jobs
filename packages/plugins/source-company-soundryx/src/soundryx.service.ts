@@ -11,13 +11,16 @@ import {
 } from '@ever-jobs/models';
 import {
   createHttpClient,
+  describeUrlForLog,
   htmlToPlainText,
   parseLocationText,
+  pinUrlToHosts,
   resolveCompensation,
 } from '@ever-jobs/common';
 import * as cheerio from 'cheerio';
 import type { AnyNode } from 'domhandler';
 import {
+  SOUNDRYX_ALLOWED_HOSTS,
   SOUNDRYX_APPLY_HEADING_RE,
   SOUNDRYX_CAREERS_URL,
   SOUNDRYX_CFEMAIL_ATTR,
@@ -70,9 +73,11 @@ export class SoundryxService implements IScraper {
       proxies: input.proxies,
       caCert: input.caCert,
       requestTimeout: input.requestTimeout ?? SOUNDRYX_DEFAULT_TIMEOUT_SECONDS,
+      // Spec 1689 — re-pin every redirect hop, not just the first URL
+      allowedRedirectHosts: SOUNDRYX_ALLOWED_HOSTS,
     });
 
-    const careersUrl = this.normalize(input.companyUrl) || SOUNDRYX_CAREERS_URL;
+    const careersUrl = this.careersUrl(input);
     const indexRes = await client.get<string>(careersUrl);
     const refs = this.parseIndex(cheerio.load(String(indexRes.data ?? '')), careersUrl);
     if (refs.length === 0) return [];
@@ -87,7 +92,33 @@ export class SoundryxService implements IScraper {
     return jobs;
   }
 
-  /** `a.srx-tile.is-link` tiles on the index. */
+  /**
+   * The careers index to fetch: the caller's `companyUrl` when it is on
+   * soundryx.com (or a subdomain), otherwise this plugin's board.
+   *
+   * Pin-or-ignore (Spec 1689), as `source-company-rdw` does: a company plugin
+   * scrapes one company, so an off-domain, internal or malformed `companyUrl`
+   * is a mistake or an attempt to aim our HTTP client elsewhere. Neither
+   * deserves a failed scrape — ignore it and say so. `http:` is upgraded.
+   */
+  private careersUrl(input: ScraperInputDto): string {
+    const requested = this.normalize(input.companyUrl);
+    if (!requested) return SOUNDRYX_CAREERS_URL;
+    const pinned = pinUrlToHosts(requested, SOUNDRYX_ALLOWED_HOSTS, { upgradeHttp: true });
+    if (!pinned) {
+      this.logger.debug(
+        `Soundryx: ignoring companyUrl on host \`${describeUrlForLog(requested)}\` - not an https URL on ${SOUNDRYX_ALLOWED_HOSTS.join(', ')}`,
+      );
+      return SOUNDRYX_CAREERS_URL;
+    }
+    return pinned;
+  }
+
+  /**
+   * `a.srx-tile.is-link` tiles on the index. Each tile's detail page is
+   * fetched next, so a tile linking off soundryx.com is skipped rather than
+   * followed (Spec 1689) — the index is third-party HTML.
+   */
   private parseIndex($: cheerio.CheerioAPI, careersUrl: string): SoundryxJobRef[] {
     const refs: SoundryxJobRef[] = [];
     $(SOUNDRYX_TILE_SELECTOR).each((_, el) => {
@@ -95,7 +126,13 @@ export class SoundryxService implements IScraper {
       const href = $a.attr('href')?.trim();
       const title = this.normalize($a.find(SOUNDRYX_TILE_TITLE_SELECTOR).first().text());
       if (!href || !title) return;
-      const url = this.resolveUrl(href, careersUrl);
+      const url = pinUrlToHosts(this.resolveUrl(href, careersUrl), SOUNDRYX_ALLOWED_HOSTS, {
+        upgradeHttp: true,
+      });
+      if (!url) {
+        this.logger.debug(`Soundryx: skipping off-site tile link \`${href.slice(0, 200)}\``);
+        return;
+      }
       const slug = url.match(/\/careers\/([^/]+)\/?$/)?.[1];
       if (!slug) return;
       const meta = this.normalize($a.find('p').first().text());
@@ -161,9 +198,30 @@ export class SoundryxService implements IScraper {
       const raw = $(el).parent().text();
       const body = raw.replace(/^\s*Location\s*:/i, '').trim();
       onsite = SOUNDRYX_ONSITE_RE.test(body);
-      text = body.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim() || null;
+      text = this.stripParentheticals(body).replace(/\s+/g, ' ').trim() || null;
     });
     return { text, onsite };
+  }
+
+  /**
+   * Replace every `(…)` with a space — the same result as the fork's
+   * `replace(/\s*\([^)]*\)\s*\/g, ' ')` once whitespace is collapsed, in one
+   * linear pass (Spec 1689). The regex's unanchored `\s*` was quadratic on a
+   * long whitespace run, and `[^)]*` rescanned to the end for every unclosed
+   * `(`; here the first `(` without a `)` after it ends the search.
+   */
+  private stripParentheticals(value: string): string {
+    let out = '';
+    let from = 0;
+    for (;;) {
+      const open = value.indexOf('(', from);
+      if (open < 0) break;
+      const close = value.indexOf(')', open + 1);
+      if (close < 0) break;
+      out += `${value.slice(from, open)} `;
+      from = close + 1;
+    }
+    return out + value.slice(from);
   }
 
   /** `h2#compensation` → the sibling `ul` text → resolveCompensation. */

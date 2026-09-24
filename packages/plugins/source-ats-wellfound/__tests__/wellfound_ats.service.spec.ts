@@ -192,4 +192,60 @@ describe('WellfoundAtsService', () => {
     expect(res.jobs).toHaveLength(0);
     expect(res.diagnostics?.reason).toBe('empty');
   });
+
+  /**
+   * Spec 1689 (fork-sync hardening): the remote-config map is per scrape. Nest
+   * providers are singletons, so these reuse ONE service instance.
+   */
+  describe('remote-config kinds are scoped per scrape', () => {
+    const remoteOk = {
+      'JobListingRemoteConfig:9': { __typename: 'JobListingRemoteConfig', id: '9', kind: 'remote_ok' },
+    };
+
+    it('a later scrape does not see an earlier scrape\'s remote-config entries', async () => {
+      // Scrape 1: listing -> RemoteConfig:9 = remote_ok (remote).
+      stub([{ html: '<html></html>', nextData: apolloPage([listing({ id: 'first' })], remoteOk) }]);
+      const first = await service.scrape(new ScraperInputDto({ companySlug: 'chipmotors' }));
+      expect(first.jobs[0].isRemote).toBe(true);
+
+      // Scrape 2 (another board): same ref, but its payload carries no config.
+      stub([{ html: '<html></html>', nextData: apolloPage([listing({ id: 'second', locationNames: ['Austin, TX'] })]) }]);
+      const second = await service.scrape(new ScraperInputDto({ companySlug: 'othercorp' }));
+
+      expect(second.jobs).toHaveLength(1);
+      expect(second.jobs[0].isRemote).toBe(false);
+    });
+
+    it('concurrent scrapes on one instance each use only their own remote-config entries', async () => {
+      const pageFor = (nextData: string) => ({
+        goto: jest.fn().mockResolvedValue(undefined),
+        content: jest.fn().mockResolvedValue('<html></html>'),
+        evaluate: jest.fn().mockResolvedValue(nextData),
+        context: jest.fn().mockReturnValue({ close: jest.fn().mockResolvedValue(undefined) }),
+        close: jest.fn().mockResolvedValue(undefined),
+      });
+      const onsite = {
+        'JobListingRemoteConfig:9': { __typename: 'JobListingRemoteConfig', id: '9', kind: 'onsite' },
+      };
+      jest
+        .spyOn(BrowserPool, 'getPage')
+        .mockResolvedValueOnce(pageFor(apolloPage([listing({ id: 'r' })], remoteOk)) as any)
+        .mockResolvedValueOnce(pageFor(apolloPage([listing({ id: 'o' })], onsite)) as any);
+
+      const [remote, office] = await Promise.all([
+        service.scrape(new ScraperInputDto({ companySlug: 'remoteco' })),
+        service.scrape(new ScraperInputDto({ companySlug: 'officeco' })),
+      ]);
+
+      expect(remote.jobs[0].isRemote).toBe(true);
+      expect(office.jobs[0].isRemote).toBe(false);
+    });
+
+    it('keeps no remote-config state on the service instance', async () => {
+      stub([{ html: '<html></html>', nextData: apolloPage([listing()], remoteOk) }]);
+      await service.scrape(new ScraperInputDto({ companySlug: 'chipmotors' }));
+
+      expect(Object.prototype.hasOwnProperty.call(service, 'lastRemoteConfigKind')).toBe(false);
+    });
+  });
 });

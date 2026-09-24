@@ -182,3 +182,31 @@ describe('ZennoAstronauticsService', () => {
     expect(paged.jobs).toHaveLength(1);
   });
 });
+
+/** Best of three wall-clock runs, in ms (one run can overshoot on a throttled pod). */
+function bestOf3Ms(fn: () => unknown): number {
+  let best = Infinity;
+  for (let i = 0; i < 3; i++) {
+    const started = performance.now();
+    fn();
+    best = Math.min(best, performance.now() - started);
+  }
+  return best;
+}
+
+describe('ZennoAstronauticsService scraped-text regexes stay linear (Spec 1689)', () => {
+  type Internals = { renderBlock(block: { children: Array<{ text: string }>; markDefs: [] }): string };
+  const render = (text: string) =>
+    (new ZennoAstronauticsService() as unknown as Internals).renderBlock({ children: [{ text }], markDefs: [] });
+
+  it('still drops trailing newlines and edge whitespace', () => {
+    expect(render('Build rockets\n\n\n')).toBe('Build rockets');
+    expect(render('  a\nb \n')).toBe('a\nb');
+  });
+
+  it('renders a block with a 20k-char inner newline run in linear time', () => {
+    const text = `a${'\n'.repeat(20_000)}b`;
+    expect(render(text)).toBe(text);
+    expect(bestOf3Ms(() => render(text))).toBeLessThan(50);
+  });
+});

@@ -25,6 +25,7 @@ import {
   JOBSOID_APPLY_PAGE_TEMPLATE,
   JOBSOID_DEFAULT_RESULTS,
   JOBSOID_HEADERS,
+  jobsoidLocationHeuristicsEnabled,
 } from './jobsoid.constants';
 import { JobsoidJob, JobsoidJobsResponse } from './jobsoid.types';
 
@@ -283,7 +284,26 @@ export class JobsoidService implements IScraper {
     // Fall back to the combined free-text label (e.g. "Milan - Milan").
     const label = loc.title?.trim();
     if (!label) return null;
-    return parseLocationText(label).location;
+    return this.parseLabel(label);
+  }
+
+  /**
+   * Parse the free-text location label. With JOBSOID_LOCATION_HEURISTICS on
+   * (default — Spec 1689 restores the pre-5125 split) a "City - State" label
+   * keeps the region after the spaced dash as the state, which the shared
+   * parser drops ("Pune - Maharashtra" → city only). Fields the shared parser
+   * found win; a workplace head ("Remote - US") is left to the parser.
+   */
+  private parseLabel(label: string): LocationDto | null {
+    const parsed = parseLocationText(label).location;
+    if (!jobsoidLocationHeuristicsEnabled() || parsed?.state) return parsed;
+    const [head, tail] = label
+      .split(',')[0]
+      .split(/\s[-–]\s/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (!head || !tail || /^(?:remote|hybrid|on-?site|anywhere)$/i.test(head)) return parsed;
+    return new LocationDto({ ...parsed, city: head, state: tail });
   }
 
   /**

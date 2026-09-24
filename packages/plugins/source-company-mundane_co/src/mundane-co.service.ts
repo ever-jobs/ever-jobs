@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { SourcePlugin } from '@ever-jobs/plugin';
 import {
   classifyScrapeError,
@@ -10,16 +10,26 @@ import {
   ScrapeDiagnostics,
   Site,
 } from '@ever-jobs/models';
-import { BrowserPool, createHttpClient, parseLocationText } from '@ever-jobs/common';
 import {
+  BrowserPool,
+  createHttpClient,
+  describeUrlForLog,
+  parseLocationText,
+  pinUrlToHosts,
+} from '@ever-jobs/common';
+import type { Page } from 'playwright';
+import {
+  MUNDANE_AIRTABLE_HOSTS,
   MUNDANE_AIRTABLE_HYDRATE_MS,
-  MUNDANE_APPLY_HOST_RE,
+  MUNDANE_ALLOWED_HOSTS,
+  MUNDANE_APPLY_HOSTS,
   MUNDANE_COMPANY_NAME,
   MUNDANE_DEFAULT_TIMEOUT_SECONDS,
   MUNDANE_JOB_ENTRY_RE,
   MUNDANE_JOIN_URL,
   MUNDANE_MAX_DETAIL_RENDERS,
   MUNDANE_ORIGIN,
+  readMundaneClosePoolAfterScrape,
 } from './mundane-co.constants';
 import { MundaneJobEntry } from './mundane-co.types';
 
@@ -30,8 +40,16 @@ import { MundaneJobEntry } from './mundane-co.types';
   companyDomains: ['mundane.co'],
 })
 @Injectable()
-export class MundaneCoService implements IScraper {
+export class MundaneCoService implements IScraper, OnModuleDestroy {
   private readonly logger = new Logger(MundaneCoService.name);
+
+  /**
+   * The shared browser pool is process-global, so it is closed on shutdown
+   * only — the same hook every other browser plugin uses (Spec 1689).
+   */
+  async onModuleDestroy(): Promise<void> {
+    await BrowserPool.close().catch(() => undefined);
+  }
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
     try {
@@ -53,7 +71,12 @@ export class MundaneCoService implements IScraper {
       this.logger.error(`Mundane scrape failed [${diagnostics.reason}]: ${diagnostics.detail}`);
       return new JobResponseDto([], diagnostics);
     } finally {
-      await BrowserPool.close().catch(() => undefined);
+      // Opt-in only (MUNDANE_CO_CLOSE_BROWSER_POOL_AFTER_SCRAPE=true): the
+      // fork closed the process-global pool here on every scrape, which
+      // killed every other plugin's in-flight browser scrape.
+      if (readMundaneClosePoolAfterScrape()) {
+        await BrowserPool.close().catch(() => undefined);
+      }
     }
   }
 
@@ -62,9 +85,11 @@ export class MundaneCoService implements IScraper {
       proxies: input.proxies,
       caCert: input.caCert,
       requestTimeout: input.requestTimeout ?? MUNDANE_DEFAULT_TIMEOUT_SECONDS,
+      // Spec 1689 — re-pin every redirect hop, not just the first URL
+      allowedRedirectHosts: MUNDANE_ALLOWED_HOSTS,
     });
 
-    const careersUrl = this.normalize(input.companyUrl) || MUNDANE_JOIN_URL;
+    const careersUrl = this.careersUrl(input);
     const shellRes = await client.get<string>(careersUrl);
     const bundleUrl = this.bundleUrl(String(shellRes.data ?? ''));
     if (!bundleUrl) return [];
@@ -74,6 +99,28 @@ export class MundaneCoService implements IScraper {
     return entries
       .map((entry) => this.toJobPost(entry))
       .filter((job): job is JobPostDto => job !== null);
+  }
+
+  /**
+   * The careers page to fetch: the caller's `companyUrl` when it is on
+   * mundane.co (or a subdomain), otherwise this plugin's board.
+   *
+   * Pin-or-ignore (Spec 1689), as `source-company-rdw` does: a company plugin
+   * scrapes one company, so an off-domain, internal or malformed `companyUrl`
+   * is a mistake or an attempt to aim our HTTP client elsewhere. Neither
+   * deserves a failed scrape — ignore it and say so. `http:` is upgraded.
+   */
+  private careersUrl(input: ScraperInputDto): string {
+    const requested = this.normalize(input.companyUrl);
+    if (!requested) return MUNDANE_JOIN_URL;
+    const pinned = pinUrlToHosts(requested, MUNDANE_ALLOWED_HOSTS, { upgradeHttp: true });
+    if (!pinned) {
+      this.logger.debug(
+        `Mundane: ignoring companyUrl on host \`${describeUrlForLog(requested)}\` - not an https URL on ${MUNDANE_ALLOWED_HOSTS.join(', ')}`,
+      );
+      return MUNDANE_JOIN_URL;
+    }
+    return pinned;
   }
 
   /** `/assets/index-{hash}.js` referenced by the careers shell. */
@@ -87,7 +134,7 @@ export class MundaneCoService implements IScraper {
     const out: MundaneJobEntry[] = [];
     for (const m of bundleJs.matchAll(MUNDANE_JOB_ENTRY_RE)) {
       const url = this.unescapeJs(m[4]);
-      if (!MUNDANE_APPLY_HOST_RE.test(url)) continue;
+      if (!this.hostIn(url, MUNDANE_APPLY_HOSTS)) continue;
       const title = this.normalize(this.unescapeJs(m[1]));
       if (!title) continue;
       out.push({
@@ -144,29 +191,55 @@ export class MundaneCoService implements IScraper {
    * Descriptions live on the Airtable shared forms behind the apply links.
    * Each form is a client-rendered hyperbase SPA, so the description is read
    * from the rendered DOM. LinkedIn apply links are never fetched.
+   *
+   * Only https airtable.com form URLs are opened (Spec 1689: the host is
+   * checked on the parsed URL, not with an unanchored regex), and the page and
+   * context this scrape opened are closed when it is done — never the shared
+   * pool, which other plugins are using.
    */
   private async attachDescriptions(jobs: JobPostDto[], input: ScraperInputDto): Promise<void> {
-    const targets = jobs
-      .filter((job) => this.airtableFormId(job.jobUrl ?? ''))
-      .slice(0, MUNDANE_MAX_DETAIL_RENDERS);
+    const targets: { job: JobPostDto; url: string }[] = [];
+    for (const job of jobs) {
+      if (targets.length >= MUNDANE_MAX_DETAIL_RENDERS) break;
+      const url = this.airtableFormUrl(job.jobUrl ?? '');
+      if (url) targets.push({ job, url });
+    }
     if (targets.length === 0) return;
 
     const proxy = input.proxies?.[0] ?? undefined;
     const timeoutMs = (input.requestTimeout ?? MUNDANE_DEFAULT_TIMEOUT_SECONDS) * 1000;
     const page = await BrowserPool.getPage({ stealth: true, proxy });
 
-    for (const job of targets) {
-      try {
-        await page.goto(job.jobUrl as string, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
-        await this.delay(MUNDANE_AIRTABLE_HYDRATE_MS);
-        const description = (await page.evaluate(AIRTABLE_DESCRIPTION_JS)) as string | null;
-        const text = this.normalize(description ?? '');
-        if (text) job.description = text;
-      } catch (error) {
-        this.logger.warn(
-          `Mundane: description render failed for ${job.jobUrl}: ${(error as Error).message}`,
-        );
+    try {
+      for (const { job, url } of targets) {
+        try {
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+          await this.delay(MUNDANE_AIRTABLE_HYDRATE_MS);
+          const description = (await page.evaluate(AIRTABLE_DESCRIPTION_JS)) as string | null;
+          const text = this.normalize(description ?? '');
+          if (text) job.description = text;
+        } catch (error) {
+          this.logger.warn(
+            `Mundane: description render failed for ${url}: ${(error as Error).message}`,
+          );
+        }
       }
+    } finally {
+      await this.closeOwnPage(page);
+    }
+  }
+
+  /**
+   * Close the page this scrape opened, and its context when that context is
+   * this page's own (a non-persistent context from `browser.newContext()`,
+   * whose `browser()` is non-null). A persistent context is shared by every
+   * plugin with the same launch identity, so it is left to `BrowserPool`.
+   */
+  private async closeOwnPage(page: Page): Promise<void> {
+    const context = page.context();
+    await page.close().catch(() => undefined);
+    if (context.browser() !== null) {
+      await context.close().catch(() => undefined);
     }
   }
 
@@ -197,13 +270,46 @@ export class MundaneCoService implements IScraper {
   }
 
   private linkedinJobId(url: string): string | null {
-    const m = /linkedin\.com\/jobs\/view\/(\d+)/.exec(url);
+    const parsed = this.parseHttpUrl(url);
+    if (!parsed || !this.hostIn(parsed, ['linkedin.com'])) return null;
+    const m = /^\/jobs\/view\/(\d+)/.exec(parsed.pathname);
     return m ? m[1] : null;
   }
 
   private airtableFormId(url: string): string | null {
-    const m = /airtable\.com\/[^/]+\/(pag[a-zA-Z0-9]+)/.exec(url);
+    const parsed = this.parseHttpUrl(url);
+    if (!parsed || !this.hostIn(parsed, MUNDANE_AIRTABLE_HOSTS)) return null;
+    const m = /^\/[^/]+\/(pag[a-zA-Z0-9]+)/.exec(parsed.pathname);
     return m ? m[1] : null;
+  }
+
+  /**
+   * The https URL to open for an Airtable shared form, or `null` when `url`
+   * is not one. The host is checked on the parsed URL (Spec 1689) — the
+   * fork's unanchored `/airtable\.com\/…/` also passed
+   * `http://10.0.0.5/airtable.com/x/pagX`.
+   */
+  private airtableFormUrl(url: string): string | null {
+    if (!this.airtableFormId(url)) return null;
+    return pinUrlToHosts(url, MUNDANE_AIRTABLE_HOSTS, { upgradeHttp: true });
+  }
+
+  /** An http(s) URL, parsed; `null` for anything else. */
+  private parseHttpUrl(url: string): URL | null {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** `true` when `url` is http(s) on one of `hosts` or a subdomain of one. */
+  private hostIn(url: string | URL, hosts: readonly string[]): boolean {
+    const parsed = typeof url === 'string' ? this.parseHttpUrl(url) : url;
+    if (!parsed) return false;
+    const host = parsed.hostname.toLowerCase().replace(/\.$/, '');
+    return hosts.some((h) => host === h || host.endsWith(`.${h}`));
   }
 
   /** Strip tracking params; LinkedIn keeps `origin + pathname` only. */

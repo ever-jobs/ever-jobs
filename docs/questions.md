@@ -10,6 +10,94 @@
 
 ---
 
+## Q-096 — Shared location parser: known mis-splits carried in from the fork (Spec 1689)
+
+**Context:** The fork-sync review (Spec 1689, lane A4) found shared-parser outputs that no
+lane owned. None is a regression against a test; each is reproduced on the fork tip
+(11c61771) and on the hardened tree. Recorded so they are not lost after the merge:
+
+| Label | Current output | Expected |
+|---|---|---|
+| `Sarajevo, Bosnia & Herzegovina` | two sites `{city:'Sarajevo', state:'Bosnia'}`, `{city:'Herzegovina'}`; merged city `Sarajevo, Bosnia; Herzegovina` | one site, country Bosnia and Herzegovina (the `&` word-split fires inside a country name) |
+| `Austin - TX` | `{city:'Austin', name:'TX'}` | `{city:'Austin', state:'TX'}` |
+| `Pune - Maharashtra` | `{city:'Pune', name:'Maharashtra'}` | `{city:'Pune', state:'Maharashtra'}` (a region, not a site name) |
+| `New York, NY 10001` | `{city:'New York', state:'NY', name:'10001'}` | the ZIP in `postalCode`, not `name` |
+| `Remote - US` vs `United States (Remote)` | per-site `text` is `US` for the first, absent for the second | one consistent rule for `text` |
+
+`LocationDto.text` is therefore "the per-site segment the parser read, when it differs from
+the structured fields" — not the raw source label. The GraphQL `Location.text` description
+was corrected to say so (Spec 1689); the DTO's own doc comment still says "verbatim".
+
+**Options:**
+
+- **A. One follow-up spec fixing the four mis-splits** (a country-name guard before the
+  `&`/`and` word split; ` - <US state code|known region>` read as `state`; a trailing
+  5-digit token read as `postalCode`) plus a single `text` rule.
+- **B. Make the parser always set `text` to the full raw label** and leave the splits.
+- **C. Leave as is.**
+
+**Default:** **C** until a spec is written — the outputs above are what the fork shipped.
+
+**Resolution:** _open — awaiting a spec._
+
+---
+
+## Q-095 — `allowBareStateProvince` default: fork (on) kept (Spec 1689)
+
+**Context:** Before the fork, `allowBareStateProvince` was opt-in ("Off by default, so every
+existing caller is unaffected") and only ~36 plugins used the parser at all; the other ~940
+emitted the raw label as `city`. The fork turned it on for everyone, so a bare `Virginia` /
+`VA` label is now `{ state: 'VA' }` instead of a city. Spec 1689 made it switchable
+(`EVER_JOBS_LOCATION_BARE_STATE`, per-call `allowBareStateProvince`) and kept the fork default.
+
+**Options:**
+
+- **A. Keep on (fork).** Bare state names become states — more structure; the fork's plugin
+  specs pin it.
+- **B. Restore off (pre-fork).** `Virginia` stays a city for every plugin; many fork plugin
+  specs would need their expectations rewritten.
+
+**Default:** **A**. `EVER_JOBS_LOCATION_BARE_STATE=false` restores B without a code change.
+
+**Resolution:** _open — owner to confirm._
+
+---
+
+## Q-094 — `emitRemoteCity` default: legacy `{ city: 'Remote' }` or the fork's no-Remote-city? (Spec 1689)
+
+**Context:** Before the fork, a remote-only label reached consumers as a city: the ~36 parser
+plugins emitted `{ city: 'Remote', country }`, and the ~940 others emitted the raw label
+(`Remote - US`, `United States (Remote)`) as `city`. The fork's parser never mints a Remote
+city: `Remote` gives `location: null`, `Remote - US` gives `{ country: 'United States' }`, and
+only `isRemote` / `remoteMentioned` carry the signal. REST, GraphQL `location { city }` and
+MCP therefore stop showing "Remote" for those jobs. Spec 1689 added `emitRemoteCity`
+(`EVER_JOBS_LOCATION_REMOTE_CITY`) and the review asked for its default to be the legacy one.
+
+Measured (full `packages/plugins/source-` run with the default flipped to `true`): 79 fork
+plugin spec files (83 tests) fail — 77 tests assert `location.city` is undefined for a remote
+listing, 5 assert `location` is `null`, 1 asserts the city is not `Remote`. Neither value reproduces develop
+574bd922 for the ~940 migrated plugins (they emitted the raw label, e.g. `Remote - US`). The
+dedup harm the review tied to this default is fixed independently: the canonical key's
+remote bucket now reads `isRemote` (dedup-hybrid passes it), and a parsed `Remote` /
+`Remote - US` hash-merges with an iCIMS `{ city: 'Remote' }` under both settings.
+
+**Options:**
+
+- **A. Fork default (`false`) in code; deployments that want the legacy text set
+  `EVER_JOBS_LOCATION_REMOTE_CITY=true`** (e.g. the ever-jobs API manifests in
+  `ever-co/k8s-gitops`). Fork plugin specs stay as upstream wrote them, so later fork syncs do
+  not re-break.
+- **B. Legacy default (`true`) in code.** Rewrite the 79 fork plugin specs' remote
+  expectations now, and every new fork plugin spec that asserts the fork's output on each
+  later sync.
+
+**Default:** **A** (Spec 1689 fix-up). Flipping to B is one line
+(`envDefaults().emitRemoteCity`) plus the spec rewrites.
+
+**Resolution:** _open — owner to decide._
+
+---
+
 ## Q-093 — Rippling: `ScraperInputDto` filters are ignored (known gap, needs a spec)
 
 **Context:** `source-ats-rippling` never reads `input.searchTerm`,
@@ -42,7 +130,6 @@ tracked until someone writes the spec.
 
 ---
 
-||||||| 062a1346
 ## Q-092 — `source-ats-avature` honours a verbatim `companyUrl` (pre-existing)
 
 **Context:** Spec 1688 closed the same shape in `source-ats-recruitee`, where Spec 5100 had let

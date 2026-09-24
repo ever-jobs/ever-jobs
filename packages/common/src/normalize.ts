@@ -98,13 +98,73 @@ const TITLE_SENIORITY_ALIASES: ReadonlyArray<[RegExp, string]> = [
   [/\bproduct manager\b/g, 'pm'],
 ];
 
-const TITLE_NOISE: ReadonlyArray<RegExp> = [
-  // Parenthesised/bracketed extras: "(Remote)", "[NYC]", etc.
-  /\([^)]*\)/g,
-  /\[[^\]]*\]/g,
+const TITLE_NOISE: ReadonlyArray<(s: string) => string> = [
+  // Parenthesised/bracketed extras: "(Remote)", "[NYC]", etc. — the same
+  // spans `/\([^)]*\)/g` and `/\[[^\]]*\]/g` match, found in linear time
+  (s) => stripDelimited(s, '(', ')'),
+  (s) => stripDelimited(s, '[', ']'),
   // Trailing slashes/pipes: "Backend / Go", "Engineer | Remote"
-  /[/|]/g,
+  (s) => s.replace(/[/|]/g, ' '),
 ];
+
+/**
+ * Replace every `open … close` span with a space — exactly the matches of
+ * `/\(([^)]*)\)/g` (for '(' / ')'): from an `open` to the FIRST `close` after
+ * it. Linear: once an `open` has no `close` after it, no later one can, so
+ * the scan stops; the regex instead rescanned the rest of the string from
+ * every unmatched `open` (a 20k-char '((((…' title took ~0.5 s).
+ */
+function stripDelimited(s: string, open: string, close: string): string {
+  let out = '';
+  let from = 0;
+  for (;;) {
+    const start = s.indexOf(open, from);
+    if (start < 0) break;
+    const end = s.indexOf(close, start + 1);
+    if (end < 0) break;
+    out += `${s.slice(from, start)} `;
+    from = end + 1;
+  }
+  return from === 0 ? s : out + s.slice(from);
+}
+
+const WHITESPACE_CHAR_RE = /\s/;
+
+/**
+ * Replace every `(…)` span — from a '(' to the FIRST ')' after it, exactly the
+ * spans `/\([^)]*\)/g` matches — with `replacement`, in one linear pass
+ * (Spec 1689). For plugins that strip parenthetical qualifiers out of scraped
+ * labels ('Leeds (Head Office), UK'): the `/\s*\([^)]*\)\s*\/g`-style regexes
+ * they used rescan a whitespace run from every position and the rest of the
+ * string from every unclosed '(' — quadratic, ~0.6 s on a 20k-char label.
+ *
+ * `space` reproduces the regex a call site used, exactly:
+ *  - 'keep'   (default) `/\([^)]*\)/g` — whitespace around a span stays;
+ *  - 'before' `/\s*\([^)]*\)/g` — the whitespace run before a span goes too;
+ *  - 'around' `/\s*\([^)]*\)\s*\/g` — the runs on both sides go too.
+ */
+export function stripParentheticals(
+  value: string,
+  replacement = ' ',
+  { space = 'keep' }: { space?: 'keep' | 'before' | 'around' } = {},
+): string {
+  let out = '';
+  let from = 0;
+  for (;;) {
+    const open = value.indexOf('(', from);
+    if (open < 0) break;
+    const close = value.indexOf(')', open + 1);
+    if (close < 0) break;
+    const head = value.slice(from, open);
+    // trimEnd() and `\s` strip the same (ECMAScript WhiteSpace + LineTerminator)
+    out += (space === 'keep' ? head : head.trimEnd()) + replacement;
+    from = close + 1;
+    if (space === 'around') {
+      while (from < value.length && WHITESPACE_CHAR_RE.test(value[from])) from++;
+    }
+  }
+  return from === 0 ? value : out + value.slice(from);
+}
 
 /**
  * Canonicalise a job title.
@@ -117,7 +177,7 @@ const TITLE_NOISE: ReadonlyArray<RegExp> = [
 export function normalizeTitle(input: string | null | undefined): string {
   if (!input) return '';
   let s = baseNormalize(input);
-  for (const re of TITLE_NOISE) s = s.replace(re, ' ');
+  for (const strip of TITLE_NOISE) s = strip(s);
   s = s.replace(PUNCT_RE, ' ');
   for (const [re, repl] of TITLE_SENIORITY_ALIASES) s = s.replace(re, repl);
   return s.replace(MULTI_WS_RE, ' ').trim();

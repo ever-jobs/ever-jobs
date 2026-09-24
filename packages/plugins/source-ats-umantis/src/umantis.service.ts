@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  normalizeCountryOnly,
   parseLocationText,
 } from '@ever-jobs/common';
 import {
@@ -30,6 +31,7 @@ import {
   UMANTIS_VACANCY_LINK_REGEX,
   UMANTIS_DATE_REGEX,
   UMANTIS_REMOTE_REGEX,
+  umantisLocationHeuristicsEnabled,
 } from './umantis.constants';
 import { UmantisIndexJob, UmantisDetail, UmantisJob } from './umantis.types';
 
@@ -494,12 +496,56 @@ export class UmantisService implements IScraper {
     if (!text || this.isRemoteToken(text)) {
       return { city: null, state: null, country: null };
     }
+    if (umantisLocationHeuristicsEnabled()) {
+      const cityCountry = this.cityWithParenCountry(text);
+      if (cityCountry) return cityCountry;
+    }
     const parsed = parseLocationText(text).location;
     return {
       city: parsed?.city ?? null,
       state: parsed?.state ?? null,
       country: parsed?.country ?? null,
     };
+  }
+
+  /**
+   * "Munich (Germany)" → city "Munich", country "Germany" (Spec 1689 restores
+   * this pre-5125 rule; UMANTIS_LOCATION_HEURISTICS=false turns it off). The
+   * country is normalised when recognisable ("(CH)" → "Switzerland") and kept
+   * verbatim otherwise, as before. Returns null — deferring to the shared
+   * parser — for labels without a single trailing parenthetical, or whose
+   * parenthetical is a workplace / numeric qualifier ("(Hybrid)", "(80%)").
+   */
+  private cityWithParenCountry(
+    text: string,
+  ): { city: string | null; state: string | null; country: string | null } | null {
+    const paren = this.splitTrailingParenthetical(text);
+    if (!paren) return null;
+    const city = this.cleanText(paren.head);
+    const token = this.cleanText(paren.inner);
+    if (!city || !token || city.includes(',')) return null;
+    if (/\d/.test(token) || /\b(?:remote|hybrid|on-?site|office|home|homeoffice)\b/i.test(token)) return null;
+    return { city, state: null, country: normalizeCountryOnly(token) ?? token };
+  }
+
+  /**
+   * 'Munich (Germany)' -> { head: 'Munich', inner: 'Germany' }: a paren-free
+   * head, ONE trailing '(…)' with no nested parens, then only whitespace —
+   * what `/^([^()]+?)\s*\(([^()]+)\)\s*$/` matched, found with indexOf
+   * (Spec 1689; the lazy head + `\s*` rescanned whitespace runs, quadratic).
+   * `head` is untrimmed at the start, as the regex group was.
+   */
+  private splitTrailingParenthetical(text: string): { head: string; inner: string } | null {
+    const open = text.indexOf('(');
+    if (open < 0) return null;
+    const close = text.indexOf(')', open + 1);
+    if (close < 0) return null;
+    const rawHead = text.slice(0, open);
+    const inner = text.slice(open + 1, close);
+    if (rawHead.includes(')') || !inner || inner.includes('(')) return null;
+    if (text.slice(close + 1).trim() !== '') return null;
+    const head = rawHead.trimEnd();
+    return head ? { head, inner } : null;
   }
 
   /** Detect remote roles from the title, location, or body text. */

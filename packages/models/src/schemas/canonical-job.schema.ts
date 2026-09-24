@@ -55,6 +55,8 @@ export const CanonicalJobSchema = z.object({
       LocationShapeSchema.extend({ id: z.string().nullable().optional() }),
     )
     .optional(),
+  /** ATS-declared ISO-3166 alpha-2 posting country, verbatim (Spec 1689). */
+  countryCode: z.string().min(1).optional(),
   description: z.string().optional(),
   url: z.string().url(),
   sources: z.array(SourceObservationSchema).min(1),
@@ -122,6 +124,8 @@ export const RawJobSchema = z.object({
     )
     .nullable()
     .optional(),
+  /** ATS-declared ISO-3166 alpha-2 posting country, verbatim (Spec 1689). */
+  countryCode: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   observedAt: z.string().datetime({ offset: true }).optional(),
 });

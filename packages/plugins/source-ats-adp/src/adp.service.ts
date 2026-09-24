@@ -26,13 +26,16 @@ import {
   toDateOnly,
 } from '@ever-jobs/common';
 import {
+  ADP_DEFAULT_MAX_LIST_PAGES,
   ADP_DETAIL_CONCURRENCY,
   ADP_HEADERS,
   ADP_HOSTS,
+  ADP_MAX_LIST_PAGES_ENV,
   ADP_PAGE_SIZE,
   adpCareersUrl,
   adpDetailUrl,
   adpListUrl,
+  parseAdpMaxListPages,
 } from './adp.constants';
 import { AdpResponse, AdpJob } from './adp.types';
 
@@ -42,6 +45,18 @@ type HttpClient = ReturnType<typeof createHttpClient>;
 interface AdpListing {
   host: string;
   jobs: AdpJob[];
+}
+
+/** How far one scrape may walk the paged requisition list. */
+interface AdpListLimits {
+  /**
+   * Stop paging once this many requisitions are held. ADP applies no
+   * post-list filter (no searchTerm/location filtering happens after the
+   * listing), so every requisition past `offset + resultsWanted` is never used.
+   */
+  budget: number;
+  /** Hard cap on list pages fetched, first page included (ADP_MAX_LIST_PAGES). */
+  maxPages: number;
 }
 
 @SourcePlugin({
@@ -71,7 +86,13 @@ export class AdpService implements IScraper {
     });
     client.setHeaders(ADP_HEADERS);
 
-    const listing = await this.fetchList(client, cid);
+    const resultsWanted = input.resultsWanted ?? 100;
+    const limits: AdpListLimits = {
+      budget: this.nonNegativeInt(input.offset, 0) + this.nonNegativeInt(resultsWanted, 100),
+      maxPages: this.resolveMaxListPages(),
+    };
+
+    const listing = await this.fetchList(client, cid, limits);
     if (!listing) {
       this.logger.error(
         `ADP: no host resolved the requisition list for cid ${cid}`,
@@ -86,7 +107,6 @@ export class AdpService implements IScraper {
       `ADP: found ${listing.jobs.length} raw jobs for ${cid} on ${listing.host}`,
     );
 
-    const resultsWanted = input.resultsWanted ?? 100;
     // The list feed omits the posting body; `requisitionDescription` lives only
     // on the per-requisition detail endpoint. Overlay the wanted slice.
     const wanted = listing.jobs.slice(0, resultsWanted);
@@ -124,13 +144,14 @@ export class AdpService implements IScraper {
   private async fetchList(
     client: HttpClient,
     cid: string,
+    limits: AdpListLimits,
   ): Promise<AdpListing | null> {
     for (const host of ADP_HOSTS) {
       try {
         const response = await client.get<AdpResponse>(adpListUrl(host, cid));
         const data = response.data;
         if (data && Array.isArray(data.jobRequisitions)) {
-          return { host, jobs: await this.fetchAllPages(client, host, cid, data) };
+          return { host, jobs: await this.fetchAllPages(client, host, cid, data, limits) };
         }
         this.logger.warn(`ADP: unexpected payload from ${host} for ${cid}`);
       } catch (err: any) {
@@ -145,21 +166,33 @@ export class AdpService implements IScraper {
   /**
    * Walk the remaining list pages: the API caps a response at `ADP_PAGE_SIZE`
    * requisitions and reports the real total in `meta.totalNumber`. Pages are
-   * addressed by `$skip`/`$top`; the loop stops on the last page, an empty or
-   * fully-duplicate page, or a page fetch failure (partial results kept — a
-   * truncated list beats none).
+   * addressed by `$skip`/`$top`; the loop stops on the last page, once
+   * `limits.budget` requisitions are held (nothing past it is used), at the
+   * `limits.maxPages` cap, on an empty or fully-duplicate page, or on a page
+   * fetch failure (partial results kept — a truncated list beats none).
    */
   private async fetchAllPages(
     client: HttpClient,
     host: string,
     cid: string,
     first: AdpResponse,
+    limits: AdpListLimits,
   ): Promise<AdpJob[]> {
     const jobs = [...(first.jobRequisitions ?? [])];
     const total = first.meta?.totalNumber ?? jobs.length;
     const seen = new Set(jobs.map((job) => job.itemID));
+    let pagesFetched = 1;
 
     for (let skip = ADP_PAGE_SIZE; jobs.length < total; skip += ADP_PAGE_SIZE) {
+      if (jobs.length >= limits.budget) break;
+      if (pagesFetched >= limits.maxPages) {
+        this.logger.warn(
+          `ADP: stopped at the ${limits.maxPages}-page list cap (${ADP_MAX_LIST_PAGES_ENV}) for ${cid}: ` +
+            `${jobs.length} of ${total} requisitions listed`,
+        );
+        break;
+      }
+      pagesFetched++;
       let page: AdpJob[];
       try {
         const response = await client.get<AdpResponse>(
@@ -180,6 +213,28 @@ export class AdpService implements IScraper {
       }
     }
     return jobs;
+  }
+
+  /**
+   * The list-page cap for this scrape, from `ADP_MAX_LIST_PAGES` (default
+   * 100). Read per scrape so a config change applies without a restart; an
+   * invalid value warns and uses the default.
+   */
+  private resolveMaxListPages(): number {
+    const raw = process.env[ADP_MAX_LIST_PAGES_ENV];
+    const parsed = parseAdpMaxListPages(raw);
+    if (parsed !== null) return parsed;
+    this.logger.warn(
+      `Ignoring invalid ${ADP_MAX_LIST_PAGES_ENV}="${raw}" (expected a positive integer); ` +
+        `using ${ADP_DEFAULT_MAX_LIST_PAGES}`,
+    );
+    return ADP_DEFAULT_MAX_LIST_PAGES;
+  }
+
+  private nonNegativeInt(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0
+      ? Math.floor(value)
+      : fallback;
   }
 
   /**

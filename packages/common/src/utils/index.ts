@@ -6,3 +6,4 @@ export * from './country-name';
 export * from './jsonld';
 export * from './site-from-domain';
 export * from './site-from-url';
+export * from './url-guard';

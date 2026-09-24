@@ -139,7 +139,9 @@ export class ZennoAstronauticsService implements IScraper {
       const href = this.linkHref(child.marks, block.markDefs);
       parts.push(href ? `${text.trim()} (${href})` : text);
     }
-    return parts.join('').replace(/\n+$/, '').trim();
+    // trim() already drops trailing newlines; the former /\n+$/ pass was
+    // quadratic on text with long inner newline runs (Spec 1689)
+    return parts.join('').trim();
   }
 
   private linkHref(

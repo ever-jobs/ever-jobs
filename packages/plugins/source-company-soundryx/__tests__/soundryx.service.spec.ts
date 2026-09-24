@@ -28,6 +28,7 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { SoundryxService } from '../src/soundryx.service';
+import { SOUNDRYX_ALLOWED_HOSTS } from '../src/soundryx.constants';
 
 function respondWithPages(pages: Record<string, string>): void {
   getMock.mockReset();
@@ -40,6 +41,21 @@ function respondWithPages(pages: Record<string, string>): void {
 
 function live(): void {
   respondWithPages({ 'https://soundryx.com/careers/': careersHtml, ...jobPages });
+}
+
+/**
+ * Best of three wall-clock runs, in ms. One run can overshoot a small budget
+ * on a throttled CI pod (CFS quota, GC pause); a super-linear regex overshoots
+ * it on every run, by orders of magnitude.
+ */
+function bestOf3Ms(fn: () => unknown): number {
+  let best = Infinity;
+  for (let i = 0; i < 3; i++) {
+    const started = performance.now();
+    fn();
+    best = Math.min(best, performance.now() - started);
+  }
+  return best;
 }
 
 describe('SoundryxService', () => {
@@ -140,5 +156,111 @@ describe('SoundryxService', () => {
     );
     expect(limited.jobs).toHaveLength(1);
     expect(limited.jobs[0].atsId).toBe('00002-founding-audio-ml-engineer');
+  });
+
+  describe('URL pinning (Spec 1689)', () => {
+    it('fetches an on-domain companyUrl and resolves tiles against it', async () => {
+      respondWithPages({
+        'https://www.soundryx.com/careers/': careersHtml,
+        'https://www.soundryx.com/careers/00001-founding-electrical-engineer/':
+          jobPages['https://soundryx.com/careers/00001-founding-electrical-engineer/'],
+      });
+      const res = await service.scrape(
+        new ScraperInputDto({ companyUrl: 'http://www.soundryx.com/careers/' }),
+      );
+      expect(getMock).toHaveBeenNthCalledWith(1, 'https://www.soundryx.com/careers/');
+      expect(res.jobs.map((j) => j.jobUrl)).toEqual([
+        'https://www.soundryx.com/careers/00001-founding-electrical-engineer/',
+      ]);
+    });
+
+    it.each([
+      ['off-domain', 'https://evil.example/careers/'],
+      ['lookalike', 'https://soundryx.com.evil.example/careers/'],
+      ['internal IP', 'http://10.96.0.1/careers/'],
+      ['IPv6 ULA', 'http://[fd00::1]/careers/'],
+      ['cluster DNS', 'http://svc.cluster.local/careers/'],
+    ])('ignores a %s companyUrl and fetches the default index', async (_label, companyUrl) => {
+      live();
+      const res = await service.scrape(new ScraperInputDto({ companyUrl }));
+      expect(getMock).toHaveBeenNthCalledWith(1, 'https://soundryx.com/careers/');
+      expect(res.jobs).toHaveLength(3);
+    });
+
+    it('never follows a tile that links off soundryx.com', async () => {
+      const index =
+        '<a class="srx-tile is-link" href="http://169.254.169.254/careers/00009-meta/"><h3>Meta</h3></a>' +
+        '<a class="srx-tile is-link" href="https://evil.example/careers/00008-evil/"><h3>Evil</h3></a>' +
+        '<a class="srx-tile is-link" href="//evil.example/careers/00007-proto/"><h3>Proto</h3></a>' +
+        '<a class="srx-tile is-link" href="/careers/00001-founding-electrical-engineer/"><h3>EE</h3></a>';
+      respondWithPages({
+        'https://soundryx.com/careers/': index,
+        'https://soundryx.com/careers/00001-founding-electrical-engineer/':
+          jobPages['https://soundryx.com/careers/00001-founding-electrical-engineer/'],
+      });
+      const res = await service.scrape(new ScraperInputDto({}));
+      const urls = getMock.mock.calls.map((c) => c[0] as string);
+      expect(urls).toEqual([
+        'https://soundryx.com/careers/',
+        'https://soundryx.com/careers/00001-founding-electrical-engineer/',
+      ]);
+      expect(res.jobs).toHaveLength(1);
+    });
+  });
+
+  describe('location parsing (Spec 1689)', () => {
+    type Internals = { stripParentheticals(value: string): string };
+    const strip = (s: string) =>
+      (service as unknown as Internals).stripParentheticals(s).replace(/\s+/g, ' ').trim();
+    const old = (s: string) => s.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+
+    it('matches the old parenthetical strip on ordinary and odd input', () => {
+      for (const s of [
+        'Los Angeles, CA (onsite)',
+        'Los Angeles, CA',
+        'A (x) B (y) C',
+        'A (b (c) d) e',
+        'A (unclosed',
+        'A ) B (c)',
+        '(x)',
+        '',
+      ]) {
+        expect(strip(s)).toBe(old(s));
+      }
+    });
+
+    it('stays linear on many unclosed parentheses and long whitespace runs', () => {
+      const nasty = `${'('.repeat(50_000)}${' '.repeat(50_000)}x`;
+      expect(bestOf3Ms(() => strip(nasty))).toBeLessThan(50);
+    });
+  });
+});
+
+describe('SoundryxService companyUrl hygiene (Spec 1689)', () => {
+  afterEach(() => getMock.mockReset());
+
+  it('logs only the host of a refused companyUrl, never its credentials or query', () => {
+    const svc = new SoundryxService();
+    const debug = jest
+      .spyOn((svc as unknown as { logger: { debug: (m: string) => void } }).logger, 'debug')
+      .mockImplementation(() => undefined);
+    (svc as unknown as { careersUrl(input: ScraperInputDto): string }).careersUrl(
+      new ScraperInputDto({ companyUrl: 'https://user:s3cret@evil.example/x?token=t0k' }),
+    );
+    const logged = debug.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged).toContain('evil.example');
+    expect(logged).not.toMatch(/s3cret|t0k|user:/);
+  });
+
+  it('pins every redirect hop to the plugin allowlist', async () => {
+    const { createHttpClient } = jest.requireMock('@ever-jobs/common') as {
+      createHttpClient: jest.Mock;
+    };
+    createHttpClient.mockClear();
+    getMock.mockRejectedValue(new Error('ECONNREFUSED'));
+    await new SoundryxService().scrape(new ScraperInputDto({})).catch(() => undefined);
+    expect(createHttpClient).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedRedirectHosts: SOUNDRYX_ALLOWED_HOSTS }),
+    );
   });
 });

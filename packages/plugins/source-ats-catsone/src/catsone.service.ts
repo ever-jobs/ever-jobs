@@ -18,6 +18,7 @@ import {
   extractEmails,
   parseLocationText,
   randomSleep,
+  stripParentheticals,
 } from '@ever-jobs/common';
 import {
   CATSONE_HOST_TEMPLATE,
@@ -30,6 +31,7 @@ import {
   CATSONE_REQUEST_DELAY_MS,
   CATSONE_DEFAULT_RESULTS,
   CATSONE_HEADERS,
+  catsoneLocationHeuristicsEnabled,
 } from './catsone.constants';
 import { CatsoneJobStub, CatsoneJobDetail, CatsoneTenantContext } from './catsone.types';
 
@@ -410,7 +412,7 @@ export class CatsoneService implements IScraper {
       }
     }
 
-    const locationDto = location ? parseLocationText(location).location : null;
+    const locationDto = location ? this.parseLocation(location) : null;
 
     return new JobPostDto({
       id: `catsone-${atsId}`,
@@ -478,6 +480,29 @@ export class CatsoneService implements IScraper {
     return slug
       .replace(/[-_]+/g, ' ')
       .replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  /**
+   * Parse a CATS location label. CATS labels often carry parenthetical
+   * qualifiers ("Leeds (Head Office), UK", "London (Hybrid)"); with
+   * CATSONE_LOCATION_HEURISTICS on (default — Spec 1689 restores the pre-5125
+   * behaviour) they are stripped before parsing so they never land in the
+   * city. When the parenthetical IS the geography ("Remote (Paris, FR)") the
+   * stripped label parses to nothing and the full label is parsed instead.
+   * The strip is linear (the former `/\s*\([^)]*\)/g` was quadratic on
+   * long whitespace runs and unclosed '('), and the stripped label is probed
+   * without the parser's legacy Remote city, so 'Remote (Paris, FR)' still
+   * falls back to Paris.
+   */
+  private parseLocation(label: string): LocationDto | null {
+    if (catsoneLocationHeuristicsEnabled()) {
+      const stripped = stripParentheticals(label, '', { space: 'before' }).trim();
+      if (stripped && stripped !== label) {
+        const parsed = parseLocationText(stripped, { emitRemoteCity: false }).location;
+        if (parsed) return parsed;
+      }
+    }
+    return parseLocationText(label).location;
   }
 
   /** Detect remote roles from the title or location text. */

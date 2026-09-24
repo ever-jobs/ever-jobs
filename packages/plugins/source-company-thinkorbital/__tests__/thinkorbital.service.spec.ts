@@ -73,9 +73,63 @@ describe('ThinkorbitalService', () => {
     for (const job of response.jobs) {
       expect(job.location?.city).toBe('Boulder');
       expect(job.location?.state).toBe('CO');
-      expect(job.location?.country).toBeUndefined();
+      // Spec 1689: ThinkOrbital hires only in the US — the country default is restored.
+      expect(job.location?.country).toBe('USA');
+      expect(job.locations).toEqual([job.location]);
       expect(job.location?.displayLocation()).toMatch(/Boulder/);
     }
+  });
+
+  /** Spec 1689 — pre-5125 location data restored on top of the shared parser. */
+  describe('location heuristics (THINKORBITAL_LOCATION_HEURISTICS)', () => {
+    const saved = process.env.THINKORBITAL_LOCATION_HEURISTICS;
+    const parse = (label: string) => (service as any).parseLocation(label);
+
+    beforeEach(() => {
+      delete process.env.THINKORBITAL_LOCATION_HEURISTICS;
+    });
+
+    afterAll(() => {
+      if (saved === undefined) delete process.env.THINKORBITAL_LOCATION_HEURISTICS;
+      else process.env.THINKORBITAL_LOCATION_HEURISTICS = saved;
+    });
+
+    it('fills a missing country with USA by default', () => {
+      const location = parse('Boulder, Colorado');
+      expect(location).toMatchObject({ city: 'Boulder', state: 'CO', country: 'USA' });
+    });
+
+    it('resolves the first US state named after the city in multi-site labels', () => {
+      const location = parse('Boulder, Colorado or Washington, DC Area');
+      expect(location).toMatchObject({ city: 'Boulder', state: 'CO', country: 'USA' });
+    });
+
+    it('keeps a country for a label with no parseable geography', () => {
+      expect(parse('Remote')).toMatchObject({ country: 'USA' });
+    });
+
+    it('never overwrites fields the shared parser found', () => {
+      const location = parse('Toronto, ON, Canada');
+      expect(location?.country).toBe('Canada');
+    });
+
+    it.each(['false', '0', 'off', 'NO'])('=%s returns the shared-parser output only', (value) => {
+      process.env.THINKORBITAL_LOCATION_HEURISTICS = value;
+      const location = parse('Boulder, Colorado');
+      expect(location).toMatchObject({ city: 'Boulder', state: 'CO' });
+      expect(location?.country).toBeUndefined();
+      expect(parse('Remote')).toBeNull();
+    });
+
+    it('switches off for scraped jobs end to end', async () => {
+      process.env.THINKORBITAL_LOCATION_HEURISTICS = 'false';
+      getMock.mockResolvedValueOnce({ data: fixture });
+
+      const response = await service.scrape(new ScraperInputDto({ resultsWanted: 999 }));
+
+      expect(response.jobs.length).toBeGreaterThan(0);
+      for (const job of response.jobs) expect(job.location?.country).toBeUndefined();
+    });
   });
 
   it('builds a markdown description from the labeled body sections', async () => {
@@ -143,5 +197,32 @@ describe('ThinkorbitalService', () => {
 
     expect(response.jobs).toHaveLength(0);
     expect(response.diagnostics).toBeDefined();
+  });
+});
+
+/** Best of three wall-clock runs, in ms (one run can overshoot on a throttled pod). */
+function bestOf3Ms(fn: () => unknown): number {
+  let best = Infinity;
+  for (let i = 0; i < 3; i++) {
+    const started = performance.now();
+    fn();
+    best = Math.min(best, performance.now() - started);
+  }
+  return best;
+}
+
+describe('ThinkorbitalService scraped-text regexes stay linear (Spec 1689)', () => {
+  const resolve = (raw: string) =>
+    (new ThinkorbitalService() as unknown as { resolveStateName(r: string): string | null }).resolveStateName(raw);
+
+  it('still splits on the same connectors', () => {
+    expect(resolve('Colorado or Texas')).toBe('CO');
+    expect(resolve('Mars  and  Texas')).toBe('TX');
+    expect(resolve('Moon, Utah')).toBe('UT');
+  });
+
+  it('resolves a 20k-char whitespace run in linear time', () => {
+    const raw = `Mars${' '.repeat(20_000)}Venus`;
+    expect(bestOf3Ms(() => resolve(raw))).toBeLessThan(50);
   });
 });

@@ -141,11 +141,16 @@ export class DedupHybridService implements IDedupEngine {
         }
       }
 
+      // Spec 1689 — `isRemote` feeds the key's remote bucket: a parsed
+      // 'Remote' (no location) or 'Remote - US' (`{ country }` only) keys to
+      // `remote`, the same as a source emitting `{ city: 'Remote' }`, so the
+      // two hash-merge in stage 1 instead of relying on MinHash.
       const keyInput = {
         title: raw.title ?? '',
         company: raw.companyName ?? '',
         location: raw.location ? formatLocation(raw.location) : '',
         locations: raw.locations,
+        isRemote: raw.isRemote,
       };
       prepared.push({
         index: i,
@@ -216,6 +221,9 @@ export class DedupHybridService implements IDedupEngine {
       // site lists genuinely differ (e.g. a repost that added a site).
       const locations = unionLocations(cluster, prepared);
       const offices = unionOffices(cluster, prepared);
+      // Spec 1689 — the ATS posting country (`JobPostDto.countryCode`) is
+      // carried onto the canonical record instead of being dropped here.
+      const countryCode = pickCountryCode(cluster, prepared);
 
       const titleVal = normalizeTitle(head.raw.title ?? '');
       const companyVal = normalizeCompany(head.raw.companyName ?? '');
@@ -228,6 +236,14 @@ export class DedupHybridService implements IDedupEngine {
       if (head.raw.description) {
         fields['description'] = provenance(head.raw.description, headSite, headSourceId, observedAt);
       }
+      if (countryCode) {
+        fields['countryCode'] = provenance(
+          countryCode.value,
+          (countryCode.raw.site as Site) ?? headSite,
+          String(countryCode.raw.id ?? countryCode.raw.atsId ?? countryCode.raw.jobUrl ?? headSourceId),
+          observedAt,
+        );
+      }
 
       const record: CanonicalJob = {
         canonicalJobId: head.canonicalJobId,
@@ -236,6 +252,7 @@ export class DedupHybridService implements IDedupEngine {
         location: locationVal,
         ...(locations.length > 0 ? { locations } : {}),
         ...(offices.length > 0 ? { offices } : {}),
+        ...(countryCode ? { countryCode: countryCode.value } : {}),
         description: head.raw.description ?? undefined,
         url: head.raw.jobUrl,
         sources: observations,
@@ -318,6 +335,23 @@ function unionOffices(
     }
   }
   return out;
+}
+
+/**
+ * The cluster's ATS posting country (`JobPostDto.countryCode`), head-first:
+ * the head's code when it carries one, else the first observation's that does.
+ * Kept verbatim (trimmed). Returns `null` when no observation carries one.
+ */
+function pickCountryCode(
+  cluster: ReadonlyArray<number>,
+  prepared: PreparedJob[],
+): { value: string; raw: JobPostDto } | null {
+  for (const pos of cluster) {
+    const raw = prepared[pos].raw;
+    const code = typeof raw.countryCode === 'string' ? raw.countryCode.trim() : '';
+    if (code) return { value: code, raw };
+  }
+  return null;
 }
 
 /**

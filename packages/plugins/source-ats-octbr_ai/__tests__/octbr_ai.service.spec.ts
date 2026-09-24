@@ -1,6 +1,16 @@
 import 'reflect-metadata';
+import { createHttpClient } from '@ever-jobs/common';
 import { JobType, ScraperInputDto, Site } from '@ever-jobs/models';
 import { OctbrAiService } from '../src/octbr_ai.service';
+import { OCTBR_AI_DETAIL_CONCURRENCY } from '../src/octbr_ai.constants';
+
+jest.mock('@ever-jobs/common', () => {
+  const actual = jest.requireActual('@ever-jobs/common');
+  return {
+    ...actual,
+    createHttpClient: jest.fn((...args: unknown[]) => actual.createHttpClient(...args)),
+  };
+});
 
 const LIST_JOB = (over: object = {}) => ({
   id: 712,
@@ -125,5 +135,141 @@ describe('OctbrAiService', () => {
     const service = serviceWith(async () => '<html><body>no jobs</body></html>');
     const { jobs } = await service.scrape(inputFrom());
     expect(jobs).toEqual([]);
+  });
+
+  describe('Spec 1689 hardening', () => {
+    function listingWith(jobs: object[]): string {
+      return dataPage({
+        jobsByDepartment: [{ department: 'Eng', jobs }],
+        organisation: { name: 'Starcloud' },
+      });
+    }
+
+    it.each([
+      ['10.0.0.1:6443/?x='],
+      ['evil.example#'],
+      ['x@169.254.169.254/latest/meta-data/?'],
+      ['kubernetes.default.svc/version?'],
+      ['star.cloud'],
+      ['star cloud'],
+      ['a'.repeat(64)],
+      ['starcloud/../admin'],
+    ])('refuses companySlug %p as bad_input without any request', async (slug) => {
+      const fetchImpl = jest.fn(okListing());
+      const service = serviceWith(fetchImpl);
+      const res = await service.scrape(inputFrom({ companySlug: slug }));
+      expect(res.jobs).toEqual([]);
+      expect(res.diagnostics?.reason).toBe('bad_input');
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('accepts a mixed-case hyphenated slug and trims it', async () => {
+      const fetchImpl = jest.fn(async () => '<html></html>');
+      const service = serviceWith(fetchImpl);
+      const res = await service.scrape(inputFrom({ companySlug: ' Star-Cloud-2 ' }));
+      expect(res.diagnostics).toBeUndefined();
+      expect(fetchImpl).toHaveBeenCalledWith('https://Star-Cloud-2.octbr.ai/');
+    });
+
+    it('never fetches an off-tenant job.url; rebuilds it from job.slug instead', async () => {
+      const fetched: string[] = [];
+      const service = serviceWith(async (url: string) => {
+        fetched.push(url);
+        if (url === 'https://starcloud.octbr.ai/') {
+          return listingWith([
+            LIST_JOB({ id: 1, slug: 'meta', url: 'http://169.254.169.254/latest/meta-data/' }),
+            LIST_JOB({ id: 2, slug: 'k8s', url: 'https://kubernetes.default.svc/api' }),
+            LIST_JOB({ id: 3, slug: 'other', url: 'https://othertenant.octbr.ai/jobs/x' }),
+            LIST_JOB({ id: 4, slug: 'sub', url: 'https://evil.starcloud.octbr.ai/jobs/x' }),
+            LIST_JOB({ id: 5, slug: 'plain', url: 'http://starcloud.octbr.ai/jobs/plain' }),
+          ]);
+        }
+        return DETAIL;
+      });
+      const { jobs } = await service.scrape(inputFrom());
+      expect(fetched.slice(1).sort()).toEqual(
+        [
+          'https://starcloud.octbr.ai/jobs/k8s',
+          'https://starcloud.octbr.ai/jobs/meta',
+          'https://starcloud.octbr.ai/jobs/other',
+          'https://starcloud.octbr.ai/jobs/plain',
+          'https://starcloud.octbr.ai/jobs/sub',
+        ].sort(),
+      );
+      expect(jobs).toHaveLength(5);
+      for (const job of jobs) {
+        expect(new URL(job.jobUrl!).hostname).toBe('starcloud.octbr.ai');
+        expect(job.description).toContain('Build satellites.');
+      }
+    });
+
+    it('resolves a relative job.url against the tenant origin', async () => {
+      const fetched: string[] = [];
+      const service = serviceWith(async (url: string) => {
+        fetched.push(url);
+        return url === 'https://starcloud.octbr.ai/'
+          ? listingWith([LIST_JOB({ url: '/jobs/relative-1' })])
+          : DETAIL;
+      });
+      const { jobs } = await service.scrape(inputFrom());
+      expect(fetched).toContain('https://starcloud.octbr.ai/jobs/relative-1');
+      expect(jobs[0].jobUrl).toBe('https://starcloud.octbr.ai/jobs/relative-1');
+    });
+
+    it('skips the detail fetch when job.url is off-tenant and there is no slug', async () => {
+      const fetched: string[] = [];
+      const service = serviceWith(async (url: string) => {
+        fetched.push(url);
+        return url === 'https://starcloud.octbr.ai/'
+          ? listingWith([LIST_JOB({ slug: '', url: 'https://evil.example/jobs/1' })])
+          : DETAIL;
+      });
+      const { jobs } = await service.scrape(inputFrom());
+      expect(fetched).toEqual(['https://starcloud.octbr.ai/']);
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0].jobUrl).toBe('https://starcloud.octbr.ai/');
+      expect(jobs[0].description ?? null).toBeNull();
+    });
+
+    it(`fetches details at most ${OCTBR_AI_DETAIL_CONCURRENCY} at a time and keeps order`, async () => {
+      const many = Array.from({ length: 13 }, (_, i) =>
+        LIST_JOB({
+          id: 100 + i,
+          title: `Role ${i}`,
+          slug: `role-${i}`,
+          url: `https://starcloud.octbr.ai/jobs/role-${i}`,
+        }),
+      );
+      let inFlight = 0;
+      let peak = 0;
+      const service = serviceWith(async (url: string) => {
+        if (url === 'https://starcloud.octbr.ai/') return listingWith(many);
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight--;
+        const n = Number(url.split('role-')[1]);
+        return dataPage({ job: { ...DETAIL_JOB, description: `<p>Detail ${n}</p>` } });
+      });
+      const { jobs } = await service.scrape(inputFrom());
+      expect(peak).toBeLessThanOrEqual(OCTBR_AI_DETAIL_CONCURRENCY);
+      expect(peak).toBeGreaterThan(1);
+      expect(jobs).toHaveLength(13);
+      jobs.forEach((job, i) => {
+        expect(job.title).toBe(`Role ${i}`);
+        expect(job.description).toContain(`Detail ${i}`);
+      });
+    });
+
+    it('passes proxies through but never the caller caCert (TLS verification stays on)', async () => {
+      (createHttpClient as jest.Mock).mockClear();
+      const service = serviceWith(okListing());
+      await service.scrape(inputFrom({ caCert: '/etc/ca.pem', proxies: ['http://p:1'] }));
+      expect(createHttpClient).toHaveBeenCalledWith(
+        expect.objectContaining({ proxies: ['http://p:1'], allowedRedirectHosts: ['octbr.ai'] }),
+      );
+      const options = (createHttpClient as jest.Mock).mock.calls[0][0];
+      expect(options).not.toHaveProperty('caCert');
+    });
   });
 });

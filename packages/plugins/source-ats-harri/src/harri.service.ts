@@ -16,6 +16,8 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  findUsAddressSnippet,
+  normalizeUsState,
   parseLocationText,
   randomSleep,
 } from '@ever-jobs/common';
@@ -27,6 +29,7 @@ import {
   HARRI_REQUEST_DELAY_MS,
   HARRI_DEFAULT_RESULTS,
   HARRI_HEADERS,
+  harriLocationHeuristicsEnabled,
 } from './harri.constants';
 import { HarriListJob, HarriDetailJob } from './harri.types';
 
@@ -495,7 +498,7 @@ export class HarriService implements IScraper {
         return {
           city: parsed.city ?? null,
           state: parsed.state ?? null,
-          country: parsed.country ?? null,
+          country: this.inferCountry(parsed.state ?? null, parsed.country ?? null, 'US'),
           raw: usMatch[0],
         };
       }
@@ -510,14 +513,14 @@ export class HarriService implements IScraper {
         return {
           city: parsed.city ?? null,
           state: parsed.state ?? null,
-          country: parsed.country ?? null,
+          country: this.inferCountry(parsed.state ?? null, parsed.country ?? null, 'GB'),
           raw: ukMatch[0],
         };
       }
       return {
         city: ukMatch[1].replace(/,\s*$/, '').trim(),
         state: null,
-        country: null,
+        country: this.inferCountry(null, null, 'GB'),
         raw: ukMatch[0],
       };
     }
@@ -533,16 +536,32 @@ export class HarriService implements IScraper {
     raw: string,
   ): { city: string | null; state: string | null; country: string | null } {
     // US: "San Jose, CA 95130" or "1030 El Paseo, San Jose, CA 95130" — pull the
-    // address-shaped substring out of prose before parsing.
-    const usRe = /([A-Za-z][A-Za-z\s]+,\s+[A-Z]{2}(?:\s+\d{5})?)/;
-    const usMatch = usRe.exec(raw);
-    const candidate = usMatch ? usMatch[0].trim() : raw;
+    // address-shaped substring out of prose before parsing (linear — the
+    // former unanchored regex was quadratic on long prose, Spec 1689).
+    const usMatch = findUsAddressSnippet(raw, 'optional');
+    const candidate = usMatch ? usMatch.trim() : raw;
     const parsed = parseLocationText(candidate).location;
+    const state = parsed?.state ?? null;
+    const country = parsed?.country ?? null;
     return {
       city: parsed?.city ?? null,
-      state: parsed?.state ?? null,
-      country: parsed?.country ?? null,
+      state,
+      country: usMatch ? this.inferCountry(state, country, 'US') : country,
     };
+  }
+
+  /**
+   * Country inference from the address shape (Spec 1689 — restores the
+   * `US` / `GB` stamps Spec 5125 removed; HARRI_LOCATION_HEURISTICS=false
+   * keeps the shared parser's literal-only country). A parsed country always
+   * wins. A `US` stamp additionally needs a real US state code, so a
+   * "City, XX" label whose 2-letter token is not a US state is never
+   * mislabelled.
+   */
+  private inferCountry(state: string | null, country: string | null, shape: 'US' | 'GB'): string | null {
+    if (country || !harriLocationHeuristicsEnabled()) return country;
+    if (shape === 'US') return state && normalizeUsState(state) ? 'US' : null;
+    return 'GB';
   }
 
   /** Build a LocationDto from the detail data. */

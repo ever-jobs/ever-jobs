@@ -19,6 +19,7 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { AdpService } from '../src/adp.service';
+import { ADP_DEFAULT_MAX_LIST_PAGES, parseAdpMaxListPages } from '../src/adp.constants';
 import { AdpJob } from '../src/adp.types';
 
 const LIST_RE = /\/job-requisitions\?cid=([^&]+)/;
@@ -312,5 +313,106 @@ describe('AdpService', () => {
     const res = await service.scrape(input());
 
     expect(res.jobs).toHaveLength(0);
+  });
+});
+
+/**
+ * Spec 1689 (fork-sync hardening): list pagination stops once the scrape holds
+ * what it will use (offset + resultsWanted — ADP applies no post-list filter)
+ * and never walks more than ADP_MAX_LIST_PAGES pages.
+ */
+describe('AdpService list pagination budget and page cap', () => {
+  let service: AdpService;
+  const saved = process.env.ADP_MAX_LIST_PAGES;
+
+  /** A 100-page (2,000 requisition) board. */
+  const bigBoard = () => Array.from({ length: 100 }, (_, n) => pageOf(n * 20, 20));
+  const listCalls = () =>
+    mockGet.mock.calls.map(([u]) => u as string).filter((u) => LIST_RE.test(u) && !DETAIL_RE.test(u));
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    service = new AdpService();
+    delete process.env.ADP_MAX_LIST_PAGES;
+  });
+
+  afterAll(() => {
+    if (saved === undefined) delete process.env.ADP_MAX_LIST_PAGES;
+    else process.env.ADP_MAX_LIST_PAGES = saved;
+  });
+
+  it('fetches only the first list page when resultsWanted fits in it', async () => {
+    mockApiPaged(bigBoard(), 2000);
+
+    const res = await service.scrape(input({ resultsWanted: 10 }));
+
+    expect(res.jobs).toHaveLength(10);
+    expect(listCalls()).toHaveLength(1);
+  });
+
+  it('stops paging once resultsWanted requisitions are held', async () => {
+    mockApiPaged(bigBoard(), 2000);
+
+    const res = await service.scrape(input({ resultsWanted: 45 }));
+
+    expect(res.jobs).toHaveLength(45);
+    // 20 + 20 + 20 = 60 >= 45 → exactly 3 list pages, not 100.
+    expect(listCalls()).toHaveLength(3);
+    expect(listCalls().some((u) => u.includes('$skip=60'))).toBe(false);
+  });
+
+  it('counts offset into the list budget', async () => {
+    mockApiPaged(bigBoard(), 2000);
+
+    await service.scrape(input({ resultsWanted: 10, offset: 30 }));
+
+    // offset 30 + wanted 10 = 40 → 2 list pages.
+    expect(listCalls()).toHaveLength(2);
+  });
+
+  it('caps list pages at the default of 100 even when resultsWanted is larger', async () => {
+    mockApiPaged(Array.from({ length: 150 }, (_, n) => pageOf(n * 20, 20)), 3000);
+
+    await service.scrape(input({ resultsWanted: 5000 }));
+
+    expect(listCalls()).toHaveLength(100);
+  });
+
+  it('honours ADP_MAX_LIST_PAGES', async () => {
+    process.env.ADP_MAX_LIST_PAGES = '3';
+    mockApiPaged(bigBoard(), 2000);
+
+    const res = await service.scrape(input({ resultsWanted: 9999 }));
+
+    expect(listCalls()).toHaveLength(3);
+    expect(res.jobs).toHaveLength(60);
+  });
+
+  it('ADP_MAX_LIST_PAGES=1 restores the pre-pagination first-page-only behaviour', async () => {
+    process.env.ADP_MAX_LIST_PAGES = '1';
+    mockApiPaged(bigBoard(), 2000);
+
+    const res = await service.scrape(input({ resultsWanted: 9999 }));
+
+    expect(listCalls()).toHaveLength(1);
+    expect(res.jobs).toHaveLength(20);
+  });
+
+  it.each(['0', '-2', 'abc', '2.5'])('ignores an invalid ADP_MAX_LIST_PAGES=%s and uses the default', async (raw) => {
+    process.env.ADP_MAX_LIST_PAGES = raw;
+    mockApiPaged([pageOf(0, 20), pageOf(20, 20), pageOf(40, 5)], 45);
+
+    const res = await service.scrape(input({ resultsWanted: 9999 }));
+
+    expect(res.jobs).toHaveLength(45);
+  });
+
+  it('parseAdpMaxListPages accepts positive integers only', () => {
+    expect(parseAdpMaxListPages(undefined)).toBe(ADP_DEFAULT_MAX_LIST_PAGES);
+    expect(parseAdpMaxListPages(' ')).toBe(ADP_DEFAULT_MAX_LIST_PAGES);
+    expect(parseAdpMaxListPages(' 7 ')).toBe(7);
+    expect(parseAdpMaxListPages('0')).toBeNull();
+    expect(parseAdpMaxListPages('1e3')).toBeNull();
+    expect(parseAdpMaxListPages('-1')).toBeNull();
   });
 });

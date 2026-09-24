@@ -110,6 +110,26 @@ export class BrowserPool {
   /** Default (non-stealth) User-Agent string. */
   private static readonly DEFAULT_USER_AGENT = USER_AGENT_POOL[0];
 
+  /** Default cap on live persistent contexts (see {@link maxPersistentContexts}). */
+  static readonly DEFAULT_MAX_PERSISTENT_CONTEXTS = 4;
+
+  /**
+   * Most persistent contexts kept alive at once (Spec 1689). Each distinct
+   * identity — and the identity includes a caller-supplied proxy — launches
+   * its own Chromium process and profile directory, so a caller rotating
+   * proxy strings could otherwise grow Chromium processes until shutdown.
+   * Over the cap, the least-recently-used IDLE context (no open page) is
+   * closed before a new one launches; a context with a page in use is never
+   * closed under its caller. `EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS`
+   * sets it; `0` = unbounded (the previous behaviour).
+   */
+  private static get maxPersistentContexts(): number {
+    const raw = process.env.EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS?.trim();
+    if (!raw) return this.DEFAULT_MAX_PERSISTENT_CONTEXTS;
+    const value = Number(raw);
+    return Number.isInteger(value) && value >= 0 ? value : this.DEFAULT_MAX_PERSISTENT_CONTEXTS;
+  }
+
   /** Pick a random element from an array. */
   private static pick<T>(arr: readonly T[]): T {
     return arr[Math.floor(Math.random() * arr.length)];
@@ -177,7 +197,12 @@ export class BrowserPool {
     const key = this.identityKey(userDataDir, identity);
 
     const existing = this.persistentContexts.get(key);
-    if (existing && this.isContextUsable(existing)) return existing;
+    if (existing && this.isContextUsable(existing)) {
+      // most-recently-used last (Map iteration order is the LRU order)
+      this.persistentContexts.delete(key);
+      this.persistentContexts.set(key, existing);
+      return existing;
+    }
     // A context that closed under us must not be handed out again.
     if (existing) this.persistentContexts.delete(key);
 
@@ -186,6 +211,7 @@ export class BrowserPool {
 
     const profileDir = this.profileDirFor(userDataDir, identity);
     const promise = (async () => {
+      await this.evictIdleOverCap();
       this.logger.log(
         `Launching persistent Chromium context (headful=${identity.headful}) at ${profileDir}…`,
       );
@@ -317,6 +343,31 @@ export class BrowserPool {
   /** Whether a cached persistent context is still usable. */
   private static isContextUsable(context: BrowserContext): boolean {
     return !this.closedContexts.has(context);
+  }
+
+  /**
+   * Make room under {@link maxPersistentContexts} before a launch: close the
+   * least-recently-used contexts that have no open page. When every context
+   * is busy the launch goes ahead over the cap (a scrape in flight is never
+   * cut off) and says so.
+   */
+  private static async evictIdleOverCap(): Promise<void> {
+    const cap = this.maxPersistentContexts;
+    if (cap <= 0) return;
+    for (const [key, context] of [...this.persistentContexts]) {
+      if (this.persistentContexts.size < cap) return;
+      const open = context.pages().filter((page) => !page.isClosed());
+      if (open.length > 0) continue;
+      // unmapped first, so its 'close' event is not reported as unexpected
+      this.persistentContexts.delete(key);
+      this.logger.log(`Closing idle persistent Chromium context ${key} (over the cap of ${cap})`);
+      await context.close().catch(() => undefined);
+    }
+    if (this.persistentContexts.size >= cap) {
+      this.logger.warn(
+        `${this.persistentContexts.size} persistent Chromium contexts are busy; launching over the cap of ${cap}`,
+      );
+    }
   }
 
   /** Drop a dead context so the next request relaunches instead of reusing it. */

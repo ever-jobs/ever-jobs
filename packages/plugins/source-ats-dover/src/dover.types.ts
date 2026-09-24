@@ -106,8 +106,10 @@ export interface DoverJobDetail {
 export interface DoverJob {
   /** Role id — used as the ATS id. */
   jobId: string;
-  /** Absolute public board URL. */
+  /** Absolute public URL used as `jobUrl` — shape per `DOVER_JOB_URL_STYLE`. */
   url: string;
+  /** Per-role apply-form URL (or the careers URL when no slug is known). */
+  applyUrl: string;
   /** Job display title. */
   title: string | null;
   /** Tenant company display name (from `client_name` / careers-page `name`). */

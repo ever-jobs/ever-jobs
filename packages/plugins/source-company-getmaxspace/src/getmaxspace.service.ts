@@ -9,9 +9,10 @@ import {
   ScrapeDiagnostics,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient, parseLocationText } from '@ever-jobs/common';
+import { createHttpClient, describeUrlForLog, parseLocationText, pinUrlToHosts } from '@ever-jobs/common';
 import * as cheerio from 'cheerio';
 import {
+  GETMAXSPACE_ALLOWED_HOSTS,
   GETMAXSPACE_CAREERS_URL,
   GETMAXSPACE_COL_SELECTOR,
   GETMAXSPACE_COMPANY_NAME,
@@ -55,14 +56,38 @@ export class GetMaxSpaceService implements IScraper {
       proxies: input.proxies,
       caCert: input.caCert,
       requestTimeout: input.requestTimeout ?? GETMAXSPACE_DEFAULT_TIMEOUT_SECONDS,
+      // Spec 1689 — re-pin every redirect hop, not just the first URL
+      allowedRedirectHosts: GETMAXSPACE_ALLOWED_HOSTS,
     });
 
-    const careersUrl = this.normalize(input.companyUrl) || GETMAXSPACE_CAREERS_URL;
+    const careersUrl = this.careersUrl(input);
     const res = await client.get<string>(careersUrl);
     const rows = this.parseCareersPage(cheerio.load(String(res.data ?? '')));
     return rows
       .map((row) => this.toJobPost(row))
       .filter((job): job is JobPostDto => job !== null);
+  }
+
+  /**
+   * The careers page to fetch: the caller's `companyUrl` when it is on
+   * getmaxspace.com (or a subdomain), otherwise this plugin's board.
+   *
+   * Pin-or-ignore (Spec 1689), as `source-company-rdw` does: a company plugin
+   * scrapes one company, so an off-domain, internal or malformed `companyUrl`
+   * is a mistake or an attempt to aim our HTTP client elsewhere. Neither
+   * deserves a failed scrape — ignore it and say so. `http:` is upgraded.
+   */
+  private careersUrl(input: ScraperInputDto): string {
+    const requested = this.normalize(input.companyUrl);
+    if (!requested) return GETMAXSPACE_CAREERS_URL;
+    const pinned = pinUrlToHosts(requested, GETMAXSPACE_ALLOWED_HOSTS, { upgradeHttp: true });
+    if (!pinned) {
+      this.logger.debug(
+        `Max Space: ignoring companyUrl on host \`${describeUrlForLog(requested)}\` - not an https URL on ${GETMAXSPACE_ALLOWED_HOSTS.join(', ')}`,
+      );
+      return GETMAXSPACE_CAREERS_URL;
+    }
+    return pinned;
   }
 
   private parseCareersPage($: cheerio.CheerioAPI): GetMaxSpaceJobRow[] {

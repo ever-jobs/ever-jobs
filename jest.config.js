@@ -1,5 +1,40 @@
+// ── TypeScript test transformer (Spec 1689) ─────────────────────────────────
+// Two supported ways to run the suites, picked by `JEST_TRANSFORMER`:
+//
+//   swc     (default) @swc/jest transpiles only — fast, but specs are NOT
+//           type-checked while they run. CI's `tsc --project
+//           tsconfig.typecheck.json` step covers type errors instead.
+//   ts-jest the pre-fork-sync transform (`preset: 'ts-jest'` + ts-jest over
+//           tsconfig.base.json): every spec is type-checked as it runs, so a
+//           type error fails the test. Slower. `npm run test:typed` sets it.
+//
+// An unrecognised value throws instead of silently falling back, so a typo
+// can never make a "typed" run quietly skip the type-check.
+const TS_TRANSFORMERS = {
+  swc: ['@swc/jest', {
+    jsc: {
+      parser: { syntax: 'typescript', decorators: true },
+      transform: { legacyDecorator: true, decoratorMetadata: true, useDefineForClassFields: false },
+      target: 'es2021',
+      keepClassNames: true,
+    },
+    module: { type: 'commonjs' },
+    sourceMaps: 'inline',
+  }],
+  'ts-jest': ['ts-jest', { tsconfig: 'tsconfig.base.json' }],
+};
+const requestedTransformer = (process.env.JEST_TRANSFORMER || '').trim().toLowerCase();
+const tsTransformer = requestedTransformer || 'swc';
+if (!Object.prototype.hasOwnProperty.call(TS_TRANSFORMERS, tsTransformer)) {
+  throw new Error(
+    `Unknown JEST_TRANSFORMER "${process.env.JEST_TRANSFORMER}" — expected one of: ${Object.keys(TS_TRANSFORMERS).join(', ')}`,
+  );
+}
+
 /** @type {import('jest').Config} */
 module.exports = {
+  // ts-jest mode restores the full pre-fork-sync config, preset included.
+  ...(tsTransformer === 'ts-jest' ? { preset: 'ts-jest' } : {}),
   testEnvironment: 'node',
   roots: ['<rootDir>/packages/', '<rootDir>/apps/', '<rootDir>/scripts/'],
   testMatch: ['**/__tests__/**/*.e2e-spec.ts', '**/__tests__/**/*.spec.ts'],
@@ -1881,16 +1916,8 @@ module.exports = {
     '^@ever-jobs/source-tesla-playwright$': '<rootDir>/packages/plugins/source-tesla-playwright/src/index.ts',
   },
   transform: {
-    '^.+\\.tsx?$': ['@swc/jest', {
-      jsc: {
-        parser: { syntax: 'typescript', decorators: true },
-        transform: { legacyDecorator: true, decoratorMetadata: true, useDefineForClassFields: false },
-        target: 'es2021',
-        keepClassNames: true,
-      },
-      module: { type: 'commonjs' },
-      sourceMaps: 'inline',
-    }],
+    // `swc` by default; `JEST_TRANSFORMER=ts-jest` for type-checked runs (see top).
+    '^.+\\.tsx?$': TS_TRANSFORMERS[tsTransformer],
     // Transform ESM-only packages (uuid v13+ ships as ESM .js)
     '[/\\\\]node_modules[/\\\\]uuid[/\\\\].+\\.js$': ['ts-jest', {
       tsconfig: 'tsconfig.base.json',

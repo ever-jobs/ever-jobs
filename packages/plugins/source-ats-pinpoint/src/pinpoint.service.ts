@@ -6,6 +6,7 @@ import {
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
 import { createHttpClient, parseLocationText, stripHtmlTags } from '@ever-jobs/common';
+import { pinpointLocationHeuristicsEnabled } from './pinpoint.constants';
 
 @SourcePlugin({
   site: Site.PINPOINT,
@@ -31,6 +32,9 @@ export class PinpointService implements IScraper {
       if (!parsed && !state) return null;
       const dto = parsed ?? new LocationDto({});
       if (state && !dto.state) dto.state = state;
+      // Spec 1689: the pre-5125 `name ?? city ?? province` city fallback
+      // (PINPOINT_LOCATION_HEURISTICS=false keeps the province in state only).
+      if (!label && state && !dto.city && pinpointLocationHeuristicsEnabled()) dto.city = state;
       return dto;
     }
 

@@ -11,13 +11,16 @@ import {
 } from '@ever-jobs/models';
 import {
   createHttpClient,
+  describeUrlForLog,
   extractEmails,
   extractJobType,
   htmlToPlainText,
   parseLocationText,
+  pinUrlToHosts,
 } from '@ever-jobs/common';
 import * as cheerio from 'cheerio';
 import {
+  THERMWOOD_ALLOWED_HOSTS,
   THERMWOOD_CARD_SELECTOR,
   THERMWOOD_CAREERS_URL,
   THERMWOOD_COMPANY_NAME,
@@ -66,14 +69,38 @@ export class ThermwoodService implements IScraper {
       proxies: input.proxies,
       caCert: input.caCert,
       requestTimeout: input.requestTimeout ?? THERMWOOD_DEFAULT_TIMEOUT_SECONDS,
+      // Spec 1689 — re-pin every redirect hop, not just the first URL
+      allowedRedirectHosts: THERMWOOD_ALLOWED_HOSTS,
     });
 
-    const careersUrl = this.normalize(input.companyUrl) || THERMWOOD_CAREERS_URL;
+    const careersUrl = this.careersUrl(input);
     const res = await client.get<string>(careersUrl);
     const cards = this.parseCareersPage(cheerio.load(String(res.data ?? '')));
     return cards
       .map((card) => this.toJobPost(card, careersUrl))
       .filter((job): job is JobPostDto => job !== null);
+  }
+
+  /**
+   * The careers page to fetch: the caller's `companyUrl` when it is on
+   * thermwood.com (or a subdomain), otherwise this plugin's board.
+   *
+   * Pin-or-ignore (Spec 1689), as `source-company-rdw` does: a company plugin
+   * scrapes one company, so an off-domain, internal or malformed `companyUrl`
+   * is a mistake or an attempt to aim our HTTP client elsewhere. Neither
+   * deserves a failed scrape — ignore it and say so. `http:` is upgraded.
+   */
+  private careersUrl(input: ScraperInputDto): string {
+    const requested = this.normalize(input.companyUrl);
+    if (!requested) return THERMWOOD_CAREERS_URL;
+    const pinned = pinUrlToHosts(requested, THERMWOOD_ALLOWED_HOSTS, { upgradeHttp: true });
+    if (!pinned) {
+      this.logger.debug(
+        `Thermwood: ignoring companyUrl on host \`${describeUrlForLog(requested)}\` - not an https URL on ${THERMWOOD_ALLOWED_HOSTS.join(', ')}`,
+      );
+      return THERMWOOD_CAREERS_URL;
+    }
+    return pinned;
   }
 
   private parseCareersPage($: cheerio.CheerioAPI): ThermwoodJobCard[] {

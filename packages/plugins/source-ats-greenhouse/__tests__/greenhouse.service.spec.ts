@@ -391,3 +391,30 @@ describe('GreenhouseService — Spec 5009', () => {
     });
   });
 });
+
+/** Best of three wall-clock runs, in ms (one run can overshoot on a throttled pod). */
+function bestOf3Ms(fn: () => unknown): number {
+  let best = Infinity;
+  for (let i = 0; i < 3; i++) {
+    const started = performance.now();
+    fn();
+    best = Math.min(best, performance.now() - started);
+  }
+  return best;
+}
+
+describe('GreenhouseService scraped-text regexes stay linear (Spec 1689)', () => {
+  type Internals = { officeGeoFromName(name: string | null): Record<string, unknown> };
+  const geo = (name: string) => (new GreenhouseService() as unknown as Internals).officeGeoFromName(name);
+
+  it('strips the same parentheticals as before', () => {
+    expect(geo('HQ (Main) - Austin, TX')).toMatchObject({ city: 'Austin', state: 'TX' });
+  });
+
+  it.each([
+    ['a whitespace run without a paren', `Austin${' '.repeat(20_000)}x`],
+    ['a whitespace run before a paren', `Austin${' '.repeat(20_000)}(x)`],
+  ])('reads a 20k-char office name with %s in linear time', (_name, name) => {
+    expect(bestOf3Ms(() => geo(name))).toBeLessThan(50);
+  });
+});

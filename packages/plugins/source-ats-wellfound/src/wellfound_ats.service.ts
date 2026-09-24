@@ -62,6 +62,10 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
     try {
       page = await BrowserPool.getPage({ stealth: true, proxy });
       const listings = new Map<string, WellfoundAtsJobListing>();
+      // Apollo JobListingRemoteConfig ref → kind, for THIS scrape only. It must
+      // not live on the (singleton) service: a shared map grows for the life of
+      // the process and leaks entries between concurrent scrapes.
+      const remoteConfigKind: Record<string, string | undefined> = {};
       let startupName: string | null = null;
       let declaredPages = 0;
       let pagesRead = 0;
@@ -126,7 +130,7 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
           }
         }
         pagesRead++;
-        Object.assign(this.lastRemoteConfigKind, this.collectRemoteConfigKind(data));
+        Object.assign(remoteConfigKind, this.collectRemoteConfigKind(data));
 
         if (listings.size === before) break; // ?page= ignored or past the end
         if (listings.size >= resultsWanted) break;
@@ -138,7 +142,7 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
         if (partial.length) {
           const posts = partial
             .slice(0, resultsWanted)
-            .map((l) => this.mapListing(l, startupName, input.descriptionFormat))
+            .map((l) => this.mapListing(l, startupName, remoteConfigKind, input.descriptionFormat))
             .filter((p): p is JobPostDto => p !== null);
           return new JobResponseDto(posts, new ScrapeDiagnostics('partial', 'Cloudflare challenge mid-pagination'));
         }
@@ -153,7 +157,7 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
 
       const jobPosts = [...listings.values()]
         .slice(0, resultsWanted)
-        .map((l) => this.mapListing(l, startupName, input.descriptionFormat))
+        .map((l) => this.mapListing(l, startupName, remoteConfigKind, input.descriptionFormat))
         .filter((p): p is JobPostDto => p !== null);
 
       this.logger.log(`Wellfound ATS: mapped ${jobPosts.length} jobs for ${slug}`);
@@ -173,9 +177,10 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
     }
   }
 
-  /** Last remoteConfig kind seen — set during enumeration, consumed by mapListing. */
-  private lastRemoteConfigKind: Record<string, string | undefined> = {};
-
+  /**
+   * JobListingRemoteConfig ref → kind from one board page. The caller merges
+   * each page into a per-scrape map consumed by mapListing.
+   */
   private collectRemoteConfigKind(data: Record<string, any>): Record<string, string | undefined> {
     const kinds: Record<string, string | undefined> = {};
     for (const [key, entry] of Object.entries(data)) {
@@ -203,6 +208,7 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
   private mapListing(
     listing: WellfoundAtsJobListing,
     startupName: string | null,
+    remoteConfigKind: Record<string, string | undefined>,
     format?: DescriptionFormat,
   ): JobPostDto | null {
     if (!listing.id || !listing.title) return null;
@@ -225,7 +231,7 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
     const locationParsed = parseLocationList(listing.locationNames ?? []);
 
     const remoteKind = listing.remoteConfig?.__ref
-      ? this.lastRemoteConfigKind[listing.remoteConfig.__ref]
+      ? remoteConfigKind[listing.remoteConfig.__ref]
       : undefined;
     const isRemote = Boolean(listing.remote) || /remote/i.test(remoteKind ?? '');
 
