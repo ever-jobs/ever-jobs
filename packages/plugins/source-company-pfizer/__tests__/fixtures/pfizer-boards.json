@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "pfizer:1:PfizerCareers"
+      },
+      "atsIdPrefix": "wd-pfizer-"
+    }
+  ],
+  "responses": {
+    "https://pfizer.wd1.myworkdayjobs.com/wday/cxs/pfizer/PfizerCareers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Director, Consumer Products & Surfaces",
+          "externalPath": "/job/United-States---New-York---New-York-City/Director--Consumer-Products---Surfaces_4963297-1",
+          "locationsText": "6 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "4963297"
+          ]
+        },
+        {
+          "title": "代谢事业部-医学信息沟通专员-佛山",
+          "externalPath": "/job/China---Guangdong---Foshan/--_4964537",
+          "locationsText": "China - Guangdong - Foshan",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "4964537"
+          ]
+        },
+        {
+          "title": "肺癌产品组-医学信息沟通专员-武汉",
+          "externalPath": "/job/China---Hubei---Wuhan/--_4964543",
+          "locationsText": "China - Hubei - Wuhan",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "4964543"
+          ]
+        }
+      ]
+    },
+    "https://pfizer.wd1.myworkdayjobs.com/wday/cxs/pfizer/PfizerCareers/job/United-States---New-York---New-York-City/Director--Consumer-Products---Surfaces_4963297-1": {
+      "jobPostingInfo": {
+        "title": "Director, Consumer Products & Surfaces",
+        "jobDescription": "<p>Director, Consumer Products &amp; Surfaces at Pfizer.</p>",
+        "location": "6 Locations",
+        "jobReqId": "4963297",
+        "externalUrl": "https://pfizer.wd1.myworkdayjobs.com/PfizerCareers/job/United-States---New-York---New-York-City/Director--Consumer-Products---Surfaces_4963297-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "pfizer"
+      }
+    },
+    "https://pfizer.wd1.myworkdayjobs.com/wday/cxs/pfizer/PfizerCareers/job/China---Guangdong---Foshan/--_4964537": {
+      "jobPostingInfo": {
+        "title": "代谢事业部-医学信息沟通专员-佛山",
+        "jobDescription": "<p>代谢事业部-医学信息沟通专员-佛山 at Pfizer.</p>",
+        "location": "China - Guangdong - Foshan",
+        "jobReqId": "4964537",
+        "externalUrl": "https://pfizer.wd1.myworkdayjobs.com/PfizerCareers/job/China---Guangdong---Foshan/--_4964537",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "pfizer"
+      }
+    },
+    "https://pfizer.wd1.myworkdayjobs.com/wday/cxs/pfizer/PfizerCareers/job/China---Hubei---Wuhan/--_4964543": {
+      "jobPostingInfo": {
+        "title": "肺癌产品组-医学信息沟通专员-武汉",
+        "jobDescription": "<p>肺癌产品组-医学信息沟通专员-武汉 at Pfizer.</p>",
+        "location": "China - Hubei - Wuhan",
+        "jobReqId": "4964543",
+        "externalUrl": "https://pfizer.wd1.myworkdayjobs.com/PfizerCareers/job/China---Hubei---Wuhan/--_4964543",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "pfizer"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "pfizer-4963297",
+      "title": "Director, Consumer Products & Surfaces"
+    },
+    {
+      "id": "pfizer-4964537",
+      "title": "代谢事业部-医学信息沟通专员-佛山"
+    },
+    {
+      "id": "pfizer-4964543",
+      "title": "肺癌产品组-医学信息沟通专员-武汉"
+    }
+  ]
+}

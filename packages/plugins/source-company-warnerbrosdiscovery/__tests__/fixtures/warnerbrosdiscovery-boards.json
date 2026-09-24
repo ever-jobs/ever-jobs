@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "warnerbros:5:global"
+      },
+      "atsIdPrefix": "wd-warnerbros-"
+    }
+  ],
+  "responses": {
+    "https://warnerbros.wd5.myworkdayjobs.com/wday/cxs/warnerbros/global/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "TikTok Social Programming, Bleacher Report (Temporary)",
+          "externalPath": "/job/GA-Atlanta-1050-Techwood-Drive-NW/TikTok-Social-Programming--Bleacher-Report--Temporary-_R000108694",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R000108694"
+          ]
+        },
+        {
+          "title": "Senior Software Developer",
+          "externalPath": "/job/Kanata-307-Legget-Dr/Senior-Software-Developer_R000105677",
+          "locationsText": "Kanata 307 Legget Dr.",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R000105677"
+          ]
+        },
+        {
+          "title": "Manager, Software Development",
+          "externalPath": "/job/Kanata-307-Legget-Dr/Manager--Software-Development_R000105669",
+          "locationsText": "Kanata 307 Legget Dr.",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R000105669"
+          ]
+        }
+      ]
+    },
+    "https://warnerbros.wd5.myworkdayjobs.com/wday/cxs/warnerbros/global/job/GA-Atlanta-1050-Techwood-Drive-NW/TikTok-Social-Programming--Bleacher-Report--Temporary-_R000108694": {
+      "jobPostingInfo": {
+        "title": "TikTok Social Programming, Bleacher Report (Temporary)",
+        "jobDescription": "<p>TikTok Social Programming, Bleacher Report (Temporary) at Warner Bros. Discovery.</p>",
+        "location": "2 Locations",
+        "jobReqId": "R000108694",
+        "externalUrl": "https://warnerbros.wd5.myworkdayjobs.com/global/job/GA-Atlanta-1050-Techwood-Drive-NW/TikTok-Social-Programming--Bleacher-Report--Temporary-_R000108694",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "warnerbros"
+      }
+    },
+    "https://warnerbros.wd5.myworkdayjobs.com/wday/cxs/warnerbros/global/job/Kanata-307-Legget-Dr/Senior-Software-Developer_R000105677": {
+      "jobPostingInfo": {
+        "title": "Senior Software Developer",
+        "jobDescription": "<p>Senior Software Developer at Warner Bros. Discovery.</p>",
+        "location": "Kanata 307 Legget Dr.",
+        "jobReqId": "R000105677",
+        "externalUrl": "https://warnerbros.wd5.myworkdayjobs.com/global/job/Kanata-307-Legget-Dr/Senior-Software-Developer_R000105677",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "warnerbros"
+      }
+    },
+    "https://warnerbros.wd5.myworkdayjobs.com/wday/cxs/warnerbros/global/job/Kanata-307-Legget-Dr/Manager--Software-Development_R000105669": {
+      "jobPostingInfo": {
+        "title": "Manager, Software Development",
+        "jobDescription": "<p>Manager, Software Development at Warner Bros. Discovery.</p>",
+        "location": "Kanata 307 Legget Dr.",
+        "jobReqId": "R000105669",
+        "externalUrl": "https://warnerbros.wd5.myworkdayjobs.com/global/job/Kanata-307-Legget-Dr/Manager--Software-Development_R000105669",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "warnerbros"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "warnerbrosdiscovery-R000108694",
+      "title": "TikTok Social Programming, Bleacher Report (Temporary)"
+    },
+    {
+      "id": "warnerbrosdiscovery-R000105677",
+      "title": "Senior Software Developer"
+    },
+    {
+      "id": "warnerbrosdiscovery-R000105669",
+      "title": "Manager, Software Development"
+    }
+  ]
+}

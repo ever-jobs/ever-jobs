@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "philips:3:jobs-and-careers"
+      },
+      "atsIdPrefix": "wd-philips-"
+    }
+  ],
+  "responses": {
+    "https://philips.wd3.myworkdayjobs.com/wday/cxs/philips/jobs-and-careers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Field Service Engineer - Imaging Systems (Field: Shreveport, LA)",
+          "externalPath": "/job/Shreveport-Louisiana-United-States/Field-Service-Engineer---Imaging-Systems--Field--Shreveport--LA-_591283",
+          "locationsText": "Shreveport, Louisiana, United States",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "591283"
+          ]
+        },
+        {
+          "title": "Technical Consultant - Patient Monitoring (Field: Kansas City, KS/MO)",
+          "externalPath": "/job/Kansas-City-Kansas-United-States/Technical-Consultant---Patient-Monitoring--Field--Kansas-City--KS-MO-_589159",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "589159"
+          ]
+        },
+        {
+          "title": "Executive Legal Assistant (Cambridge, MA)",
+          "externalPath": "/job/Cambridge-US-Massachusetts-United-States/Executive-Legal-Assistant--Cambridge--MA-_588597",
+          "locationsText": "Cambridge (US), Massachusetts, United States",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "588597"
+          ]
+        }
+      ]
+    },
+    "https://philips.wd3.myworkdayjobs.com/wday/cxs/philips/jobs-and-careers/job/Shreveport-Louisiana-United-States/Field-Service-Engineer---Imaging-Systems--Field--Shreveport--LA-_591283": {
+      "jobPostingInfo": {
+        "title": "Field Service Engineer - Imaging Systems (Field: Shreveport, LA)",
+        "jobDescription": "<p>Field Service Engineer - Imaging Systems (Field: Shreveport, LA) at Philips.</p>",
+        "location": "Shreveport, Louisiana, United States",
+        "jobReqId": "591283",
+        "externalUrl": "https://philips.wd3.myworkdayjobs.com/jobs-and-careers/job/Shreveport-Louisiana-United-States/Field-Service-Engineer---Imaging-Systems--Field--Shreveport--LA-_591283",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "philips"
+      }
+    },
+    "https://philips.wd3.myworkdayjobs.com/wday/cxs/philips/jobs-and-careers/job/Kansas-City-Kansas-United-States/Technical-Consultant---Patient-Monitoring--Field--Kansas-City--KS-MO-_589159": {
+      "jobPostingInfo": {
+        "title": "Technical Consultant - Patient Monitoring (Field: Kansas City, KS/MO)",
+        "jobDescription": "<p>Technical Consultant - Patient Monitoring (Field: Kansas City, KS/MO) at Philips.</p>",
+        "location": "2 Locations",
+        "jobReqId": "589159",
+        "externalUrl": "https://philips.wd3.myworkdayjobs.com/jobs-and-careers/job/Kansas-City-Kansas-United-States/Technical-Consultant---Patient-Monitoring--Field--Kansas-City--KS-MO-_589159",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "philips"
+      }
+    },
+    "https://philips.wd3.myworkdayjobs.com/wday/cxs/philips/jobs-and-careers/job/Cambridge-US-Massachusetts-United-States/Executive-Legal-Assistant--Cambridge--MA-_588597": {
+      "jobPostingInfo": {
+        "title": "Executive Legal Assistant (Cambridge, MA)",
+        "jobDescription": "<p>Executive Legal Assistant (Cambridge, MA) at Philips.</p>",
+        "location": "Cambridge (US), Massachusetts, United States",
+        "jobReqId": "588597",
+        "externalUrl": "https://philips.wd3.myworkdayjobs.com/jobs-and-careers/job/Cambridge-US-Massachusetts-United-States/Executive-Legal-Assistant--Cambridge--MA-_588597",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "philips"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "philips-591283",
+      "title": "Field Service Engineer - Imaging Systems (Field: Shreveport, LA)"
+    },
+    {
+      "id": "philips-589159",
+      "title": "Technical Consultant - Patient Monitoring (Field: Kansas City, KS/MO)"
+    },
+    {
+      "id": "philips-588597",
+      "title": "Executive Legal Assistant (Cambridge, MA)"
+    }
+  ]
+}

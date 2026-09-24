@@ -1871,6 +1871,59 @@ import { ZennoAstronauticsModule } from './source-company-zennoastronautics';
 import { ThermwoodModule } from './source-company-thermwood';
 import { LabsActorModule } from './source-company-labs_actor';
 import { SoundryxModule } from './source-company-soundryx';
+import { SalesforceModule } from './source-company-salesforce';
+import { AdobeModule } from './source-company-adobe';
+import { IntelModule } from './source-company-intel';
+import { HpModule } from './source-company-hp';
+import { HpeModule } from './source-company-hpe';
+import { MastercardModule } from './source-company-mastercard';
+import { PayPalModule } from './source-company-paypal';
+import { CapitalOneModule } from './source-company-capitalone';
+import { WalmartModule } from './source-company-walmart';
+import { TargetModule } from './source-company-target';
+import { NorthropGrummanModule } from './source-company-northropgrumman';
+import { BoozAllenModule } from './source-company-boozallen';
+import { CaciModule } from './source-company-caci';
+import { GditModule } from './source-company-gdit';
+import { LeidosModule } from './source-company-leidos';
+import { BlueOriginModule } from './source-company-blueorigin';
+import { RedHatModule } from './source-company-redhat';
+import { MotorolaSolutionsModule } from './source-company-motorolasolutions';
+import { StrykerModule } from './source-company-stryker';
+import { JnjModule } from './source-company-jnj';
+import { PhilipsModule } from './source-company-philips';
+import { McKessonModule } from './source-company-mckesson';
+import { WorkdayIncModule } from './source-company-workdayinc';
+import { MicronModule } from './source-company-micron';
+import { AnalogDevicesModule } from './source-company-analogdevices';
+import { TMobileModule } from './source-company-tmobile';
+import { ComcastModule } from './source-company-comcast';
+import { DisneyModule } from './source-company-disney';
+import { NikeModule } from './source-company-nike';
+import { FidelityModule } from './source-company-fidelity';
+import { StateStreetModule } from './source-company-statestreet';
+import { BlackRockModule } from './source-company-blackrock';
+import { AutodeskModule } from './source-company-autodesk';
+import { ZillowModule } from './source-company-zillow';
+import { ExpediaGroupModule } from './source-company-expediagroup';
+import { ThreeMModule } from './source-company-3m';
+import { RtxModule } from './source-company-rtx';
+import { HumanaModule } from './source-company-humana';
+import { CvsHealthModule } from './source-company-cvshealth';
+import { ChevronModule } from './source-company-chevron';
+import { VisaModule } from './source-company-visa';
+import { GeAerospaceModule } from './source-company-geaerospace';
+import { WellsFargoModule } from './source-company-wellsfargo';
+import { SnapModule } from './source-company-snap';
+import { MorganStanleyModule } from './source-company-morganstanley';
+import { CopartModule } from './source-company-copart';
+import { CoxEnterprisesModule } from './source-company-coxenterprises';
+import { BroadcomModule } from './source-company-broadcom';
+import { PfizerModule } from './source-company-pfizer';
+import { MarvellModule } from './source-company-marvell';
+import { GeneralMotorsModule } from './source-company-generalmotors';
+import { WarnerBrosDiscoveryModule } from './source-company-warnerbrosdiscovery';
+import { ModernaModule } from './source-company-moderna';
 export const ALL_SOURCE_MODULES = [
   FourDayWeekModule,
   AcademiccareersModule,
@@ -3735,4 +3788,57 @@ export const ALL_SOURCE_MODULES = [
   ThermwoodModule,
   LabsActorModule,
   SoundryxModule,
+  SalesforceModule,
+  AdobeModule,
+  IntelModule,
+  HpModule,
+  HpeModule,
+  MastercardModule,
+  PayPalModule,
+  CapitalOneModule,
+  WalmartModule,
+  TargetModule,
+  NorthropGrummanModule,
+  BoozAllenModule,
+  CaciModule,
+  GditModule,
+  LeidosModule,
+  BlueOriginModule,
+  RedHatModule,
+  MotorolaSolutionsModule,
+  StrykerModule,
+  JnjModule,
+  PhilipsModule,
+  McKessonModule,
+  WorkdayIncModule,
+  MicronModule,
+  AnalogDevicesModule,
+  TMobileModule,
+  ComcastModule,
+  DisneyModule,
+  NikeModule,
+  FidelityModule,
+  StateStreetModule,
+  BlackRockModule,
+  AutodeskModule,
+  ZillowModule,
+  ExpediaGroupModule,
+  ThreeMModule,
+  RtxModule,
+  HumanaModule,
+  CvsHealthModule,
+  ChevronModule,
+  VisaModule,
+  GeAerospaceModule,
+  WellsFargoModule,
+  SnapModule,
+  MorganStanleyModule,
+  CopartModule,
+  CoxEnterprisesModule,
+  BroadcomModule,
+  PfizerModule,
+  MarvellModule,
+  GeneralMotorsModule,
+  WarnerBrosDiscoveryModule,
+  ModernaModule,
 ];

@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "broadcom:1:External_Career"
+      },
+      "atsIdPrefix": "wd-broadcom-"
+    }
+  ],
+  "responses": {
+    "https://broadcom.wd1.myworkdayjobs.com/wday/cxs/broadcom/External_Career/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Business Analyst - Metrics & Reporting",
+          "externalPath": "/job/USA-NY-Melville/Business-Analyst---Metrics---Reporting_R027137",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R027137"
+          ]
+        },
+        {
+          "title": "Software Engineer (ICB 4)",
+          "externalPath": "/job/USA-TX-Plano-Legacy-Drive-Suite-700/Software-Engineer--ICB-4-_R027155",
+          "locationsText": "USA-TX Plano Legacy Drive Suite 700",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R027155"
+          ]
+        },
+        {
+          "title": "Software/Firmware Engineer",
+          "externalPath": "/job/USA-Colorado-Fort-Collins-4380-Ziegler-Road/Software-Firmware-Engineer_R027107",
+          "locationsText": "USA-Colorado-Fort Collins-4380 Ziegler Road",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R027107"
+          ]
+        }
+      ]
+    },
+    "https://broadcom.wd1.myworkdayjobs.com/wday/cxs/broadcom/External_Career/job/USA-NY-Melville/Business-Analyst---Metrics---Reporting_R027137": {
+      "jobPostingInfo": {
+        "title": "Business Analyst - Metrics & Reporting",
+        "jobDescription": "<p>Business Analyst - Metrics &amp; Reporting at Broadcom.</p>",
+        "location": "2 Locations",
+        "jobReqId": "R027137",
+        "externalUrl": "https://broadcom.wd1.myworkdayjobs.com/External_Career/job/USA-NY-Melville/Business-Analyst---Metrics---Reporting_R027137",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "broadcom"
+      }
+    },
+    "https://broadcom.wd1.myworkdayjobs.com/wday/cxs/broadcom/External_Career/job/USA-TX-Plano-Legacy-Drive-Suite-700/Software-Engineer--ICB-4-_R027155": {
+      "jobPostingInfo": {
+        "title": "Software Engineer (ICB 4)",
+        "jobDescription": "<p>Software Engineer (ICB 4) at Broadcom.</p>",
+        "location": "USA-TX Plano Legacy Drive Suite 700",
+        "jobReqId": "R027155",
+        "externalUrl": "https://broadcom.wd1.myworkdayjobs.com/External_Career/job/USA-TX-Plano-Legacy-Drive-Suite-700/Software-Engineer--ICB-4-_R027155",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "broadcom"
+      }
+    },
+    "https://broadcom.wd1.myworkdayjobs.com/wday/cxs/broadcom/External_Career/job/USA-Colorado-Fort-Collins-4380-Ziegler-Road/Software-Firmware-Engineer_R027107": {
+      "jobPostingInfo": {
+        "title": "Software/Firmware Engineer",
+        "jobDescription": "<p>Software/Firmware Engineer at Broadcom.</p>",
+        "location": "USA-Colorado-Fort Collins-4380 Ziegler Road",
+        "jobReqId": "R027107",
+        "externalUrl": "https://broadcom.wd1.myworkdayjobs.com/External_Career/job/USA-Colorado-Fort-Collins-4380-Ziegler-Road/Software-Firmware-Engineer_R027107",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "broadcom"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "broadcom-R027137",
+      "title": "Business Analyst - Metrics & Reporting"
+    },
+    {
+      "id": "broadcom-R027155",
+      "title": "Software Engineer (ICB 4)"
+    },
+    {
+      "id": "broadcom-R027107",
+      "title": "Software/Firmware Engineer"
+    }
+  ]
+}

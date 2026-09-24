@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "tmobile:1:External"
+      },
+      "atsIdPrefix": "wd-tmobile-"
+    }
+  ],
+  "responses": {
+    "https://tmobile.wd1.myworkdayjobs.com/wday/cxs/tmobile/External/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Sr Engineer, Systems Design",
+          "externalPath": "/job/Overland-Park-Kansas/Sr-Engineer--Systems-Design_REQ373906-1",
+          "locationsText": "Overland Park, Kansas",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REQ373906"
+          ]
+        },
+        {
+          "title": "Business Analysis Manager, Contact Interaction Analytics",
+          "externalPath": "/job/Overland-Park-Kansas/Business-Analysis-Manager--Contact-Interaction-Analytics_REQ364746-2",
+          "locationsText": "3 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REQ364746"
+          ]
+        },
+        {
+          "title": "Sr Mobile Expert",
+          "externalPath": "/job/Trenton-New-Jersey/Sr-Mobile-Expert_REQ373824-2",
+          "locationsText": "Trenton, New Jersey",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REQ373824"
+          ]
+        }
+      ]
+    },
+    "https://tmobile.wd1.myworkdayjobs.com/wday/cxs/tmobile/External/job/Overland-Park-Kansas/Sr-Engineer--Systems-Design_REQ373906-1": {
+      "jobPostingInfo": {
+        "title": "Sr Engineer, Systems Design",
+        "jobDescription": "<p>Sr Engineer, Systems Design at T-Mobile.</p>",
+        "location": "Overland Park, Kansas",
+        "jobReqId": "REQ373906",
+        "externalUrl": "https://tmobile.wd1.myworkdayjobs.com/External/job/Overland-Park-Kansas/Sr-Engineer--Systems-Design_REQ373906-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "tmobile"
+      }
+    },
+    "https://tmobile.wd1.myworkdayjobs.com/wday/cxs/tmobile/External/job/Overland-Park-Kansas/Business-Analysis-Manager--Contact-Interaction-Analytics_REQ364746-2": {
+      "jobPostingInfo": {
+        "title": "Business Analysis Manager, Contact Interaction Analytics",
+        "jobDescription": "<p>Business Analysis Manager, Contact Interaction Analytics at T-Mobile.</p>",
+        "location": "3 Locations",
+        "jobReqId": "REQ364746",
+        "externalUrl": "https://tmobile.wd1.myworkdayjobs.com/External/job/Overland-Park-Kansas/Business-Analysis-Manager--Contact-Interaction-Analytics_REQ364746-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "tmobile"
+      }
+    },
+    "https://tmobile.wd1.myworkdayjobs.com/wday/cxs/tmobile/External/job/Trenton-New-Jersey/Sr-Mobile-Expert_REQ373824-2": {
+      "jobPostingInfo": {
+        "title": "Sr Mobile Expert",
+        "jobDescription": "<p>Sr Mobile Expert at T-Mobile.</p>",
+        "location": "Trenton, New Jersey",
+        "jobReqId": "REQ373824",
+        "externalUrl": "https://tmobile.wd1.myworkdayjobs.com/External/job/Trenton-New-Jersey/Sr-Mobile-Expert_REQ373824-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "tmobile"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "tmobile-REQ373906",
+      "title": "Sr Engineer, Systems Design"
+    },
+    {
+      "id": "tmobile-REQ364746",
+      "title": "Business Analysis Manager, Contact Interaction Analytics"
+    },
+    {
+      "id": "tmobile-REQ373824",
+      "title": "Sr Mobile Expert"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "motorolasolutions:5:Careers"
+      },
+      "atsIdPrefix": "wd-motorolasolutions-"
+    }
+  ],
+  "responses": {
+    "https://motorolasolutions.wd5.myworkdayjobs.com/wday/cxs/motorolasolutions/Careers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Systems Integration Engineering Intern (Summer 2027)",
+          "externalPath": "/job/Greater-Chicago-Area/Systems-Integration-Engineering-Intern--Summer-2027-_R68894",
+          "locationsText": "Greater Chicago Area",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Greater Chicago Area",
+            "R68894"
+          ]
+        },
+        {
+          "title": "Senior Sales Operations Analyst",
+          "externalPath": "/job/Illinois-Remote-Work/Senior-Sales-Operations-Analyst_R69141",
+          "locationsText": "Illinois Remote Work, More...",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Illinois Remote Work",
+            "R69141"
+          ]
+        },
+        {
+          "title": "Channel Sales Executive (Wisconsin)",
+          "externalPath": "/job/Wisconsin-Remote-Work/Channel-Sales-Executive--Wisconsin-_R68902",
+          "locationsText": "Wisconsin Remote Work",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Wisconsin Remote Work",
+            "R68902"
+          ]
+        }
+      ]
+    },
+    "https://motorolasolutions.wd5.myworkdayjobs.com/wday/cxs/motorolasolutions/Careers/job/Greater-Chicago-Area/Systems-Integration-Engineering-Intern--Summer-2027-_R68894": {
+      "jobPostingInfo": {
+        "title": "Systems Integration Engineering Intern (Summer 2027)",
+        "jobDescription": "<p>Systems Integration Engineering Intern (Summer 2027) at Motorola Solutions.</p>",
+        "location": "Greater Chicago Area",
+        "jobReqId": "R68894",
+        "externalUrl": "https://motorolasolutions.wd5.myworkdayjobs.com/Careers/job/Greater-Chicago-Area/Systems-Integration-Engineering-Intern--Summer-2027-_R68894",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "motorolasolutions"
+      }
+    },
+    "https://motorolasolutions.wd5.myworkdayjobs.com/wday/cxs/motorolasolutions/Careers/job/Illinois-Remote-Work/Senior-Sales-Operations-Analyst_R69141": {
+      "jobPostingInfo": {
+        "title": "Senior Sales Operations Analyst",
+        "jobDescription": "<p>Senior Sales Operations Analyst at Motorola Solutions.</p>",
+        "location": "Illinois Remote Work, More...",
+        "jobReqId": "R69141",
+        "externalUrl": "https://motorolasolutions.wd5.myworkdayjobs.com/Careers/job/Illinois-Remote-Work/Senior-Sales-Operations-Analyst_R69141",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "motorolasolutions"
+      }
+    },
+    "https://motorolasolutions.wd5.myworkdayjobs.com/wday/cxs/motorolasolutions/Careers/job/Wisconsin-Remote-Work/Channel-Sales-Executive--Wisconsin-_R68902": {
+      "jobPostingInfo": {
+        "title": "Channel Sales Executive (Wisconsin)",
+        "jobDescription": "<p>Channel Sales Executive (Wisconsin) at Motorola Solutions.</p>",
+        "location": "Wisconsin Remote Work",
+        "jobReqId": "R68902",
+        "externalUrl": "https://motorolasolutions.wd5.myworkdayjobs.com/Careers/job/Wisconsin-Remote-Work/Channel-Sales-Executive--Wisconsin-_R68902",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "motorolasolutions"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "motorolasolutions-R68894",
+      "title": "Systems Integration Engineering Intern (Summer 2027)"
+    },
+    {
+      "id": "motorolasolutions-R69141",
+      "title": "Senior Sales Operations Analyst"
+    },
+    {
+      "id": "motorolasolutions-R68902",
+      "title": "Channel Sales Executive (Wisconsin)"
+    }
+  ]
+}

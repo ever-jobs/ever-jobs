@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "paypal:1:jobs"
+      },
+      "atsIdPrefix": "wd-paypal-"
+    }
+  ],
+  "responses": {
+    "https://paypal.wd1.myworkdayjobs.com/wday/cxs/paypal/jobs/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Sr Manager, Software Engineering",
+          "externalPath": "/job/San-Jose-California-United-States-of-America/Sr-Manager--Software-Engineering_R0138185-1",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0138185"
+          ]
+        },
+        {
+          "title": "Senior Manager, Loyalty Strategy & Performance",
+          "externalPath": "/job/New-York-City-New-York-United-States-of-America/Senior-Manager--Loyalty-Economics_R0137425",
+          "locationsText": "New York City, New York, United States of America",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0137425"
+          ]
+        },
+        {
+          "title": "Sr Manager, Ads Privacy",
+          "externalPath": "/job/San-Jose-California-United-States-of-America/Sr-Manager--Ads-Privacy_R0138048",
+          "locationsText": "6 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0138048"
+          ]
+        }
+      ]
+    },
+    "https://paypal.wd1.myworkdayjobs.com/wday/cxs/paypal/jobs/job/San-Jose-California-United-States-of-America/Sr-Manager--Software-Engineering_R0138185-1": {
+      "jobPostingInfo": {
+        "title": "Sr Manager, Software Engineering",
+        "jobDescription": "<p>Sr Manager, Software Engineering at PayPal.</p>",
+        "location": "2 Locations",
+        "jobReqId": "R0138185",
+        "externalUrl": "https://paypal.wd1.myworkdayjobs.com/jobs/job/San-Jose-California-United-States-of-America/Sr-Manager--Software-Engineering_R0138185-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "paypal"
+      }
+    },
+    "https://paypal.wd1.myworkdayjobs.com/wday/cxs/paypal/jobs/job/New-York-City-New-York-United-States-of-America/Senior-Manager--Loyalty-Economics_R0137425": {
+      "jobPostingInfo": {
+        "title": "Senior Manager, Loyalty Strategy & Performance",
+        "jobDescription": "<p>Senior Manager, Loyalty Strategy &amp; Performance at PayPal.</p>",
+        "location": "New York City, New York, United States of America",
+        "jobReqId": "R0137425",
+        "externalUrl": "https://paypal.wd1.myworkdayjobs.com/jobs/job/New-York-City-New-York-United-States-of-America/Senior-Manager--Loyalty-Economics_R0137425",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "paypal"
+      }
+    },
+    "https://paypal.wd1.myworkdayjobs.com/wday/cxs/paypal/jobs/job/San-Jose-California-United-States-of-America/Sr-Manager--Ads-Privacy_R0138048": {
+      "jobPostingInfo": {
+        "title": "Sr Manager, Ads Privacy",
+        "jobDescription": "<p>Sr Manager, Ads Privacy at PayPal.</p>",
+        "location": "6 Locations",
+        "jobReqId": "R0138048",
+        "externalUrl": "https://paypal.wd1.myworkdayjobs.com/jobs/job/San-Jose-California-United-States-of-America/Sr-Manager--Ads-Privacy_R0138048",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "paypal"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "paypal-R0138185",
+      "title": "Sr Manager, Software Engineering"
+    },
+    {
+      "id": "paypal-R0137425",
+      "title": "Senior Manager, Loyalty Strategy & Performance"
+    },
+    {
+      "id": "paypal-R0138048",
+      "title": "Sr Manager, Ads Privacy"
+    }
+  ]
+}
