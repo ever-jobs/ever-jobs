@@ -7,6 +7,7 @@ import { JobType } from '../enums/job-type.enum';
 import { DescriptionFormat } from '../enums/description-format.enum';
 import { Country } from '../enums/country.enum';
 import { ScraperAuthDto } from './auth/scraper-auth.dto';
+import { CAREER_LEVELS, type CareerLevel } from '../interfaces/career-level-classifier.interface';
 
 export class ScraperInputDto {
   @ApiPropertyOptional({ enum: Site, isArray: true, description: 'Sites to scrape (default: search + company scrapers; omit or pass explicit values to override)' })
@@ -219,6 +220,17 @@ export class ScraperInputDto {
   @IsOptional()
   @IsNumber()
   retryMaxDelay?: number;
+
+  @ApiPropertyOptional({
+    enum: CAREER_LEVELS,
+    isArray: true,
+    description:
+      'Keep only jobs whose server-computed `careerLevel.level` is in this list (Spec 1730). Applied after dedup and classification; omit or pass [] for no filter. Unknown values are rejected with 400. Example: ["internship","new_grad"].',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsIn(CAREER_LEVELS, { each: true })
+  careerLevels?: CareerLevel[];
 
   @ApiPropertyOptional({
     type: () => ScraperAuthDto,

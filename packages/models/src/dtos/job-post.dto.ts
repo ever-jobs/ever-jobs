@@ -2,6 +2,7 @@ import { JobType } from '../enums/job-type.enum';
 import { LocationDto } from './location.dto';
 import { OfficeDto } from './office.dto';
 import { CompensationDto } from './compensation.dto';
+import type { CareerLevelVerdict } from '../interfaces/career-level-classifier.interface';
 
 export class JobPostDto {
   id?: string | null;
@@ -92,6 +93,11 @@ export class JobPostDto {
     state: 'verified' | 'likely' | 'uncertain';
     reasons?: string[];
   } | null;
+
+  // Career level (Spec 1730, contract C7) — computed server-side after dedup by the bound
+  // `ICareerLevelClassifier`; on by default, off with EVER_JOBS_CLASSIFY_CAREER_LEVEL=false.
+  // Derived from title / description / the source fields above, which it never mutates.
+  careerLevel?: CareerLevelVerdict | null;
 
   constructor(partial?: Partial<JobPostDto>) {
     Object.assign(this, partial);
