@@ -316,4 +316,15 @@ describe('renderVerificationTable', () => {
     );
     expect(table).toContain('| `acme` | Acme & Sons\' Corp | Workday | `acme:5:Acme` | 2026-09-24 | 1,234 |');
   });
+
+  it('marks a first-listing-page count (iCIMS) as a lower bound, in the table and the doc comment', () => {
+    const [ic] = assembleDescriptors(
+      [seed({ key: 'acmeic', enumKey: 'ACMEIC', className: 'AcmeIc', boards: [{ backend: 'icims', slug: 'careers-acme' }] })],
+      VERIFICATION,
+    );
+    expect(renderVerificationTable([ic])).toContain('| `careers-acme` | 2026-09-24 | 20+ |');
+    expect(serviceFile(ic)).toContain('verified live 2026-09-24: 20+ open postings (first listing page).');
+    const [wd] = assembleDescriptors([seed()], VERIFICATION);
+    expect(serviceFile(wd)).toContain('verified live 2026-09-24: 1,234 open postings.');
+  });
 });

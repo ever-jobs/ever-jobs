@@ -124,6 +124,11 @@ interface BackendSpec {
    * it degrades to a bare empty result (iCIMS treats a 4xx as an unknown tenant).
    */
   notFoundReason: string | null;
+  /**
+   * True when the probe could only count the first listing page (HTML boards
+   * with no total), so the recorded job count is a lower bound.
+   */
+  countIsFirstPageOnly?: boolean;
   /** Recorded HTTP responses (keyed by URL without query) + expected mapping. */
   fixture(d: AtsDelegateDescriptor, board: AssembledBoard): BoardFixture;
 }
@@ -350,6 +355,7 @@ export const BACKENDS: Record<string, BackendSpec> = {
     atsIdPrefix: (slug) => `icims-${slug}-`,
     boardUrl: (slug) => `https://${slug}.icims.com/jobs/search`,
     notFoundReason: null,
+    countIsFirstPageOnly: true,
     fixture(d, board) {
       const cards = board.listings
         .map((l) => {
@@ -514,11 +520,16 @@ function moduleFile(d: AtsDelegateDescriptor): string {
   );
 }
 
+/** Job count as recorded; a first-page-only count is a lower bound (`20+`). */
+function jobsSeen(b: AssembledBoard, spec: BackendSpec): string {
+  return `${b.jobCount.toLocaleString('en-US')}${spec.countIsFirstPageOnly ? '+' : ''}`;
+}
+
 function boardLine(b: AssembledBoard, spec: BackendSpec): string[] {
   const label = b.label ? ` (${b.label})` : '';
   return [
     ` *   - \`${b.slug}\`${label} — ${spec.boardUrl(b.slug)}`,
-    ` *     verified live ${b.verifiedAt}: ${b.jobCount.toLocaleString('en-US')} open postings.`,
+    ` *     verified live ${b.verifiedAt}: ${jobsSeen(b, spec)} open postings${spec.countIsFirstPageOnly ? ' (first listing page)' : ''}.`,
   ];
 }
 
@@ -1047,7 +1058,7 @@ export function renderVerificationTable(descriptors: AtsDelegateDescriptor[]): s
     for (const b of d.boards) {
       const label = b.label ? ` (${b.label})` : '';
       rows.push(
-        `| \`${d.key}\` | ${d.displayName} | ${spec.label} | \`${b.slug}\`${label} | ${b.verifiedAt} | ${b.jobCount.toLocaleString('en-US')} |`,
+        `| \`${d.key}\` | ${d.displayName} | ${spec.label} | \`${b.slug}\`${label} | ${b.verifiedAt} | ${jobsSeen(b, spec)} |`,
       );
     }
   }

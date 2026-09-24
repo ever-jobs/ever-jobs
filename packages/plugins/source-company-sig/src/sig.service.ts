@@ -17,7 +17,7 @@ import {
  *
  * Source (Spec 1737): iCIMS board, scraped in this order:
  *   - `careers-sig` — https://careers-sig.icims.com/jobs/search
- *     verified live 2026-09-24: 20 open postings.
+ *     verified live 2026-09-24: 20+ open postings (first listing page).
  *
  * The plugin re-implements no parsing. It resolves the registered iCIMS
  * source plugin from the PluginRegistry at runtime, delegates each board in

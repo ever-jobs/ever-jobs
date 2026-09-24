@@ -93,7 +93,7 @@ more.
 | `schonfeld` | Schonfeld | Greenhouse | `schonfeld` | 2026-09-24 | 79 |
 | `genevatrading` | Geneva Trading | Greenhouse | `genevatrading` | 2026-09-24 | 15 |
 | `vaticlabs` | Vatic Labs | Greenhouse | `vaticlabs` | 2026-09-24 | 8 |
-| `sig` | Susquehanna International Group (SIG) | iCIMS | `careers-sig` | 2026-09-24 | 20 |
+| `sig` | Susquehanna International Group (SIG) | iCIMS | `careers-sig` | 2026-09-24 | 20+ |
 | `towerresearchcapital` | Tower Research Capital | Greenhouse | `towerresearchcapital` | 2026-09-24 | 91 |
 | `imc` | IMC Trading | Greenhouse | `imc` | 2026-09-24 | 172 |
 | `janestreet` | Jane Street | Greenhouse | `janestreet` | 2026-09-24 | 228 |
