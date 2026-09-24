@@ -1,3 +1,4 @@
+import type { PluginCrawlPolicy } from '@ever-jobs/common';
 import { Site } from '@ever-jobs/models';
 
 /**
@@ -43,6 +44,17 @@ export interface IPluginMetadata {
    * Optional description of the plugin's capabilities or limitations.
    */
   description?: string;
+
+  /**
+   * How this source should be crawled (Spec 1690): pacing, identity, proxy
+   * rotation, retries, discovery. These are the plugin's *defaults* — operators
+   * (`EVER_JOBS_CRAWL_POLICIES`) and search callers (`crawl`) can override them.
+   * A plugin that sets `userAgentMode: 'plugin'` must explain why in
+   * `userAgentReason` (e.g. the API requires a registered e-mail as its UA).
+   *
+   * @example { rateLimitScope: 'domain', maxConcurrentPerHost: 1, minIntervalMs: 1000 }
+   */
+  crawl?: PluginCrawlPolicy;
 }
 
 export type PluginCategory =
