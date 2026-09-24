@@ -10,6 +10,126 @@
 
 ---
 
+## Q-104 — Should the JSON result order stop being "by site name"? (Specs 1720, 1721)
+
+**Context:** `JobsService` sorts the fan-out by `site` name, then `datePosted` desc, before any
+pagination. A consumer that stores only page 1 therefore only ever sees sources whose name
+starts with "a" — the main consumer's 6 587 production rows were 100 % `a*` sources (66 % AbbVie).
+Spec 1721's NDJSON stream removes the need to paginate at all, and the contract requires NDJSON
+to keep the JSON order.
+
+**Options:**
+
+- **A. Keep the order.** Deterministic, cache-friendly, and page N+1 of a paginated request stays
+  consistent with page N. Consumers that want everything use `?format=ndjson`.
+- **B. Sort by `datePosted` desc across all sources.** Page 1 becomes "newest anywhere", but
+  undated postings (many company boards) sink to the end, and the NDJSON contract's "same order
+  as JSON" would move with it.
+- **C. Interleave sources (round-robin).** Fairest page 1, but order then depends on how many
+  sources answered — two identical requests can page differently.
+
+**Default (proceeding):** **A** — the defect was the consumer stopping at page 1, which list mode
++ NDJSON fix without changing what any existing paginated client sees.
+
+**Resolution:** _pending review._
+
+---
+
+## Q-103 — `dedupKey`: the job's own key or the dedup cluster's id? (Spec 1721)
+
+**Context:** Contract C9 asks for a stable cross-source key on every job. The dedup engine buckets
+on `canonicalJobId = sha256(normalizeCompany|normalizeTitle|normalizeLocation)` and, after its
+MinHash stage, names each cluster after its *head* (first member in input order).
+
+**Options:**
+
+- **A. Per-job key** — `dedupKeyForJob(job)`, the same function applied to the job itself.
+  Identical to the cluster id for every representative the aggregator returns (the
+  representative *is* the head), identical with `dedup=false`, with a swapped engine, from cache
+  or fresh, across runs.
+- **B. Cluster id from `assignments[i]`.** Exactly "what the engine used", but for fuzzy (MinHash)
+  merges it depends on which member happened to come first, so the same posting can change key
+  between runs; and it does not exist when `dedup=false`.
+
+**Default (proceeding):** **A.** Near-duplicates that only MinHash merges (e.g. a title with an
+extra word) keep *different* keys under A; a consumer that wants them merged must dedup fuzzily
+itself. Exact-after-normalisation duplicates — the common cross-source case — always share a key.
+
+**Resolution:** _pending review._
+
+---
+
+## Q-102 — Postgres store: fail fast when unreachable? Migrate at boot? (Spec 1722)
+
+**Context:** Spec 1722 makes `EVER_JOBS_STORE=postgres` work from env alone. Two behaviours had
+to be chosen.
+
+**Options (unreachable database at boot):**
+
+- **A. Fail fast** (`ERR_STORE_BACKEND_DOWN`, redacted URL). A wrong host/port/password becomes a
+  failed deploy instead of a silently empty corpus. Matches Spec 004 §7.3.
+- **B. Boot anyway and degrade** to `persistError` on every search. Search stays up during a DB
+  outage, but misconfiguration is invisible unless someone reads the logs.
+
+**Options (schema):**
+
+- **C. Scripted** — `npm run store:postgres:migrate` (`prisma migrate deploy`), run once by the
+  operator. Needs the Prisma CLI (devDependency) and the right to `CREATE EXTENSION pg_trgm`.
+- **D. At boot** — the API applies migrations itself. Convenient, but the API role then needs DDL
+  rights and several replicas race on first start.
+
+**Default (proceeding):** **A + C.** A fork that wants search to survive a store outage can set
+`EVER_JOBS_PERSIST_SEARCH=false` temporarily; persistence failures *after* boot are already
+best-effort (Spec 004 / T11).
+
+**Resolution:** _pending review._
+
+---
+
+## Q-101 — Liveness cap: default value, and what an unprobed job carries (Spec 1723)
+
+**Context:** `?liveness=true` issues one GET per returned job. Spec 5025 bounded paginated
+requests (`page_size ≤ 100`) but an unpaginated JSON or NDJSON response is the whole corpus
+(20–30 k jobs). The owner wants liveness possible per request but off unless asked.
+
+**Options:**
+
+- **A. `EVER_JOBS_LIVENESS_MAX_URLS=100`, unprobed jobs carry no `liveness`.** 100 is the existing
+  `page_size` ceiling, so paginated behaviour is unchanged; ~20–40 s at the plugin's concurrency
+  of 5.
+- **B. A larger cap (500–1 000).** More coverage, minutes per request, outside the consumer's
+  120 s JSON timeout.
+- **C. Mark unprobed jobs `uncertain`.** Conflates "we did not look" with "we looked and could not
+  tell".
+
+**Default (proceeding):** **A.** `EVER_JOBS_LIVENESS_ENABLED=false` additionally lets an operator
+refuse probing outright.
+
+**Resolution:** _pending review._
+
+---
+
+## Q-100 — List mode: which plugins "require a keyword", and how is that reported? (Spec 1720)
+
+**Context:** In list mode (no `searchTerm`) most plugins already list their board (847 guard with
+`if (input.searchTerm)`, others use `?? ''`). A few put the term in the URL path and send a
+malformed request without one: Bayt builds `/jobs/-jobs/`, Naukri a `-jobs` SEO key under
+`urlType: search_by_keyword`. Auditing all ~1 860 plugins live was out of scope.
+
+**Options:**
+
+- **A. Metadata flag `requiresSearchTerm`, set only where the code proves a keyword is needed**
+  (`bayt`, `naukri`); flagged plugins are not dispatched in list mode and report `empty` with an
+  explanatory detail. Other plugins that misbehave are isolated by the fan-out and can be flagged
+  as they are found. A static test forbids bare `${input.searchTerm}` interpolation.
+- **B. Report flagged plugins as `bad_input`.** Accurate for the source, but `bad_input` is an
+  "actionable" diagnostic — every list-mode request would surface the same non-actionable rows.
+- **C. Probe every plugin live without a keyword** and flag from the results — thorough, but
+  thousands of requests and flaky upstreams.
+
+**Default (proceeding):** **A.**
+
+**Resolution:** _pending review._
 ## Q-096 — Shared location parser: known mis-splits carried in from the fork (Spec 1689)
 
 **Context:** The fork-sync review (Spec 1689, lane A4) found shared-parser outputs that no

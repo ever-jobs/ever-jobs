@@ -1,0 +1,17 @@
+# Tasks: 1720 — List mode (no keyword) and source selection by category
+
+| Field        | Value      |
+| ------------ | ---------- |
+| Spec ID      | 1720       |
+| Status       | done       |
+| Last updated | 2026-09-24 |
+
+- [x] T1 — `SITE_CATEGORIES` / `SiteCategory` / `isSiteCategory` in `@ever-jobs/models`; `PluginCategory` aliases it. Acceptance: the eight categories in plugin metadata today are exactly the allowed set.
+- [x] T2 — `ScraperInputDto.siteCategories` with `@IsIn(..., { each: true })`. Acceptance: `validate()` rejects `["boards"]` with a message listing the allowed values; accepts `["job-board","company"]`.
+- [x] T3 — `requiresSearchTerm` on `IPluginMetadata`; flag `bayt` and `naukri`. Acceptance: both plugins' metadata carries the flag.
+- [x] T4 — `search-input.ts` helpers. Acceptance: `undefined`, `null`, `""`, `"   "` → `undefined`; `"  node  "` → `"node"`; `describeTerm` → `<none>` / `"node"`.
+- [x] T5 — `JobsService` list mode: normalise, partition flagged plugins, `empty` diagnostic, debug log. Acceptance: flagged plugin never called; unflagged plugins called with `searchTerm === undefined`; a thrower is isolated.
+- [x] T6 — `JobsService` categories: narrow the default selection; `siteType`/`companyDomain` wins; `companySlug` keeps ATS semantics; unknown → `BadRequestException`. Acceptance: unit tests for each branch; no-filter selection unchanged.
+- [x] T7 — Controller + resolver: normalise before cache, `term=<none>` log, GraphQL `siteCategories` + nullable `searchTerm`. Acceptance: controller test asserts log text and shared cache key for `""`/omitted.
+- [x] T8 — Static guard over `packages/plugins/*/src` for bare `input.searchTerm` interpolation. Acceptance: passes on the current tree; fails on a planted sample (red control in the test itself).
+- [x] T9 — Docs: README "Getting ALL jobs" + "Choosing sources by category", OpenAPI descriptions, `docs/log.md`, `docs/index.md`, Q-100.
