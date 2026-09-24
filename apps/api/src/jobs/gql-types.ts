@@ -1,6 +1,6 @@
 import { ObjectType, Field, InputType, Int, Float, ID, registerEnumType } from '@nestjs/graphql';
-import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
-import { COUNTRY_CONFIG, Country, Site, getIndeedDomain } from '@ever-jobs/models';
+import { IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString } from 'class-validator';
+import { COUNTRY_CONFIG, Country, SITE_CATEGORIES, Site, getIndeedDomain } from '@ever-jobs/models';
 
 // ── Register the Site enum for GraphQL ───────────────────
 registerEnumType(Site, {
@@ -29,9 +29,29 @@ export class SearchJobsInput {
   @IsEnum(Site, { each: true })
   siteType?: Site[];
 
-  @Field({ description: 'Search term / keywords' })
+  @Field(() => [String], {
+    nullable: true,
+    description:
+      'Restrict the default fan-out to these plugin categories (job-board, niche, regional, remote, government, ' +
+      'freelance, company, ats). Ignored when siteType is given. Unknown values are rejected (Spec 1720).',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsIn(SITE_CATEGORIES, {
+    each: true,
+    message: `siteCategories must contain only: ${SITE_CATEGORIES.join(', ')}`,
+  })
+  siteCategories?: string[];
+
+  @Field(() => String, {
+    nullable: true,
+    description:
+      'Search term / keywords. Omit (or pass null / "") for list mode: every selected source returns what it can ' +
+      'list without a keyword (Spec 1720).',
+  })
+  @IsOptional()
   @IsString()
-  searchTerm!: string;
+  searchTerm?: string | null;
 
   @Field({ nullable: true, description: 'Location filter (city, state, country)' })
   @IsOptional()
@@ -237,6 +257,14 @@ export class JobPostGql {
 
   @Field({ nullable: true })
   logoUrl?: string;
+
+  @Field({
+    nullable: true,
+    description:
+      'Stable cross-source key of the posting (sha-256 of normalised company|title|location) — the same posting ' +
+      'from different sources or runs has the same key (Spec 1721).',
+  })
+  dedupKey?: string;
 }
 
 @ObjectType({

@@ -9,8 +9,22 @@ import {
   extractSalary, convertToAnnual, siteFromDomain, deriveSiteToken, resolveCompanyUrl,
 } from '@ever-jobs/common';
 import { ConfigService } from '@nestjs/config';
-import { PluginRegistry, CircuitBreakerInterceptor } from '@ever-jobs/plugin';
+import { PluginRegistry, CircuitBreakerInterceptor, IPluginMetadata } from '@ever-jobs/plugin';
 import { MetricsService } from '../metrics/metrics.service';
+import {
+  SearchRunOptions,
+  describeTerm,
+  isListMode,
+  normalizeSearchInput,
+  parseSiteCategories,
+} from './search-input';
+
+/**
+ * Detail carried by the per-source row of a plugin that was not dispatched
+ * because it needs a keyword and the request is in list mode (Spec 1720).
+ */
+export const LIST_MODE_SKIPPED_DETAIL =
+  'requires a searchTerm; not queried in list mode (Spec 1720)';
 
 /**
  * Default ceiling on simultaneously-dispatched sources (Spec 5026).
@@ -39,7 +53,8 @@ export const DEFAULT_SEARCH_CONCURRENCY = 64;
  * Sources already in flight are allowed to finish.
  *
  * `0` (or negative) disables the deadline. Override with
- * `EVER_JOBS_SEARCH_DEADLINE_MS`.
+ * `EVER_JOBS_FANOUT_DEADLINE_MS` (Spec 1721; the older
+ * `EVER_JOBS_SEARCH_DEADLINE_MS` still works as a fallback).
  */
 export const DEFAULT_SEARCH_DEADLINE_MS = 120_000;
 
@@ -167,7 +182,15 @@ export class JobsService implements OnModuleInit {
    */
   async searchJobsWithDiagnostics(
     input: ScraperInputDto,
+    options: SearchRunOptions = {},
   ): Promise<{ jobs: JobPostDto[]; perSource: SourceDiagnosticDto[] }> {
+    // Spec 1720 — one keyword semantics for every entry point: omitted, null,
+    // "" and whitespace-only all mean list mode and reach plugins as an absent
+    // `searchTerm`, never as "undefined"/"null"/"   ".
+    normalizeSearchInput(input);
+    const listMode = isListMode(input);
+    const categories = parseSiteCategories(input.siteCategories);
+
     const atsSites = new Set<Site>(this.registry.listAtsSites());
     const { resolved: resolvedSites, unresolved: unresolvedDomains } =
       this.resolveCompanyDomains(input.companyDomain);
@@ -217,20 +240,49 @@ export class JobsService implements OnModuleInit {
       );
     }
 
-    const selectedScrapers: { site: Site; scraper: IScraper }[] = [];
-
-    for (const site of sites) {
-      const scraper = this.registry.getScraper(site);
-      if (scraper) {
-        selectedScrapers.push({ site, scraper });
+    // Spec 1720 — plugin metadata drives both the category filter and the
+    // list-mode keyword check. One pass per request (~1.9k entries).
+    const metadataBySite = new Map<string, IPluginMetadata>(
+      this.registry.listSources().map((meta) => [meta.site, meta]),
+    );
+    if (categories) {
+      if (effectiveSites.length) {
+        this.logger.debug(
+          `siteCategories [${[...categories].join(', ')}] ignored: siteType/companyDomain selection wins`,
+        );
       } else {
-        this.logger.warn(`Unknown site: ${site}`);
+        // Narrow the DEFAULT selection computed above, so ATS plugins keep
+        // needing a companySlug exactly as they do without the filter.
+        sites = sites.filter((site) => {
+          const category = metadataBySite.get(site)?.category;
+          return category !== undefined && categories.has(category);
+        });
       }
     }
 
+    const selectedScrapers: { site: Site; scraper: IScraper }[] = [];
+    const keywordSkipped: Site[] = [];
+
+    for (const site of sites) {
+      const scraper = this.registry.getScraper(site);
+      if (!scraper) {
+        this.logger.warn(`Unknown site: ${site}`);
+        continue;
+      }
+      if (listMode && metadataBySite.get(site)?.requiresSearchTerm) {
+        this.logger.debug(`${site}: ${LIST_MODE_SKIPPED_DETAIL}`);
+        keywordSkipped.push(site);
+        continue;
+      }
+      selectedScrapers.push({ site, scraper });
+    }
+    const keywordSkippedRows = keywordSkipped.map(
+      (site) => new SourceDiagnosticDto(site, 0, 'empty', LIST_MODE_SKIPPED_DETAIL),
+    );
+
     if (selectedScrapers.length === 0) {
       this.logger.warn('No valid scrapers selected');
-      return { jobs: [], perSource: [] };
+      return { jobs: [], perSource: keywordSkippedRows };
     }
 
     // Spec 5026 — bounded fan-out. Previously this was a bare
@@ -260,7 +312,8 @@ export class JobsService implements OnModuleInit {
 
     this.logger.log(
       `Running ${selectedScrapers.length} scrapers (concurrency ${concurrency}, ` +
-        `deadline ${deadlineMs > 0 ? `${deadlineMs}ms` : 'none'}): ` +
+        `deadline ${deadlineMs > 0 ? `${deadlineMs}ms` : 'none'}, ` +
+        `term=${describeTerm(input)}${listMode ? ' [list mode]' : ''}): ` +
         `${selectedScrapers.map((s) => s.site).join(', ')}`,
     );
 
@@ -269,6 +322,30 @@ export class JobsService implements OnModuleInit {
     );
     let cursor = 0;
     let skipped = 0;
+
+    // Spec 1721 — progress for the NDJSON heartbeat. A throwing listener must
+    // never break the fan-out it is observing.
+    let sourcesDone = 0;
+    let jobsSoFar = 0;
+    const reportProgress = (settled?: PromiseSettledResult<JobResponseDto>): void => {
+      if (!options.onProgress) return;
+      if (settled) {
+        sourcesDone++;
+        if (settled.status === 'fulfilled') jobsSoFar += settled.value?.jobs?.length ?? 0;
+      }
+      try {
+        options.onProgress({
+          sourcesDone,
+          sourcesTotal: selectedScrapers.length,
+          jobs: jobsSoFar,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `progress listener threw (ignored): ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    };
+    reportProgress();
 
     // Shared-cursor worker pool — same shape as
     // `LivenessHttpService.checkBatch` (Spec 721), which is the established
@@ -292,6 +369,7 @@ export class JobsService implements OnModuleInit {
             status: 'rejected',
             reason: new Error(`${site}: skipped (search deadline exceeded)`),
           };
+          reportProgress(results[index]);
           continue;
         }
 
@@ -310,6 +388,7 @@ export class JobsService implements OnModuleInit {
         } catch (err) {
           results[index] = { status: 'rejected', reason: err };
         }
+        reportProgress(results[index]);
       }
     };
 
@@ -322,7 +401,7 @@ export class JobsService implements OnModuleInit {
     if (skipped > 0) {
       this.logger.warn(
         `Search deadline (${deadlineMs}ms) exceeded — skipped ${skipped} of ` +
-          `${selectedScrapers.length} sources. Raise EVER_JOBS_SEARCH_DEADLINE_MS ` +
+          `${selectedScrapers.length} sources. Raise EVER_JOBS_FANOUT_DEADLINE_MS ` +
           `or narrow siteType to cover more of the catalogue.`,
       );
     }
@@ -387,6 +466,8 @@ export class JobsService implements OnModuleInit {
         ),
       );
     }
+    // Spec 1720 — keyword-only sources that list mode did not dispatch.
+    perSource.push(...keywordSkippedRows);
 
     this.logger.log(`Total aggregated jobs: ${allJobs.length}`);
     return { jobs: allJobs, perSource };

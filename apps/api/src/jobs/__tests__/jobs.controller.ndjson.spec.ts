@@ -1,0 +1,421 @@
+import 'reflect-metadata';
+import { EventEmitter } from 'events';
+import { StreamableFile } from '@nestjs/common';
+import { JobPostDto, LocationDto, ScraperInputDto } from '@ever-jobs/models';
+import { JobsController } from '../jobs.controller';
+import { NDJSON_CONTENT_TYPE, NDJSON_HEARTBEAT_MS } from '../ndjson-writer';
+import type { SearchProgress } from '../search-input';
+
+/**
+ * Spec 1721 — `POST /api/jobs/search?format=ndjson`.
+ *
+ * The controller is constructed directly (as in `jobs.controller.spec.ts`)
+ * and the returned `StreamableFile` is read to the end, so every assertion is
+ * about the exact bytes a client would receive.
+ */
+
+type Line = { type: string; [key: string]: unknown };
+
+function makeJob(i: number, extra: Partial<JobPostDto> = {}): JobPostDto {
+  return new JobPostDto({
+    id: `job-${i}`,
+    title: `Engineer ${i}`,
+    companyName: 'Acme',
+    jobUrl: `https://example.com/jobs/${i}`,
+    location: new LocationDto({ city: 'Berlin', country: 'GERMANY' }),
+    datePosted: '2026-09-01',
+    site: 'linkedin',
+    dedupKey: `key-${i}`,
+    ...extra,
+  });
+}
+
+interface Harness {
+  controller: JobsController;
+  jobsService: { searchJobsWithDiagnostics: jest.Mock; searchJobs: jest.Mock };
+  aggregator: { aggregateRaw: jest.Mock };
+  cacheService: { get: jest.Mock; set: jest.Mock };
+  liveness: { checkBatch: jest.Mock; check: jest.Mock };
+}
+
+function createHarness(opts: {
+  jobs?: JobPostDto[];
+  cached?: JobPostDto[] | null;
+  search?: (input: ScraperInputDto, options?: { onProgress?: (p: SearchProgress) => void }) => Promise<unknown>;
+  config?: Record<string, unknown>;
+  deduped?: boolean;
+} = {}): Harness {
+  const jobs = opts.jobs ?? [makeJob(1), makeJob(2), makeJob(3)];
+  const jobsService = {
+    searchJobs: jest.fn(),
+    searchJobsWithDiagnostics: jest.fn(
+      opts.search ??
+        (async (_input: ScraperInputDto, options?: { onProgress?: (p: SearchProgress) => void }) => {
+          options?.onProgress?.({ sourcesDone: 0, sourcesTotal: 2, jobs: 0 });
+          options?.onProgress?.({ sourcesDone: 1, sourcesTotal: 2, jobs: jobs.length });
+          options?.onProgress?.({ sourcesDone: 2, sourcesTotal: 2, jobs: jobs.length });
+          return { jobs, perSource: [] };
+        }),
+    ),
+  };
+  const aggregator = {
+    aggregateRaw: jest.fn(async (raw: JobPostDto[]) => ({
+      jobs: raw,
+      rawCount: raw.length,
+      outputCount: raw.length,
+      deduped: opts.deduped ?? true,
+    })),
+  };
+  const cacheService = {
+    get: jest.fn(async () => opts.cached ?? null),
+    set: jest.fn(async () => undefined),
+  };
+  const config = opts.config ?? {};
+  const configService = {
+    get: (key: string, def?: unknown) => (key in config ? config[key] : def),
+  };
+  const liveness = {
+    check: jest.fn(),
+    checkBatch: jest.fn(async (urls: string[]) =>
+      urls.map((url) => ({ url, result: 'active', code: 'ok', checkedAt: '2026-09-24T00:00:00Z' })),
+    ),
+  };
+  const controller = new JobsController(
+    jobsService as any,
+    aggregator as any,
+    {} as any,
+    cacheService as any,
+    configService as any,
+    liveness as any,
+  );
+  return { controller, jobsService, aggregator, cacheService, liveness };
+}
+
+class FakeResponse extends EventEmitter {
+  headers: Record<string, string> = {};
+  setHeader(name: string, value: string): void {
+    this.headers[name.toLowerCase()] = value;
+  }
+}
+
+/** Positional call helper — the controller's parameter list, NDJSON flavour. */
+async function callNdjson(
+  controller: JobsController,
+  input: ScraperInputDto,
+  q: { paginate?: string; page?: string; pageSize?: string; dedup?: string; liveness?: string; legitimacy?: string } = {},
+  res: FakeResponse = new FakeResponse(),
+): Promise<{ file: StreamableFile; res: FakeResponse }> {
+  const file = (await controller.searchJobs(
+    input,
+    'ndjson',
+    q.paginate,
+    q.page,
+    q.pageSize,
+    q.dedup,
+    q.liveness,
+    q.legitimacy,
+    res as any,
+  )) as StreamableFile;
+  return { file, res };
+}
+
+async function readAll(file: StreamableFile): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of file.getStream()) chunks.push(Buffer.from(chunk as Buffer));
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+function parseLines(body: string): Line[] {
+  expect(body.endsWith('\n')).toBe(true);
+  return body
+    .split('\n')
+    .filter((l) => l.length > 0)
+    .map((l) => JSON.parse(l) as Line);
+}
+
+describe('JobsController — NDJSON stream (Spec 1721)', () => {
+  it('sets the NDJSON headers and returns a StreamableFile', async () => {
+    const { controller } = createHarness();
+    const { file, res } = await callNdjson(controller, new ScraperInputDto({}));
+    expect(file).toBeInstanceOf(StreamableFile);
+    expect(res.headers['content-type']).toBe(NDJSON_CONTENT_TYPE);
+    expect(res.headers['content-type']).toBe('application/x-ndjson; charset=utf-8');
+    expect(res.headers['cache-control']).toBe('no-cache');
+    expect(res.headers['x-accel-buffering']).toBe('no');
+    await readAll(file);
+  });
+
+  it('emits progress first, then one job line per job, then exactly one end line', async () => {
+    const jobs = [makeJob(1), makeJob(2), makeJob(3)];
+    const { controller } = createHarness({ jobs, deduped: true });
+
+    const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
+
+    expect(lines[0]).toEqual({ type: 'progress', sourcesDone: 0, sourcesTotal: 2, jobs: 0 });
+    const types = lines.map((l) => l.type);
+    const firstJob = types.indexOf('job');
+    expect(types.slice(0, firstJob).every((t) => t === 'progress')).toBe(true);
+    expect(types.slice(firstJob, firstJob + 3)).toEqual(['job', 'job', 'job']);
+    expect(types.filter((t) => t === 'end')).toHaveLength(1);
+    expect(types[types.length - 1]).toBe('end');
+
+    const end = lines[lines.length - 1]!;
+    expect(end).toMatchObject({ type: 'end', total: 3, deduped: true });
+    expect(typeof end.durationMs).toBe('number');
+    expect(end.durationMs as number).toBeGreaterThanOrEqual(0);
+    expect(Object.keys(end).sort()).toEqual(['deduped', 'durationMs', 'total', 'type']);
+  });
+
+  it('each job line carries exactly the per-job JSON of the JSON response, in the same order', async () => {
+    const jobs = [makeJob(1), makeJob(2, { compensation: { minAmount: 1, maxAmount: 2 } as any }), makeJob(3)];
+
+    const json = createHarness({ jobs });
+    const jsonResult = (await json.controller.searchJobs(new ScraperInputDto({}))) as { jobs: JobPostDto[] };
+    const jsonJobs = JSON.parse(JSON.stringify(jsonResult.jobs));
+
+    const nd = createHarness({ jobs });
+    const lines = parseLines(await readAll((await callNdjson(nd.controller, new ScraperInputDto({}))).file));
+    const streamed = lines.filter((l) => l.type === 'job').map((l) => l.data);
+
+    expect(streamed).toEqual(jsonJobs);
+    expect(streamed.map((j: any) => j.id)).toEqual(['job-1', 'job-2', 'job-3']);
+    // Every job line is exactly {type, data} — nothing else leaks in.
+    for (const line of lines.filter((l) => l.type === 'job')) {
+      expect(Object.keys(line).sort()).toEqual(['data', 'type']);
+    }
+  });
+
+  it('passes extra job fields (e.g. careerLevel from another feature) through untouched', async () => {
+    const careerLevel = { level: 'senior', confidence: 'high', reasons: ['title: Senior'] };
+    const job = makeJob(1, { title: 'Senior Engineer' });
+    Object.assign(job, { careerLevel, someFutureField: { nested: [1, 2] } });
+    const { controller } = createHarness({ jobs: [job] });
+
+    const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
+    const data = lines.find((l) => l.type === 'job')!.data as Record<string, unknown>;
+    expect(data.careerLevel).toEqual(careerLevel);
+    expect(data.someFutureField).toEqual({ nested: [1, 2] });
+    expect(data.dedupKey).toBe('key-1');
+  });
+
+  it('ignores paginate/page/page_size', async () => {
+    const jobs = Array.from({ length: 7 }, (_, i) => makeJob(i));
+    const { controller } = createHarness({ jobs });
+
+    const lines = parseLines(
+      await readAll(
+        (await callNdjson(controller, new ScraperInputDto({}), { paginate: 'true', page: '2', pageSize: '2' })).file,
+      ),
+    );
+
+    expect(lines.filter((l) => l.type === 'job')).toHaveLength(7);
+    expect(lines[lines.length - 1]).toMatchObject({ type: 'end', total: 7 });
+  });
+
+  it('passes the dedup flag through exactly as the JSON path does', async () => {
+    const { controller, aggregator } = createHarness({ deduped: false });
+    const lines = parseLines(
+      await readAll((await callNdjson(controller, new ScraperInputDto({}), { dedup: 'false' })).file),
+    );
+    expect(aggregator.aggregateRaw).toHaveBeenCalledWith(expect.any(Array), { dedup: false, persist: true });
+    expect(lines[lines.length - 1]).toMatchObject({ type: 'end', deduped: false });
+  });
+
+  it('a failure after headers writes an error line and NO end line', async () => {
+    const { controller } = createHarness({
+      search: async (_input, options) => {
+        options?.onProgress?.({ sourcesDone: 0, sourcesTotal: 5, jobs: 0 });
+        throw new Error('fan-out exploded');
+      },
+    });
+
+    const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
+
+    expect(lines).toEqual([
+      { type: 'progress', sourcesDone: 0, sourcesTotal: 5, jobs: 0 },
+      { type: 'error', message: 'fan-out exploded' },
+    ]);
+  });
+
+  it('a failure while serialising a job ends with an error line, not an end line', async () => {
+    const circular = makeJob(2) as any;
+    circular.self = circular;
+    const { controller } = createHarness({ jobs: [makeJob(1), circular] });
+
+    const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
+    const types = lines.map((l) => l.type);
+    expect(types.filter((t) => t === 'job')).toHaveLength(1);
+    expect(types[types.length - 1]).toBe('error');
+    expect(types).not.toContain('end');
+  });
+
+  it('streams a cache hit without running the fan-out', async () => {
+    const cached = [makeJob(9)];
+    const { controller, jobsService } = createHarness({ cached });
+
+    const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
+
+    expect(jobsService.searchJobsWithDiagnostics).not.toHaveBeenCalled();
+    expect(lines.map((l) => l.type)).toEqual(['job', 'end']);
+    expect(lines[1]).toMatchObject({ total: 1 });
+  });
+
+  it('uses the same cache key as the JSON path and writes the raw fan-out to it', async () => {
+    const { controller, cacheService } = createHarness();
+    await readAll((await callNdjson(controller, new ScraperInputDto({ searchTerm: 'go' }))).file);
+    expect(cacheService.get).toHaveBeenCalledWith(expect.objectContaining({ searchTerm: 'go', endpoint: 'search' }));
+    expect(cacheService.set).toHaveBeenCalledTimes(1);
+  });
+
+  it('the first line is readable while the fan-out is still running (headers flush immediately)', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { controller } = createHarness({
+      search: async (_input, options) => {
+        options?.onProgress?.({ sourcesDone: 0, sourcesTotal: 1669, jobs: 0 });
+        await gate;
+        return { jobs: [makeJob(1)], perSource: [] };
+      },
+    });
+
+    // The handler resolves BEFORE the fan-out does.
+    const { file } = await callNdjson(controller, new ScraperInputDto({}));
+    const stream = file.getStream();
+    const first = await new Promise<Buffer>((resolve) => stream.once('data', resolve));
+    expect(JSON.parse(first.toString('utf8').split('\n')[0]!)).toEqual({
+      type: 'progress',
+      sourcesDone: 0,
+      sourcesTotal: 1669,
+      jobs: 0,
+    });
+
+    release();
+    const rest: Buffer[] = [];
+    for await (const chunk of stream) rest.push(Buffer.from(chunk as Buffer));
+    const tail = parseLines(Buffer.concat(rest).toString('utf8'));
+    expect(tail.map((l) => l.type)).toEqual(['job', 'end']);
+  });
+
+  describe('heartbeat', () => {
+    beforeEach(() => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('re-emits the latest progress every NDJSON_HEARTBEAT_MS while scraping, then stops', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      let report!: (p: SearchProgress) => void;
+      const { controller } = createHarness({
+        search: async (_input, options) => {
+          report = options!.onProgress!;
+          report({ sourcesDone: 0, sourcesTotal: 10, jobs: 0 });
+          await gate;
+          return { jobs: [makeJob(1)], perSource: [] };
+        },
+      });
+
+      const { file } = await callNdjson(controller, new ScraperInputDto({}));
+      const body = readAll(file);
+
+      // Progress inside one interval is coalesced: no extra line yet.
+      report({ sourcesDone: 3, sourcesTotal: 10, jobs: 40 });
+      await jest.advanceTimersByTimeAsync(NDJSON_HEARTBEAT_MS - 1);
+      report({ sourcesDone: 4, sourcesTotal: 10, jobs: 55 });
+      await jest.advanceTimersByTimeAsync(1);
+      report({ sourcesDone: 9, sourcesTotal: 10, jobs: 90 });
+      await jest.advanceTimersByTimeAsync(NDJSON_HEARTBEAT_MS);
+
+      release();
+      const lines = parseLines(await body);
+
+      const progress = lines.filter((l) => l.type === 'progress');
+      expect(progress).toEqual([
+        { type: 'progress', sourcesDone: 0, sourcesTotal: 10, jobs: 0 },
+        { type: 'progress', sourcesDone: 4, sourcesTotal: 10, jobs: 55 },
+        { type: 'progress', sourcesDone: 9, sourcesTotal: 10, jobs: 90 },
+      ]);
+      expect(lines.map((l) => l.type).slice(-2)).toEqual(['job', 'end']);
+
+      // After the end line the timer is gone: nothing more is written.
+      await jest.advanceTimersByTimeAsync(NDJSON_HEARTBEAT_MS * 3);
+      expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it('keeps heart-beating through a slow liveness phase, and never after the first job line', async () => {
+      let releaseLiveness!: () => void;
+      const livenessGate = new Promise<void>((resolve) => (releaseLiveness = resolve));
+      const jobs = [makeJob(1), makeJob(2)];
+      const harness = createHarness({ jobs });
+      harness.liveness.checkBatch.mockImplementation(async (urls: string[]) => {
+        await livenessGate;
+        return urls.map((url) => ({ url, result: 'active', code: 'ok', checkedAt: 'x' }));
+      });
+
+      const { file } = await callNdjson(harness.controller, new ScraperInputDto({}), { liveness: 'true' });
+      const body = readAll(file);
+      await jest.advanceTimersByTimeAsync(NDJSON_HEARTBEAT_MS * 2);
+      releaseLiveness();
+      const lines = parseLines(await body);
+
+      const types = lines.map((l) => l.type);
+      // start line + two heartbeats while liveness was running
+      expect(types.filter((t) => t === 'progress').length).toBeGreaterThanOrEqual(3);
+      const firstJob = types.indexOf('job');
+      expect(types.slice(firstJob)).toEqual(['job', 'job', 'end']);
+    });
+  });
+
+  it('stops writing when the client disconnects (no throw, no end line)', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { controller } = createHarness({
+      jobs: [makeJob(1), makeJob(2)],
+      search: async (_input, options) => {
+        options?.onProgress?.({ sourcesDone: 0, sourcesTotal: 1, jobs: 0 });
+        await gate;
+        return { jobs: [makeJob(1), makeJob(2)], perSource: [] };
+      },
+    });
+    const res = new FakeResponse();
+    const { file } = await callNdjson(controller, new ScraperInputDto({}), {}, res);
+    const stream = file.getStream();
+
+    res.emit('close');
+    release();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(stream.destroyed).toBe(true);
+  });
+
+  it('applies liveness only to the first EVER_JOBS_LIVENESS_MAX_URLS jobs', async () => {
+    const jobs = Array.from({ length: 5 }, (_, i) => makeJob(i));
+    const { controller, liveness } = createHarness({ jobs, config: { 'liveness.maxUrls': 2 } });
+
+    const lines = parseLines(
+      await readAll((await callNdjson(controller, new ScraperInputDto({}), { liveness: 'true' })).file),
+    );
+
+    expect(liveness.checkBatch).toHaveBeenCalledTimes(1);
+    expect(liveness.checkBatch.mock.calls[0]![0]).toEqual([
+      'https://example.com/jobs/0',
+      'https://example.com/jobs/1',
+    ]);
+    const data = lines.filter((l) => l.type === 'job').map((l) => l.data as Record<string, unknown>);
+    expect(data.map((d) => d.liveness !== undefined)).toEqual([true, true, false, false, false]);
+  });
+
+  it('never probes when the server gate is off, even with ?liveness=true', async () => {
+    const { controller, liveness } = createHarness({ config: { 'liveness.enabled': false } });
+    const lines = parseLines(
+      await readAll((await callNdjson(controller, new ScraperInputDto({}), { liveness: 'true' })).file),
+    );
+    expect(liveness.checkBatch).not.toHaveBeenCalled();
+    for (const line of lines.filter((l) => l.type === 'job')) {
+      expect((line.data as Record<string, unknown>).liveness).toBeUndefined();
+    }
+  });
+});

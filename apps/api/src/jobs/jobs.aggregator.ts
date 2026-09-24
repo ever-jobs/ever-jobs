@@ -11,6 +11,7 @@ import {
   JobPostDto,
   ScraperInputDto,
 } from '@ever-jobs/models';
+import { dedupKeyForJob } from '@ever-jobs/common';
 import { JobsService } from './jobs.service';
 
 /**
@@ -166,6 +167,17 @@ export class JobsAggregator {
     rawJobs: JobPostDto[],
     options: AggregateOptions = {},
   ): Promise<AggregateResult> {
+    const result = await this.aggregateRawUnkeyed(rawJobs, options);
+    // Spec 1721 / contract C9 — every returned job carries its stable
+    // cross-source key, whichever path produced the list.
+    await stampDedupKeys(result.jobs);
+    return result;
+  }
+
+  private async aggregateRawUnkeyed(
+    rawJobs: JobPostDto[],
+    options: AggregateOptions,
+  ): Promise<AggregateResult> {
     const rawCount = rawJobs.length;
     const wantDedup = options.dedup ?? true;
 
@@ -303,6 +315,38 @@ export class JobsAggregator {
         persistError: { code, message },
       };
     }
+  }
+}
+
+/**
+ * Jobs keyed between event-loop yields in {@link stampDedupKeys}. One key is
+ * a normalise + sha-256 (~12 µs); 500 of them is ~6 ms, well under anything a
+ * liveness probe or a concurrent request would notice.
+ */
+const DEDUP_KEY_YIELD_EVERY = 500;
+
+/**
+ * Stamp `dedupKey` (Spec 1721 / contract C9) on every job, in place.
+ *
+ * Always derived from the job's own normalised company/title/location via
+ * `dedupKeyForJob` — the function the default dedup engine uses for
+ * `canonicalJobId` — rather than from the engine's cluster assignment, so the
+ * key is identical with `dedup=false`, with a swapped engine, from a cache hit
+ * or a fresh fan-out, and across runs. For every representative the default
+ * engine returns, the two coincide (the representative is the cluster head).
+ *
+ * Yields to the event loop every {@link DEDUP_KEY_YIELD_EVERY} jobs: a
+ * 25 k-job list-mode corpus would otherwise block for ~0.3 s.
+ */
+export async function stampDedupKeys(jobs: JobPostDto[]): Promise<void> {
+  for (let i = 0; i < jobs.length; i++) {
+    if (i > 0 && i % DEDUP_KEY_YIELD_EVERY === 0) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    const job = jobs[i];
+    if (!job) continue;
+    const key = dedupKeyForJob(job);
+    if (key !== undefined) job.dedupKey = key;
   }
 }
 

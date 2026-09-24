@@ -5,6 +5,7 @@ import { JobPostDto, Site } from '@ever-jobs/models';
 import { JobsService } from './jobs.service';
 import { JobsAggregator } from './jobs.aggregator';
 import { CacheService } from '../cache/cache.service';
+import { describeTerm, normalizeSearchInput } from './search-input';
 import {
   SearchJobsInput,
   SearchJobsResult,
@@ -51,8 +52,11 @@ export class JobsResolver {
   async searchJobs(
     @Args('input') input: SearchJobsInput,
   ): Promise<SearchJobsResult> {
+    // Spec 1720 — list mode: null / "" / whitespace mean "no keyword".
+    // Normalised before the cache key so they share one entry.
+    normalizeSearchInput(input);
     this.logger.log(
-      `GraphQL searchJobs: term="${input.searchTerm}", location="${input.location ?? ''}"`,
+      `GraphQL searchJobs: term=${describeTerm(input)}, location="${input.location ?? ''}"`,
     );
 
     // Cache stores RAW fan-out — dedup runs per-request.
@@ -88,6 +92,7 @@ export class JobsResolver {
         companySlug: input.companySlug,
         descriptionFormat: input.descriptionFormat ?? 'markdown',
         siteType: input.siteType,
+        siteCategories: input.siteCategories,
       };
       rawJobs = await this.jobsService.searchJobs(scraperInput);
       await this.cacheService.set(cacheParams, rawJobs);

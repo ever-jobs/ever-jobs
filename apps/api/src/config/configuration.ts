@@ -1,3 +1,5 @@
+import { resolveFanoutDeadlineMs, resolveLivenessConfig } from './search-config';
+
 /**
  * Central configuration factory.
  * Maps every environment variable to a typed config object.
@@ -73,9 +75,13 @@ export default () => {
        * Wall-clock budget for one fan-out, ms. Once exceeded, no further
        * sources are STARTED (in-flight ones finish). `0` disables.
        * Defaults to the Hust client's own 120 s abort.
+       * Spec 1721: `EVER_JOBS_FANOUT_DEADLINE_MS`, falling back to
+       * `EVER_JOBS_SEARCH_DEADLINE_MS`.
        */
-      deadlineMs: parseInt(process.env.EVER_JOBS_SEARCH_DEADLINE_MS, 120_000),
+      deadlineMs: resolveFanoutDeadlineMs(process.env),
     },
+    // Liveness server gate + per-request cap (Spec 1723)
+    liveness: resolveLivenessConfig(process.env),
     // Persistence (Spec 5024 — bounded retention on the interactive path)
     store: {
       /**

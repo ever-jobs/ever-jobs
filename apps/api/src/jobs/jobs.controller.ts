@@ -32,7 +32,14 @@ import {
 } from '@ever-jobs/models';
 import { ConfigService } from '@nestjs/config';
 import { JobsService } from './jobs.service';
-import { JobsAggregator } from './jobs.aggregator';
+import { AggregateResult, JobsAggregator } from './jobs.aggregator';
+import {
+  NDJSON_CONTENT_TYPE,
+  NDJSON_HEARTBEAT_MS,
+  NdjsonWriter,
+} from './ndjson-writer';
+import { SearchProgress, describeTerm, normalizeSearchInput } from './search-input';
+import { DEFAULT_LIVENESS_MAX_URLS } from '../config/search-config';
 import { AnalyticsService } from '@ever-jobs/analytics';
 import { CacheService } from '../cache/cache.service';
 
@@ -65,18 +72,36 @@ export class JobsController {
    *
    * Output format and pagination are controlled via query parameters:
    *   ?format=csv    → returns CSV file download
+   *   ?format=ndjson → streams one JSON line per job (Spec 1721)
    *   ?paginate=true&page=1&page_size=10 → paginated JSON
    *   ?dedup=false   → opt out of cross-source deduplication (default true)
+   *
+   * Omitting `searchTerm` (or sending null / "" / whitespace) is LIST MODE
+   * (Spec 1720): every selected source lists what it can, no keyword filter.
    */
   @Post('search')
   @ApiOperation({
     summary: 'Search for jobs across multiple sources',
     description:
       'Searches selected job boards concurrently and returns a merged, sorted list of job postings. ' +
-      'Supports caching, CSV export (via ?format=csv), pagination (via ?paginate=true), and ' +
-      'cross-source deduplication (default ?dedup=true; pass ?dedup=false to opt out).',
+      'Supports caching, CSV export (via ?format=csv), NDJSON streaming (via ?format=ndjson), pagination ' +
+      '(via ?paginate=true), and cross-source deduplication (default ?dedup=true; pass ?dedup=false to opt out). ' +
+      'Omit `searchTerm` for LIST MODE: every selected source returns what it can list without a keyword, ' +
+      'up to `resultsWanted` per source. Every job carries a stable cross-source `dedupKey`.',
   })
-  @ApiQuery({ name: 'format', required: false, description: 'Output format: json (default) or csv', example: 'json' })
+  @ApiQuery({
+    name: 'format',
+    required: false,
+    enum: ['json', 'csv', 'ndjson'],
+    description:
+      'Output format: json (default), csv, or ndjson. ndjson streams Content-Type application/x-ndjson: ' +
+      '{"type":"progress","sourcesDone":n,"sourcesTotal":m,"jobs":k} at fan-out start and at most every ~10 s, ' +
+      'then one {"type":"job","data":{…}} per job (same order and per-job shape as json), then ' +
+      '{"type":"end","total":N,"deduped":bool,"durationMs":ms}. On failure after headers: {"type":"error","message":"…"} ' +
+      'and NO end line — treat a missing end line as a truncated result. Ignore unknown line types. ' +
+      'paginate/page/page_size are ignored in ndjson mode.',
+    example: 'json',
+  })
   @ApiQuery({ name: 'paginate', required: false, type: Boolean, description: 'Enable pagination' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (when paginate=true)' })
   @ApiQuery({ name: 'page_size', required: false, type: Number, description: 'Results per page (1-100, default 10)' })
@@ -100,7 +125,23 @@ export class JobsController {
     type: Number,
     description: 'Cap on returned per_source rows (default 200). Non-positive means no cap.',
   })
-  @ApiResponse({ status: 200, description: 'Job search results' })
+  @ApiQuery({
+    name: 'liveness',
+    required: false,
+    type: Boolean,
+    description:
+      'Probe each returned posting URL (liveness-http) and attach liveness {state, checkedAt}. Off unless requested. ' +
+      'The server can refuse it (EVER_JOBS_LIVENESS_ENABLED=false → no liveness field) and caps probes per request ' +
+      '(EVER_JOBS_LIVENESS_MAX_URLS, default 100; jobs past the cap carry no liveness).',
+  })
+  @ApiQuery({
+    name: 'legitimacy',
+    required: false,
+    type: Boolean,
+    description: 'Attach an in-process legitimacy verdict {state, reasons} to each returned job. Off unless requested.',
+  })
+  @ApiResponse({ status: 200, description: 'Job search results (json / csv / ndjson)' })
+  @ApiResponse({ status: 400, description: 'Invalid input, e.g. an unknown siteCategories value' })
   @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   async searchJobs(
     @Body() input: ScraperInputDto,
@@ -119,8 +160,14 @@ export class JobsController {
     @Query('diagnostics') diagnosticsRaw?: string,
     @Query('diagnostics_limit') diagnosticsLimitRaw?: string,
   ) {
+    // Spec 1720 — normalise the keyword BEFORE logging and the cache lookup,
+    // so "", "   ", null and an omitted term are one request and one cache
+    // entry, and the log never prints term="undefined".
+    normalizeSearchInput(input);
     this.logger.log(
-      `Search request: sites=${input.siteType?.join(',') ?? 'all'}, term="${input.searchTerm}", location="${input.location}"`,
+      `Search request: sites=${input.siteType?.join(',') ?? 'all'}` +
+        `${input.siteCategories?.length ? `, categories=${input.siteCategories.join(',')}` : ''}` +
+        `, term=${describeTerm(input)}, location=${input.location ? JSON.stringify(input.location) : '<none>'}`,
     );
 
     // ── Helper parsers ────────────────────
@@ -163,39 +210,22 @@ export class JobsController {
       return 'off';
     };
 
-    // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
-    const cacheParams = { ...input, endpoint: 'search' };
-    const cached = await this.cacheService.get<JobPostDto[]>(cacheParams);
-    let rawJobs: JobPostDto[];
-    let fromCache = false;
-    // Per-source outcome breakdown (Spec 5082). Only meaningful on a fresh
-    // fan-out — a cache hit ran no scrapers, so it stays empty.
-    let perSource: SourceDiagnosticDto[] = [];
+    const dedup = parseBoolWithDefault(dedupRaw, true);
 
-    if (cached) {
-      rawJobs = cached;
-      fromCache = true;
-      this.logger.log(`Cache hit — returning ${rawJobs.length} cached results`);
-    } else {
-      const result = await this.jobsService.searchJobsWithDiagnostics(input);
-      rawJobs = result.jobs;
-      perSource = result.perSource;
-      await this.cacheService.set(cacheParams, rawJobs);
+    // ── NDJSON stream (Spec 1721) ─────────
+    // Same cache → fan-out → dedup → corpus-signal pipeline as JSON, but the
+    // whole set is streamed line by line; pagination params are ignored.
+    if (format?.toLowerCase() === 'ndjson') {
+      return this.streamNdjson(
+        input,
+        { dedup, liveness: parseBool(livenessRaw), legitimacy: parseBool(legitimacyRaw) },
+        res,
+      );
     }
 
-    // ── Dedup (Spec 003 / FR-1) ───────────
-    const dedup = parseBoolWithDefault(dedupRaw, true);
-    // Spec 5024 — persistence on the interactive path is opt-out via
-    // `EVER_JOBS_PERSIST_SEARCH`. Default stays `true` (historical
-    // behaviour); deployments on the in-process `memory` backend should
-    // disable it, since nothing in `apps/api` reads the corpus back.
-    const persist = this.configService.get<boolean>('store.persistSearch', true);
-    const aggregated = await this.aggregator.aggregateRaw(rawJobs, { dedup, persist });
+    // ── Cache → fan-out → dedup (shared with NDJSON) ──
+    const { aggregated, perSource, fromCache } = await this.runSearch(input, dedup);
     const jobs = aggregated.jobs;
-
-    this.logger.log(
-      `Returning ${jobs.length} jobs (raw=${aggregated.rawCount}, deduped=${aggregated.deduped}, cached=${fromCache})`,
-    );
 
     // ── Output window (Spec 5025) ─────────
     // Resolved BEFORE enrichment so corpus signals are computed only for the
@@ -223,14 +253,7 @@ export class JobsController {
     }
 
     // ── Corpus signals (Spec 740; scoped by Spec 5025) — opt-in ──
-    // Order matters: legitimacy folds in liveness's off-platform redirect
-    // signal (`job.liveness?.state === 'expired'`), so liveness runs first.
-    if (parseBool(livenessRaw) && this.livenessChecker) {
-      await this.enrichLiveness(outputJobs);
-    }
-    if (parseBool(legitimacyRaw) && this.legitimacyChecker) {
-      this.enrichLegitimacy(outputJobs);
-    }
+    await this.applyCorpusSignals(outputJobs, parseBool(livenessRaw), parseBool(legitimacyRaw));
 
     // ── CSV output ────────────────────────
     if (isCsv) {
@@ -300,7 +323,7 @@ export class JobsController {
   })
   async analyzeJobs(@Body() input: ScraperInputDto): Promise<JobAnalysisDto> {
     this.logger.log(
-      `Analyze request: sites=${input.siteType?.join(',') ?? 'all'}, term="${input.searchTerm}", location="${input.location}"`,
+      `Analyze request: sites=${input.siteType?.join(',') ?? 'all'}, term=${describeTerm(input)}, location=${input.location ? JSON.stringify(input.location) : '<none>'}`,
     );
     const jobs = await this.jobsService.searchJobs(input);
     const analysis = this.analyticsService.analyze(jobs);
@@ -308,14 +331,209 @@ export class JobsController {
     return analysis;
   }
 
+  // ── Shared search pipeline (JSON + NDJSON) ──
+
+  /**
+   * Cache lookup → fan-out on miss → cache write (RAW fan-out) → dedup +
+   * optional persistence. The single implementation behind both the JSON and
+   * the NDJSON path, so the two can never return different job sets.
+   */
+  private async runSearch(
+    input: ScraperInputDto,
+    dedup: boolean,
+    onProgress?: (progress: SearchProgress) => void,
+  ): Promise<{ aggregated: AggregateResult; perSource: SourceDiagnosticDto[]; fromCache: boolean }> {
+    // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
+    const cacheParams = { ...input, endpoint: 'search' };
+    const cached = await this.cacheService.get<JobPostDto[]>(cacheParams);
+    let rawJobs: JobPostDto[];
+    let fromCache = false;
+    // Per-source outcome breakdown (Spec 5082). Only meaningful on a fresh
+    // fan-out — a cache hit ran no scrapers, so it stays empty.
+    let perSource: SourceDiagnosticDto[] = [];
+
+    if (cached) {
+      rawJobs = cached;
+      fromCache = true;
+      this.logger.log(`Cache hit — returning ${rawJobs.length} cached results`);
+    } else {
+      const result = onProgress
+        ? await this.jobsService.searchJobsWithDiagnostics(input, { onProgress })
+        : await this.jobsService.searchJobsWithDiagnostics(input);
+      rawJobs = result.jobs;
+      perSource = result.perSource;
+      await this.cacheService.set(cacheParams, rawJobs);
+    }
+
+    // ── Dedup (Spec 003 / FR-1) ───────────
+    // Persistence follows `store.persistSearch` (Spec 5024; since Spec 1722
+    // off by default, on by default for an explicitly selected durable store).
+    // The fallback below only applies when no configuration is loaded at all.
+    const persist = this.configService.get<boolean>('store.persistSearch', true);
+    const aggregated = await this.aggregator.aggregateRaw(rawJobs, { dedup, persist });
+
+    this.logger.log(
+      `Returning ${aggregated.jobs.length} jobs (raw=${aggregated.rawCount}, deduped=${aggregated.deduped}, cached=${fromCache})`,
+    );
+    return { aggregated, perSource, fromCache };
+  }
+
+  // ── NDJSON streaming (Spec 1721) ──
+
+  /**
+   * Start an NDJSON response and return it as a `StreamableFile`.
+   *
+   * The producer runs detached: this method returns before any scraping so
+   * Nest's interceptors finish first (flushing from inside the handler would
+   * make `LoggingInterceptor`'s `X-Process-Time` header throw). The first
+   * line — a progress line at fan-out start, or the first job on a cache hit —
+   * is what pushes the headers to the client.
+   */
+  private streamNdjson(
+    input: ScraperInputDto,
+    flags: { dedup: boolean; liveness: boolean; legitimacy: boolean },
+    res?: Response,
+  ): StreamableFile {
+    const startedAt = Date.now();
+    res?.setHeader('Content-Type', NDJSON_CONTENT_TYPE);
+    res?.setHeader('Cache-Control', 'no-cache');
+    // nginx (ingress) buffers proxied responses by default; this header turns
+    // that off for this response so lines reach the client as written.
+    res?.setHeader('X-Accel-Buffering', 'no');
+
+    const writer = new NdjsonWriter();
+    // A client that goes away stops the writer; the fan-out itself cannot be
+    // cancelled (no AbortSignal in the plugin contract) and finishes detached.
+    res?.once?.('close', () => {
+      if (!writer.isClosed) {
+        this.logger.warn('NDJSON client disconnected before the end line');
+        writer.abort();
+      }
+    });
+
+    let latest: SearchProgress | undefined;
+    let announced = false;
+    let heartbeat: ReturnType<typeof setInterval> | undefined = setInterval(() => {
+      if (latest) writer.writeNow({ type: 'progress', ...latest });
+    }, NDJSON_HEARTBEAT_MS);
+    heartbeat.unref?.();
+    const stopHeartbeat = (): void => {
+      if (heartbeat !== undefined) {
+        clearInterval(heartbeat);
+        heartbeat = undefined;
+      }
+    };
+    const onProgress = (progress: SearchProgress): void => {
+      latest = { ...progress };
+      if (!announced) {
+        // Fan-out start: the first line, sent immediately.
+        announced = true;
+        writer.writeNow({ type: 'progress', ...latest });
+      }
+    };
+
+    void this.produceNdjson(input, flags, writer, onProgress, startedAt, {
+      onFetched: (rawCount) => {
+        // Cache hit: no fan-out ran, but heartbeats must keep the connection
+        // alive while dedup / liveness work through the set.
+        if (!latest) latest = { sourcesDone: 0, sourcesTotal: 0, jobs: rawCount };
+      },
+      // No progress line may land between job lines or after the end line.
+      onStreamStart: stopHeartbeat,
+    }).finally(stopHeartbeat);
+
+    return new StreamableFile(writer.stream, { type: NDJSON_CONTENT_TYPE });
+  }
+
+  /**
+   * Body of the NDJSON response. Never rejects: every failure becomes one
+   * `{"type":"error"}` line and the stream closes WITHOUT an `end` line,
+   * which is how consumers recognise a truncated result.
+   */
+  private async produceNdjson(
+    input: ScraperInputDto,
+    flags: { dedup: boolean; liveness: boolean; legitimacy: boolean },
+    writer: NdjsonWriter,
+    onProgress: (progress: SearchProgress) => void,
+    startedAt: number,
+    hooks: { onFetched: (rawCount: number) => void; onStreamStart: () => void },
+  ): Promise<void> {
+    try {
+      const { aggregated, fromCache } = await this.runSearch(input, flags.dedup, onProgress);
+      hooks.onFetched(aggregated.rawCount);
+      const jobs = aggregated.jobs;
+      await this.applyCorpusSignals(jobs, flags.liveness, flags.legitimacy);
+
+      hooks.onStreamStart();
+      for (const job of jobs) {
+        if (!(await writer.writeJob(job))) return; // consumer went away
+      }
+      await writer.write({
+        type: 'end',
+        total: jobs.length,
+        deduped: aggregated.deduped,
+        durationMs: Date.now() - startedAt,
+      });
+      writer.end();
+      this.logger.log(
+        `NDJSON stream complete: ${jobs.length} jobs (cached=${fromCache}) in ${Date.now() - startedAt}ms`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`NDJSON stream failed after headers: ${message}`);
+      writer.writeNow({ type: 'error', message });
+      writer.end();
+    }
+  }
+
   // ── Corpus-signal enrichment (Spec 740) ──
+
+  /**
+   * Opt-in corpus signals for exactly the jobs being returned.
+   * Order matters: legitimacy folds in liveness's off-platform redirect
+   * signal (`job.liveness?.state === 'expired'`), so liveness runs first.
+   */
+  private async applyCorpusSignals(
+    jobs: JobPostDto[],
+    liveness: boolean,
+    legitimacy: boolean,
+  ): Promise<void> {
+    if (liveness && this.livenessChecker && this.livenessAllowed()) {
+      await this.enrichLiveness(jobs);
+    }
+    if (legitimacy && this.legitimacyChecker) {
+      this.enrichLegitimacy(jobs);
+    }
+  }
+
+  /**
+   * Spec 1723 — server gate. `EVER_JOBS_LIVENESS_ENABLED=false` refuses the
+   * per-request flag: nothing is probed and no `liveness` field is set.
+   */
+  private livenessAllowed(): boolean {
+    const enabled = this.configService.get<boolean>('liveness.enabled', true) !== false;
+    if (!enabled) {
+      this.logger.debug('liveness requested but EVER_JOBS_LIVENESS_ENABLED=false — not probing');
+    }
+    return enabled;
+  }
 
   /**
    * Attach per-posting liveness (active/expired/uncertain) by probing each result URL via the
    * `ILivenessChecker` (Spec 721). Best-effort: any failure degrades the whole batch to
    * `uncertain` and never aborts the request.
+   *
+   * Spec 1723 — at most `EVER_JOBS_LIVENESS_MAX_URLS` URLs (default 100) are probed, the
+   * first ones in output order; jobs past the cap are left without a `liveness` field.
    */
   private async enrichLiveness(jobs: JobPostDto[]): Promise<void> {
+    const maxUrls = this.configService.get<number>('liveness.maxUrls', DEFAULT_LIVENESS_MAX_URLS);
+    if (maxUrls > 0 && jobs.length > maxUrls) {
+      this.logger.warn(
+        `Liveness capped: probing ${maxUrls} of ${jobs.length} jobs (EVER_JOBS_LIVENESS_MAX_URLS)`,
+      );
+      jobs = jobs.slice(0, maxUrls);
+    }
     try {
       const verdicts = await this.livenessChecker!.checkBatch(
         jobs.map((j) => j.jobUrl),
@@ -369,7 +587,10 @@ export class JobsController {
           flat[key] = '';
         } else if (typeof value === 'object' && !Array.isArray(value)) {
           for (const [subKey, subVal] of Object.entries(value as Record<string, any>)) {
-            flat[`${key}.${subKey}`] = String(subVal ?? '');
+            // Nested arrays (e.g. `legitimacy.reasons`) read like top-level ones.
+            flat[`${key}.${subKey}`] = Array.isArray(subVal)
+              ? subVal.join('; ')
+              : String(subVal ?? '');
           }
         } else if (Array.isArray(value)) {
           flat[key] = value.join('; ');
