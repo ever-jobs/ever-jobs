@@ -1,0 +1,3694 @@
+{
+  "generatedAt": "2026-09-24",
+  "userAgent": "EverJobs-SourceVerifier/1.0 (+https://github.com/ever-co/ever-jobs; one-off careers-listing check, max 1 req/s)",
+  "minIntervalMs": 1100,
+  "requests": 98,
+  "note": "Merged record of the live verification runs of scripts/probe-ats-delegate-company-source.ts (Spec 1735). Keyed by backend:slug. One listing request per attempt, serial, >=1.1 s apart.",
+  "boards": {
+    "workday:salesforce:12:External_Career_Site": {
+      "backend": "workday",
+      "slug": "salesforce:12:External_Career_Site",
+      "url": "https://salesforce.wd12.myworkdayjobs.com/wday/cxs/salesforce/External_Career_Site/jobs",
+      "status": 200,
+      "jobCount": 1529,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "JR360493",
+          "title": "Value Acceleration Engineer MTS",
+          "location": "3 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/California---San-Francisco/Value-Acceleration-Engineer-MTS_JR360493-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR360493"
+          ]
+        },
+        {
+          "id": "JR360492",
+          "title": "Value Acceleration Engineer SMTS",
+          "location": "3 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/California---San-Francisco/Value-Acceleration-Engineer-SMTS_JR360492",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR360492"
+          ]
+        },
+        {
+          "id": "JR357458",
+          "title": "ETL Informatica/IICS Engineer | Data",
+          "location": "Mexico - Mexico City",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Mexico---Mexico-City/ETL-Software-Engineer---Data_JR357458",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR357458"
+          ]
+        }
+      ]
+    },
+    "workday:adobe:5:external_experienced": {
+      "backend": "workday",
+      "slug": "adobe:5:external_experienced",
+      "url": "https://adobe.wd5.myworkdayjobs.com/wday/cxs/adobe/external_experienced/jobs",
+      "status": 200,
+      "jobCount": 583,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R171447",
+          "title": "Forward Deployed Engineer",
+          "location": "San Jose",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/San-Jose/Forward-Deployed-Engineer_R171447-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R171447"
+          ]
+        },
+        {
+          "id": "R171555",
+          "title": "Senior Engineering Program Manager",
+          "location": "San Jose",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/San-Jose/Senior-Engineering-Program-Manager_R171555",
+          "postedOn": "Posted 2 Days Ago",
+          "bulletFields": [
+            "R171555"
+          ]
+        },
+        {
+          "id": "R171834",
+          "title": "Senior Manager, Employee Relations",
+          "location": "San Jose",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/San-Jose/Senior-Manager--Employee-Relations_R171834",
+          "postedOn": "Posted 3 Days Ago",
+          "bulletFields": [
+            "R171834"
+          ]
+        }
+      ]
+    },
+    "workday:intel:1:External": {
+      "backend": "workday",
+      "slug": "intel:1:External",
+      "url": "https://intel.wd1.myworkdayjobs.com/wday/cxs/intel/External/jobs",
+      "status": 200,
+      "jobCount": 614,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "JR0287131",
+          "title": "Senior DFT Logic Design Engineer",
+          "location": "3 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/US-Arizona-Phoenix/Senior-DFT-Logic-Design-Engineer_JR0287131",
+          "postedOn": "Posted 10 Days Ago",
+          "bulletFields": [
+            "Spotlight Job",
+            "JR0287131"
+          ]
+        },
+        {
+          "id": "JR0284570",
+          "title": "SoC Compute/Memory Subsystem Architect",
+          "location": "Ireland, Leixlip",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Ireland-Leixlip/SoC-Compute-Memory-Subsystem-Architect_JR0284570",
+          "postedOn": "Posted 10 Days Ago",
+          "bulletFields": [
+            "Spotlight Job",
+            "JR0284570"
+          ]
+        },
+        {
+          "id": "JR0286861",
+          "title": "Pre-Silicon verification engineer",
+          "location": "Ireland, Leixlip",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Ireland-Leixlip/Pre-Silicon-verification-engineer_JR0286861",
+          "postedOn": "Posted 16 Days Ago",
+          "bulletFields": [
+            "Spotlight Job",
+            "JR0286861"
+          ]
+        }
+      ]
+    },
+    "workday:hp:5:ExternalCareerSite": {
+      "backend": "workday",
+      "slug": "hp:5:ExternalCareerSite",
+      "url": "https://hp.wd5.myworkdayjobs.com/wday/cxs/hp/ExternalCareerSite/jobs",
+      "status": 200,
+      "jobCount": 926,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "3168552",
+          "title": "Technical Solutions Cons I",
+          "location": "Heredia, Heredia, Costa Rica",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168552-2",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "3168552"
+          ]
+        },
+        {
+          "id": "3168549",
+          "title": "Technical Solutions Cons I",
+          "location": "Heredia, Heredia, Costa Rica",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168549-2",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "3168549"
+          ]
+        },
+        {
+          "id": "3168547",
+          "title": "Technical Solutions Cons I",
+          "location": "Heredia, Heredia, Costa Rica",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168547-1",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "3168547"
+          ]
+        }
+      ]
+    },
+    "workday:hpe:5:Jobsathpe": {
+      "backend": "workday",
+      "slug": "hpe:5:Jobsathpe",
+      "url": "https://hpe.wd5.myworkdayjobs.com/wday/cxs/hpe/Jobsathpe/jobs",
+      "status": 200,
+      "jobCount": 1292,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "1210285",
+          "title": "Manufacturing Operations Associate",
+          "location": "Aguadilla, Puerto Rico, Puerto Rico",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Aguadilla-Puerto-Rico-Puerto-Rico/Manufacturing-Operations-Associate_1210285-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "1210285"
+          ]
+        },
+        {
+          "id": "1215675",
+          "title": "PCAI Specialist",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Mexico-City-Distrito-Federal/PCAI-Specialist_1215675-2",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "1215675"
+          ]
+        },
+        {
+          "id": "1210320",
+          "title": "Manufacturing Operations Associate",
+          "location": "Aguadilla, Puerto Rico, Puerto Rico",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Aguadilla-Puerto-Rico-Puerto-Rico/Manufacturing-Operations-Associate_1210320-3",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "1210320"
+          ]
+        }
+      ]
+    },
+    "workday:mastercard:1:CorporateCareers": {
+      "backend": "workday",
+      "slug": "mastercard:1:CorporateCareers",
+      "url": "https://mastercard.wd1.myworkdayjobs.com/wday/cxs/mastercard/CorporateCareers/jobs",
+      "status": 200,
+      "jobCount": 1066,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R-287829",
+          "title": "Senior Software Engineer",
+          "location": "O'Fallon, Missouri",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/OFallon-Missouri/Senior-Software-Engineer_R-287829",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-287829"
+          ]
+        },
+        {
+          "id": "R-291094",
+          "title": "Senior Software Engineer",
+          "location": "Arlington, Virginia",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Arlington-Virginia/Senior-Software-Engineer_R-291094-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-291094"
+          ]
+        },
+        {
+          "id": "R-291355",
+          "title": "Manager, Product Management (Agentic Commerce + Commercialization)",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Toronto-Canada-Ethoca/Manager--Product-Management--Agentic-Commerce---Commercialization-_R-291355",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-291355"
+          ]
+        }
+      ]
+    },
+    "workday:paypal:1:jobs": {
+      "backend": "workday",
+      "slug": "paypal:1:jobs",
+      "url": "https://paypal.wd1.myworkdayjobs.com/wday/cxs/paypal/jobs/jobs",
+      "status": 200,
+      "jobCount": 280,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R0138185",
+          "title": "Sr Manager, Software Engineering",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/San-Jose-California-United-States-of-America/Sr-Manager--Software-Engineering_R0138185-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0138185"
+          ]
+        },
+        {
+          "id": "R0137425",
+          "title": "Senior Manager, Loyalty Strategy & Performance",
+          "location": "New York City, New York, United States of America",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/New-York-City-New-York-United-States-of-America/Senior-Manager--Loyalty-Economics_R0137425",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0137425"
+          ]
+        },
+        {
+          "id": "R0138048",
+          "title": "Sr Manager, Ads Privacy",
+          "location": "6 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/San-Jose-California-United-States-of-America/Sr-Manager--Ads-Privacy_R0138048",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0138048"
+          ]
+        }
+      ]
+    },
+    "workday:capitalone:12:Capital_One": {
+      "backend": "workday",
+      "slug": "capitalone:12:Capital_One",
+      "url": "https://capitalone.wd12.myworkdayjobs.com/wday/cxs/capitalone/Capital_One/jobs",
+      "status": 200,
+      "jobCount": 1843,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R1002073",
+          "title": "Full Stack Engineer 4",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Richmond-VA/Full-Stack-Engineer-4_R1002073-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R1002073"
+          ]
+        },
+        {
+          "id": "R1000798",
+          "title": "Director, HR Business Partner - Risk",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/McLean-VA/Director--HR-Business-Partner---Risk_R1000798",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R1000798"
+          ]
+        },
+        {
+          "id": "R246392",
+          "title": "Product Manager - Trade Credit",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Chicago-IL/Product-Manager---Trade-Credit_R246392-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R246392"
+          ]
+        }
+      ]
+    },
+    "workday:target:5:targetcareers": {
+      "backend": "workday",
+      "slug": "target:5:targetcareers",
+      "url": "https://target.wd5.myworkdayjobs.com/wday/cxs/target/targetcareers/jobs",
+      "status": 200,
+      "jobCount": 2000,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R0000425193",
+          "title": "Senior Systems Engineer - Regional Distribution Center - Fridley, MN",
+          "location": "1090 73rd Ave NE, Fridley,MN 55432-3407",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/1090-73rd-Ave-NE-FridleyMN-55432-3407/Senior-Systems-Engineer---Regional-Distribution-Center---Fridley--MN_R0000425193",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0000425193"
+          ]
+        },
+        {
+          "id": "R0000475213",
+          "title": "Executive Team Leader General Merchandise & Food Sales (Assistant Manager Operations & Grocery)- Baltimore, MD",
+          "location": "3559 Boston Street, Baltimore,MD 21224-5750",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/3559-Boston-Street-BaltimoreMD-21224-5750/Executive-Team-Leader-General-Merchandise---Food-Sales--Assistant-Manager-Operations---Grocery---Baltimore--MD_R0000475213",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0000475213"
+          ]
+        },
+        {
+          "id": "R0000453872",
+          "title": "Specialty Sales Team Leader - Greer, SC",
+          "location": "6025 Wade Hampton Blvd, Taylors,SC 29687-5334",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/6025-Wade-Hampton-Blvd-TaylorsSC-29687-5334/Specialty-Sales-Team-Leader---Greer--SC_R0000453872",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0000453872"
+          ]
+        }
+      ]
+    },
+    "workday:ngc:1:Northrop_Grumman_External_Site": {
+      "backend": "workday",
+      "slug": "ngc:1:Northrop_Grumman_External_Site",
+      "url": "https://ngc.wd1.myworkdayjobs.com/wday/cxs/ngc/Northrop_Grumman_External_Site/jobs",
+      "status": 200,
+      "jobCount": 3854,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R10253020",
+          "title": "Aircraft Inspector 2 / 3",
+          "location": "United States-Florida-Melbourne",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/United-States-Florida-Melbourne/Aircraft-Inspector-2---3_R10253020",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R10253020"
+          ]
+        },
+        {
+          "id": "R10253028",
+          "title": "Associate Software Engineer / Software Engineer",
+          "location": "United States-Alabama-Huntsville",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/United-States-Alabama-Huntsville/Associate-Software-Engineer---Software-Engineer_R10253028-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R10253028"
+          ]
+        },
+        {
+          "id": "R10253010",
+          "title": "Staff Software Systems Architect",
+          "location": "United States-Alabama-Huntsville",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/United-States-Alabama-Huntsville/Staff-Software-Systems-Architect_R10253010",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R10253010"
+          ]
+        }
+      ]
+    },
+    "workday:bah:1:BAH_Jobs": {
+      "backend": "workday",
+      "slug": "bah:1:BAH_Jobs",
+      "url": "https://bah.wd1.myworkdayjobs.com/wday/cxs/bah/BAH_Jobs/jobs",
+      "status": 200,
+      "jobCount": 2000,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R0243162",
+          "title": "DevOps Platform Engineer",
+          "location": "Rome, NY",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Rome-NY/DevOps-Platform-Engineer_R0243162",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0243162"
+          ]
+        },
+        {
+          "id": "R0250332",
+          "title": "Recruiter, Mid",
+          "location": "Honolulu, HI",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Honolulu-HI/Recruiter--Mid_R0250332",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0250332"
+          ]
+        },
+        {
+          "id": "R0249705",
+          "title": "Electronic Warfare Mission Expert",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Fayetteville-NC/Electronic-Warfare-Mission-Expert_R0249705",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0249705"
+          ]
+        }
+      ]
+    },
+    "workday:caci:1:External": {
+      "backend": "workday",
+      "slug": "caci:1:External",
+      "url": "https://caci.wd1.myworkdayjobs.com/wday/cxs/caci/External/jobs",
+      "status": 200,
+      "jobCount": 1873,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "332638",
+          "title": "Systems Engineer",
+          "location": "Ypsilanti, MI, US",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Ypsilanti-MI-US/Systems-Engineer_332638-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "332638"
+          ]
+        },
+        {
+          "id": "332564",
+          "title": "Software Integration & Test Engineer",
+          "location": "3 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/King-of-Prussia-PA-US/Software-Integration---Test-Engineer_332564",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "332564"
+          ]
+        },
+        {
+          "id": "332174",
+          "title": "Software Engineer",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Ypsilanti-MI-US/Software-Engineer_332174",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "332174"
+          ]
+        }
+      ]
+    },
+    "workday:gdit:5:External_Career_Site": {
+      "backend": "workday",
+      "slug": "gdit:5:External_Career_Site",
+      "url": "https://gdit.wd5.myworkdayjobs.com/wday/cxs/gdit/External_Career_Site/jobs",
+      "status": 200,
+      "jobCount": 1181,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "RQ228945",
+          "title": "Principal Systems and Network Engineer",
+          "location": "USA HI Pearl Harbor",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA-HI-Pearl-Harbor/Principal-Systems-and-Network-Engineer_RQ228945-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "RQ228945"
+          ]
+        },
+        {
+          "id": "RQ223042",
+          "title": "Network Engineer Senior",
+          "location": "KOR Seoul - Osan Air Base (APC168)",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/KOR-Seoul---Osan-Air-Base-APC168/Network-Engineer-Senior_RQ223042-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "RQ223042"
+          ]
+        },
+        {
+          "id": "RQ223039",
+          "title": "Network Engineer SME",
+          "location": "USA HI Camp Smith",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA-HI-Camp-Smith/Network-Engineer-SME_RQ223039-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "RQ223039"
+          ]
+        }
+      ]
+    },
+    "workday:leidos:5:External": {
+      "backend": "workday",
+      "slug": "leidos:5:External",
+      "url": "https://leidos.wd5.myworkdayjobs.com/wday/cxs/leidos/External/jobs",
+      "status": 200,
+      "jobCount": 2000,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R-00184468",
+          "title": "Software Engineer/Data Science Librarian",
+          "location": "Arnold, MO",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Arnold-MO/Software-Engineer-Data-Science-Librarian_R-00184468",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-00184468"
+          ]
+        },
+        {
+          "id": "R-00179079",
+          "title": "Cyber Security Engineer—Technical Lead",
+          "location": "Bethesda, MD",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Bethesda-MD/Cyber-Security-Engineer-Technical-lead_R-00179079",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-00179079"
+          ]
+        },
+        {
+          "id": "R-00174057",
+          "title": "DevOps Engineer (SME)",
+          "location": "Bethesda, MD",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Bethesda-MD/DevOps-Engineer--SME-_R-00174057",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-00174057"
+          ]
+        }
+      ]
+    },
+    "workday:blueorigin:5:BlueOrigin": {
+      "backend": "workday",
+      "slug": "blueorigin:5:BlueOrigin",
+      "url": "https://blueorigin.wd5.myworkdayjobs.com/wday/cxs/blueorigin/BlueOrigin/jobs",
+      "status": 200,
+      "jobCount": 1745,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R72273",
+          "title": "Specialist - Quality III",
+          "location": "Space Coast, FL",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Space-Coast-FL/Specialist---Quality-III_R72273",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R72273"
+          ]
+        },
+        {
+          "id": "R72275",
+          "title": "Specialist - Quality II",
+          "location": "Space Coast, FL",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Space-Coast-FL/Specialist---Quality-II_R72275",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R72275"
+          ]
+        },
+        {
+          "id": "R72455",
+          "title": "Senior System Validation and Test Automation Engineer - TeraWave RF and Optical Systems",
+          "location": "Greater Seattle Area",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Greater-Seattle-Area/Senior-System-Validation-and-Test-Automation-Engineer---TeraWave-RF-and-Optical-Systems_R72455",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R72455"
+          ]
+        }
+      ]
+    },
+    "workday:redhat:5:jobs": {
+      "backend": "workday",
+      "slug": "redhat:5:jobs",
+      "url": "https://redhat.wd5.myworkdayjobs.com/wday/cxs/redhat/jobs/jobs",
+      "status": 200,
+      "jobCount": 161,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R-059036",
+          "title": "Openshift Consultant - Bilingual - French-English // Consultant OpenShift – Bilingue français-anglais",
+          "location": "Remote CA QC",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Remote-CA-QC/Openshift-Consultant---Billingual---French-English_R-059036-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-059036"
+          ]
+        },
+        {
+          "id": "R-059723",
+          "title": "Strategic Accounts Manager",
+          "location": "Lima - MSO",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Lima---MSO/Strategic-Accounts-Manager_R-059723-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-059723"
+          ]
+        },
+        {
+          "id": "R-059737",
+          "title": "RHEL Sales Specialist",
+          "location": "Buenos Aires",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Buenos-Aires/RHEL-Sales-Specialist_R-059737-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-059737"
+          ]
+        }
+      ]
+    },
+    "workday:motorolasolutions:5:Careers": {
+      "backend": "workday",
+      "slug": "motorolasolutions:5:Careers",
+      "url": "https://motorolasolutions.wd5.myworkdayjobs.com/wday/cxs/motorolasolutions/Careers/jobs",
+      "status": 200,
+      "jobCount": 888,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R68894",
+          "title": "Systems Integration Engineering Intern (Summer 2027)",
+          "location": "Greater Chicago Area",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Greater-Chicago-Area/Systems-Integration-Engineering-Intern--Summer-2027-_R68894",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Greater Chicago Area",
+            "R68894"
+          ]
+        },
+        {
+          "id": "R69141",
+          "title": "Senior Sales Operations Analyst",
+          "location": "Illinois Remote Work, More...",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Illinois-Remote-Work/Senior-Sales-Operations-Analyst_R69141",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Illinois Remote Work",
+            "R69141"
+          ]
+        },
+        {
+          "id": "R68902",
+          "title": "Channel Sales Executive (Wisconsin)",
+          "location": "Wisconsin Remote Work",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Wisconsin-Remote-Work/Channel-Sales-Executive--Wisconsin-_R68902",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Wisconsin Remote Work",
+            "R68902"
+          ]
+        }
+      ]
+    },
+    "workday:stryker:1:StrykerCareers": {
+      "backend": "workday",
+      "slug": "stryker:1:StrykerCareers",
+      "url": "https://stryker.wd1.myworkdayjobs.com/wday/cxs/stryker/StrykerCareers/jobs",
+      "status": 200,
+      "jobCount": 1480,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R556652",
+          "title": "Pricing Manager - Southern Europe",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Rome-Italy/Pricing-Manager---Southern-Europe_R556652",
+          "postedOn": "Posted 7 Days Ago",
+          "bulletFields": [
+            "R556652"
+          ]
+        },
+        {
+          "id": "R569606",
+          "title": "Associate Territory Manager - Orthopaedics",
+          "location": "Melbourne, Australia",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Melbourne-Australia/Associate-Territory-Manager---Orthopaedics_R569606",
+          "postedOn": "Posted 17 Days Ago",
+          "bulletFields": [
+            "R569606"
+          ]
+        },
+        {
+          "id": "R569597",
+          "title": "Lead Specialist, Marketing Communications, Neurovascular (APAC)",
+          "location": "Singapore, Singapore 1 George Street 20-01/02/03",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Singapore-Singapore-1-George-Street-20-010203/Lead-Specialist--Marketing-Communications--Neurovascular--APAC-_R569597",
+          "postedOn": "Posted 30+ Days Ago",
+          "bulletFields": [
+            "R569597"
+          ]
+        }
+      ]
+    },
+    "workday:jj:5:JJ": {
+      "backend": "workday",
+      "slug": "jj:5:JJ",
+      "url": "https://jj.wd5.myworkdayjobs.com/wday/cxs/jj/JJ/jobs",
+      "status": 200,
+      "jobCount": 2069,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R-101685",
+          "title": "Access & Pump Engineering Co-op",
+          "location": "Danvers, Massachusetts, United States of America",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Danvers-Massachusetts-United-States-of-America/Access---Pump-Engineering-Co-op_R-101685",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-101685"
+          ]
+        },
+        {
+          "id": "R-099559",
+          "title": "Director, Data, Data Science and Artificial Intelligence – Oncology / Prostate Cancer",
+          "location": "6 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Spring-House-Pennsylvania-United-States-of-America/Director--Data--Data-Science-and-Artificial-Intelligence---Oncology---Prostate-Cancer_R-099559",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-099559"
+          ]
+        },
+        {
+          "id": "R-099930",
+          "title": "Facilities Management Co-Op",
+          "location": "Cincinnati, Ohio, United States of America",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Cincinnati-Ohio-United-States-of-America/Facilities-Management-Co-Op_R-099930",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-099930"
+          ]
+        }
+      ]
+    },
+    "workday:philips:3:jobs-and-careers": {
+      "backend": "workday",
+      "slug": "philips:3:jobs-and-careers",
+      "url": "https://philips.wd3.myworkdayjobs.com/wday/cxs/philips/jobs-and-careers/jobs",
+      "status": 200,
+      "jobCount": 870,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "591283",
+          "title": "Field Service Engineer - Imaging Systems (Field: Shreveport, LA)",
+          "location": "Shreveport, Louisiana, United States",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Shreveport-Louisiana-United-States/Field-Service-Engineer---Imaging-Systems--Field--Shreveport--LA-_591283",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "591283"
+          ]
+        },
+        {
+          "id": "589159",
+          "title": "Technical Consultant - Patient Monitoring (Field: Kansas City, KS/MO)",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Kansas-City-Kansas-United-States/Technical-Consultant---Patient-Monitoring--Field--Kansas-City--KS-MO-_589159",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "589159"
+          ]
+        },
+        {
+          "id": "588597",
+          "title": "Executive Legal Assistant (Cambridge, MA)",
+          "location": "Cambridge (US), Massachusetts, United States",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Cambridge-US-Massachusetts-United-States/Executive-Legal-Assistant--Cambridge--MA-_588597",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "588597"
+          ]
+        }
+      ]
+    },
+    "workday:mckesson:3:External_Careers": {
+      "backend": "workday",
+      "slug": "mckesson:3:External_Careers",
+      "url": "https://mckesson.wd3.myworkdayjobs.com/wday/cxs/mckesson/External_Careers/jobs",
+      "status": 200,
+      "jobCount": 573,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "JR0154497",
+          "title": "Equipment Operator- Full Time Shifts",
+          "location": "USA, MS, Olive Branch",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA-MS-Olive-Branch/Equipment-Operator--Full-Time-Shifts_JR0154497",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR0154497"
+          ]
+        },
+        {
+          "id": "JR0154212",
+          "title": "Warehouse Worker - Full-Time Shifts",
+          "location": "USA, AZ, Tolleson",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA-AZ-Tolleson/Warehouse-Worker---Full-Time-Shifts_JR0154212",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR0154212"
+          ]
+        },
+        {
+          "id": "JR0154118",
+          "title": "Associate Biomed Technician",
+          "location": "USA, IL, Hanover Park",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA-IL-Hanover-Park/Associate-Biomed-Technician_JR0154118",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR0154118"
+          ]
+        }
+      ]
+    },
+    "workday:workday:5:Workday": {
+      "backend": "workday",
+      "slug": "workday:5:Workday",
+      "url": "https://workday.wd5.myworkdayjobs.com/wday/cxs/workday/Workday/jobs",
+      "status": 200,
+      "jobCount": 382,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "JR-0109829",
+          "title": "Engagement Manager - Sana",
+          "location": "USA, NY, New York City",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA-NY-New-York-City/Senior-Engagement-Manager---Sana-Learn_JR-0109829",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-0109829"
+          ]
+        },
+        {
+          "id": "JR-0110306",
+          "title": "Principal AI GTM Strategist – Outbound & Demand Generation",
+          "location": "6 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA-CA-Pleasanton/Principal-AI-GTM-Strategist---Outbound---Demand-Generation_JR-0110306",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-0110306"
+          ]
+        },
+        {
+          "id": "JR-0110428",
+          "title": "Technical Support Delivery Associate - Paradox (Tuesday - Saturday, 12pm-9pm)",
+          "location": "Costa Rica",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Costa-Rica/Technical-Support-Delivery-Associate---Paradox--Tuesday---Saturday--12pm-9pm-_JR-0110428",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-0110428"
+          ]
+        }
+      ]
+    },
+    "workday:micron:1:External": {
+      "backend": "workday",
+      "slug": "micron:1:External",
+      "url": "https://micron.wd1.myworkdayjobs.com/wday/cxs/micron/External/jobs",
+      "status": 200,
+      "jobCount": 3072,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "JR105575",
+          "title": "PDE NPI PWF Process Engineer",
+          "location": "Taichung - Fab 16, Taiwan",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Taichung---Fab-16-Taiwan/PDE-NPI-PWF-Process-Engineer_JR105575-1",
+          "postedOn": "Posted 14 Days Ago",
+          "bulletFields": [
+            "JR105575"
+          ]
+        },
+        {
+          "id": "JR110473",
+          "title": "ASIC Gen-AI Data Scientist",
+          "location": "3 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/San-Jose-CA/ASIC-Gen-AI-Data-Scientist_JR110473-1",
+          "postedOn": "Posted 22 Days Ago",
+          "bulletFields": [
+            "JR110473"
+          ]
+        },
+        {
+          "id": "JR101216",
+          "title": "半導体製造 EUVフォトマスク検査・管理スタッフ（技術職）",
+          "location": "Hiroshima - Fab 15, Japan",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Hiroshima---Fab-15-Japan/-EUV---_JR101216",
+          "postedOn": "Posted 30+ Days Ago",
+          "bulletFields": [
+            "JR101216"
+          ]
+        }
+      ]
+    },
+    "workday:analogdevices:1:External": {
+      "backend": "workday",
+      "slug": "analogdevices:1:External",
+      "url": "https://analogdevices.wd1.myworkdayjobs.com/wday/cxs/analogdevices/External/jobs",
+      "status": 200,
+      "jobCount": 843,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R266595",
+          "title": "Senior Engineer, Full Stack Developer",
+          "location": "Ireland, Dublin, Glasnevin",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Ireland-Dublin-Glasnevin/Senior-Engineer--Full-Stack-Developer_R266595",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R266595"
+          ]
+        },
+        {
+          "id": "R266064",
+          "title": "PTE Engineer, Consumer Audio",
+          "location": "India, Bangalore, Nova",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/India-Bangalore-Nova/PTE-Engineer--Consumer-Audio_R266064",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R266064"
+          ]
+        },
+        {
+          "id": "R266397",
+          "title": "Sr. Manager, Digital Design",
+          "location": "India, Hyderabad",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/India-Hyderabad/Sr-Manager--Digital-Design_R266397",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R266397"
+          ]
+        }
+      ]
+    },
+    "workday:tmobile:1:External": {
+      "backend": "workday",
+      "slug": "tmobile:1:External",
+      "url": "https://tmobile.wd1.myworkdayjobs.com/wday/cxs/tmobile/External/jobs",
+      "status": 200,
+      "jobCount": 2000,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "REQ373906",
+          "title": "Sr Engineer, Systems Design",
+          "location": "Overland Park, Kansas",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Overland-Park-Kansas/Sr-Engineer--Systems-Design_REQ373906-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REQ373906"
+          ]
+        },
+        {
+          "id": "REQ364746",
+          "title": "Business Analysis Manager, Contact Interaction Analytics",
+          "location": "3 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Overland-Park-Kansas/Business-Analysis-Manager--Contact-Interaction-Analytics_REQ364746-2",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REQ364746"
+          ]
+        },
+        {
+          "id": "REQ373824",
+          "title": "Sr Mobile Expert",
+          "location": "Trenton, New Jersey",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Trenton-New-Jersey/Sr-Mobile-Expert_REQ373824-2",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REQ373824"
+          ]
+        }
+      ]
+    },
+    "workday:disney:5:disneycareer": {
+      "backend": "workday",
+      "slug": "disney:5:disneycareer",
+      "url": "https://disney.wd5.myworkdayjobs.com/wday/cxs/disney/disneycareer/jobs",
+      "status": 200,
+      "jobCount": 679,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "10158386",
+          "title": "Manager, Software Engineering",
+          "location": "Orlando, FL, USA",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Orlando-FL-USA/Manager--Software-Engineering_10158386-2",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "10158386"
+          ]
+        },
+        {
+          "id": "10150093",
+          "title": "Sr Software Engineer (Project Hire)",
+          "location": "Lake Buena Vista, FL, USA",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Lake-Buena-Vista-FL-USA/Sr-Software-Engineer--Project-Hire-_10150093",
+          "postedOn": "Posted 7 Days Ago",
+          "bulletFields": [
+            "10150093"
+          ]
+        },
+        {
+          "id": "10132666",
+          "title": "Lead Software Engineer-AI Licensing & Publishing Systems",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Orlando-FL-USA/Lead-Software-Engineer_10132666",
+          "postedOn": "Posted 30+ Days Ago",
+          "bulletFields": [
+            "10132666"
+          ]
+        }
+      ]
+    },
+    "workday:nike:1:nke": {
+      "backend": "workday",
+      "slug": "nike:1:nke",
+      "url": "https://nike.wd1.myworkdayjobs.com/wday/cxs/nike/nke/jobs",
+      "status": 200,
+      "jobCount": 837,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R-92076",
+          "title": "Senior Administrative Assistant - Speed, Running, & Training",
+          "location": "Beaverton, Oregon",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Beaverton-Oregon/Senior-Administrative-Assistant---Speed--Running----Training_R-92076-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-92076"
+          ]
+        },
+        {
+          "id": "R-92424",
+          "title": "Lead, Creative Concept & Styling Design Project Manager, Global Jordan",
+          "location": "Beaverton, Oregon",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Beaverton-Oregon/Lead--Creative-Concept---Styling-Design-Project-Manager--Global-Jordan_R-92424",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-92424"
+          ]
+        },
+        {
+          "id": "R-91184",
+          "title": "Nike Retail Associate (Athlete) - NIKE ZARAGOZA - Contrato Permanente - Part Time 16h/semana",
+          "location": "Zaragoza, Spain",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Zaragoza-Spain/Nike-Retail-Associate--Athlete--NIKE-UNITE-ZARAGOZA---Contrato-Permanente---Part-Time--16h-_R-91184",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-91184"
+          ]
+        }
+      ]
+    },
+    "workday:fmr:1:FidelityCareers": {
+      "backend": "workday",
+      "slug": "fmr:1:FidelityCareers",
+      "url": "https://fmr.wd1.myworkdayjobs.com/wday/cxs/fmr/FidelityCareers/jobs",
+      "status": 200,
+      "jobCount": 850,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "2133766",
+          "title": "Senior Pension Administrator - Core Market Defined Benefits",
+          "location": "Covington, KY",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Covington-KY/Senior-Pension-Administrator---Core-Market-Defined-Benefits_2133766-1",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "2133766"
+          ]
+        },
+        {
+          "id": "2135068",
+          "title": "Planning Consultant - Greenwood Village, CO",
+          "location": "Denver, CO",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Denver-CO/Planning-Consultant---Greenwood-Village--CO_2135068",
+          "postedOn": "Posted 3 Days Ago",
+          "bulletFields": [
+            "2135068"
+          ]
+        },
+        {
+          "id": "2129661",
+          "title": "Defined Benefit Configuration Analyst",
+          "location": "Covington, KY",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Covington-KY/Defined-Benefit-Configuration-Analyst_2129661-1",
+          "postedOn": "Posted 27 Days Ago",
+          "bulletFields": [
+            "2129661"
+          ]
+        }
+      ]
+    },
+    "workday:statestreet:1:Global": {
+      "backend": "workday",
+      "slug": "statestreet:1:Global",
+      "url": "https://statestreet.wd1.myworkdayjobs.com/wday/cxs/statestreet/Global/jobs",
+      "status": 200,
+      "jobCount": 1360,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R-788670",
+          "title": "Markets Capital Optimization Analyst, Officer",
+          "location": "Boston, Massachusetts",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Boston-Massachusetts/Markets-Capital-Optimization-Analyst--Officer_R-788670",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-788670"
+          ]
+        },
+        {
+          "id": "R-798553",
+          "title": "Front Office Trading Services, FX and FS Initiatives, Vice President",
+          "location": "Boston, Massachusetts",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Boston-Massachusetts/Front-Office-Trading-Services--FX-and-FS-Initiatives--Vice-President_R-798553",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-798553"
+          ]
+        },
+        {
+          "id": "R-798406",
+          "title": "Regulatory Reporting Specialist, Senior Associae",
+          "location": "Hyderabad, India",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Hyderabad-India/Regulatory-Reporting-Specialist--Senior-Associae_R-798406",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-798406"
+          ]
+        }
+      ]
+    },
+    "workday:blackrock:1:BlackRock_Professional": {
+      "backend": "workday",
+      "slug": "blackrock:1:BlackRock_Professional",
+      "url": "https://blackrock.wd1.myworkdayjobs.com/wday/cxs/blackrock/BlackRock_Professional/jobs",
+      "status": 200,
+      "jobCount": 352,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R264269",
+          "title": "Vice President, Alternatives Fund Accounting - Delaware",
+          "location": "Wilmington, DE",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Wilmington-DE/Vice-President--Alternatives-Fund-Accounting_R264269",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R264269"
+          ]
+        },
+        {
+          "id": "R266604",
+          "title": "Admin Business Partner",
+          "location": "NY7 - 50 Hudson Yards, New York",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/NY7---50-Hudson-Yards-New-York/Admin-Business-Partner_R266604",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R266604"
+          ]
+        },
+        {
+          "id": "R266252",
+          "title": "Aladdin Product Management Whole Portfolio technology Team, Director",
+          "location": "NY7 - 50 Hudson Yards, New York",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/NY7---50-Hudson-Yards-New-York/Aladdin-Product-Management-Whole-Portfolio-technology-Team--Director_R266252-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R266252"
+          ]
+        }
+      ]
+    },
+    "workday:autodesk:1:Ext": {
+      "backend": "workday",
+      "slug": "autodesk:1:Ext",
+      "url": "https://autodesk.wd1.myworkdayjobs.com/wday/cxs/autodesk/Ext/jobs",
+      "status": 200,
+      "jobCount": 378,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "26WD101260",
+          "title": "Senior Manager, Product",
+          "location": "8 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/AMER---United-States---Colorado---Denver---Wewatta/Senior-Manager--Product_26WD101260-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "26WD101260"
+          ]
+        },
+        {
+          "id": "26WD101226",
+          "title": "Director, Operations Business Partner - Enterprise",
+          "location": "5 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/San-Francisco-CA-USA/Director--Operations-Business-Partner---Enterprise_26WD101226-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "26WD101226"
+          ]
+        },
+        {
+          "id": "26WD101204",
+          "title": "Software Engineer",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Portland-OR-USA/Software-Engineer_26WD101204-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "26WD101204"
+          ]
+        }
+      ]
+    },
+    "workday:zillow:5:Zillow_Group_External": {
+      "backend": "workday",
+      "slug": "zillow:5:Zillow_Group_External",
+      "url": "https://zillow.wd5.myworkdayjobs.com/wday/cxs/zillow/Zillow_Group_External/jobs",
+      "status": 200,
+      "jobCount": 120,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "P750923",
+          "title": "Lifecycle Marketing Operations Specialist, Audience",
+          "location": "Bengaluru",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Bengaluru/Lifecycle-Marketing-Operations-Specialist--Audience_P750923-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "P750923"
+          ]
+        },
+        {
+          "id": "P750921",
+          "title": "Lifecycle Marketing Operations Specialist, Templates",
+          "location": "Bengaluru",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Bengaluru/Lifecycle-Marketing-Operations-Specialist--Templates_P750921-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "P750921"
+          ]
+        },
+        {
+          "id": "P751421",
+          "title": "Recruiter",
+          "location": "Bengaluru",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Bengaluru/Recruiter_P751421-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "P751421"
+          ]
+        }
+      ]
+    },
+    "workday:3m:1:Search": {
+      "backend": "workday",
+      "slug": "3m:1:Search",
+      "url": "https://3m.wd1.myworkdayjobs.com/wday/cxs/3m/Search/jobs",
+      "status": 200,
+      "jobCount": 702,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R01169291",
+          "title": "Treasury Manager - Cash Operations",
+          "location": "IN, BANGALORE",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/IN-BANGALORE/Manager---Treasury-Operations_R01169291",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R01169291"
+          ]
+        },
+        {
+          "id": "R01170654",
+          "title": "Analytical Testing Coordinator (m/f/*)",
+          "location": "BE, Zwijndrecht",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/BE-Zwijndrecht/Analytical-Testing-Coordinator--m-f---_R01170654-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R01170654"
+          ]
+        },
+        {
+          "id": "R01170955",
+          "title": "Director, Strategy & Business Development – Consumer Business",
+          "location": "US, Minnesota, Maplewood",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/US-Minnesota-Maplewood/Director--Strategy---Business-Development_R01170955",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "R01170955"
+          ]
+        }
+      ]
+    },
+    "workday:globalhr:5:REC_RTX_Ext_Gateway": {
+      "backend": "workday",
+      "slug": "globalhr:5:REC_RTX_Ext_Gateway",
+      "url": "https://globalhr.wd5.myworkdayjobs.com/wday/cxs/globalhr/REC_RTX_Ext_Gateway/jobs",
+      "status": 200,
+      "jobCount": 4859,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "01877539",
+          "title": "Staff Tech, Logistics - Huntsville, AL",
+          "location": "US-AL-HUNTSVILLE-7745 ~ 7745 Eagle Rd ~ EAGLE",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/US-AL-HUNTSVILLE-7745--7745-Eagle-Rd--EAGLE/Staff-Tech--Logistics---Huntsville--AL_01877539-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "01877539"
+          ]
+        },
+        {
+          "id": "01876806",
+          "title": "Operations Manager, Aftermarket Tooling (Onsite)",
+          "location": "US-CT-EAST HARTFORD-OBG ~ 400 Main St ~ BLDG OBG",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/US-CT-EAST-HARTFORD-OBG--400-Main-St--BLDG-OBG/Operations-Manager--Aftermarket-Tooling--Onsite-_01876806",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "01876806"
+          ]
+        },
+        {
+          "id": "01872666",
+          "title": "Head-up Guidance Systems Engineering Co-op (Spring/Summer 2027) - Onsite",
+          "location": "US-OR-WILSONVILLE-596 ~ 27500 SW Parkway Ave ~ BLDG 596",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/US-OR-WILSONVILLE-596--27500-SW-Parkway-Ave--BLDG-596/Head-up-Guidance-Systems-Engineering-Co-op--Spring-Summer-2027----Onsite_01872666",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "01872666"
+          ]
+        }
+      ]
+    },
+    "workday:humana:5:Humana_External_Career_Site": {
+      "backend": "workday",
+      "slug": "humana:5:Humana_External_Career_Site",
+      "url": "https://humana.wd5.myworkdayjobs.com/wday/cxs/humana/Humana_External_Career_Site/jobs",
+      "status": 200,
+      "jobCount": 381,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R-422163",
+          "title": "Medical Director - OneHome",
+          "location": "Remote Nationwide",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Remote-Nationwide/Medical-Director---OneHome_R-422163",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-422163"
+          ]
+        },
+        {
+          "id": "R-421978",
+          "title": "Senior Product Manager",
+          "location": "3 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Louisville-KY/Senior-Product-Manager_R-421978",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-421978"
+          ]
+        },
+        {
+          "id": "R-428162",
+          "title": "Lead Technology Leadership",
+          "location": "3 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Louisville-KY/Lead-Technology-Leadership_R-428162",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-428162"
+          ]
+        }
+      ]
+    },
+    "workday:cvshealth:1:CVS_Health_Careers": {
+      "backend": "workday",
+      "slug": "cvshealth:1:CVS_Health_Careers",
+      "url": "https://cvshealth.wd1.myworkdayjobs.com/wday/cxs/cvshealth/CVS_Health_Careers/jobs",
+      "status": 200,
+      "jobCount": 19970,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R0979303",
+          "title": "Onsite Health & Wellness Program Specialist",
+          "location": "Pompano Beach- City of Pompano Beach",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Pompano-Beach--City-of-Pompano-Beach/Onsite-Health---Wellness-Program-Specialist_R0979303",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0979303"
+          ]
+        },
+        {
+          "id": "R1055922",
+          "title": "Pharmacy Intern",
+          "location": "CA - Galt",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/CA---Galt/Pharmacy-Intern_R1055922",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R1055922"
+          ]
+        },
+        {
+          "id": "R1049409",
+          "title": "Pharmacy Technician Front End",
+          "location": "CA - Santa Rosa",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/CA---Santa-Rosa/Pharmacy-Technician-Front-End_R1049409",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R1049409"
+          ]
+        }
+      ]
+    },
+    "workday:chevron:5:jobs": {
+      "backend": "workday",
+      "slug": "chevron:5:jobs",
+      "url": "https://chevron.wd5.myworkdayjobs.com/wday/cxs/chevron/jobs/jobs",
+      "status": 200,
+      "jobCount": 132,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R000073867",
+          "title": "Senior Drilling Engineer",
+          "location": "El Tigre, Anzoategui, Venezuela",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/El-Tigre-Anzoategui-Venezuela/Senior-Drilling-Engineer_R000073867",
+          "postedOn": "Posted 3 Days Ago",
+          "bulletFields": [
+            "R000073867"
+          ]
+        },
+        {
+          "id": "R000073878",
+          "title": "COCO Business Performance & Finance (BPF) Lead",
+          "location": "Houston, Texas, United States of America",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Houston-Texas-United-States-of-America/COCO-Business-Performance---Finance--BPF--Lead_R000073878",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R000073878"
+          ]
+        },
+        {
+          "id": "R000074025",
+          "title": "Operations Trainee",
+          "location": "Pascagoula, Mississippi, United States of America",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Pascagoula-Mississippi-United-States-of-America/Operations-Trainee_R000074025",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R000074025"
+          ]
+        }
+      ]
+    },
+    "workday:walmart:504:WalmartExternal": {
+      "backend": "workday",
+      "slug": "walmart:504:WalmartExternal",
+      "url": "https://walmart.wd504.myworkdayjobs.com/wday/cxs/walmart/WalmartExternal/jobs",
+      "status": 200,
+      "jobCount": 2000,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R-2598544",
+          "title": "(CAN) Food & Consumables Coach",
+          "location": "Slave Lake, AB",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Slave-Lake-AB/XMLNAME--CAN--Food---Consumables-Coach_R-2598544-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-2598544"
+          ]
+        },
+        {
+          "id": "R-2657601",
+          "title": "(USA) Operations Manager - Floor",
+          "location": "(USA) TX FORT WORTH 07555 ECOMM FULFILLMENT SERVICES",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA-TX-FORT-WORTH-07555-ECOMM-FULFILLMENT-SERVICES/XMLNAME--USA--Operations-Manager---Floor_R-2657601-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-2657601"
+          ]
+        },
+        {
+          "id": "R-2402397",
+          "title": "Staff Pharmacist-Ca - $50,000 Sign On Bonus Available",
+          "location": "Porterville, CA",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Porterville-CA/Staff-Pharmacist-Ca_R-2402397-2",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-2402397"
+          ]
+        }
+      ]
+    },
+    "workday:comcast:115:Comcast_Careers": {
+      "backend": "workday",
+      "slug": "comcast:115:Comcast_Careers",
+      "url": "https://comcast.wd115.myworkdayjobs.com/wday/cxs/comcast/Comcast_Careers/jobs",
+      "status": 200,
+      "jobCount": 673,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R444631",
+          "title": "Sr. Analyst, FP&A",
+          "location": "4 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/PA---Philadelphia-1800-Arch-St/Sr-Analyst--FP-A_R444631",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R444631"
+          ]
+        },
+        {
+          "id": "R443140",
+          "title": "Xfinity Assistant Retail Store Manager",
+          "location": "IL - Champaign, 2000 N Neil St - Retail XFR1324",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/IL---Champaign-2000-N-Neil-St---Retail-XFR1324/Xfinity-Assistant-Retail-Store-Manager_R443140",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R443140"
+          ]
+        },
+        {
+          "id": "R445143",
+          "title": "Senior Auditor, Financial Operations (Corporate/Spectacor)",
+          "location": "PA - Philadelphia, 1701 John F Kennedy Blvd",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/PA---Philadelphia-1701-John-F-Kennedy-Blvd/Senior-Auditor--Financial-Operations--Corporate-Spectacor-_R445143",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R445143"
+          ]
+        }
+      ]
+    },
+    "workday:expedia:108:search": {
+      "backend": "workday",
+      "slug": "expedia:108:search",
+      "url": "https://expedia.wd108.myworkdayjobs.com/wday/cxs/expedia/search/jobs",
+      "status": 200,
+      "jobCount": 169,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R-109666",
+          "title": "Software Development Engineer III, Media Solutions",
+          "location": "Washington - Seattle Campus",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Washington---Seattle-Campus/Software-Development-Engineer-III--Media-Solutions_R-109666-2",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-109666"
+          ]
+        },
+        {
+          "id": "R-109932",
+          "title": "Account Manager, Key Partners, North America",
+          "location": "9 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA---Florida---Orlando/Account-Manager--Lodging-Strategic-Partners_R-109932-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-109932"
+          ]
+        },
+        {
+          "id": "R-108173",
+          "title": "Senior Product Security Architect",
+          "location": "3 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Austin-Domain-11---HomeAway/Senior-Product-Security-Architect_R-108173-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-108173"
+          ]
+        }
+      ]
+    },
+    "workday:visa:5:Visa": {
+      "backend": "workday",
+      "slug": "visa:5:Visa",
+      "url": "https://visa.wd5.myworkdayjobs.com/wday/cxs/visa/Visa/jobs",
+      "status": 200,
+      "jobCount": 794,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "REF082480W",
+          "title": "Network Engineer- WAN (Sr. Consultant level)",
+          "location": "US - Ashburn, VA",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/US---Ashburn-VA/Sr-Consultant-Network-Engineer_REF082480W",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REF082480W"
+          ]
+        },
+        {
+          "id": "REF088255W",
+          "title": "Director, Platform Engineering",
+          "location": "US - Foster City, CA",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/US---Foster-City-CA/Director--Platform-Engineering_REF088255W",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REF088255W"
+          ]
+        },
+        {
+          "id": "REF085123W",
+          "title": "Sr. Software Engineer - Core Automation Platform",
+          "location": "US - Ashburn, VA",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/US---Ashburn-VA/Sr-Software-Engineer---Core-Automation-Platform_REF085123W",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REF085123W"
+          ]
+        }
+      ]
+    },
+    "workday:geaerospace:5:GE_ExternalSite": {
+      "backend": "workday",
+      "slug": "geaerospace:5:GE_ExternalSite",
+      "url": "https://geaerospace.wd5.myworkdayjobs.com/wday/cxs/geaerospace/GE_ExternalSite/jobs",
+      "status": 200,
+      "jobCount": 506,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R5040369",
+          "title": "Lead Manufacturing Engineer - 2nd Shift",
+          "location": "Clearwater",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Clearwater/Lead-Manufacturing-Engineer---2nd-Shift_R5040369-1",
+          "postedOn": "Posted 3 Days Ago",
+          "bulletFields": [
+            "R5040369"
+          ]
+        },
+        {
+          "id": "R5040429",
+          "title": "Customer Account Manager - Lockheed Martin",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Remote/Customer-Account-Manager---Lockheed-Martin_R5040429-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R5040429"
+          ]
+        },
+        {
+          "id": "R5040013",
+          "title": "Operador de Usinagem I",
+          "location": "Petropolis",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Petropolis/Operador-de-Usinagem-I_R5040013-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R5040013"
+          ]
+        }
+      ]
+    },
+    "workday:wf:1:WellsFargoJobs": {
+      "backend": "workday",
+      "slug": "wf:1:WellsFargoJobs",
+      "url": "https://wf.wd1.myworkdayjobs.com/wday/cxs/wf/WellsFargoJobs/jobs",
+      "status": 200,
+      "jobCount": 1893,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R-577758",
+          "title": "Personal Banker Brainerd MN",
+          "location": "BRAINERD, MN",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/BRAINERD-MN/Personal-Banker-Brainerd-MN_R-577758",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-577758",
+            "Posting End Date: 09/30/2026"
+          ]
+        },
+        {
+          "id": "R-518255",
+          "title": "Principal Technology Mid-Corporate Relationship Manager",
+          "location": "AUSTIN, TX",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/AUSTIN-TX/Principal-Technology-Mid-Corporate-Relationship-Manager_R-518255",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-518255",
+            "Posting End Date: 10/15/2026"
+          ]
+        },
+        {
+          "id": "R-576467",
+          "title": "Personal Banker Thorncreek",
+          "location": "THORNTON, CO",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/THORNTON-CO/Personal-Banker-Thorncreek_R-576467-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-576467",
+            "Posting End Date: 09/30/2026"
+          ]
+        }
+      ]
+    },
+    "workday:snapchat:1:snap": {
+      "backend": "workday",
+      "slug": "snapchat:1:snap",
+      "url": "https://snapchat.wd1.myworkdayjobs.com/wday/cxs/snapchat/snap/jobs",
+      "status": 200,
+      "jobCount": 179,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R0046899",
+          "title": "Partnerships Operations Specialist",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Los-Angeles-California/Partnerships-Operations-Specialist_R0046899-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0046899"
+          ]
+        },
+        {
+          "id": "H126SWEE3",
+          "title": "Electrical Engineer, Level 4",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Los-Angeles-California/Electrical-Engineer--Level-4_H126SWEE3-2",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "H126SWEE3"
+          ]
+        },
+        {
+          "id": "R0046870",
+          "title": "Software Engineer, ML Infrastructure, Level 5",
+          "location": "3 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Palo-Alto-California/Software-Engineer--ML-Infrastructure--Level-5_R0046870-2",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0046870"
+          ]
+        }
+      ]
+    },
+    "workday:ms:5:External": {
+      "backend": "workday",
+      "slug": "ms:5:External",
+      "url": "https://ms.wd5.myworkdayjobs.com/wday/cxs/ms/External/jobs",
+      "status": 200,
+      "jobCount": 1325,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "JR041565",
+          "title": "Business Service Officer",
+          "location": "Cleveland, Ohio, United States of America",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Cleveland-Ohio-United-States-of-America/Business-Service-Officer_JR041565-2",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR041565"
+          ]
+        },
+        {
+          "id": "PT-JR043680",
+          "title": "WM Client Segment Risk Head of Scams and Exploitation Risk Team and Internal Fraud: Executive Director",
+          "location": "Purchase, New York, United States of America",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Purchase-New-York-United-States-of-America/WM-Client-Segment-Risk-Head-of-Scams-and-Exploitation-Risk-Team-and-Internal-Fraud--Vice-President_PT-JR043680-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "PT-JR043680"
+          ]
+        },
+        {
+          "id": "JR042973",
+          "title": "Intern",
+          "location": "Baltimore, Maryland, United States of America",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Baltimore-Maryland-United-States-of-America/Intern_JR042973-2",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR042973"
+          ]
+        }
+      ]
+    },
+    "workday:copart:12:Copart": {
+      "backend": "workday",
+      "slug": "copart:12:Copart",
+      "url": "https://copart.wd12.myworkdayjobs.com/wday/cxs/copart/Copart/jobs",
+      "status": 200,
+      "jobCount": 371,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "JR111393",
+          "title": "National Account Manager - Government & Public Sector",
+          "location": "Dallas, TX - Headquarters",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Dallas-TX---Headquarters/National-account-manger---Government---Public-Sector_JR111393",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR111393"
+          ]
+        },
+        {
+          "id": "JR111470",
+          "title": "BluCar Sales Account Manager",
+          "location": "Dallas, TX - Headquarters",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Dallas-TX---Headquarters/BluCar-Sales-Account-Manager_JR111470",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR111470"
+          ]
+        },
+        {
+          "id": "JR111692",
+          "title": "Inventory Specialist",
+          "location": "Denver Central, CO",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Denver-Central-CO/Inventory-Specialist_JR111692",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR111692"
+          ]
+        }
+      ]
+    },
+    "workday:cox:1:Cox_External_Career_Site_1": {
+      "backend": "workday",
+      "slug": "cox:1:Cox_External_Career_Site_1",
+      "url": "https://cox.wd1.myworkdayjobs.com/wday/cxs/cox/Cox_External_Career_Site_1/jobs",
+      "status": 200,
+      "jobCount": 754,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R202682958",
+          "title": "Mobile Diesel &Trailer Mechanic II -Tue - Sat 11am to 7:30pm $5,000 New Hire Bonus",
+          "location": "3 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/San-Fernando-CA/Mobile-Diesel--Trailer-Mechanic-II--Tue---Sat-11am-to-7-30pm--5-000-New-Hire-Bonus_R202682958-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R202682958"
+          ]
+        },
+        {
+          "id": "R202682420",
+          "title": "Enterprise Planning and Analysis Intern",
+          "location": "Atlanta GA",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Atlanta-GA/Enterprise-Planning-and-Analysis-Intern_R202682420-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R202682420"
+          ]
+        },
+        {
+          "id": "R202682005",
+          "title": "Manheim Mobile Vehicle Condition Inspector, Ft. Lauderdale, FL",
+          "location": "Remote - Florida",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Remote---Florida/Manheim-Mobile-Vehicle-Condition-Inspector--North-Ft-Lauderdale--FL_R202682005",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R202682005"
+          ]
+        }
+      ]
+    },
+    "workday:broadcom:1:External_Career": {
+      "backend": "workday",
+      "slug": "broadcom:1:External_Career",
+      "url": "https://broadcom.wd1.myworkdayjobs.com/wday/cxs/broadcom/External_Career/jobs",
+      "status": 200,
+      "jobCount": 375,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R027137",
+          "title": "Business Analyst - Metrics & Reporting",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA-NY-Melville/Business-Analyst---Metrics---Reporting_R027137",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R027137"
+          ]
+        },
+        {
+          "id": "R027155",
+          "title": "Software Engineer (ICB 4)",
+          "location": "USA-TX Plano Legacy Drive Suite 700",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA-TX-Plano-Legacy-Drive-Suite-700/Software-Engineer--ICB-4-_R027155",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R027155"
+          ]
+        },
+        {
+          "id": "R027107",
+          "title": "Software/Firmware Engineer",
+          "location": "USA-Colorado-Fort Collins-4380 Ziegler Road",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/USA-Colorado-Fort-Collins-4380-Ziegler-Road/Software-Firmware-Engineer_R027107",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R027107"
+          ]
+        }
+      ]
+    },
+    "workday:pfizer:1:PfizerCareers": {
+      "backend": "workday",
+      "slug": "pfizer:1:PfizerCareers",
+      "url": "https://pfizer.wd1.myworkdayjobs.com/wday/cxs/pfizer/PfizerCareers/jobs",
+      "status": 200,
+      "jobCount": 564,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "4963297",
+          "title": "Director, Consumer Products & Surfaces",
+          "location": "6 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/United-States---New-York---New-York-City/Director--Consumer-Products---Surfaces_4963297-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "4963297"
+          ]
+        },
+        {
+          "id": "4964537",
+          "title": "代谢事业部-医学信息沟通专员-佛山",
+          "location": "China - Guangdong - Foshan",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/China---Guangdong---Foshan/--_4964537",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "4964537"
+          ]
+        },
+        {
+          "id": "4964543",
+          "title": "肺癌产品组-医学信息沟通专员-武汉",
+          "location": "China - Hubei - Wuhan",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/China---Hubei---Wuhan/--_4964543",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "4964543"
+          ]
+        }
+      ]
+    },
+    "workday:marvell:1:MarvellCareers": {
+      "backend": "workday",
+      "slug": "marvell:1:MarvellCareers",
+      "url": "https://marvell.wd1.myworkdayjobs.com/wday/cxs/marvell/MarvellCareers/jobs",
+      "status": 200,
+      "jobCount": 246,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "2603478",
+          "title": "Principal Signal/Power integrity Engineer",
+          "location": "Yokneam",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Yokneam/Principal-Signal-Power-integrity-Engineer_2603478",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "2603478"
+          ]
+        },
+        {
+          "id": "2603477",
+          "title": "Hardware Board Design Senior Staff Engineer",
+          "location": "Yokneam",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Yokneam/Hardware-Board-Design-Senior-Staff-Engineer_2603477",
+          "postedOn": "Posted 7 Days Ago",
+          "bulletFields": [
+            "2603477"
+          ]
+        },
+        {
+          "id": "2604737",
+          "title": "Director of IT - Legal, Compliance & Workplace Applications",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Santa-Clara-CA/Director-of-IT---Legal--Compliance---Workplace-Applications_2604737",
+          "postedOn": "Posted 10 Days Ago",
+          "bulletFields": [
+            "2604737"
+          ]
+        }
+      ]
+    },
+    "workday:generalmotors:5:Careers_GM": {
+      "backend": "workday",
+      "slug": "generalmotors:5:Careers_GM",
+      "url": "https://generalmotors.wd5.myworkdayjobs.com/wday/cxs/generalmotors/Careers_GM/jobs",
+      "status": 200,
+      "jobCount": 865,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "JR-202620783",
+          "title": "Staff HR Business Partner",
+          "location": "Warren, Michigan, United States of America",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Warren-Michigan-United-States-of-America/Staff-HR-Business-Partner_JR-202620783-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-202620783",
+            "Exempt"
+          ]
+        },
+        {
+          "id": "JR-202620524",
+          "title": "Senior Data Scientist - Product Safety Data Analytics (GPSSC)",
+          "location": "Warren, Michigan, United States of America",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Warren-Michigan-United-States-of-America/Senior-Data-Scientist---Product-Safety-Data-Analytics--GPSSC-_JR-202620524-1",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-202620524",
+            "Exempt"
+          ]
+        },
+        {
+          "id": "JR-202621086",
+          "title": "Compliant Variation Analysis Engineer",
+          "location": "Warren, Michigan, United States of America",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Warren-Michigan-United-States-of-America/Compliant-Variation-Analysis-Engineer_JR-202621086",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-202621086",
+            "Exempt"
+          ]
+        }
+      ]
+    },
+    "workday:warnerbros:5:global": {
+      "backend": "workday",
+      "slug": "warnerbros:5:global",
+      "url": "https://warnerbros.wd5.myworkdayjobs.com/wday/cxs/warnerbros/global/jobs",
+      "status": 200,
+      "jobCount": 317,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R000108694",
+          "title": "TikTok Social Programming, Bleacher Report (Temporary)",
+          "location": "2 Locations",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/GA-Atlanta-1050-Techwood-Drive-NW/TikTok-Social-Programming--Bleacher-Report--Temporary-_R000108694",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R000108694"
+          ]
+        },
+        {
+          "id": "R000105677",
+          "title": "Senior Software Developer",
+          "location": "Kanata 307 Legget Dr.",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Kanata-307-Legget-Dr/Senior-Software-Developer_R000105677",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R000105677"
+          ]
+        },
+        {
+          "id": "R000105669",
+          "title": "Manager, Software Development",
+          "location": "Kanata 307 Legget Dr.",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Kanata-307-Legget-Dr/Manager--Software-Development_R000105669",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R000105669"
+          ]
+        }
+      ]
+    },
+    "workday:modernatx:1:M_tx": {
+      "backend": "workday",
+      "slug": "modernatx:1:M_tx",
+      "url": "https://modernatx.wd1.myworkdayjobs.com/wday/cxs/modernatx/M_tx/jobs",
+      "status": 200,
+      "jobCount": 205,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R19218",
+          "title": "Scientist, Process Development (Formulation)",
+          "location": null,
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Norwood-Massachusetts/Scientist--Process-Development--Formulation-_R19218",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Norwood, Massachusetts",
+            "Technical Development",
+            "R19218"
+          ]
+        },
+        {
+          "id": "R19494",
+          "title": "Director, CMC Stability",
+          "location": null,
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Norwood-Massachusetts/Director--CMC-Stability_R19494",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Norwood, Massachusetts",
+            "Technical Development",
+            "R19494"
+          ]
+        },
+        {
+          "id": "R19590",
+          "title": "Sr. Research Associate, Clinical Biomarker Laboratory, Flow Cytometry",
+          "location": null,
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Norwood-Massachusetts/Sr-Research-Associate--Clinical-Biomarker-Laboratory--Flow-Cytometry_R19590",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Norwood, Massachusetts",
+            "Clinical Development",
+            "R19590"
+          ]
+        }
+      ]
+    },
+    "workday:visa:5:Visa_Early_Careers": {
+      "backend": "workday",
+      "slug": "visa:5:Visa_Early_Careers",
+      "url": "https://visa.wd5.myworkdayjobs.com/wday/cxs/visa/Visa_Early_Careers/jobs",
+      "status": 200,
+      "jobCount": 44,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "REF088594W",
+          "title": "2027 Sophomore Internship Program - Software Engineer Intern, Bellevue",
+          "location": "US - Bellevue, WA",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/US---Bellevue-WA/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Bellevue_REF088594W",
+          "postedOn": "Posted 6 Days Ago",
+          "bulletFields": [
+            "REF088594W"
+          ]
+        },
+        {
+          "id": "REF088596W",
+          "title": "2027 Sophomore Internship Program - Software Engineer Intern, Austin",
+          "location": "US - Austin, TX",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/US---Austin-TX/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Austin_REF088596W",
+          "postedOn": "Posted 6 Days Ago",
+          "bulletFields": [
+            "REF088596W"
+          ]
+        },
+        {
+          "id": "REF088591W",
+          "title": "2027 Sophomore Internship Program - Software Engineer Intern, Foster City",
+          "location": "US - Foster City, CA",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/US---Foster-City-CA/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Foster-City_REF088591W",
+          "postedOn": "Posted 6 Days Ago",
+          "bulletFields": [
+            "REF088591W"
+          ]
+        }
+      ]
+    },
+    "greenhouse:wehrtyou": {
+      "backend": "greenhouse",
+      "slug": "wehrtyou",
+      "url": "https://api.greenhouse.io/v1/boards/wehrtyou/jobs",
+      "status": 200,
+      "jobCount": 85,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "7972593",
+          "title": "AI Research Engineer, Inference",
+          "location": "London, United Kingdom; New York, NY, United States",
+          "department": null,
+          "updatedAt": "2026-09-18T17:46:42.000Z"
+        },
+        {
+          "id": "7972584",
+          "title": "AI Research Engineer, Pre-Training",
+          "location": "London, United Kingdom; New York, NY, United States",
+          "department": null,
+          "updatedAt": "2026-09-18T17:46:42.000Z"
+        },
+        {
+          "id": "8161767",
+          "title": "AI Researcher",
+          "location": "London, United Kingdom; New York, NY, United States",
+          "department": null,
+          "updatedAt": "2026-09-18T17:46:42.000Z"
+        }
+      ]
+    },
+    "greenhouse:jumptrading": {
+      "backend": "greenhouse",
+      "slug": "jumptrading",
+      "url": "https://api.greenhouse.io/v1/boards/jumptrading/jobs",
+      "status": 200,
+      "jobCount": 114,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "4982814",
+          "title": "AI Research Scientist | Research & Development",
+          "location": "New York, London, Singapore",
+          "department": null,
+          "updatedAt": "2026-09-24T17:46:19.000Z"
+        },
+        {
+          "id": "6622233",
+          "title": "Business Intelligence Researcher",
+          "location": "New York",
+          "department": null,
+          "updatedAt": "2026-08-08T05:01:16.000Z"
+        },
+        {
+          "id": "8027938",
+          "title": "Campus AI/ML Researcher (Intern)",
+          "location": "Hong Kong; Shanghai; Singapore",
+          "department": null,
+          "updatedAt": "2026-08-28T11:28:48.000Z"
+        }
+      ]
+    },
+    "greenhouse:optiverus": {
+      "backend": "greenhouse",
+      "slug": "optiverus",
+      "url": "https://api.greenhouse.io/v1/boards/optiverus/jobs",
+      "status": 200,
+      "jobCount": 165,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "8644364002",
+          "title": "2027 Shanghai FPGA Developer Summer Internship",
+          "location": "Shanghai, China",
+          "department": null,
+          "updatedAt": "2026-08-12T10:13:46.000Z"
+        },
+        {
+          "id": "8633966002",
+          "title": "2027 Shanghai Machine Learning Engineer Summer Internship",
+          "location": "Shanghai, China",
+          "department": null,
+          "updatedAt": "2026-08-12T10:14:53.000Z"
+        },
+        {
+          "id": "8732789002",
+          "title": "2027 Shanghai Performance Researcher Summer Internship",
+          "location": "Shanghai, China",
+          "department": null,
+          "updatedAt": "2026-09-08T01:18:06.000Z"
+        }
+      ]
+    },
+    "greenhouse:drweng": {
+      "backend": "greenhouse",
+      "slug": "drweng",
+      "url": "https://api.greenhouse.io/v1/boards/drweng/jobs",
+      "status": 200,
+      "jobCount": 165,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "8201188",
+          "title": "Administrative Assistant - FICCO Trading Group",
+          "location": "Chicago",
+          "department": null,
+          "updatedAt": "2026-09-15T14:25:48.000Z"
+        },
+        {
+          "id": "7759802",
+          "title": "AI Full Stack Software Developer",
+          "location": "Montreal",
+          "department": null,
+          "updatedAt": "2026-08-19T21:04:51.000Z"
+        },
+        {
+          "id": "7991171",
+          "title": "AI/ML Research Intern",
+          "location": "Montreal",
+          "department": null,
+          "updatedAt": "2026-08-19T21:04:51.000Z"
+        }
+      ]
+    },
+    "greenhouse:akunacapital": {
+      "backend": "greenhouse",
+      "slug": "akunacapital",
+      "url": "https://api.greenhouse.io/v1/boards/akunacapital/jobs",
+      "status": 200,
+      "jobCount": 42,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "8109370",
+          "title": "Accounting Intern (Term-Time, Part-Time)",
+          "location": "Chicago, IL",
+          "department": null,
+          "updatedAt": "2026-09-23T22:06:29.000Z"
+        },
+        {
+          "id": "8021124",
+          "title": "Akuna Capital's Talent Community",
+          "location": "Virtual",
+          "department": null,
+          "updatedAt": "2026-06-22T16:57:24.000Z"
+        },
+        {
+          "id": "7496425",
+          "title": "Experienced Options Trader",
+          "location": "Chicago, IL",
+          "department": null,
+          "updatedAt": "2026-07-27T13:34:24.000Z"
+        }
+      ]
+    },
+    "greenhouse:fiveringsllc": {
+      "backend": "greenhouse",
+      "slug": "fiveringsllc",
+      "url": "https://api.greenhouse.io/v1/boards/fiveringsllc/jobs",
+      "status": 200,
+      "jobCount": 16,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "5255334008",
+          "title": "Campus Full Time 2027 - Quantitative Trader",
+          "location": "New York",
+          "department": null,
+          "updatedAt": "2026-09-01T21:18:37.000Z"
+        },
+        {
+          "id": "5344213008",
+          "title": "Campus Full Time 2027 - Quantitative Trader - Amsterdam",
+          "location": "Amsterdam",
+          "department": null,
+          "updatedAt": "2026-09-01T21:18:37.000Z"
+        },
+        {
+          "id": "5255367008",
+          "title": "Campus Full Time 2027 - Quantitative Trader - London",
+          "location": "London",
+          "department": null,
+          "updatedAt": "2026-09-01T21:18:37.000Z"
+        }
+      ]
+    },
+    "greenhouse:oldmissioncapital": {
+      "backend": "greenhouse",
+      "slug": "oldmissioncapital",
+      "url": "https://api.greenhouse.io/v1/boards/oldmissioncapital/jobs",
+      "status": 200,
+      "jobCount": 37,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "7859507003",
+          "title": "Associate Head of Trader Education",
+          "location": "Chicago, IL, United States",
+          "department": null,
+          "updatedAt": "2026-08-12T19:13:13.000Z"
+        },
+        {
+          "id": "5607340003",
+          "title": "C++ Software Engineer",
+          "location": "Chicago, IL, United States",
+          "department": null,
+          "updatedAt": "2026-05-26T14:31:46.000Z"
+        },
+        {
+          "id": "5607344003",
+          "title": "C++ Software Engineer",
+          "location": "New York, NY, United States",
+          "department": null,
+          "updatedAt": "2026-05-26T14:31:46.000Z"
+        }
+      ]
+    },
+    "greenhouse:xtxmarketstechnologies": {
+      "backend": "greenhouse",
+      "slug": "xtxmarketstechnologies",
+      "url": "https://api.greenhouse.io/v1/boards/xtxmarketstechnologies/jobs",
+      "status": 200,
+      "jobCount": 9,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "6274458003",
+          "title": "AI Research Internship - XTY Labs",
+          "location": "New York",
+          "department": null,
+          "updatedAt": "2026-06-30T14:56:10.000Z"
+        },
+        {
+          "id": "7831489003",
+          "title": "C++ Software Engineer",
+          "location": "Singapore, Central, Singapore",
+          "department": null,
+          "updatedAt": "2026-08-21T17:00:23.000Z"
+        },
+        {
+          "id": "7645996003",
+          "title": "Datacentre Operations Engineer",
+          "location": "Singapore, Central, Singapore",
+          "department": null,
+          "updatedAt": "2026-06-23T13:35:44.000Z"
+        }
+      ]
+    },
+    "greenhouse:point72": {
+      "backend": "greenhouse",
+      "slug": "point72",
+      "url": "https://api.greenhouse.io/v1/boards/point72/jobs",
+      "status": 200,
+      "jobCount": 220,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "8726366002",
+          "title": "2026 Point72 Academy National Case Competition - US",
+          "location": "United States",
+          "department": null,
+          "updatedAt": "2026-09-15T21:33:58.000Z"
+        },
+        {
+          "id": "7598678002",
+          "title": "2027 Cubist Quant Academy – Developers",
+          "location": "New York",
+          "department": null,
+          "updatedAt": "2026-09-15T21:33:58.000Z"
+        },
+        {
+          "id": "8811167002",
+          "title": "2027 Investment Services Internship",
+          "location": "New York, New York, United States, Stamford, Connecticut, United States",
+          "department": null,
+          "updatedAt": "2026-09-22T13:53:38.000Z"
+        }
+      ]
+    },
+    "greenhouse:bridgewater89": {
+      "backend": "greenhouse",
+      "slug": "bridgewater89",
+      "url": "https://api.greenhouse.io/v1/boards/bridgewater89/jobs",
+      "status": 200,
+      "jobCount": 14,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "8395041002",
+          "title": "2027 Investment Associate Intern",
+          "location": "New York City",
+          "department": null,
+          "updatedAt": "2026-09-23T05:01:55.000Z"
+        },
+        {
+          "id": "8334259002",
+          "title": "Campus Talent Associate",
+          "location": "Westport, CT & New York City",
+          "department": null,
+          "updatedAt": "2026-09-23T05:01:54.000Z"
+        },
+        {
+          "id": "8294673002",
+          "title": "Client Investment Research Associate",
+          "location": "New York City",
+          "department": null,
+          "updatedAt": "2026-09-23T05:01:54.000Z"
+        }
+      ]
+    },
+    "greenhouse:radixexperienced": {
+      "backend": "greenhouse",
+      "slug": "radixexperienced",
+      "url": "https://api.greenhouse.io/v1/boards/radixexperienced/jobs",
+      "status": 200,
+      "jobCount": 7,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "6954287002",
+          "title": "Compliance Specialist – Amsterdam",
+          "location": "Radix Trading Amsterdam",
+          "department": null,
+          "updatedAt": "2026-05-04T19:18:00.000Z"
+        },
+        {
+          "id": "8121869002",
+          "title": "HPC Systems Engineer",
+          "location": "Chicago, Illinois, United States; New York, New York, United States",
+          "department": null,
+          "updatedAt": "2026-09-09T05:01:33.000Z"
+        },
+        {
+          "id": "7745843002",
+          "title": "Network Engineer",
+          "location": "Chicago, Illinois, United States; New York, New York, United States",
+          "department": null,
+          "updatedAt": "2026-09-09T05:01:32.000Z"
+        }
+      ]
+    },
+    "greenhouse:headlandstechnologiesllc": {
+      "backend": "greenhouse",
+      "slug": "headlandstechnologiesllc",
+      "url": "https://api.greenhouse.io/v1/boards/headlandstechnologiesllc/jobs",
+      "status": 200,
+      "jobCount": 8,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "4227758009",
+          "title": "C++ Software Developer",
+          "location": "Amsterdam; Chicago; London; New York",
+          "department": null,
+          "updatedAt": "2026-09-21T20:27:21.000Z"
+        },
+        {
+          "id": "4336806009",
+          "title": "C++ Software Developer - New Grad",
+          "location": "Amsterdam; Chicago",
+          "department": null,
+          "updatedAt": "2026-09-21T20:27:21.000Z"
+        },
+        {
+          "id": "4228114009",
+          "title": "FPGA Engineer",
+          "location": "Amsterdam; Chicago; London; New York",
+          "department": null,
+          "updatedAt": "2026-09-21T20:27:21.000Z"
+        }
+      ]
+    },
+    "lever:belvederetrading": {
+      "backend": "lever",
+      "slug": "belvederetrading",
+      "url": "https://api.lever.co/v0/postings/belvederetrading?mode=json",
+      "status": 200,
+      "jobCount": 21,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "fd619115-ced7-4d59-bd2b-0948b5ee5fde",
+          "title": "Early Career Talent Partner - Technology & Platform",
+          "location": "Chicago, Illinois",
+          "department": "Talent",
+          "updatedAt": "2026-09-22T20:46:54.068Z"
+        },
+        {
+          "id": "fb74cb4d-a250-47c7-96a5-0450095add27",
+          "title": "Early Career Talent Partner - Trading",
+          "location": "Chicago, Illinois",
+          "department": "Talent",
+          "updatedAt": "2026-09-22T20:49:05.569Z"
+        },
+        {
+          "id": "886e04f8-1ec2-4f0f-8237-fdbda729c14c",
+          "title": "Employee Experience Coordinator",
+          "location": "Chicago, Illinois",
+          "department": "Employee Experience",
+          "updatedAt": "2026-09-16T14:18:41.639Z"
+        }
+      ]
+    },
+    "greenhouse:chicagotrading": {
+      "backend": "greenhouse",
+      "slug": "chicagotrading",
+      "url": "https://api.greenhouse.io/v1/boards/chicagotrading/jobs",
+      "status": 200,
+      "jobCount": 25,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "4730408005",
+          "title": "AI Engineer",
+          "location": "Chicago, Illinois, United States",
+          "department": null,
+          "updatedAt": "2026-09-21T19:35:31.000Z"
+        },
+        {
+          "id": "4668637005",
+          "title": "Business Manager - Systematic",
+          "location": "Chicago, Illinois, United States",
+          "department": null,
+          "updatedAt": "2026-09-11T15:33:24.000Z"
+        },
+        {
+          "id": "4725292005",
+          "title": "Campus Relations & Events Associate",
+          "location": "Chicago, Illinois, United States",
+          "department": null,
+          "updatedAt": "2026-09-11T15:33:24.000Z"
+        }
+      ]
+    },
+    "greenhouse:chicagotradingcampus": {
+      "backend": "greenhouse",
+      "slug": "chicagotradingcampus",
+      "url": "https://api.greenhouse.io/v1/boards/chicagotradingcampus/jobs",
+      "status": 200,
+      "jobCount": 8,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "4716937005",
+          "title": "Associate Engineer - 2027 Start",
+          "location": "Chicago, IL; New York, NY",
+          "department": null,
+          "updatedAt": "2026-09-11T15:33:23.000Z"
+        },
+        {
+          "id": "4716509005",
+          "title": "Quant Trading Associate - 2027 Start",
+          "location": "London, England, United Kingdom",
+          "department": null,
+          "updatedAt": "2026-09-11T15:33:23.000Z"
+        },
+        {
+          "id": "4716507005",
+          "title": "Quant Trading Associate - 2027 Start",
+          "location": "Chicago, IL",
+          "department": null,
+          "updatedAt": "2026-09-11T15:33:23.000Z"
+        }
+      ]
+    },
+    "greenhouse:flowtraders": {
+      "backend": "greenhouse",
+      "slug": "flowtraders",
+      "url": "https://api.greenhouse.io/v1/boards/flowtraders/jobs",
+      "status": 200,
+      "jobCount": 48,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "8092416",
+          "title": "Compliance Officer",
+          "location": "New York",
+          "department": null,
+          "updatedAt": "2026-09-10T06:39:25.000Z"
+        },
+        {
+          "id": "7621695",
+          "title": "Compliance Officer - Digital Assets Specialist",
+          "location": "Amsterdam",
+          "department": null,
+          "updatedAt": "2026-08-05T13:33:35.000Z"
+        },
+        {
+          "id": "8203712",
+          "title": "Data Center Engineer",
+          "location": "Amsterdam",
+          "department": null,
+          "updatedAt": "2026-09-21T12:33:14.000Z"
+        }
+      ]
+    },
+    "greenhouse:mavensecuritiesholdingltd": {
+      "backend": "greenhouse",
+      "slug": "mavensecuritiesholdingltd",
+      "url": "https://api.greenhouse.io/v1/boards/mavensecuritiesholdingltd/jobs",
+      "status": 200,
+      "jobCount": 45,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "8048591",
+          "title": "Amsterdam Trader Summer Internship 2027",
+          "location": "Amsterdam",
+          "department": null,
+          "updatedAt": "2026-09-18T16:05:23.000Z"
+        },
+        {
+          "id": "5511938",
+          "title": "Associate Portfolio Manager",
+          "location": "London",
+          "department": null,
+          "updatedAt": "2026-09-10T15:34:09.000Z"
+        },
+        {
+          "id": "8132023",
+          "title": "Campus Recruitment & HR Specialist",
+          "location": "Amsterdam",
+          "department": null,
+          "updatedAt": "2026-09-10T15:34:13.000Z"
+        }
+      ]
+    },
+    "greenhouse:quberesearchandtechnologies": {
+      "backend": "greenhouse",
+      "slug": "quberesearchandtechnologies",
+      "url": "https://api.greenhouse.io/v1/boards/quberesearchandtechnologies/jobs",
+      "status": 200,
+      "jobCount": 201,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "8773447002",
+          "title": "2027 – Graduate or Internship, Infrastructure Engineer",
+          "location": "London, Paris",
+          "department": null,
+          "updatedAt": "2026-09-24T08:57:00.000Z"
+        },
+        {
+          "id": "8623972002",
+          "title": "2027 - Internship, Data Engineering",
+          "location": "Paris, London",
+          "department": null,
+          "updatedAt": "2026-09-24T08:57:00.000Z"
+        },
+        {
+          "id": "8749947002",
+          "title": "2027 – Internship, Data Engineering",
+          "location": "Hong Kong, Singapore",
+          "department": null,
+          "updatedAt": "2026-09-24T08:57:00.000Z"
+        }
+      ]
+    },
+    "workday:gresearch:103:G-Research": {
+      "backend": "workday",
+      "slug": "gresearch:103:G-Research",
+      "url": "https://gresearch.wd103.myworkdayjobs.com/wday/cxs/gresearch/G-Research/jobs",
+      "status": 200,
+      "jobCount": 64,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R3746",
+          "title": "Software Engineering Internship",
+          "location": "London, UK",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/London-UK/Software-Engineering-Intern_R3746",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "R3746"
+          ]
+        },
+        {
+          "id": "R3739",
+          "title": "Platform Desktop Engineer",
+          "location": "London, UK",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/London-UK/Platform-Desktop-Engineer_R3739",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "R3739"
+          ]
+        },
+        {
+          "id": "R2633",
+          "title": "Quantitative Analyst",
+          "location": "London, UK",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/London-UK/Quantitative-Analyst_R2633",
+          "postedOn": "Posted 6 Days Ago",
+          "bulletFields": [
+            "R2633"
+          ]
+        }
+      ]
+    },
+    "workday:arrowstreetcapital:5:Arrowstreet": {
+      "backend": "workday",
+      "slug": "arrowstreetcapital:5:Arrowstreet",
+      "url": "https://arrowstreetcapital.wd5.myworkdayjobs.com/wday/cxs/arrowstreetcapital/Arrowstreet/jobs",
+      "status": 200,
+      "jobCount": 23,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "R1511",
+          "title": "Pre-Trade Investment Services",
+          "location": "Boston",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Boston/Pre-Trade-Investment-Services_R1511-1",
+          "postedOn": "Posted 3 Days Ago",
+          "bulletFields": [
+            "R1511"
+          ]
+        },
+        {
+          "id": "R1544",
+          "title": "Senior Network Security Engineer",
+          "location": "Boston",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Boston/Senior-Network-Security-Engineer_R1544-1",
+          "postedOn": "Posted 6 Days Ago",
+          "bulletFields": [
+            "R1544"
+          ]
+        },
+        {
+          "id": "R1545",
+          "title": "Portfolio Compliance",
+          "location": "Boston",
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "/job/Boston/Portfolio-Compliance_R1545",
+          "postedOn": "Posted 8 Days Ago",
+          "bulletFields": [
+            "R1545"
+          ]
+        }
+      ]
+    },
+    "ashby:voleon": {
+      "backend": "ashby",
+      "slug": "voleon",
+      "url": "https://api.ashbyhq.com/posting-api/job-board/voleon",
+      "status": 200,
+      "jobCount": 55,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "306bf4dd-b3a8-4e9d-95eb-17afbf33467c",
+          "title": "Senior Software Engineer, Developer Experience",
+          "location": "Berkeley, CA",
+          "department": "Software",
+          "updatedAt": "2026-08-11T23:02:28.230Z"
+        },
+        {
+          "id": "36c3634b-ffc5-44b7-970b-9c17943d6628",
+          "title": "Senior/Staff Software Engineer, Data Engineering",
+          "location": "Remote, United States",
+          "department": "Software",
+          "updatedAt": "2026-04-17T01:11:23.427Z"
+        },
+        {
+          "id": "ea4af8e0-d7d9-44db-9f57-9f26e783fd11",
+          "title": "Senior Software Engineer, Strategy Research Analytics",
+          "location": "Remote, United States",
+          "department": "Software",
+          "updatedAt": "2026-09-04T13:06:23.729Z"
+        }
+      ]
+    },
+    "greenhouse:worldquant": {
+      "backend": "greenhouse",
+      "slug": "worldquant",
+      "url": "https://api.greenhouse.io/v1/boards/worldquant/jobs",
+      "status": 200,
+      "jobCount": 102,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "4687291006",
+          "title": "AI Scientist",
+          "location": "New York",
+          "department": null,
+          "updatedAt": "2026-09-15T20:47:13.000Z"
+        },
+        {
+          "id": "4671240006",
+          "title": "AI Software Developer",
+          "location": "London",
+          "department": null,
+          "updatedAt": "2026-08-19T08:45:49.000Z"
+        },
+        {
+          "id": "4668859006",
+          "title": "AI Software Developer",
+          "location": "Budapest",
+          "department": null,
+          "updatedAt": "2026-07-28T12:47:47.000Z"
+        }
+      ]
+    },
+    "greenhouse:schonfeld": {
+      "backend": "greenhouse",
+      "slug": "schonfeld",
+      "url": "https://api.greenhouse.io/v1/boards/schonfeld/jobs",
+      "status": 200,
+      "jobCount": 79,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "7950797",
+          "title": "2026 BSc/MSc/PhD Quantitative Research/Strat Internship",
+          "location": "São Paulo, Brazil",
+          "department": null,
+          "updatedAt": "2026-09-22T13:15:59.000Z"
+        },
+        {
+          "id": "7761282",
+          "title": "2026 LATAM Investment Analyst (Internship)",
+          "location": "São Paulo, Brazil",
+          "department": null,
+          "updatedAt": "2026-09-22T13:15:59.000Z"
+        },
+        {
+          "id": "8044346",
+          "title": "2026 Operational Risk Internship",
+          "location": "São Paulo, Brazil",
+          "department": null,
+          "updatedAt": "2026-09-22T13:15:59.000Z"
+        }
+      ]
+    },
+    "greenhouse:genevatrading": {
+      "backend": "greenhouse",
+      "slug": "genevatrading",
+      "url": "https://api.greenhouse.io/v1/boards/genevatrading/jobs",
+      "status": 200,
+      "jobCount": 15,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "5240107007",
+          "title": "AI Engineer Internship - Summer 2027",
+          "location": "Chicago Office",
+          "department": null,
+          "updatedAt": "2026-09-24T17:25:39.000Z"
+        },
+        {
+          "id": "5242063007",
+          "title": "C++ Developer (Intern)",
+          "location": "Chicago Office",
+          "department": null,
+          "updatedAt": "2026-09-24T17:25:39.000Z"
+        },
+        {
+          "id": "5202927007",
+          "title": "Data Analyst – Mid/Back Office Tech Team",
+          "location": "Chicago Office",
+          "department": null,
+          "updatedAt": "2026-09-24T18:25:38.000Z"
+        }
+      ]
+    },
+    "greenhouse:vaticlabs": {
+      "backend": "greenhouse",
+      "slug": "vaticlabs",
+      "url": "https://api.greenhouse.io/v1/boards/vaticlabs/jobs",
+      "status": 200,
+      "jobCount": 8,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "5414236",
+          "title": "AI Engineer",
+          "location": "New York",
+          "department": null,
+          "updatedAt": "2026-07-22T17:55:40.000Z"
+        },
+        {
+          "id": "7235544",
+          "title": "AI Engineer (UAE)",
+          "location": "Abu Dhabi",
+          "department": null,
+          "updatedAt": "2026-06-01T09:22:44.000Z"
+        },
+        {
+          "id": "5114560",
+          "title": "AI Researcher",
+          "location": "New York",
+          "department": null,
+          "updatedAt": "2026-07-22T17:55:40.000Z"
+        }
+      ]
+    },
+    "icims:careers-sig": {
+      "backend": "icims",
+      "slug": "careers-sig",
+      "url": "https://careers-sig.icims.com/jobs/search?ss=1&in_iframe=1",
+      "status": 200,
+      "jobCount": 20,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "10966",
+          "title": "Accounting Internship: Summer 2027",
+          "location": null,
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "https://careers-sig.icims.com/jobs/10966/accounting-internship%3a-summer-2027/job?in_iframe=1"
+        },
+        {
+          "id": "11485",
+          "title": "Accounts Payable Associate | Fixed Term Contract",
+          "location": null,
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "https://careers-sig.icims.com/jobs/11485/accounts-payable-associate-%7c-fixed-term-contract/job?in_iframe=1"
+        },
+        {
+          "id": "11368",
+          "title": "AI Co-op with Drexel University",
+          "location": null,
+          "department": null,
+          "updatedAt": null,
+          "externalPath": "https://careers-sig.icims.com/jobs/11368/ai-co-op-with-drexel-university/job?in_iframe=1"
+        }
+      ]
+    },
+    "greenhouse:towerresearchcapital": {
+      "backend": "greenhouse",
+      "slug": "towerresearchcapital",
+      "url": "https://api.greenhouse.io/v1/boards/towerresearchcapital/jobs",
+      "status": 200,
+      "jobCount": 91,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "7583213",
+          "title": "Agentic System Developer",
+          "location": "New York",
+          "department": null,
+          "updatedAt": "2026-09-10T17:54:11.000Z"
+        },
+        {
+          "id": "7704976",
+          "title": "Analyste en sécurité de l’information / Information Security Analyst",
+          "location": "Montreal",
+          "department": null,
+          "updatedAt": "2026-08-13T19:16:39.000Z"
+        },
+        {
+          "id": "7693090",
+          "title": "Associate, Finance",
+          "location": "Gurgaon",
+          "department": null,
+          "updatedAt": "2026-08-18T14:14:49.000Z"
+        }
+      ]
+    },
+    "greenhouse:imc": {
+      "backend": "greenhouse",
+      "slug": "imc",
+      "url": "https://api.greenhouse.io/v1/boards/imc/jobs",
+      "status": 200,
+      "jobCount": 172,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "4979079101",
+          "title": "2026 Chess Academy Australia & New Zealand - Expression of Interest",
+          "location": "APAC",
+          "department": null,
+          "updatedAt": "2026-09-23T23:32:46.000Z"
+        },
+        {
+          "id": "4940448101",
+          "title": "2027 EU Campus Programme Talent Community",
+          "location": "Europe",
+          "department": null,
+          "updatedAt": "2026-09-22T11:43:56.000Z"
+        },
+        {
+          "id": "4981180101",
+          "title": "2027 EU Chess Academy - Expression of Interest",
+          "location": "Europe",
+          "department": null,
+          "updatedAt": "2026-09-21T12:06:53.000Z"
+        }
+      ]
+    },
+    "greenhouse:janestreet": {
+      "backend": "greenhouse",
+      "slug": "janestreet",
+      "url": "https://api.greenhouse.io/v1/boards/janestreet/jobs",
+      "status": 200,
+      "jobCount": 228,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "8631912002",
+          "title": "Accounting Coordinator",
+          "location": "New York, New York, United States",
+          "department": null,
+          "updatedAt": "2026-09-21T15:16:43.000Z"
+        },
+        {
+          "id": "8596771002",
+          "title": "ꓟachine ꓡearning ꓣesearcher",
+          "location": "Hong Kong, Hong Kong",
+          "department": null,
+          "updatedAt": "2026-09-21T15:16:40.000Z"
+        },
+        {
+          "id": "8836991002",
+          "title": "Architect",
+          "location": "New York, New York, United States",
+          "department": null,
+          "updatedAt": "2026-09-24T21:24:47.000Z"
+        }
+      ]
+    },
+    "greenhouse:squarepointcapital": {
+      "backend": "greenhouse",
+      "slug": "squarepointcapital",
+      "url": "https://api.greenhouse.io/v1/boards/squarepointcapital/jobs",
+      "status": 200,
+      "jobCount": 89,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "7454476",
+          "title": "Accountant",
+          "location": "Jersey, Montreal, Warsaw",
+          "department": null,
+          "updatedAt": "2026-08-06T11:00:40.000Z"
+        },
+        {
+          "id": "7731544",
+          "title": "Accounts Payable Finance Analyst",
+          "location": "Montreal, Warsaw",
+          "department": null,
+          "updatedAt": "2026-08-06T11:00:40.000Z"
+        },
+        {
+          "id": "8002291",
+          "title": "APAC Delta One Trader",
+          "location": "Hong Kong, Singapore",
+          "department": null,
+          "updatedAt": "2026-09-11T10:53:55.000Z"
+        }
+      ]
+    },
+    "greenhouse:virtu": {
+      "backend": "greenhouse",
+      "slug": "virtu",
+      "url": "https://api.greenhouse.io/v1/boards/virtu/jobs",
+      "status": 200,
+      "jobCount": 49,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "6329460002",
+          "title": "2027 Internship – Core Operations Engineer",
+          "location": "Singapore",
+          "department": null,
+          "updatedAt": "2026-07-30T07:08:51.000Z"
+        },
+        {
+          "id": "8638124002",
+          "title": "2027 Internship - FPGA Engineer",
+          "location": "Dublin, Ireland",
+          "department": null,
+          "updatedAt": "2026-08-12T16:42:24.000Z"
+        },
+        {
+          "id": "8657286002",
+          "title": "2027 Internship- Hardware Engineer (FPGA)",
+          "location": "Austin, TX",
+          "department": null,
+          "updatedAt": "2026-08-18T18:36:23.000Z"
+        }
+      ]
+    },
+    "greenhouse:gravitonresearchcapital": {
+      "backend": "greenhouse",
+      "slug": "gravitonresearchcapital",
+      "url": "https://api.greenhouse.io/v1/boards/gravitonresearchcapital/jobs",
+      "status": 200,
+      "jobCount": 19,
+      "verifiedAt": "2026-09-24",
+      "listings": [
+        {
+          "id": "8559378002",
+          "title": "Accountant",
+          "location": "Singapore",
+          "department": null,
+          "updatedAt": "2026-09-23T15:09:31.000Z"
+        },
+        {
+          "id": "8781321002",
+          "title": "Application Reliability Engineer",
+          "location": "Gurugram, Haryana, India",
+          "department": null,
+          "updatedAt": "2026-09-23T15:09:31.000Z"
+        },
+        {
+          "id": "8156976002",
+          "title": "Central Execution Trader",
+          "location": "Singapore",
+          "department": null,
+          "updatedAt": "2026-09-23T15:09:31.000Z"
+        }
+      ]
+    }
+  },
+  "rejected": [
+    {
+      "key": "dell",
+      "displayName": "Dell Technologies",
+      "attempts": [
+        {
+          "backend": "workday",
+          "slug": "dell:1:External",
+          "status": 422,
+          "outcome": "http_error"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": false
+    },
+    {
+      "key": "walmart",
+      "displayName": "Walmart",
+      "attempts": [
+        {
+          "backend": "workday",
+          "slug": "walmart:5:WalmartExternal",
+          "status": 422,
+          "outcome": "http_error"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": true
+    },
+    {
+      "key": "comcast",
+      "displayName": "Comcast",
+      "attempts": [
+        {
+          "backend": "workday",
+          "slug": "comcast:5:Comcast_Careers",
+          "status": 422,
+          "outcome": "http_error"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": true
+    },
+    {
+      "key": "expedia",
+      "displayName": "Expedia Group",
+      "attempts": [
+        {
+          "backend": "workday",
+          "slug": "expedia:5:search",
+          "status": 422,
+          "outcome": "http_error"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": true
+    },
+    {
+      "key": "qualcomm",
+      "displayName": "Qualcomm",
+      "attempts": [
+        {
+          "backend": "workday",
+          "slug": "qualcomm:12:External",
+          "status": 200,
+          "outcome": "empty"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": false
+    },
+    {
+      "key": "netapp",
+      "displayName": "NetApp",
+      "attempts": [
+        {
+          "backend": "workday",
+          "slug": "netapp:1:NetAppCareers",
+          "status": 422,
+          "outcome": "http_error"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": false
+    },
+    {
+      "key": "adobe",
+      "displayName": "Adobe (university)",
+      "attempts": [
+        {
+          "backend": "workday",
+          "slug": "adobe:5:external_university",
+          "status": 403,
+          "outcome": "http_error"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": true
+    },
+    {
+      "key": "aqr",
+      "displayName": "AQR Capital Management",
+      "attempts": [
+        {
+          "backend": "workday",
+          "slug": "aqr:1:AQRexternalcareers",
+          "status": 401,
+          "outcome": "http_error"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": false
+    },
+    {
+      "key": "mlp",
+      "displayName": "Millennium",
+      "attempts": [
+        {
+          "backend": "workday",
+          "slug": "mlp:5:mlpcareers",
+          "status": 200,
+          "outcome": "empty"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": false
+    },
+    {
+      "key": "twosigma",
+      "displayName": "Two Sigma",
+      "attempts": [
+        {
+          "backend": "avature",
+          "slug": "https://careers.twosigma.com",
+          "status": 404,
+          "outcome": "http_error"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": false
+    },
+    {
+      "key": "peak6",
+      "displayName": "PEAK6",
+      "attempts": [
+        {
+          "backend": "greenhouse",
+          "slug": "peak6",
+          "status": 404,
+          "outcome": "http_error"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": false
+    },
+    {
+      "key": "wolverinetrading",
+      "displayName": "Wolverine Trading",
+      "attempts": [
+        {
+          "backend": "greenhouse",
+          "slug": "wolverinetrading",
+          "status": 404,
+          "outcome": "http_error"
+        }
+      ],
+      "laterVerifiedOnAnotherBoard": false
+    }
+  ]
+}
