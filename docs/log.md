@@ -5,6 +5,77 @@
 
 ---
 
+## 2026-09-25 — Specs 1720–1723 — list mode, NDJSON stream, store selection, liveness gate
+
+**Why:** the main consumer (a corpus builder) ingests from `POST /api/jobs/search` on a
+15-minute keyword rotation and stored only page 1 of each answer. Because results are sorted by
+site name before pagination, 100 % of its 6 587 production rows came from sources starting with
+"a" (66 % AbbVie), while each call actually scraped ~1 669 sources and 20–30 k jobs. The owner
+asked for: storage off by default but genuinely configurable for forks; every job returned when
+no keyword is given; streaming instead of pages; a stable per-job dedup key; liveness probing
+configurable server-side and off unless requested.
+
+**Spec 1720 — list mode + `siteCategories`.**
+
+- Omitted / `null` / `""` / whitespace `searchTerm` is normalised to absent in the controller
+  (before the log line and the cache key) and again in `JobsService` (for GraphQL, CLI and
+  direct callers). Before: whitespace reached every filter-style plugin as a two-space filter
+  that matched almost nothing; `null` was logged as `term="null"`; `""` and omitted were two
+  cache entries. Now the log reads `term=<none>`.
+- `IPluginMetadata.requiresSearchTerm` (set on `bayt` and `naukri`, whose requests are malformed
+  without a term): not dispatched in list mode, reported as `empty` with an explanatory detail.
+- `ScraperInputDto.siteCategories` narrows the *default* fan-out by metadata category;
+  `siteType`/`companyDomain` wins; ATS still needs `companySlug`; unknown values → 400.
+  `PluginCategory` is now an alias of `SiteCategory` in `@ever-jobs/models`.
+- `list-mode-source-audit.spec.ts` scans every plugin `src/` for bare `input.searchTerm`
+  interpolation (template, `+`, `String()`, `!`) — none today; red control included.
+
+**Spec 1721 — NDJSON stream, deadline alias, `dedupKey`.**
+
+- `?format=ndjson`: `progress` at fan-out start then at most every 10 s, one `job` line per job
+  (exact per-job JSON of the JSON response, extra fields untouched), one `end` line; `error` and
+  no `end` on failure. Back-pressured line writes, `X-Accel-Buffering: no`, pagination ignored.
+  JSON and NDJSON share one cache → fan-out → dedup implementation (`runSearch`).
+- `EVER_JOBS_FANOUT_DEADLINE_MS` (falls back to `EVER_JOBS_SEARCH_DEADLINE_MS`; default 120 000).
+- `dedupKey` on every job in every format (JSON, CSV column, NDJSON, GraphQL): the dedup engine's
+  `canonicalJobId` for that posting. `formatJobLocation` + `dedupKeyForJob` moved into
+  `@ever-jobs/common`, and `dedup-hybrid` now uses the shared formatter, so the engine and the
+  API cannot disagree. CSV flattens nested arrays with `; `.
+
+**Spec 1722 — store selection.**
+
+| Setting | Before | After |
+| ------- | ------ | ----- |
+| nothing set | memory, **persist on** (heap sink, nothing reads it) | memory, persist **off** |
+| `EVER_JOBS_PERSIST_SEARCH=false` (our deployment) | memory, persist off | unchanged |
+| `EVER_JOBS_STORE=sqlite` | booted on `:memory:` silently | needs `EVER_JOBS_STORE_SQLITE_PATH`, persist on |
+| `EVER_JOBS_STORE=postgres` | **did not boot** (nothing bound `STORE_POSTGRES_PRISMA_CONFIG`) | reads `EVER_JOBS_STORE_DATABASE_URL` / `DATABASE_URL`, lazy Prisma, connects at boot, persist on |
+| `EVER_JOBS_STORE=store-postgres-prisma` | `ERR_STORE_NOT_FOUND` | accepted (also `EVER_JOBS_STORE_PLUGIN`) |
+
+`StoreModule.forActive` gained an additive `providers` option; `npm run store:postgres:generate`
+/ `store:postgres:migrate` / `store:postgres:status` (`scripts/store-postgres.ts`); the
+Dockerfile generates the Prisma client best-effort and ships `openssl`. The gated
+Testcontainers suite now also runs against `EVER_JOBS_TEST_PG_URL` — and running it against a
+real database for the first time exposed that its migration replay dropped every
+`CREATE TABLE` (chunks that began with a comment were filtered out), so it could never have
+passed; fixed.
+
+**Spec 1723 — liveness gate.** `EVER_JOBS_LIVENESS_ENABLED` (default `true` = honour
+`?liveness=true`; `false` = never probe) and `EVER_JOBS_LIVENESS_MAX_URLS` (default 100, the
+`page_size` ceiling; `0` = no cap) on JSON, CSV and NDJSON.
+
+**Also fixed:** `apps/api/__tests__/jobs/corpus-signals.spec.ts` had been red on `develop`
+(7 cases) since Spec 5082 — its fakes stubbed only `searchJobs`, not
+`searchJobsWithDiagnostics`.
+
+**Questions:** Q-100 (keyword-only plugins), Q-101 (liveness cap), Q-102 (Postgres at boot),
+Q-103 (`dedupKey` derivation), Q-104 (JSON result order).
+
+**Validation:** see the four specs' tasks; real PostgreSQL 16 (throwaway `initdb` cluster):
+`store:postgres:migrate` applied `0_init`, boot-path test 4/4, conformance suite 46/46.
+
+---
+
 ## 2026-09-25 — Spec 1689 — Fork sync hardening: ReDoS, SSRF, shared state, and behaviour the fork removed
 
 **Change:** `fork-sync/makedeeply-2026-09-24` fast-forwards `origin/develop` (`574bd922`) to the

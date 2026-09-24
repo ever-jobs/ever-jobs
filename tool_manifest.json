@@ -18,7 +18,7 @@
         "company_pages": ["amazon", "apple", "microsoft", "nvidia", "tiktok", "uber", "cursor", "google_careers", "meta", "netflix", "stripe", "openai"],
         "aggregators": ["usajobs", "adzuna", "reed", "jooble", "careerjet"]
       },
-      "output_formats": ["json", "csv", "table", "summary"],
+      "output_formats": ["json", "csv", "ndjson", "table", "summary"],
       "features": [
         "Multi-board concurrent searching (65+ sources)",
         "Country-aware domain resolution (65+ countries)",
@@ -33,7 +33,12 @@
         "HTTP job-posting liveness verification (active/expired/uncertain verdicts)",
         "Description format selection (markdown, html, plain)",
         "Analytics (summary stats, company intelligence, site comparison)",
-        "MCP server for AI assistant integration"
+        "MCP server for AI assistant integration",
+        "List mode: omit searchTerm to get every job each selected source can list (Spec 1720)",
+        "Source selection by plugin category via siteCategories (Spec 1720)",
+        "NDJSON streaming of the full result set via ?format=ndjson (Spec 1721)",
+        "Stable cross-source dedupKey on every job (Spec 1721)",
+        "Optional persistence to memory, SQLite or Postgres selected by EVER_JOBS_STORE (Spec 1722)"
       ]
     }
   },
@@ -55,12 +60,17 @@
     "properties": {
       "searchTerm": {
         "type": "string",
-        "description": "Job search keywords (e.g., 'software engineer')"
+        "description": "Job search keywords (e.g., 'software engineer'). Omit (or send null / empty / whitespace) for list mode: every selected source returns what it can list without a keyword, up to resultsWanted per source."
       },
       "siteType": {
         "type": "array",
         "items": { "type": "string" },
         "description": "Sites to search. Omit (and omit companyDomain) to search all search + company sources. Provide companySlug for ATS sources."
+      },
+      "siteCategories": {
+        "type": "array",
+        "items": { "type": "string", "enum": ["job-board", "niche", "regional", "remote", "government", "freelance", "company", "ats"] },
+        "description": "Restrict the default fan-out to these plugin categories. Ignored when siteType is set. ATS sources still need companySlug. Unknown values return HTTP 400."
       },
       "companyDomain": {
         "type": "array",
@@ -148,6 +158,7 @@
           "type": "object",
           "properties": {
             "id": { "type": "string" },
+            "dedupKey": { "type": "string", "description": "Stable cross-source key (sha-256 of normalised company|title|location); the same posting from any source or run has the same key." },
             "site": { "type": "string" },
             "title": { "type": "string" },
             "companyName": { "type": "string" },
