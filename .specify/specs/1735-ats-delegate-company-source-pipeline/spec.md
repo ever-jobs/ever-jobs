@@ -7,7 +7,7 @@
 | Status | implemented |
 | Owner | agent (lane ej-sources) |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-25 (review follow-ups: §3.1, §4.2, §4.5–§4.7; §4.6 per-scrape bound, Spec 1736 T11; §4.2.1 Workday company name board-level, Spec 1736 T13) |
+| Last updated | 2026-09-25 (review follow-ups: §3.1, §4.2, §4.5–§4.7; §4.6 per-scrape bound, Spec 1736 T11; 2026-09-26: §4.2.1 Workday company name board-level, Spec 1736 T13) |
 | Related specs | 1736 (Workday company sources), 1737 (quant/trading-firm company sources), 5004 (Workday detail enrichment), 5084 (Workday pagination guard), 1375 / 1677 (older per-backend pipelines), 1681 / 1682 (not_registered diagnostics), 1690 / 1691 (crawl policy: per-host limits, robots.txt, User-Agent) |
 
 ## 1. Problem statement

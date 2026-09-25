@@ -4,7 +4,7 @@
 | --- | --- |
 | Spec | spec.md |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-25 |
+| Last updated | 2026-09-26 |
 
 ## Approach
 
@@ -57,3 +57,16 @@
    in `workday.constants.ts`; budget cases driven by a fake `Date.now`.
    Documented for operators in `.env.example` and `docs/DEPLOYMENT.md`
    (with the T10 kill-switch list).
+5. **Review round 2 (2026-09-26; T12–T16, spec §7, §8.1, §8.2):** in
+   `source-ats-workday`, give a posting one identity whether enriched or
+   returned at list level — company name = tenant (generator: Workday plugins
+   re-stamp the display name like every backend; re-scaffold of the 55
+   Workday plugins), the row's place from its location bullet when
+   `locationsText` is missing, a single US-state site implying the country;
+   keep departments out of `additionalLocations`; accept a bullet as the
+   requisition id only when the path carries it; cap the time budget at 3/4
+   of the fan-out deadline read from `EVER_JOBS_FANOUT_DEADLINE_MS` /
+   `EVER_JOBS_SEARCH_DEADLINE_MS`. Tests on the recorded Moderna page and
+   detail (`__tests__/fixtures/moderna-*.json`), each new rule
+   mutation-checked. Docs: the batch ships enabled (owner), the kill switch is
+   an optional emergency lever; consumers key Workday postings on `id`.

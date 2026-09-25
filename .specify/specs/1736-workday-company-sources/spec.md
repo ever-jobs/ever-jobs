@@ -7,7 +7,7 @@
 | Status | implemented |
 | Owner | agent (lane ej-sources) |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-25 (§8: detail cap and time budget, T11; §8.1: one identity per posting, T13) |
+| Last updated | 2026-09-26 (review round 2: §7 shipped enabled, T16; §8.1 one identity per posting, T12–T14; §8.2 budget vs fan-out deadline, T15) |
 | Related specs | 1735 (pipeline), 5004 (Workday detail enrichment), 5084 (Workday pagination guard), 5025 (Workday remote locations), 1737 (quant firms) |
 
 ## 1. Problem statement
