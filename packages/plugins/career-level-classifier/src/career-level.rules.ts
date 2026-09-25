@@ -125,6 +125,7 @@ const ROLE_NOUNS = set(`
   instructor teacher librarian dispatcher driver worker generalist expert professional paramedic
   hygienist radiographer sonographer dietitian caseworker advocate liaison scheduler controller
   bookkeeper teller banker broker adjuster appraiser examiner steward modeler modeller lead
+  publisher executive handler assembler processor custodian cook biostatistician epidemiologist
 `);
 
 /** A level-numeral after `level` that names a support tier, not seniority. */

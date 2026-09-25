@@ -3,6 +3,7 @@ import {
   CAREER_LEVEL_CONTEXT_CASES,
   CAREER_LEVEL_FIXTURE,
   CAREER_LEVEL_HOLDOUT_CASES,
+  CAREER_LEVEL_LIVE_SAMPLE_CASES,
   CAREER_LEVEL_REVIEW_REGRESSION_CASES,
   CAREER_LEVEL_TITLE_CASES,
 } from './fixtures/career-level.fixture';
@@ -73,6 +74,12 @@ describe('career-level classifier — fixture evaluation (Spec 1730)', () => {
   it('the review regressions are classified exactly as labelled', () => {
     const result = evaluate(CAREER_LEVEL_REVIEW_REGRESSION_CASES, classifyCareerLevel);
     expect(result.total).toBeGreaterThanOrEqual(30);
+    expect(result.errors.map((e) => `${e.input.title}: gold ${e.expected}, got ${e.actual}`)).toEqual([]);
+  });
+
+  it('the live-sample ladder titles and their controls are classified exactly as labelled', () => {
+    const result = evaluate(CAREER_LEVEL_LIVE_SAMPLE_CASES, classifyCareerLevel);
+    expect(result.total).toBeGreaterThanOrEqual(20);
     expect(result.errors.map((e) => `${e.input.title}: gold ${e.expected}, got ${e.actual}`)).toEqual([]);
   });
 

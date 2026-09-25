@@ -498,6 +498,39 @@ describe('classifyCareerLevel — rules (Spec 1730)', () => {
       expect(level('Senior Engineer II')).toBe('senior');
       expect(level('Software Engineer I - New Grad')).toBe('new_grad');
     });
+
+    // A live list-mode crawl (2026-09-25) found IC ladders whose job noun was not in the numeral
+    // allow-list, so "… I" came out unknown.
+    it.each<[string, CareerLevel]>([
+      ['Medical Writing Coordinator/Publisher I', 'entry'],
+      ['Account Executive I', 'entry'],
+      ['Account Executive II', 'mid'],
+      ['Sales Executive 1', 'entry'],
+      ['Material Handler I', 'entry'],
+      ['Assembler II', 'mid'],
+      ['Loan Processor I', 'entry'],
+      ['Custodian I', 'entry'],
+      ['Cook II', 'mid'],
+      ['Biostatistician I', 'entry'],
+      ['Epidemiologist II', 'mid'],
+    ])('IC ladder noun: %s → %s', (title, expected) => {
+      expect(level(title)).toBe(expected);
+    });
+
+    it('an account-executive range is its lower bound, low confidence', () => {
+      const v = classifyCareerLevel({ title: "Account Executive I/II, Parkinson's Disease - Queens, NY" });
+      expect(v).toMatchObject({ level: 'entry', confidence: 'low' });
+      expect(v.reasons).toContain('title level range "i/ii" -> lower bound');
+    });
+
+    it('the new ladder nouns change nothing without a numeral, and a numeral still needs a job noun', () => {
+      expect(level('Account Executive')).toBe('unknown');
+      expect(level('Executive Director')).toBe('executive');
+      expect(level('Executive Assistant to the VP of Sales')).toBe('unknown');
+      expect(level('Paraprofessional - Title I')).toBe('unknown');
+      expect(level('Title I Reading Teacher')).toBe('unknown');
+      expect(level('Warehouse Associate - Shift 1')).toBe('unknown');
+    });
   });
 
   describe('structured source fields', () => {

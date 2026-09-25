@@ -729,9 +729,42 @@ export const CAREER_LEVEL_REVIEW_REGRESSION_CASES: readonly CareerLevelCase[] = 
   t('General Partner', 'executive', 'control'),
 ];
 
+/**
+ * Titles from a live list-mode crawl of company ATS boards (2026-09-25), plus the IC ladder nouns
+ * they pointed at. A trailing level numeral (`I`, `1`, `II` …) counts only after a job noun
+ * (spec §7.5, *Level numerals*); these job nouns were missing, so the numeral was ignored and the
+ * title came out `unknown`. The controls pin what must not change.
+ */
+export const CAREER_LEVEL_LIVE_SAMPLE_CASES: readonly CareerLevelCase[] = [
+  t('Medical Writing Coordinator/Publisher I', 'entry', 'live: numeral after publisher'),
+  t("Account Executive I/II, Parkinson's Disease - Queens, NY", 'entry', 'live: an IC sales ladder; range → lower bound'),
+  t("Account Executive I/II, Parkinson's Disease - Staten Island, NY", 'entry', 'live'),
+  t('Account Executive II', 'mid'),
+  t('Sales Executive 1', 'entry'),
+  t('Material Handler I', 'entry'),
+  t('Assembler II', 'mid'),
+  t('Loan Processor I', 'entry'),
+  t('Custodian I', 'entry'),
+  t('Cook II', 'mid'),
+  t('Biostatistician I', 'entry'),
+  t('Epidemiologist II', 'mid'),
+  // Controls.
+  t('Senior Account Executive', 'senior', 'control: an explicit level word beats a numeral'),
+  t('Executive Assistant II', 'mid', 'control: executive assistant is never executive'),
+  t('Paraprofessional - Title I', 'unknown', 'control: Title I is a school funding programme'),
+  t('Warehouse Associate - Shift 1', 'unknown', 'control: a shift number is not a level'),
+  t('(Fixed-Term) Manufacturing Associate I', 'entry', 'live control'),
+  t('Engineer I, Process Development, Pilot Scale Operations', 'entry', 'live control'),
+  t('Pharmacy Technician II', 'mid', 'live control'),
+  t('Technician III, Utilities Maintenance', 'senior', 'live control'),
+  t('Senior Scientist I, Pipeline Technology Enablement', 'senior', 'live control: explicit senior wins'),
+  t('Principal Research Scientist I, Process Chemistry', 'principal', 'live control: explicit principal wins'),
+];
+
 export const CAREER_LEVEL_FIXTURE: readonly CareerLevelCase[] = [
   ...CAREER_LEVEL_TITLE_CASES,
   ...CAREER_LEVEL_CONTEXT_CASES,
   ...CAREER_LEVEL_HOLDOUT_CASES,
   ...CAREER_LEVEL_REVIEW_REGRESSION_CASES,
+  ...CAREER_LEVEL_LIVE_SAMPLE_CASES,
 ];
