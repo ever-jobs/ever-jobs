@@ -205,7 +205,8 @@ follow the request there:
    env key made every Greenhouse-delegating plugin return the operator's jobs
    labelled as Jane Street, Hudson River Trading, …. With the env key set and
    `GREENHOUSE_HARVEST_BOARD` unset or different, the adapter reads the public
-   board and logs one warning per process. An explicit per-request key is
+   board and logs one warning per adapter instance (the key itself is never
+   logged). An explicit per-request key is
    still honoured as before (the caller asked for it, with its own slug).
 
 The Lever, Ashby and SmartRecruiters authenticated paths address the board by
