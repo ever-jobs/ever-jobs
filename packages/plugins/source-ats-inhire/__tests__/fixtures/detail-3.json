@@ -1,0 +1,34 @@
+{
+  "tenantName": "Acme Brasil",
+  "about": "<p>A Acme &eacute; uma empresa <strong>fict&iacute;cia</strong> usada em testes.</p>",
+  "background": [
+    "https://files.inhire.app/pages/career/banner_acme-br.png"
+  ],
+  "logo": "https://files.inhire.app/pages/career/logo_acme-br.png",
+  "activeJobBoards": [
+    "linkedin"
+  ],
+  "careerPageId": "default",
+  "careerPageIds": [
+    "default"
+  ],
+  "contractType": [
+    "Estágio"
+  ],
+  "createdAt": "2026-09-10T12:00:00.000Z",
+  "description": "<p>Remunera&ccedil;&atilde;o: R$ 2.000,00 + benef&iacute;cios</p>",
+  "displayName": "Estágio em Marketing",
+  "lastPublishedAt": "2026-09-12T09:00:00.000Z",
+  "publishedAt": "2026-09-10T12:00:00.000Z",
+  "settings": {
+    "requiredFields": [
+      "curriculum"
+    ]
+  },
+  "status": "published",
+  "updatedAt": "2026-09-12T09:00:00.000Z",
+  "jobId": "33333333-3333-4333-8333-333333333333",
+  "workplaceType": "On-site",
+  "location": "Curitiba - PR",
+  "locationComplement": ""
+}
