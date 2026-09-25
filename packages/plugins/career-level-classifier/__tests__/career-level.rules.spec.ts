@@ -2,9 +2,12 @@ import type { CareerLevel, CareerLevelInput } from '@ever-jobs/models';
 import { CAREER_LEVELS } from '@ever-jobs/models';
 
 import {
+  capAtWord,
   classifyCareerLevel,
   DESCRIPTION_NEEDLES,
+  MAX_FIELD_CHARS,
   MAX_REASONS,
+  MAX_TITLE_CHARS,
   normalizeCareerText,
 } from '../src/career-level.rules';
 
@@ -596,6 +599,36 @@ describe('classifyCareerLevel — rules (Spec 1730)', () => {
       // Without a word-boundary cut the tail would end in "... manager i" and read as numeral I.
       expect(level('intern program manager '.repeat(40))).toBe('unknown');
       expect(level(`${'x '.repeat(200)}Senior Engineer`)).toBe('unknown');
+    });
+
+    it('caps employmentType / jobLevel like the title and experienceRange at MAX_FIELD_CHARS', () => {
+      const pad = 'x '.repeat(MAX_TITLE_CHARS);
+      // The start of an over-long field still counts; a cue past the cap does not.
+      expect(level('Software Engineer', { employmentType: `Internship ${pad}` })).toBe('internship');
+      expect(level('Software Engineer', { employmentType: `${pad}Internship` })).toBe('unknown');
+      expect(level('Software Engineer', { jobLevel: `Senior ${pad}` })).toBe('senior');
+      expect(level('Software Engineer', { jobLevel: `${pad}Senior` })).toBe('unknown');
+      expect(level('Java Developer', { experienceRange: `3-5 Yrs ${pad}` })).toBe('mid');
+      expect(level('Java Developer', { experienceRange: `${'x '.repeat(MAX_FIELD_CHARS)}3-5 Yrs` })).toBe('unknown');
+    });
+
+    it('quotes at most ~60 characters of a source field in a reason', () => {
+      const v = classifyCareerLevel({ title: 'Java Developer', experienceRange: `3-5 Yrs ${'relevant '.repeat(12)}` });
+      expect(v.level).toBe('mid');
+      const reason = v.reasons.find((r) => r.startsWith('experienceRange:'))!;
+      expect(reason).toMatch(/^experienceRange: "3-5 Yrs relevant .*…" \(3\+ years\)$/);
+      expect(reason.length).toBeLessThan(100);
+    });
+
+    it('capAtWord cuts at a word boundary and never exceeds the limit', () => {
+      expect(capAtWord('short', 10)).toBe('short');
+      expect(capAtWord('manager ii', 9)).toBe('manager');
+      expect(capAtWord('manager ii', 10)).toBe('manager ii');
+      expect(capAtWord('senior engineer ', 15)).toBe('senior engineer');
+      expect(capAtWord('a'.repeat(50), 10)).toBe('a'.repeat(10));
+      for (const s of ['intern program manager '.repeat(40), 'x'.repeat(1000), ' '.repeat(500)]) {
+        expect(capAtWord(s, MAX_TITLE_CHARS).length).toBeLessThanOrEqual(MAX_TITLE_CHARS);
+      }
     });
 
     it('unknown is low confidence and says so', () => {

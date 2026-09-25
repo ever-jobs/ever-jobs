@@ -135,4 +135,28 @@ describe('career-level classifier — cost tripwires (Spec 1730, NFR-2)', () => 
       });
     }
   });
+
+  /**
+   * The title is capped (MAX_TITLE_CHARS) because the title analysis is super-linear in the
+   * input length. `employmentType` / `jobLevel` go through the same analysis and
+   * `experienceRange` through its own regexes; all three are scraped third-party strings, so an
+   * oversized value must be capped too (Spec 1730 review: a 60 KB `jobLevel` took ~1.1 s and a
+   * 240 KB one ~21 s inside a single synchronous call, which no chunking can yield out of).
+   */
+  it('over-long structured source fields are capped like the title', () => {
+    const junk = 'senior intern manager, director - lead / staff engineer ii; '.repeat(1_000); // ~60 KB
+    const adversarial: Array<[string, Record<string, string>]> = [
+      ['employmentType', { employmentType: junk }],
+      ['jobLevel', { jobLevel: junk }],
+      ['experienceRange', { experienceRange: `${'1 to '.repeat(12_000)}years` }],
+      ['all fields', { title: junk, employmentType: junk, jobLevel: junk, experienceRange: junk, description: junk }],
+    ];
+    for (const [name, input] of adversarial) {
+      const started = process.hrtime.bigint();
+      const verdict = classifyCareerLevel(input);
+      const elapsed = ms(started);
+      expect({ name, fast: elapsed < 250, longestReason: Math.max(...verdict.reasons.map((r) => r.length)) <= 160 })
+        .toEqual({ name, fast: true, longestReason: true });
+    }
+  });
 });

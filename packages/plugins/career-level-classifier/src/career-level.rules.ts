@@ -22,8 +22,17 @@ import type {
 export const MAX_DESCRIPTION_CHARS = 3000;
 /** Upper bound on `reasons.length`. */
 export const MAX_REASONS = 5;
-/** Titles longer than this are junk (keyword stuffing, scraped page text); read only the start. */
+/**
+ * Titles longer than this are junk (keyword stuffing, scraped page text); read only the start.
+ * The same cap applies to every string that goes through the title rules (`employmentType`,
+ * `jobLevel`): that analysis is super-linear in the input length, so an uncapped scraped value
+ * could hold the event loop for seconds inside one synchronous call (Spec 1730 review).
+ */
 export const MAX_TITLE_CHARS = 300;
+/** `experienceRange` is a short phrase ("3-5 Yrs", "Fresher"); read only the start of a longer one. */
+export const MAX_FIELD_CHARS = 120;
+/** Longest source text quoted verbatim in a reason; longer text is cut and marked with "…". */
+const MAX_QUOTE_CHARS = 60;
 
 type Level = Exclude<CareerLevel, 'unknown'>;
 type Source = 'title' | 'jobType' | 'employmentType' | 'jobLevel' | 'experienceRange' | 'description';
@@ -285,7 +294,20 @@ function splitSegments(norm: string): string[] {
 }
 
 function quote(s: string): string {
-  return `"${s.trim()}"`;
+  const t = s.trim();
+  return `"${t.length > MAX_QUOTE_CHARS ? `${capAtWord(t, MAX_QUOTE_CHARS)}…` : t}"`;
+}
+
+/**
+ * Cut `s` to at most `max` characters at a word boundary, so the cut cannot mint a token that was
+ * not there ("… manager ii" → "… manager i"). A string with no whitespace in reach is cut hard.
+ * Linear: the regex only ever sees `max + 1` characters.
+ */
+export function capAtWord(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const head = s.slice(0, max + 1);
+  const cut = head.replace(/\s+\S*$/, '');
+  return cut.length < head.length ? cut : s.slice(0, max);
 }
 
 // ─── Early-career cues (internship / new grad) ──────────────────────────────
@@ -686,11 +708,15 @@ const POSTDOC_RE = /\bpost-?doc(?:toral)?s?\b|\bpost doc(?:toral)?\b/g;
 /**
  * Collect every level signal the title carries. `origin` labels the reasons (the same rules are
  * reused for `employmentType` / `jobLevel` strings).
+ *
+ * The input is capped at {@link MAX_TITLE_CHARS} here rather than by the callers, so no caller
+ * can feed this super-linear analysis (`around()` re-tokenises the prefix of every match) an
+ * unbounded string.
  */
 function analyzeTitle(raw: string, origin: Source): Analysis {
   const signals: Signal[] = [];
   const notes: string[] = [];
-  const norm = normalizeCareerText(raw);
+  const norm = normalizeCareerText(capAtWord(raw, MAX_TITLE_CHARS));
   if (!norm) return { signals, notes };
   const label = origin === 'title' ? 'title' : origin;
   const add = (level: Level, confidence: CareerLevelConfidence, what: string, extra?: Partial<Signal>): void => {
@@ -1055,7 +1081,7 @@ function structuredSignals(input: CareerLevelInput): Signal[] {
     if (r) out.push({ ...r.signal, confidence: cap(r.signal.confidence, 'medium') });
   }
   if (typeof input.jobLevel === 'string' && input.jobLevel.trim()) {
-    const norm = normalizeCareerText(input.jobLevel);
+    const norm = normalizeCareerText(capAtWord(input.jobLevel, MAX_TITLE_CHARS));
     const mapped = JOB_LEVEL_MAP.find(([re]) => re.test(norm));
     if (mapped) {
       out.push({ level: mapped[1], confidence: mapped[2], reason: `jobLevel: ${quote(input.jobLevel)}`, source: 'jobLevel' });
@@ -1065,7 +1091,7 @@ function structuredSignals(input: CareerLevelInput): Signal[] {
     }
   }
   if (typeof input.experienceRange === 'string' && input.experienceRange.trim()) {
-    const norm = normalizeCareerText(input.experienceRange);
+    const norm = normalizeCareerText(capAtWord(input.experienceRange, MAX_FIELD_CHARS));
     if (/\bfreshers?\b/.test(norm)) {
       out.push({ level: 'new_grad', confidence: 'medium', reason: `experienceRange: ${quote(input.experienceRange)}`, source: 'experienceRange' });
     } else {
@@ -1329,12 +1355,8 @@ export function classifyCareerLevel(input: CareerLevelInput | null | undefined):
 }
 
 function classifyInternal(input: CareerLevelInput): CareerLevelVerdict {
-  const rawTitle = typeof input.title === 'string' ? input.title : '';
-  // Cut an over-long title at a word boundary so the truncation cannot mint a token ("… manager i").
-  const title =
-    rawTitle.length > MAX_TITLE_CHARS
-      ? rawTitle.slice(0, MAX_TITLE_CHARS + 1).replace(/\s+\S*$/, '')
-      : rawTitle;
+  const title = typeof input.title === 'string' ? input.title : '';
+  // analyzeTitle cuts an over-long title at MAX_TITLE_CHARS, at a word boundary.
   const t = analyzeTitle(title, 'title');
   const titleResolved = resolve(t.signals);
   const structured = structuredSignals(input);
