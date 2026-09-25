@@ -1,4 +1,4 @@
-import { classifyCareerLevel } from '../src/career-level.rules';
+import { classifyCareerLevel, normalizeCareerText } from '../src/career-level.rules';
 import {
   CAREER_LEVEL_CONTEXT_CASES,
   CAREER_LEVEL_FIXTURE,
@@ -96,7 +96,17 @@ describe('career-level classifier — fixture evaluation (Spec 1730)', () => {
 describe('career-level classifier — cost tripwires (Spec 1730, NFR-2)', () => {
   const ms = (start: bigint): number => Number(process.hrtime.bigint() - start) / 1e6;
 
-  it('average cost per job with a ~3 KB description stays under 2 ms', () => {
+  /**
+   * Relative gate (Spec 1730 review): an absolute per-job bound loose enough for a loaded shared
+   * machine (the old < 2 ms) is 20-30x the real cost, so a 10x regression stayed green. Instead,
+   * time the classifier against a reference workload over the SAME inputs in the same process:
+   * one `normalizeCareerText` pass over title + description. Load slows both alike, so their ratio
+   * is stable where wall-clock is not: 5.5-5.7 under jest on the workstation (4.1-4.2 in plain
+   * ts-node; ~50 µs vs ~12 µs per job). Interleaved rounds, best of each: a load spike inflates one
+   * sample, rarely all of them. The bound (15) leaves ~2.7x headroom: a 3x slowdown fails, and a
+   * control that ran the classifier 4x per job measured 22.4 and failed.
+   */
+  it('costs at most ~15 normalisation passes over the same text (relative, load-robust)', () => {
     const titles = CAREER_LEVEL_TITLE_CASES.map((c) => c.input.title ?? '');
     const paragraph =
       'We are looking for an engineer to join our team. You will design, build and operate services ' +
@@ -104,16 +114,32 @@ describe('career-level classifier — cost tripwires (Spec 1730, NFR-2)', () => 
       'Requirements: 3+ years of experience with TypeScript or Go; strong communication skills. ';
     const description = paragraph.repeat(Math.ceil(3200 / paragraph.length));
     const n = 5_000;
-    const inputs = Array.from({ length: n }, (_, i) => ({ title: titles[i % titles.length], description }));
+    const inputs = Array.from({ length: n }, (_, i) => ({ title: titles[i % titles.length]!, description }));
 
-    const started = process.hrtime.bigint();
-    let classified = 0;
-    for (const input of inputs) {
-      if (classifyCareerLevel(input).level) classified += 1;
+    const time = (fn: (input: { title: string; description: string }) => number): number => {
+      const started = process.hrtime.bigint();
+      let sink = 0;
+      for (const input of inputs) sink += fn(input);
+      const elapsed = ms(started);
+      expect(sink).toBeGreaterThan(0);
+      return elapsed;
+    };
+    const classify = (input: { title: string; description: string }): number => classifyCareerLevel(input).reasons.length;
+    const reference = (input: { title: string; description: string }): number =>
+      normalizeCareerText(`${input.title} ${input.description}`).length;
+
+    let best = { classify: Infinity, reference: Infinity };
+    for (let round = 0; round < 3; round += 1) {
+      best = { classify: Math.min(best.classify, time(classify)), reference: Math.min(best.reference, time(reference)) };
     }
-    const perJobMs = ms(started) / n;
+    const ratio = best.classify / best.reference;
+    const perJobMs = best.classify / n;
 
-    expect(classified).toBe(n);
+    expect({ ratio: Number(ratio.toFixed(1)), withinRatio: ratio < 15 }).toEqual({
+      ratio: Number(ratio.toFixed(1)),
+      withinRatio: true,
+    });
+    // Absolute backstop for a catastrophic slowdown only; the ratio above is the regression gate.
     expect(perJobMs).toBeLessThan(2);
   });
 
