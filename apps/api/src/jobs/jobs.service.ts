@@ -197,12 +197,6 @@ export class JobsService implements OnModuleInit {
   }
 
   /**
-   * Like {@link searchJobs} but also returns a per-source outcome breakdown
-   * (Spec 5082): one {@link SourceDiagnosticDto} per fanned-out source with its
-   * count and a categorized `reason`, so a caller can tell an empty board apart
-   * from a blocked/errored source. `searchJobs` is a thin wrapper over this.
-   */
-  /**
    * Spec 1721 / FR-13 — reject, before anything is streamed, the input that
    * {@link searchJobsWithDiagnostics} would reject before scraping: an unknown
    * `siteCategories` value, or `companyDomain` values that resolve to no
@@ -222,6 +216,12 @@ export class JobsService implements OnModuleInit {
     throw new BadRequestException(unresolvedDomainsMessage(unresolved));
   }
 
+  /**
+   * Like {@link searchJobs} but also returns a per-source outcome breakdown
+   * (Spec 5082): one {@link SourceDiagnosticDto} per fanned-out source with its
+   * count and a categorized `reason`, so a caller can tell an empty board apart
+   * from a blocked/errored source. `searchJobs` is a thin wrapper over this.
+   */
   async searchJobsWithDiagnostics(
     input: ScraperInputDto,
     options: SearchRunOptions = {},
