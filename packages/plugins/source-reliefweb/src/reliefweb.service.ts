@@ -9,6 +9,7 @@ import {
   JobPostDto,
   LocationDto,
   DescriptionFormat,
+  ScrapeDiagnostics,
   Site,
 } from '@ever-jobs/models';
 import {
@@ -24,13 +25,23 @@ import {
   RELIEFWEB_PUBLIC_NODE_URL,
   RELIEFWEB_API_URL,
   RELIEFWEB_APP_NAME,
+  RELIEFWEB_APP_NAME_ENV,
+  RELIEFWEB_APP_NAME_DOCS_URL,
   RELIEFWEB_HEADERS,
   RELIEFWEB_DEFAULT_RESULTS,
   RELIEFWEB_MAX_RESULTS,
   RELIEFWEB_FIELDS,
 } from './reliefweb.constants';
-import { ReliefWebResponse, ReliefWebJobEntry } from './reliefweb.types';
+import { ReliefWebResponse, ReliefWebJobEntry, ReliefWebErrorBody } from './reliefweb.types';
 
+/**
+ * ReliefWeb jobs through the public API v2 (Spec 1752; v1 answers 410).
+ *
+ * ReliefWeb serves only pre-approved `appname`s (since 1 November 2025). The
+ * appname comes from `RELIEFWEB_APPNAME`, else the neutral `ever-jobs`; an
+ * unapproved one is answered 403, which this plugin reports as a `bad_input`
+ * diagnostic naming the variable to set rather than as a block.
+ */
 @SourcePlugin({
   site: Site.RELIEFWEB,
   name: 'ReliefWeb',
@@ -39,6 +50,38 @@ import { ReliefWebResponse, ReliefWebJobEntry } from './reliefweb.types';
 @Injectable()
 export class ReliefWebService implements IScraper {
   private readonly logger = new Logger(ReliefWebService.name);
+
+  constructor() {
+    if (!process.env[RELIEFWEB_APP_NAME_ENV]?.trim()) {
+      this.logger.warn(
+        `${RELIEFWEB_APP_NAME_ENV} not set: using "${RELIEFWEB_APP_NAME}", which ReliefWeb answers with 403 ` +
+          `unless it has approved it. Request an appname at ${RELIEFWEB_APP_NAME_DOCS_URL}`,
+      );
+    }
+  }
+
+  /** The configured appname (`RELIEFWEB_APPNAME`), else the neutral default. Read per scrape. */
+  private appName(): string {
+    const configured = process.env[RELIEFWEB_APP_NAME_ENV]?.trim();
+    return configured || RELIEFWEB_APP_NAME;
+  }
+
+  /**
+   * The actionable diagnostic for ReliefWeb's "not an approved appname" 403,
+   * or null for any other failure. The appname is a public identifier (it is
+   * sent in the query string), not a secret.
+   */
+  private unapprovedAppName(err: any, appName: string): ScrapeDiagnostics | null {
+    if (err?.response?.status !== 403) return null;
+    const body = err.response.data as ReliefWebErrorBody | string | undefined;
+    const message = typeof body === 'string' ? body : body?.error?.message ?? '';
+    if (!/appname/i.test(message)) return null;
+    return new ScrapeDiagnostics(
+      'bad_input',
+      `ReliefWeb rejected appname "${appName}" (HTTP 403: ${message.slice(0, 160)}). ` +
+        `Set ${RELIEFWEB_APP_NAME_ENV} to a pre-approved appname — request one at ${RELIEFWEB_APP_NAME_DOCS_URL}`,
+    );
+  }
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
     const resultsWanted = Math.min(
@@ -53,8 +96,9 @@ export class ReliefWebService implements IScraper {
     });
     client.setHeaders(RELIEFWEB_HEADERS);
 
+    const appName = this.appName();
     const params = new URLSearchParams({
-      appname: RELIEFWEB_APP_NAME,
+      appname: appName,
       limit: String(resultsWanted),
       offset: '0',
     });
@@ -99,6 +143,11 @@ export class ReliefWebService implements IScraper {
       this.logger.log(`ReliefWeb returned ${jobs.length} jobs`);
       return new JobResponseDto(jobs);
     } catch (err: any) {
+      const appNameProblem = this.unapprovedAppName(err, appName);
+      if (appNameProblem) {
+        this.logger.error(appNameProblem.detail ?? 'ReliefWeb rejected the appname');
+        return new JobResponseDto([], appNameProblem);
+      }
       this.logger.error(`ReliefWeb scrape error: ${err.message}`);
       return new JobResponseDto([], classifyScrapeError(err));
     }
@@ -108,21 +157,26 @@ export class ReliefWebService implements IScraper {
     const fields = entry.fields;
     if (!fields.title) return null;
 
-    // Spec 1751: `entry.href` is the API resource
-    // (`https://api.reliefweb.int/v1/jobs/<id>`) — never a link. When the API
-    // omits `fields.url`, link the job's public node page instead.
+    // Spec 1751/1752: `entry.href` is the API resource
+    // (`https://api.reliefweb.int/v2/jobs/<id>`) — never a link. Prefer the
+    // friendly page (`url_alias`, the page's own rel=canonical), then the
+    // canonical `url`; with neither, the public node page (301s to the alias).
     const jobUrl =
-      firstPublicUrl(fields.url) ??
+      firstPublicUrl(fields.url_alias, fields.url) ??
       `${RELIEFWEB_PUBLIC_NODE_URL}/${encodeURIComponent(entry.id)}`;
 
+    // v2 `body` is Markdown and `body-html` its HTML: serve each format from
+    // the matching field. With no format requested, `body` as before.
+    const bodyHtml = fields['body-html'] ?? null;
     let description: string | null = fields.body ?? null;
-    if (description) {
-      if (descriptionFormat === DescriptionFormat.PLAIN) {
-        description = htmlToPlainText(description);
-      } else if (descriptionFormat === DescriptionFormat.MARKDOWN) {
-        if (/<[^>]+>/.test(description)) {
-          description = markdownConverter(description) ?? description;
-        }
+    if (descriptionFormat === DescriptionFormat.HTML) {
+      description = bodyHtml ?? description;
+    } else if (descriptionFormat === DescriptionFormat.PLAIN) {
+      const source = bodyHtml ?? description;
+      description = source ? htmlToPlainText(source) : null;
+    } else if (description && descriptionFormat === DescriptionFormat.MARKDOWN) {
+      if (/<[^>]+>/.test(description)) {
+        description = markdownConverter(description) ?? description;
       }
     }
 

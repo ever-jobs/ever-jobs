@@ -63,6 +63,41 @@ describe('NavJobsService — job links (Spec 1751)', () => {
     expect(result.jobs[0].applyUrl ?? null).toBeNull();
   });
 
+  // NAV's own source (navikt/pam-stilling-feed @ 45cc8c49, FeedAd.kt / FeedService.kt):
+  // a list line is `{ id, url: "/api/v1/feedentry/<feedItemId>", _feed_entry: { uuid: <feedItemId>, … } }`,
+  // `feedItemId = UUID.fromString(ad.uuid)`, and the entry's `ad_content.link` is
+  // `https://arbeidsplassen.nav.no/stillinger/stilling/<ad.uuid>`. Verified live 2026-09-25:
+  // that page for 0862f420-… answers 200 HTML showing "Stillingsnummer 0862f420-…".
+  it('links exactly the public page NAV itself publishes for the ad (ad_content.link)', async () => {
+    const adUuid = '0862f420-5aea-4532-af73-43156a9e7b7f';
+    const listLine = {
+      id: adUuid,
+      url: `/api/v1/feedentry/${adUuid}`,
+      title: 'Midlertidig stilling som prosjektmedarbeider',
+      content_text: 'Stillingsannonse',
+      date_modified: '2026-09-24T10:15:00+02:00',
+      // the list feed's FeedEntry has no sourceurl / applicationUrl / description
+      _feed_entry: {
+        uuid: adUuid,
+        status: 'ACTIVE',
+        title: 'Midlertidig stilling som prosjektmedarbeider',
+        businessName: 'Oslo kommune',
+        municipal: 'OSLO',
+        sistEndret: '2026-09-24T10:15:00+02:00',
+      },
+    };
+    const result = await scrape([listLine]);
+    expect(result.jobs[0].jobUrl).toBe(`https://arbeidsplassen.nav.no/stillinger/stilling/${adUuid}`);
+    expect(result.jobs[0].id).toBe(`navjobs-${adUuid}`);
+  });
+
+  it('uses the line id when _feed_entry.uuid is missing (NAV sets both to the ad uuid)', async () => {
+    const line = item({});
+    delete line._feed_entry.uuid;
+    const result = await scrape([line]);
+    expect(result.jobs[0].jobUrl).toBe(`https://arbeidsplassen.nav.no/stillinger/stilling/${UUID}`);
+  });
+
   it('never falls back to the feed API url; links the public ad page', async () => {
     const result = await scrape([item({ applicationUrl: 'Send søknad på e-post', sourceurl: null })]);
     expect(result.jobs[0].jobUrl).toBe(`https://arbeidsplassen.nav.no/stillinger/stilling/${UUID}`);

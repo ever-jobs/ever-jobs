@@ -45,12 +45,15 @@ found four ATS plugins that fall back to an API URL when no public posting page 
 public candidate and the caller's `companyUrl` (`firstPublicUrl`), but with neither the old
 API link remains, so a downstream Apply button can still open JSON for these. Separately,
 `source-ats-zwayam` links `https://api.zwayam.com/job_preview/…`, which the plugin documents
-as the platform's public share page; nobody has re-checked that it serves HTML.
+as the platform's public share page; nobody has re-checked that it serves HTML. Since Spec 1751
+T11 the guard follows links built into intermediate records, so it now sees Zwayam's link too:
+Zwayam is the fifth named exception ("by design, unverified"), expiring like the others.
 
 **Options:**
 
-- **A. Keep the API link as the last resort** (no data loss; the four are named exceptions in
-  `scripts/__tests__/plugin-job-url-hosts.spec.ts`, which fails if one stops needing it).
+- **A. Keep the API link as the last resort** (no data loss; the four — plus Zwayam — are named
+  exceptions in `scripts/__tests__/plugin-job-url-hosts.spec.ts`, which fails if one stops
+  needing it).
 - **B. Drop postings with no public link** (a link that opens JSON is worse than no posting)
   — Bullhorn would return nothing unless the caller passes `companyUrl`.
 - **C. Emit them with a board-level page only** — requires a per-tenant careers URL (e.g. a

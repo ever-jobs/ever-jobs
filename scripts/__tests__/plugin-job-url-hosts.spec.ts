@@ -24,6 +24,27 @@
  *     functions' unrelated `url` locals never mix), or in a same-plugin helper
  *     it calls.
  *
+ * A link is often built one step earlier and COPIED into the DTO later —
+ * `{ url: this.buildJobUrl(id) }` in a normalised record, then
+ * `jobUrl: job.url` — where `job` is a parameter the guard cannot see through.
+ * Two more sinks close that gap (Spec 1751 T11):
+ *
+ *  3. **Record links.** A value assigned to a key named `url`, `link` or `href`
+ *     (`{ url: … }`, `{ url }`, `rec.href = …`) is judged exactly like a link
+ *     field — except in a request config (`{ url, method, headers }`, or an
+ *     object passed straight to `client.get/post/request/fetch…`), which is a
+ *     fetch target.
+ *  4. **URL-named helpers.** Every same-plugin function, method or arrow
+ *     constant whose name contains `url` (`buildJobUrl`, `jobUrlFor`,
+ *     `postingUrl`, `getApplyUrl`, …) has every value it can `return` judged
+ *     the same way — wherever its result goes. A helper is exempt only when
+ *     every call site hands its result to a request (`client.get(u)`,
+ *     `this.fetchJson(u)`, `page.goto(u)`, directly or through a local, a
+ *     template, `new URL(u)`, a request config or another helper that returns
+ *     it) — logging it, truth-testing it (`if (url)`) or reading a member
+ *     (`url.length`) aside: that helper builds a fetch target, and API URLs
+ *     used for fetching are fine.
+ *
  * 🛑 Values only known at runtime (`job.url` from a response) cannot be judged
  * statically; `firstPublicUrl()` guards those at runtime. This guard catches
  * the shape that shipped: an API host or API field wired in by code.
@@ -51,11 +72,44 @@ const URL_PART_ACCESSORS = new Set(['origin', 'host', 'hostname', 'href', 'proto
 const MAX_DEPTH = 6;
 
 /**
- * Plugins that still emit an API URL as a LAST RESORT, when no public page is
- * known for the tenant (Q-110). Each one already prefers every public
- * candidate (`firstPublicUrl`) and the caller's `companyUrl`; the entry must
- * name why the fallback remains. An entry that no longer produces a finding
- * fails the suite, so a fixed plugin cannot stay excused.
+ * Keys of an intermediate record whose value a mapper later copies into a link
+ * field (`{ url: this.buildJobUrl(id) }` → `jobUrl: job.url`). Exact names only:
+ * `detailUrl` / `apiUrl` / `feedUrl` are fetch targets as often as not.
+ */
+const RECORD_LINK_KEY = /^(?:url|link|href)$/i;
+
+/** A helper named like a URL builder (`buildJobUrl`, `jobUrlFor`, `getApplyUrl`). */
+const URL_HELPER_NAME = /url/i;
+
+/**
+ * Callees that send a request, so a URL handed to them is a fetch target:
+ * `client.get(u)`, `axios.post(u)`, `fetch(u)`, `page.goto(u)`,
+ * `this.fetchJson(u)`, `this.getWithRetry(u)`, `this.requestPage(u)`.
+ */
+const REQUEST_CALLEE = /^(?:get|post|put|patch|head|request|fetch|goto)$|^(?:fetch|request|download|getWith)[A-Z0-9_]/;
+
+/** Logger calls: a URL passed to one is neither fetched nor linked. */
+const LOG_CALLEE = /^(?:log|warn|error|debug|verbose|info|trace)$/;
+
+/**
+ * Members of a URL string / `URL` whose result is still that URL
+ * (`u.toString()`, `tpl.replace(…)`); any other member read (`url.length`,
+ * `url.startsWith(…)`) inspects the value without passing it on.
+ */
+const URL_CARRYING_MEMBERS = new Set([
+  'href', 'toString', 'replace', 'replaceAll', 'concat', 'trim', 'slice', 'substring', 'toLowerCase', 'normalize',
+]);
+
+/** Keys that mark an object literal as a request config, not a record. */
+const REQUEST_CONFIG_KEYS = new Set(['method', 'headers', 'params', 'data', 'body', 'responseType', 'timeout']);
+
+/**
+ * Plugins that still emit an API URL (Q-110): four as a LAST RESORT, when no
+ * public page is known for the tenant — each already prefers every public
+ * candidate (`firstPublicUrl`) and the caller's `companyUrl` — and Zwayam, whose
+ * only known share link lives on its API host. The entry must name why the
+ * link remains. An entry that no longer produces a finding fails the suite, so
+ * a fixed plugin cannot stay excused.
  */
 export const KNOWN_EXCEPTIONS: Readonly<Record<string, string>> = {
   'source-ats-bullhorn':
@@ -66,6 +120,8 @@ export const KNOWN_EXCEPTIONS: Readonly<Record<string, string>> = {
     'No public posting pattern is known for a HiringThing account; the api host link is used only when the API omits `url` and no companyUrl is given (Q-110).',
   'source-ats-loxo':
     'No public posting pattern is known for a Loxo agency; the API resource is used only when `url`, `apply_url` and companyUrl are all absent (Q-110).',
+  'source-ats-zwayam':
+    'buildJobUrl() builds https://api.zwayam.com/job_preview/?jobUrl=…&host=… into the record `url`; zwayam.constants.ts documents it as the share link seen in real job posts AND as the JSON detail endpoint. Unverified live; visible to the guard since T11 (Q-110, Spec 1751 T10).',
 };
 
 export interface JobUrlFinding {
@@ -80,6 +136,12 @@ export interface ScanResult {
   findings: JobUrlFinding[];
   /** Link assignments inspected — proves the scan saw the tree. */
   assignments: number;
+  /** `url` / `link` / `href` record values inspected (sink 3). */
+  recordLinks: number;
+  /** URL-named helpers whose returns were inspected (sink 4). */
+  urlHelpers: number;
+  /** URL-named helpers exempted because every caller only fetches them. */
+  fetchHelpers: number;
 }
 
 interface PluginIndex {
@@ -290,6 +352,221 @@ function analyseValue(
 }
 
 /** Scan one plugin's sources; `plugin` labels the findings. */
+/** The name a call resolves to among the plugin's own helpers (`f(…)`, `this.f(…)`). */
+function helperCallName(call: ts.CallExpression): string | null {
+  const callee = call.expression;
+  if (ts.isIdentifier(callee)) return resolveLexical(callee) === undefined ? callee.text : null;
+  if (ts.isPropertyAccessExpression(callee) && callee.expression.kind === ts.SyntaxKind.ThisKeyword) {
+    return callee.name.text;
+  }
+  return null;
+}
+
+/** The last name of a callee: `client.get` → `get`, `fetch` → `fetch`. */
+function calleeName(call: ts.CallExpression | ts.NewExpression): string | null {
+  const callee = call.expression;
+  if (ts.isIdentifier(callee)) return callee.text;
+  if (ts.isPropertyAccessExpression(callee)) return callee.name.text;
+  return null;
+}
+
+/** Every call of a same-plugin helper, by helper name. */
+function indexCallSites(sources: ts.SourceFile[], index: PluginIndex): Map<string, ts.CallExpression[]> {
+  const calls = new Map<string, ts.CallExpression[]>();
+  for (const sf of sources) {
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node)) {
+        const name = helperCallName(node);
+        if (name && index.functions.has(name)) push(calls, name, node);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+  return calls;
+}
+
+/** The name a function-like is indexed under (declaration, method, `const f = () => …`). */
+function functionName(fn: ts.Node): string | null {
+  if ((ts.isFunctionDeclaration(fn) || ts.isMethodDeclaration(fn)) && fn.name && ts.isIdentifier(fn.name)) {
+    return fn.name.text;
+  }
+  const parent = fn.parent;
+  if (parent && (ts.isVariableDeclaration(parent) || ts.isPropertyDeclaration(parent)) && ts.isIdentifier(parent.name)) {
+    return parent.name.text;
+  }
+  return null;
+}
+
+/** Identifiers in the declaring block that read the local `decl` declares. */
+function referencesOf(decl: ts.VariableDeclaration): ts.Identifier[] {
+  if (!ts.isIdentifier(decl.name)) return [];
+  const name = decl.name.text;
+  const target = decl.initializer ?? null;
+  let scope: ts.Node | undefined = decl.parent;
+  while (scope && !ts.isBlock(scope) && !ts.isSourceFile(scope) && !ts.isModuleBlock(scope)) scope = scope.parent;
+  if (!scope) return [];
+  const out: ts.Identifier[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === name &&
+      node !== decl.name &&
+      !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
+      !(ts.isPropertyAssignment(node.parent) && node.parent.name === node) &&
+      // `url = next` overwrites the local; it does not read the helper's value
+      !(ts.isBinaryExpression(node.parent) && node.parent.left === node &&
+        node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken) &&
+      resolveLexical(node) === target
+    ) {
+      out.push(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(scope);
+  return out;
+}
+
+/** The outermost expression that still carries `expr`'s URL (`await`, `??`, a template, `new URL(…)`). */
+function carrierOf(expr: ts.Expression): ts.Expression {
+  let e: ts.Expression = expr;
+  for (;;) {
+    const p = e.parent;
+    if (!p) return e;
+    if (
+      ts.isParenthesizedExpression(p) ||
+      ts.isAsExpression(p) ||
+      ts.isNonNullExpression(p) ||
+      ts.isAwaitExpression(p) ||
+      ts.isSatisfiesExpression(p) ||
+      ts.isTypeAssertionExpression(p)
+    ) {
+      e = p;
+    } else if (
+      ts.isBinaryExpression(p) &&
+      (p.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+        p.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+        p.operatorToken.kind === ts.SyntaxKind.PlusToken)
+    ) {
+      e = p;
+    } else if (ts.isConditionalExpression(p) && p.condition !== e) {
+      e = p;
+    } else if (ts.isTemplateSpan(p)) {
+      e = p.parent; // the TemplateExpression
+    } else if (ts.isNewExpression(p) && p.expression.getText() === 'URL' && p.arguments?.[0] === e) {
+      e = p;
+    } else if (ts.isPropertyAccessExpression(p) && p.expression === e && URL_CARRYING_MEMBERS.has(p.name.text)) {
+      e = ts.isCallExpression(p.parent) && p.parent.expression === p ? p.parent : p;
+    } else {
+      return e;
+    }
+  }
+}
+
+/**
+ * `request` = handed to a request; `inert` = logged, truth-tested or dropped
+ * (neither fetched nor linked); `other` = anything else — a record, a link
+ * field, a return nobody calls — so the helper counts as a link helper.
+ */
+type Use = 'request' | 'inert' | 'other';
+
+/** `if (url)`, `url && …`, `!url`, `while (url …)`: the value is tested, not used. */
+function isTruthTest(e: ts.Expression): boolean {
+  const p = e.parent;
+  if ((ts.isIfStatement(p) || ts.isWhileStatement(p) || ts.isDoStatement(p)) && p.expression === e) return true;
+  if (ts.isForStatement(p) && p.condition === e) return true;
+  if (ts.isConditionalExpression(p) && p.condition === e) return true;
+  if (ts.isPrefixUnaryExpression(p) && p.operator === ts.SyntaxKind.ExclamationToken) return true;
+  if (ts.isTypeOfExpression(p)) return true;
+  if (ts.isBinaryExpression(p) && p.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
+    return p.left === e || isTruthTest(p);
+  }
+  return false;
+}
+
+/**
+ * Where the value of `expr` (a helper call) ends up: handed to a request, to a
+ * logger, or anywhere else (a record, a link field, a return we cannot follow).
+ * Locals, templates, `new URL()` and helpers that `return` it are followed.
+ */
+function usesOf(
+  expr: ts.Expression,
+  callSites: Map<string, ts.CallExpression[]>,
+  depth: number,
+  seenFns: Set<string>,
+  out: Use[],
+): void {
+  if (depth > MAX_DEPTH) {
+    out.push('other');
+    return;
+  }
+  const e = carrierOf(expr);
+  const p = e.parent;
+  if (isTruthTest(e) || (ts.isPropertyAccessExpression(p) && p.expression === e)) {
+    // tested, or inspected through a member that does not carry the URL on
+    // (`url.length`, `url.startsWith(…)`; carrying members were climbed above)
+    out.push('inert');
+    return;
+  }
+  if ((ts.isCallExpression(p) || ts.isNewExpression(p)) && p.arguments?.includes(e)) {
+    const name = calleeName(p);
+    out.push(name && REQUEST_CALLEE.test(name) ? 'request' : name && LOG_CALLEE.test(name) ? 'inert' : 'other');
+    return;
+  }
+  // `client.request({ url: helper(), method: 'GET' })` / `{ url, headers }`
+  if (
+    ((ts.isPropertyAssignment(p) && p.initializer === e) || ts.isShorthandPropertyAssignment(p)) &&
+    ts.isObjectLiteralExpression(p.parent) &&
+    isRequestConfig(p.parent)
+  ) {
+    out.push('request');
+    return;
+  }
+  if (ts.isVariableDeclaration(p) && p.initializer === e && ts.isIdentifier(p.name)) {
+    const refs = referencesOf(p);
+    if (refs.length === 0) out.push('inert'); // computed and dropped
+    for (const ref of refs) usesOf(ref, callSites, depth + 1, seenFns, out);
+    return;
+  }
+  const returning = ts.isReturnStatement(p) ? p : ts.isArrowFunction(p) && p.body === e ? p : null;
+  if (returning) {
+    let fn: ts.Node | undefined = returning;
+    while (fn && !ts.isFunctionLike(fn)) fn = fn.parent;
+    const name = fn ? functionName(fn) : null;
+    const sites = name ? callSites.get(name) ?? [] : [];
+    if (!name || sites.length === 0 || seenFns.has(name)) {
+      out.push('other');
+      return;
+    }
+    seenFns.add(name);
+    for (const site of sites) usesOf(site, callSites, depth + 1, seenFns, out);
+    return;
+  }
+  out.push('other');
+}
+
+/** True when a URL-named helper only ever builds a request target. */
+function isFetchHelper(name: string, callSites: Map<string, ts.CallExpression[]>): boolean {
+  const uses: Use[] = [];
+  for (const site of callSites.get(name) ?? []) usesOf(site, callSites, 0, new Set([name]), uses);
+  return uses.includes('request') && uses.every((u) => u !== 'other');
+}
+
+/** `{ url, method: 'POST' }` or an object handed straight to `client.get/post/…`. */
+function isRequestConfig(literal: ts.ObjectLiteralExpression): boolean {
+  for (const prop of literal.properties) {
+    if (prop.name && REQUEST_CONFIG_KEYS.has(prop.name.getText().replace(/['"]/g, ''))) return true;
+  }
+  let e: ts.Node = literal;
+  while (ts.isParenthesizedExpression(e.parent) || ts.isAsExpression(e.parent)) e = e.parent;
+  const p = e.parent;
+  if ((ts.isCallExpression(p) || ts.isNewExpression(p)) && p.arguments?.includes(e as ts.Expression)) {
+    const name = calleeName(p);
+    return !!name && REQUEST_CALLEE.test(name);
+  }
+  return false;
+}
+
 export function scanPlugin(
   plugin: string,
   files: Array<{ file: string; text: string }>,
@@ -298,27 +575,48 @@ export function scanPlugin(
     ts.createSourceFile(f.file, f.text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS),
   );
   const index = indexPlugin(sources);
+  const callSites = indexCallSites(sources, index);
   const findings: JobUrlFinding[] = [];
   let assignments = 0;
+  let recordLinks = 0;
+  let urlHelpers = 0;
+  let fetchHelpers = 0;
+
+  const report = (at: ts.Node, field: string, value: ts.Expression): void => {
+    const sf = at.getSourceFile();
+    for (const reason of analyseValue(value, index)) {
+      findings.push({
+        plugin,
+        file: sf.fileName,
+        line: sf.getLineAndCharacterOfPosition(at.getStart()).line + 1,
+        field,
+        reason,
+      });
+    }
+  };
 
   for (const sf of sources) {
     const check = (at: ts.Node, field: string, value: ts.Expression | undefined): void => {
       if (!value) return;
       assignments += 1;
-      for (const reason of analyseValue(value, index)) {
-        findings.push({
-          plugin,
-          file: sf.fileName,
-          line: sf.getLineAndCharacterOfPosition(at.getStart()).line + 1,
-          field,
-          reason,
-        });
-      }
+      report(at, field, value);
+    };
+    const checkRecord = (at: ts.Node, key: string, value: ts.Expression): void => {
+      recordLinks += 1;
+      report(at, `record ${key}`, value);
     };
     const visit = (node: ts.Node): void => {
       if (ts.isPropertyAssignment(node)) {
         const key = node.name.getText().replace(/['"]/g, '');
         if (LINK_FIELDS.has(key)) check(node, key, node.initializer);
+        else if (RECORD_LINK_KEY.test(key) && !isRequestConfig(node.parent)) {
+          checkRecord(node, key, node.initializer);
+        }
+      } else if (ts.isShorthandPropertyAssignment(node)) {
+        // `{ jobUrl }` is judged at its `const jobUrl`; `{ url }` is a record link
+        if (RECORD_LINK_KEY.test(node.name.text) && !isRequestConfig(node.parent)) {
+          checkRecord(node, node.name.text, node.name);
+        }
       } else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && LINK_FIELDS.has(node.name.text)) {
         check(node, node.name.text, node.initializer);
       } else if (
@@ -332,12 +630,30 @@ export function scanPlugin(
             ? left.name.text
             : null;
         if (key && LINK_FIELDS.has(key)) check(node, key, node.right);
+        else if (key && ts.isPropertyAccessExpression(left) && RECORD_LINK_KEY.test(key)) {
+          checkRecord(node, key, node.right);
+        }
       }
       ts.forEachChild(node, visit);
     };
     visit(sf);
   }
-  return { findings, assignments };
+
+  // URL-named helpers: everything they can return, wherever the result goes —
+  // unless every caller only fetches it.
+  for (const [name, fns] of index.functions) {
+    if (!URL_HELPER_NAME.test(name)) continue;
+    if (isFetchHelper(name, callSites)) {
+      fetchHelpers += 1;
+      continue;
+    }
+    urlHelpers += 1;
+    for (const fn of fns) {
+      for (const ret of returnsOf(fn)) report(ret, `helper ${name}()`, ret);
+    }
+  }
+
+  return { findings, assignments, recordLinks, urlHelpers, fetchHelpers };
 }
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
@@ -354,9 +670,14 @@ function listTs(dir: string, out: string[] = []): string[] {
 
 /** Scan every `packages/plugins/<plugin>/src` tree that assigns a link field. */
 export function scanRepoPlugins(): ScanResult & { plugins: number } {
-  const findings: JobUrlFinding[] = [];
-  let assignments = 0;
-  let plugins = 0;
+  const total: ScanResult & { plugins: number } = {
+    findings: [],
+    assignments: 0,
+    recordLinks: 0,
+    urlHelpers: 0,
+    fetchHelpers: 0,
+    plugins: 0,
+  };
   for (const plugin of fs.readdirSync(PLUGINS_DIR)) {
     const src = path.join(PLUGINS_DIR, plugin, 'src');
     if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) continue;
@@ -365,12 +686,15 @@ export function scanRepoPlugins(): ScanResult & { plugins: number } {
       text: fs.readFileSync(file, 'utf8'),
     }));
     if (!files.some((f) => /\b(?:jobUrl|jobUrlDirect|applyUrl)\b/.test(f.text))) continue;
-    plugins += 1;
+    total.plugins += 1;
     const result = scanPlugin(plugin, files);
-    findings.push(...result.findings);
-    assignments += result.assignments;
+    total.findings.push(...result.findings);
+    total.assignments += result.assignments;
+    total.recordLinks += result.recordLinks;
+    total.urlHelpers += result.urlHelpers;
+    total.fetchHelpers += result.fetchHelpers;
   }
-  return { findings, assignments, plugins };
+  return total;
 }
 
 function scanSnippet(text: string, extra: Array<{ file: string; text: string }> = []): JobUrlFinding[] {
@@ -448,6 +772,95 @@ describe('plugin job links never point at an API (Spec 1751)', () => {
       expect(findings).toEqual([]);
     });
 
+    // ── Sinks 3 + 4 (Spec 1751 T11): links built by a helper into a record ──
+
+    it('follows a helper-built link stored in a record and copied later (mutant M7 shape)', () => {
+      const findings = scanSnippet(`
+        class S {
+          private buildJobUrl(tenant: string, id: string): string {
+            return \`https://api.acme.com/v1/jobs/\${id}\`;
+          }
+          private normalise(feed: any, tenant: string) {
+            return { jobId: feed.id, url: feed.url ?? this.buildJobUrl(tenant, feed.id) };
+          }
+          private toPost(job: any) {
+            const jobUrl = job.url; // a parameter: invisible to sinks 1-2
+            return { jobUrl, applyUrl: jobUrl };
+          }
+        }`);
+      expect(findings.map((f) => f.field).sort()).toEqual(['helper buildJobUrl()', 'record url']);
+    });
+
+    it('follows an arrow helper from another file into a shorthand { url } (not URL-named)', () => {
+      const findings = scanSnippet(
+        `import { vacancyPage } from './c';
+         function ref(token: string) {
+           const url = vacancyPage(token);
+           return { url, token };
+         }`,
+        [{ file: 'c.ts', text: 'export const vacancyPage = (t: string): string => `https://api.acme.com/vacancies/${t}`;' }],
+      );
+      expect(findings.map((f) => f.field)).toEqual(['record url']);
+    });
+
+    it('judges a URL-named helper wherever its result goes — a template kept in a Map or a Record', () => {
+      const findings = scanSnippet(`
+        const PAGES = new Map<string, string>([
+          ['en', 'https://werken.acme.nl/en/job/{id}'],
+          ['nl', 'https://api.acme.nl/v1/vacatures/{id}'],
+        ]);
+        const APPLY: Record<string, string> = { en: 'https://acme.com/apply/{id}', nl: 'https://acme.nl/api/apply/{id}' };
+        function jobUrlFor(lang: string, id: string) { return (PAGES.get(lang) ?? '').replace('{id}', id); }
+        const getApplyUrl = (lang: string, id: string) => APPLY[lang].replace('{id}', id);
+        function map(id: string) { return { detailPage: jobUrlFor('nl', id), applyPage: getApplyUrl('nl', id) }; }`);
+      expect(findings.map((f) => f.field).sort()).toEqual(['helper getApplyUrl()', 'helper jobUrlFor()']);
+    });
+
+    it('a URL-named helper that is fetched AND stored for people is still a link helper', () => {
+      const findings = scanSnippet(`
+        class S {
+          private pageUrl(id: string) { return \`https://api.acme.com/jobs/\${id}\`; }
+          async map(client: any, id: string) {
+            const url = this.pageUrl(id);
+            await client.get(url);
+            return { title: 'x', page: url };
+          }
+        }`);
+      expect(findings.map((f) => f.field)).toEqual(['helper pageUrl()']);
+    });
+
+    it('does not flag fetch targets: request-only helpers, request configs, logs and truth tests', () => {
+      const result = scanPlugin('fixture', [{
+        file: 'fixture.service.ts',
+        text: `
+        const API = 'https://api.acme.com/v1';
+        function listUrl(slug: string, page: number) { return \`\${API}/boards/\${slug}/jobs?page=\${page}\`; }
+        class S {
+          private detailUrl(id: string) { return \`\${API}/jobs/\${id}.json\`; }
+          private baseUrl() { return 'https://api.acme.com/v1'; }
+          private searchUrl(q: string) { return \`\${this.baseUrl()}/search?q=\${q}\`; }
+          private feedUrl = (p: number) => \`\${API}/feed?page=\${p}\`;
+          async run(client: any, slug: string, id: string) {
+            let url: string | null = listUrl(slug, 1);
+            while (url && url.length) {
+              this.logger.log(\`GET \${url}\`);
+              const r = await client.get(url);
+              url = r.data.next ?? null;
+            }
+            const d = await this.fetchJson(client, new URL(this.detailUrl(id)).toString());
+            await client.request({ url: this.searchUrl('x'), method: 'GET' });
+            const u = this.feedUrl(2);
+            await client.post(u, { url: \`\${API}/jobs\`, query: '{}' });
+            return { jobUrl: \`https://careers.acme.com/jobs/\${id}\`, title: d.title };
+          }
+        }`,
+      }]);
+      expect(result.findings).toEqual([]);
+      // five URL-named helpers exempted as fetch helpers, none judged as links
+      expect(result.fetchHelpers).toBe(5);
+      expect(result.urlHelpers).toBe(0);
+    });
+
     it('ignores type declarations and public hosts', () => {
       const findings = scanSnippet(`
         interface J { jobUrl: string; applyUrl?: string | null }
@@ -467,12 +880,16 @@ describe('plugin job links never point at an API (Spec 1751)', () => {
     }, 180_000);
 
     it('actually scanned the tree (non-vacuous)', () => {
-      // ~1,160 plugins / ~1,560 link assignments on 2026-09-25.
+      // 2026-09-25: 1,165 plugins, 1,520 link assignments, 197 record links,
+      // 348 URL-named helpers judged as links, 93 exempted as fetch helpers.
       expect(result.plugins).toBeGreaterThan(1000);
       expect(result.assignments).toBeGreaterThan(1400);
+      expect(result.recordLinks).toBeGreaterThan(150);
+      expect(result.urlHelpers).toBeGreaterThan(300);
+      expect(result.fetchHelpers).toBeGreaterThan(60);
     });
 
-    it('no plugin wires an API URL or API field into jobUrl / jobUrlDirect / applyUrl', () => {
+    it('no plugin wires an API URL or API field into a link field, a record url/link/href or a URL-named helper', () => {
       const unexpected = result.findings
         .filter((f) => !(f.plugin in KNOWN_EXCEPTIONS))
         .map((f) => `${f.file}:${f.line} ${f.field} — ${f.reason}`);

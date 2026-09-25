@@ -36,8 +36,10 @@ export interface SmartRecruitersJob {
   /**
    * The posting's **API resource** URL —
    * `https://api.smartrecruiters.com/v1/companies/<Co>/postings/<id>` (JSON).
-   * Present on list and detail responses. Never a user-facing link (Spec 1750):
-   * only the company identifier and posting id are read from it, as fallbacks.
+   * Present on every LIST posting; the posting DETAIL response has no `ref`
+   * (verified live 2026-09-25 — see `__tests__/fixtures/smartrecruiters-detail.json`).
+   * Never a user-facing link (Spec 1750): only the company identifier and
+   * posting id are read from it, as fallbacks.
    */
   ref?: string | null;
   /**

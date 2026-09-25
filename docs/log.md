@@ -5,6 +5,57 @@
 
 ---
 
+## 2026-09-25 — Specs 1751 (T11–T12) and 1752 — guard follows record links; NAV id proved; ReliefWeb on API v2
+
+**Change:**
+
+- **Guard gap (Spec 1751 T11).** Mutant M7 — Carerix `buildJobUrl()` returning
+  `https://api.carerix.com/v1/jobs/<id>` — passed `scripts/__tests__/plugin-job-url-hosts.spec.ts`:
+  the link is stored as `{ url: … }` in a record and copied later as `jobUrl: job.url`, where
+  `job` is a parameter. The guard now also judges (3) every value under a record key `url` /
+  `link` / `href` (request configs excepted) and (4) every return of a same-plugin helper whose
+  name contains `url`, unless every call site only hands the result to a request (followed
+  through locals, templates, `new URL()`, string methods and returning helpers; logs, truth
+  tests and member reads are neutral). Tree on 2026-09-25: 197 record links, 348 URL-named link
+  helpers, 93 fetch helpers exempted, zero false positives. Zwayam — whose
+  `api.zwayam.com/job_preview/` link the old guard could not see — is the fifth named exception
+  (Q-110). Mutants M7 (method helper), M8 (BreatheHR arrow helper), M9 (CVWarehouse template in
+  a `Map`), M10 (Carerix inline record template) each pass the old guard and fail the new one;
+  every file restored with `git checkout`. New runtime suite `carerix.job-url.spec.ts`.
+- **NAV (Spec 1751 T12).** NAV's own feed source (navikt/pam-stilling-feed `45cc8c49`) sets a
+  list line's `id` and `_feed_entry.uuid` to the ad uuid and publishes
+  `ad_content.link = https://arbeidsplassen.nav.no/stillinger/stilling/<ad uuid>`; one live GET of
+  such a page answered 200 HTML with the uuid as *Stillingsnummer*. The fallback is exactly NAV's
+  link — pinned by two new cases, no code change.
+- **SmartRecruiters doc.** `smartrecruiters.types.ts`: `ref` is on list postings only; the
+  detail response has none.
+- **ReliefWeb (Spec 1752).** v1 answers 410 "The API version 'v1' has been decommissioned"
+  (live), so the source returned nothing. Moved to `https://api.reliefweb.int/v2/jobs`. v2 serves
+  only pre-approved appnames (since 2025-11-01): `ever-jobs` gets 403 "You are not using an
+  approved appname" (live). The appname is now `RELIEFWEB_APPNAME` (default `ever-jobs`, start-up
+  warning), and that 403 becomes a `bad_input` diagnostic naming the variable and the request
+  form. Links `url_alias` → `url` → `reliefweb.int/node/<id>` (live: 301 to the alias; a closed
+  job 410 HTML), never `href`; description per format from `body` / `body-html`. README section
+  and `.env.example` entry added. **Owner action:** request an appname and set
+  `RELIEFWEB_APPNAME` (Spec 1752 T6).
+
+**Live requests used:** api.reliefweb.int 2 of 3 (v2 → 403, v1 → 410), reliefweb.int 2 of 2
+(`/node/4228316` → 410, `/node/4231248` → 301), arbeidsplassen.nav.no 1 of 1 (200).
+
+**Verification:** guard 17/17; reliefweb 13/13 (6 red against the old code); navjobs 5/5;
+carerix 3/3 (2 red under M7); smartrecruiters 10/10; `packages/common` 601/601 in 16 suites;
+`tsc` clean for `tsconfig.typecheck.json` and `apps/api/tsconfig.build.json`.
+
+**Docs:** [1751 spec](../.specify/specs/1751-plugin-job-link-guard/spec.md) (D-04, D-06, D-07),
+[plan](../.specify/specs/1751-plugin-job-link-guard/plan.md),
+[tasks](../.specify/specs/1751-plugin-job-link-guard/tasks.md) (T11–T13),
+[notes](../.specify/specs/1751-plugin-job-link-guard/notes.md);
+[1752 spec](../.specify/specs/1752-reliefweb-api-v2/spec.md),
+[plan](../.specify/specs/1752-reliefweb-api-v2/plan.md),
+[tasks](../.specify/specs/1752-reliefweb-api-v2/tasks.md); `docs/index.md`; **Q-110**.
+
+---
+
 ## 2026-09-25 — Spec 1751 — Plugin job-link audit and API-URL guard
 
 **Change:** audited every `jobUrl` / `jobUrlDirect` / `applyUrl` assignment in

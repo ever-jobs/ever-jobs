@@ -29,3 +29,17 @@
   then either drop the four exceptions or keep them.
 - [ ] T10 — (follow-up) Workday site-less fallback URL, Oracle `/careers/job/<id>`
   fallback, and Zwayam's `api.zwayam.com/job_preview/` link verified live.
+- [x] T11 — Guard gap (mutant M7): follow links built into an intermediate record. Record keys
+  `url` / `link` / `href` judged like link fields (request configs excepted); every URL-named
+  helper's returns judged unless every caller only fetches the result. Acceptance: guard 17/17
+  (5 new detection cases); tree: 1,165 plugins, 1,520 link assignments, 197 record links, 348
+  URL-named link helpers, 93 fetch helpers, zero findings outside the named exceptions (Zwayam
+  added as the fifth, D-04); mutants M7 (Carerix method helper), M8 (BreatheHR arrow helper),
+  M9 (CVWarehouse template in a `Map`), M10 (Carerix inline record template) each pass the
+  pre-T11 guard and fail after, restored with `git checkout`; new `carerix.job-url.spec.ts`
+  3/3 (2 red under M7).
+- [x] T12 — Prove the NAV fallback id (1 live GET). Acceptance: NAV's feed source shows list
+  `id` = `_feed_entry.uuid` = `ad.uuid` and `ad_content.link` = `…/stillinger/stilling/<ad.uuid>`;
+  the live ad page for one uuid answers 200 HTML with that uuid as *Stillingsnummer*;
+  `navjobs.job-url.spec.ts` 5/5 (2 new cases pin it). No code change needed.
+- [x] T13 — ReliefWeb v1 → v2 split out as Spec 1752.

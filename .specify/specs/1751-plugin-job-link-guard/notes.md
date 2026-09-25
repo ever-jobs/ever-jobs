@@ -143,3 +143,61 @@ Verdicts are from each source's documented response contract, not live checks.
 - `source-ats-oracle`: `ExternalUrl` else `<baseUrl>/careers/job/<slug>`, where `baseUrl` is
   the bare tenant host — not the documented `…/hcmUI/CandidateExperience/…` path.
 - `source-company-canekast`, `source-company-desktopmetal`: the posting is a PDF.
+
+## T11 — links built one step early (2026-09-25)
+
+**Measured before choosing the rule** (TypeScript AST over all 1,871 plugin `src` trees):
+
+- Values under an object key `url` / `link` / `href` (literal, shorthand, member assignment):
+  210; judged like a link field, exactly one is API-shaped — Zwayam's
+  `url: this.buildJobUrl(…)` (`https://api.zwayam.com/job_preview/…`). With every key ending in
+  `url|link|href|uri` (1,809 sites) the only extra hits are the four last-resort plugins.
+- Function / method / arrow-constant names containing `url`: 200 distinct names; 34 helpers
+  return an API-shaped string. 32 are fetch builders (`adpListUrl`, `adpDetailUrl`,
+  `apploiProfileUrl`, `buildBoardUrl` ×2, `eddyJobsListUrl`, `eddyJobDetailUrl`,
+  `employmentHeroJobsUrl`, `buildFeedUrl` ×3, `jazzhrApiUrl`, `buildJobsPageUrl`,
+  `manatalListUrl`, `mokahrJobsApiUrl`, `nodiGlobalJobsUrl`, `buildPageUrl`, `buildBaseUrl`,
+  `recruitlyJobFeedUrl`, `ripplingDetailUrl`, `roublerFeedUrl`, `submit4jobsApiUrl`,
+  `sympaOffersUrl`, `vidcruiterFeedUrl`, `workableDetailUrl`, `buildWorkdayUrl`,
+  `buildWorkdayDetailUrl`, `HN_ITEM_URL`, headhunter `buildUrl` ×2, …) — every call site
+  hands the result to `get` / `post` / `fetchJson` (or a local that does). The other two are
+  Ceipal's and Zwayam's `buildJobUrl`. A name-only rule would therefore need a hand list of
+  fetch words (and `…DetailUrl` is a link in some plugins, a fetch in others); the usage test
+  needs none.
+- Simulated mutants (each URL-named builder's last `return` replaced by an API URL, 230
+  helpers): the pre-T11 guard missed 136 of them — fetch builders among them, where missing is
+  right, but also link builders such as Carerix/Oleeo/Paycor/PyjamaHR `buildJobUrl`,
+  `cvwarehouseJobUrl`, `paycomJobUrl` and `breathehrVacancyUrl`.
+
+**After T11:** 197 record links, 348 URL-named link helpers judged, 93 exempted as fetch
+helpers; findings only in bullhorn, ceipal, hiringthing, loxo and zwayam (all named).
+
+**Mutants** (applied to the real tree, guard tree tests run with the pre-T11 guard copied from
+HEAD `381a3882` and with the new one, file restored with `git checkout` after each):
+
+| # | Shape | Plugin / file | Mutation | pre-T11 guard | T11 guard |
+| --- | --- | --- | --- | --- | --- |
+| M7 | method helper → record `url` → `jobUrl: job.url` | `source-ats-carerix` `carerix.service.ts` | `buildJobUrl` returns `https://api.carerix.com/v1/jobs/${jobId}` | pass (missed) | **fail**: `record url` :338, `helper buildJobUrl()` :451 |
+| M8 | arrow helper in a constants file | `source-ats-breathehr` `breathehr.constants.ts` | `breathehrVacancyUrl` returns `https://api.breathehr.com/v1/vacancies/${…}` | pass (missed) | **fail**: `record url` (service :196), `helper breathehrVacancyUrl()` |
+| M9 | template kept in a `Map`, looked up by language | `source-ats-cvwarehouse` `cvwarehouse.constants.ts` | `new Map([['en-US', 'https://api.cvwarehouse.com/v1/jobs/{job}']])`; `cvwarehouseJobUrl` returns `(MAP.get(lang) ?? ORIGIN).replace('{job}', jobId)` | pass (missed) | **fail**: `record url` (service :311), `helper cvwarehouseJobUrl()` |
+| M10 | inline template straight into the record (no helper) | `source-ats-carerix` `carerix.service.ts` | `url: feedJob.url ?? \`https://api.carerix.com/v1/jobs/${jobId}\`` | pass (missed) | **fail**: `record url` :338 |
+
+M7 also turns the new runtime suite `carerix.job-url.spec.ts` red (2 of 3).
+
+## T12 — NAV: the fallback id is the public ad id
+
+- **Source** (navikt/pam-stilling-feed, HEAD `45cc8c49`, 2026-09-24):
+  `FeedService.kt` stores each ad as `FeedItem(uuid = UUID.fromString(ad.uuid), …)` and its
+  page row with `feedItemId = feedItem.uuid`; `FeedAd.kt` `FeedLine.fraFeedPageItem` emits
+  `id = feedItemId`, `url = "/api/v1/feedentry/${feedItemId}"`,
+  `_feed_entry.uuid = feedItemId`; `mapAd` sets `link = "$stillingUrlBase/${source.uuid}"`;
+  `naiserator-prod.json` sets `stilling_url_base = https://arbeidsplassen.nav.no/stillinger/stilling`.
+- **Live** (1 GET): `https://arbeidsplassen.nav.no/stillinger/stilling/0862f420-5aea-4532-af73-43156a9e7b7f`
+  → 200 `text/html`, title "Midlertidig stilling som prosjektmedarbeider - arbeidsplassen.no",
+  the uuid shown as *Stillingsnummer* and as `adData.id` (status `ACTIVE`).
+- So `NAVJOBS_PUBLIC_AD_URL/<_feed_entry.uuid ?? id>` is exactly NAV's own `ad_content.link`.
+- Side finding (not changed): the list feed's `_feed_entry` carries only `uuid`, `status`,
+  `title`, `businessName`, `municipal`, `sistEndret`. `navjobs.types.ts` also declares
+  `description`, `sourceurl`, `applicationUrl` there; those live only in
+  `/api/v1/feedentry/<uuid>` (`ad_content`), which the plugin never fetches — so in practice
+  NAV jobs always link the arbeidsplassen page and carry no description.
