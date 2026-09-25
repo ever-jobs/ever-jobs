@@ -18,6 +18,7 @@ import {
   extractEmails,
   randomSleep,
   toDateOnly,
+  firstPublicUrl,
 } from '@ever-jobs/common';
 import {
   CEIPAL_API_BASE,
@@ -89,6 +90,9 @@ export class CeipalService implements IScraper {
     }
 
     const companyName = this.deriveCompanyName(input.companySlug, input.companyUrl);
+    // The tenant's own career portal, when the caller named one (Spec 1751) —
+    // an `api.ceipal.com` key URL is refused here and never becomes a link.
+    const portalUrl = firstPublicUrl(input.companyUrl);
 
     const client = createHttpClient({
       proxies: input.proxies,
@@ -116,6 +120,7 @@ export class CeipalService implements IScraper {
         apiKey,
         first.rows,
         companyName,
+        portalUrl,
         input.descriptionFormat,
         seen,
         jobPosts,
@@ -156,6 +161,7 @@ export class CeipalService implements IScraper {
             apiKey,
             chunkRows,
             companyName,
+            portalUrl,
             input.descriptionFormat,
             seen,
             jobPosts,
@@ -234,6 +240,7 @@ export class CeipalService implements IScraper {
     apiKey: string,
     rows: CeipalJobPosting[],
     companyName: string,
+    portalUrl: string | null,
     format: DescriptionFormat | undefined,
     seen: Set<string>,
     out: JobPostDto[],
@@ -261,7 +268,7 @@ export class CeipalService implements IScraper {
       }
 
       try {
-        const post = this.processJob(row, detail, apiKey, companyName, format);
+        const post = this.processJob(row, detail, apiKey, companyName, portalUrl, format);
         if (!post) continue;
         const key = post.atsId as string;
         if (seen.has(key)) continue;
@@ -305,6 +312,7 @@ export class CeipalService implements IScraper {
     detail: CeipalJobDetail | null,
     apiKey: string,
     companyName: string,
+    portalUrl: string | null,
     format?: DescriptionFormat,
   ): JobPostDto | null {
     const merged: CeipalJobPosting = { ...row, ...(detail ?? {}) };
@@ -316,7 +324,7 @@ export class CeipalService implements IScraper {
     const atsId = this.rowId(merged);
     if (!atsId) return null;
 
-    const jobUrl = this.buildJobUrl(apiKey, atsId, merged);
+    const jobUrl = this.buildJobUrl(apiKey, atsId, merged, portalUrl);
 
     const rawDescription = this.rawDescription(merged);
     let description: string | null = null;
@@ -350,7 +358,8 @@ export class CeipalService implements IScraper {
       atsId,
       atsType: 'ceipal',
       department,
-      applyUrl: this.firstNonEmpty(merged.apply_job) ?? jobUrl,
+      // never the API fallback: null when no public page is known
+      applyUrl: firstPublicUrl(merged.apply_job, jobUrl),
     });
   }
 
@@ -386,10 +395,27 @@ export class CeipalService implements IScraper {
     return '';
   }
 
-  /** Build a stable, tenant-agnostic job URL via the API detail resource. */
-  private buildJobUrl(apiKey: string, atsId: string, row: CeipalJobPosting): string {
-    const portalApply = this.firstNonEmpty(row.apply_job);
-    if (portalApply) return portalApply;
+  /**
+   * The role's link (Spec 1751), first public page wins: the tenant portal's
+   * `apply_job`, the caller's career portal (`companyUrl`), then the role's
+   * job-board syndication pages. The API detail resource is a JSON endpoint,
+   * kept only as a last resort because a bare portal key names no public page
+   * (Q-110); it is a documented exception in
+   * scripts/__tests__/plugin-job-url-hosts.spec.ts.
+   */
+  private buildJobUrl(
+    apiKey: string,
+    atsId: string,
+    row: CeipalJobPosting,
+    portalUrl: string | null = null,
+  ): string {
+    const publicUrl = firstPublicUrl(
+      row.apply_job,
+      portalUrl,
+      row.apply_job_indeed,
+      row.apply_job_monster,
+    );
+    if (publicUrl) return publicUrl;
     return CEIPAL_JOB_PAGE_TEMPLATE.replace('{key}', encodeURIComponent(apiKey)).replace(
       '{id}',
       encodeURIComponent(atsId),

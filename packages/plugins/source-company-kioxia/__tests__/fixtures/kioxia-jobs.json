@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Kioxia/744000131195069",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Kioxia/postings/744000131195069",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Kioxia/744000129796053",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Kioxia/postings/744000129796053",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Kioxia/744000129796899",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Kioxia/postings/744000129796899",
       "jobAd": {
         "sections": {
           "jobDescription": {

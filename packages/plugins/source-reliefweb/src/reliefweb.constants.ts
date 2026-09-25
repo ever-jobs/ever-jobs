@@ -11,3 +11,10 @@ export const RELIEFWEB_HEADERS: Record<string, string> = {
 export const RELIEFWEB_FIELDS = [
   'title', 'body', 'url', 'source', 'date', 'country', 'theme', 'type',
 ];
+
+/**
+ * Public page of a ReliefWeb job by node id (Spec 1751). Used only when the
+ * API omits `fields.url`; each entry's `href` is its API resource
+ * (`https://api.reliefweb.int/v1/jobs/<id>`) and must never become a link.
+ */
+export const RELIEFWEB_PUBLIC_NODE_URL = 'https://reliefweb.int/node';

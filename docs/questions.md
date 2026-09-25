@@ -10,6 +10,60 @@
 
 ---
 
+## Q-111 — SmartRecruiters: the list endpoint has no description or apply link — fetch each posting's detail? (Spec 1750)
+
+**Context:** `source-ats-smartrecruiters` reads only
+`GET /v1/companies/<Co>/postings`. Captured live on 2026-09-25 (AbbVie), a list posting has
+`ref`, `company`, `location`, `department`, … but **no `jobAd`, `postingUrl` or `applyUrl`**;
+those come only from `GET /v1/companies/<Co>/postings/<id>`. So every SmartRecruiters posting
+(and every one of the 217 delegating company plugins) ships `description: null` and
+`applyUrl: null`, although `processJob` has always parsed `jobAd.sections`. The delegating
+plugins' fixtures hide this: the scaffold fabricates a `jobAd` on list postings. Spec 1750
+fixed the link (`jobUrl` is now the public page) without adding requests.
+
+**Options:**
+
+- **A. Fetch the detail for every posting** (bounded `Promise.allSettled`, e.g. 5 at a time,
+  polite delay): full description, `postingUrl`, `applyUrl`, compensation. Cost: one extra
+  request per posting — AbbVie alone lists hundreds.
+- **B. Opt-in detail fetch** (`SMARTRECRUITERS_FETCH_DETAIL=true` or a per-request flag),
+  list-only by default.
+- **C. Keep list-only** and document that SmartRecruiters postings carry no description.
+
+**Default:** **C (default — proceeding)** — no change in request volume in this branch; B is the
+likely end state, and the scaffold should stop fabricating a list `jobAd` when it lands.
+
+---
+
+## Q-110 — A posting with no known public page: keep the API link, drop the posting, or link the board? (Spec 1751)
+
+**Context:** The Spec 1751 audit of every `jobUrl` / `jobUrlDirect` / `applyUrl` assignment
+found four ATS plugins that fall back to an API URL when no public posting page is known:
+`source-ats-bullhorn` (always — Bullhorn exposes no public posting page for a corp token),
+`source-ats-ceipal` (a bare portal key names no page), `source-ats-hiringthing` and
+`source-ats-loxo` (only when the API omits the posting's own URL). Each now prefers every
+public candidate and the caller's `companyUrl` (`firstPublicUrl`), but with neither the old
+API link remains, so a downstream Apply button can still open JSON for these. Separately,
+`source-ats-zwayam` links `https://api.zwayam.com/job_preview/…`, which the plugin documents
+as the platform's public share page; nobody has re-checked that it serves HTML.
+
+**Options:**
+
+- **A. Keep the API link as the last resort** (no data loss; the four are named exceptions in
+  `scripts/__tests__/plugin-job-url-hosts.spec.ts`, which fails if one stops needing it).
+- **B. Drop postings with no public link** (a link that opens JSON is worse than no posting)
+  — Bullhorn would return nothing unless the caller passes `companyUrl`.
+- **C. Emit them with a board-level page only** — requires a per-tenant careers URL (e.g. a
+  required `companyUrl` for Bullhorn/Ceipal), otherwise same as B.
+- **D. Add a `linkIsPublic: false` (or similar) flag on `JobPostDto`** so consumers can hide
+  the button while keeping the posting.
+
+**Default:** **A (default — proceeding)** — behaviour for tenants without a public page is
+unchanged from before Spec 1751; the guard keeps the list from growing. Zwayam: verify its
+preview URL live before deciding whether it joins the list.
+
+---
+
 ## Q-096 — Shared location parser: known mis-splits carried in from the fork (Spec 1689)
 
 **Context:** The fork-sync review (Spec 1689, lane A4) found shared-parser outputs that no

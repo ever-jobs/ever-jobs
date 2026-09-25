@@ -5,6 +5,78 @@
 
 ---
 
+## 2026-09-25 — Spec 1751 — Plugin job-link audit and API-URL guard
+
+**Change:** audited every `jobUrl` / `jobUrlDirect` / `applyUrl` assignment in
+`packages/plugins/*/src/**/*.ts` from the TypeScript AST — 1,791 sites in 1,164 plugins (the
+text search `rg '\b(jobUrl|jobUrlDirect|applyUrl)\s*[:=]'` finds 1,618 lines) — and bucketed each
+by where its value comes from ([notes.md](../.specify/specs/1751-plugin-job-link-guard/notes.md)).
+Besides SmartRecruiters (Spec 1750):
+
+- **Fixed:** `source-reliefweb` fell back to `entry.href` (`https://api.reliefweb.int/v1/jobs/<id>`)
+  and now falls back to `https://reliefweb.int/node/<id>`; `source-navjobs` fell back to the
+  feed item's `/api/v1/feedentry/<uuid>` (and used non-URL `applicationUrl` text verbatim) and
+  now falls back to `https://arbeidsplassen.nav.no/stillinger/stilling/<uuid>`, with `applyUrl`.
+- **Partly fixed (Q-110):** `source-ats-bullhorn` (always a REST entity URL), `source-ats-ceipal`
+  (JSON detail resource; `applyUrl` copied it), `source-ats-hiringthing`, `source-ats-loxo`
+  choose the first public candidate and the caller's `companyUrl` before the old API link,
+  which remains only as a last resort; Ceipal/Loxo `applyUrl` is public-only.
+- **Shared helper:** `packages/common/src/utils/public-url.ts` — `API_URL_PATTERN`,
+  `isApiLikeUrl`, `firstPublicUrl`.
+- **Guard:** `scripts/__tests__/plugin-job-url-hosts.spec.ts` parses every plugin and fails on
+  an API host or API reference field (`.ref`, `.self`, `.apiUrl`, …) wired into a link field,
+  through locals (lexically), constants, helpers, `TEMPLATE.replace()` and `URL` accessors; the
+  four last-resort plugins are named exceptions that fail when no longer needed.
+- Reported only (another session owns them): `linkedin`, `glassdoor`, `ziprecruiter`,
+  `naukri` — all link human pages. Left for later: Zwayam's documented
+  `api.zwayam.com/job_preview/` link, HiBob's unverified API `url`, Workday's site-less and
+  Oracle's `/careers/job/` fallbacks (tasks T9–T10).
+
+**Verification:** `public-url.spec.ts` 28/28; six new `*.job-url.spec.ts` suites 22/22 (13 of 22
+fail against the pre-fix services); guard 12/12 over 1,165 plugins / 1,520 valued assignments,
+red with SmartRecruiters' `job.ref` put back.
+
+**Docs:** [spec](../.specify/specs/1751-plugin-job-link-guard/spec.md),
+[plan](../.specify/specs/1751-plugin-job-link-guard/plan.md),
+[tasks](../.specify/specs/1751-plugin-job-link-guard/tasks.md), `docs/index.md`, **Q-110**.
+
+---
+
+## 2026-09-25 — Spec 1750 — SmartRecruiters `jobUrl` is the public posting page, not the API `ref`
+
+**Change:** `source-ats-smartrecruiters` mapped `jobUrl = job.ref ?? <public pattern>`. `ref` is
+the posting's API resource (`https://api.smartrecruiters.com/v1/companies/<Co>/postings/<id>`)
+and is on every list posting, so every SmartRecruiters job — and every job of the 217 company
+plugins that delegate to it — linked to raw JSON (5,032 rows in a downstream app). Three live
+GETs (AbbVie list, one detail, the id-only public page) confirmed: the list has `ref` but no
+`postingUrl`/`applyUrl`/`jobAd`; the detail has `postingUrl`/`applyUrl`;
+`https://jobs.smartrecruiters.com/AbbVie/<id>` serves the page.
+
+- `jobUrl` = `postingUrl` (public-only) else
+  `https://jobs.smartrecruiters.com/<company.identifier>/<id>` — the API's case-sensitive
+  identifier, then the `ref` segment, then the caller's slug. `applyUrl` only from the API's
+  `applyUrl`. `ref` is parsed for the id/identifier, never linked (`JobPostDto` has no raw
+  field to keep it in). `id`, `atsId` and the URL share one posting id; an id-less posting is
+  skipped instead of linking `…/undefined`.
+- The 217 delegating plugins' fixtures had fabricated a public `ref` and asserted
+  `jobUrl === ref`, which is why nothing was red: 651 fixture `ref`s now carry the real API
+  form, the 217 assertions check the public pattern, and
+  `scripts/scaffold-smartrecruiters-company-source.ts` generates both.
+- New unit suite + fixtures cut from the live responses (custom fields and body trimmed).
+
+**Verification:** `smartrecruiters.service.spec.ts` 10/10; the 217 delegating suites green;
+with `job.ref ??` reintroduced, the plugin suite, the AbbVie suite and the Spec 1751 guard fail
+(10 of 31), restored 31/31. Downstream stores keyed on `jobUrl` see new URLs for existing
+postings (deterministic rewrite: `api…/v1/companies/<Co>/postings/<id>` →
+`jobs.smartrecruiters.com/<Co>/<id>`).
+
+**Docs:** [spec](../.specify/specs/1750-smartrecruiters-public-job-url/spec.md),
+[plan](../.specify/specs/1750-smartrecruiters-public-job-url/plan.md),
+[tasks](../.specify/specs/1750-smartrecruiters-public-job-url/tasks.md), `docs/index.md`,
+**Q-111** (the list endpoint carries no description).
+
+---
+
 ## 2026-09-25 — Spec 1689 — Fork sync hardening: ReDoS, SSRF, shared state, and behaviour the fork removed
 
 **Change:** `fork-sync/makedeeply-2026-09-24` fast-forwards `origin/develop` (`574bd922`) to the

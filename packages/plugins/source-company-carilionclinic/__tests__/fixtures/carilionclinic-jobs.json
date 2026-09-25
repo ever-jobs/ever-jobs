@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CarilionClinic/744000071360700",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CarilionClinic/postings/744000071360700",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CarilionClinic/744000071357771",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CarilionClinic/postings/744000071357771",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CarilionClinic/744000059111355",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CarilionClinic/postings/744000059111355",
       "jobAd": {
         "sections": {
           "jobDescription": {

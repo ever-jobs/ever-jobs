@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AllegisGlobalSolutions/744000135690549",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AllegisGlobalSolutions/postings/744000135690549",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AllegisGlobalSolutions/744000135586574",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AllegisGlobalSolutions/postings/744000135586574",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AllegisGlobalSolutions/744000135583950",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AllegisGlobalSolutions/postings/744000135583950",
       "jobAd": {
         "sections": {
           "jobDescription": {

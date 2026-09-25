@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/InterIKEAGroup/744000135750787",
+      "ref": "https://api.smartrecruiters.com/v1/companies/InterIKEAGroup/postings/744000135750787",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/InterIKEAGroup/744000135662634",
+      "ref": "https://api.smartrecruiters.com/v1/companies/InterIKEAGroup/postings/744000135662634",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/InterIKEAGroup/744000135649749",
+      "ref": "https://api.smartrecruiters.com/v1/companies/InterIKEAGroup/postings/744000135649749",
       "jobAd": {
         "sections": {
           "jobDescription": {

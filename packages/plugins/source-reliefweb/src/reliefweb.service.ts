@@ -18,8 +18,10 @@ import {
   extractEmails,
   parseLocationList,
   toDateOnly,
+  firstPublicUrl,
 } from '@ever-jobs/common';
 import {
+  RELIEFWEB_PUBLIC_NODE_URL,
   RELIEFWEB_API_URL,
   RELIEFWEB_APP_NAME,
   RELIEFWEB_HEADERS,
@@ -106,7 +108,12 @@ export class ReliefWebService implements IScraper {
     const fields = entry.fields;
     if (!fields.title) return null;
 
-    const jobUrl = fields.url ?? entry.href;
+    // Spec 1751: `entry.href` is the API resource
+    // (`https://api.reliefweb.int/v1/jobs/<id>`) — never a link. When the API
+    // omits `fields.url`, link the job's public node page instead.
+    const jobUrl =
+      firstPublicUrl(fields.url) ??
+      `${RELIEFWEB_PUBLIC_NODE_URL}/${encodeURIComponent(entry.id)}`;
 
     let description: string | null = fields.body ?? null;
     if (description) {

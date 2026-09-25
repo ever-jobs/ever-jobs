@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HumeCityCouncil/744000135645220",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HumeCityCouncil/postings/744000135645220",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HumeCityCouncil/744000135417464",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HumeCityCouncil/postings/744000135417464",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HumeCityCouncil/744000135412689",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HumeCityCouncil/postings/744000135412689",
       "jobAd": {
         "sections": {
           "jobDescription": {

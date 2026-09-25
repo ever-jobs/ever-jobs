@@ -11,3 +11,10 @@ export const NAVJOBS_HEADERS: Record<string, string> = {
   Accept: 'application/json',
   'User-Agent': 'EverJobs/1.0',
 };
+
+/**
+ * Public page of a NAV job ad on arbeidsplassen.nav.no, keyed by the feed
+ * entry's `uuid` (Spec 1751). The feed item's own `url` is the API resource
+ * (`/api/v1/feedentry/<uuid>`) and must never become a link.
+ */
+export const NAVJOBS_PUBLIC_AD_URL = 'https://arbeidsplassen.nav.no/stillinger/stilling';

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ICTSUKLtd/743999679204587",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ICTSUKLtd/postings/743999679204587",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ICTSUKLtd/743999678885609",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ICTSUKLtd/postings/743999678885609",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ICTSUKLtd/743999678567962",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ICTSUKLtd/postings/743999678567962",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UniversityOfTheWestOfEngland/743999748437786",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UniversityOfTheWestOfEngland/postings/743999748437786",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UniversityOfTheWestOfEngland/743999747885319",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UniversityOfTheWestOfEngland/postings/743999747885319",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UniversityOfTheWestOfEngland/743999743965903",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UniversityOfTheWestOfEngland/postings/743999743965903",
       "jobAd": {
         "sections": {
           "jobDescription": {

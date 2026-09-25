@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ContactEnergy/744000135634090",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ContactEnergy/postings/744000135634090",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ContactEnergy/744000135363739",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ContactEnergy/postings/744000135363739",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ContactEnergy/744000135354249",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ContactEnergy/postings/744000135354249",
       "jobAd": {
         "sections": {
           "jobDescription": {

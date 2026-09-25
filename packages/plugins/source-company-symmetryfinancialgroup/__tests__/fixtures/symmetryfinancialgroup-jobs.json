@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SymmetryFinancialGroup7/743999666124428",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SymmetryFinancialGroup7/postings/743999666124428",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SymmetryFinancialGroup7/743999666124100",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SymmetryFinancialGroup7/postings/743999666124100",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SymmetryFinancialGroup7/743999666123641",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SymmetryFinancialGroup7/postings/743999666123641",
       "jobAd": {
         "sections": {
           "jobDescription": {

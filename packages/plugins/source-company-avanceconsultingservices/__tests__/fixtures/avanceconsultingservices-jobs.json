@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AvanceConsultingServices2/743999659804907",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AvanceConsultingServices2/postings/743999659804907",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AvanceConsultingServices2/743999659715745",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AvanceConsultingServices2/postings/743999659715745",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AvanceConsultingServices2/743999659617436",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AvanceConsultingServices2/postings/743999659617436",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/aristanetworks/744000135670709",
+      "ref": "https://api.smartrecruiters.com/v1/companies/aristanetworks/postings/744000135670709",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/aristanetworks/744000135500220",
+      "ref": "https://api.smartrecruiters.com/v1/companies/aristanetworks/postings/744000135500220",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/aristanetworks/744000135469549",
+      "ref": "https://api.smartrecruiters.com/v1/companies/aristanetworks/postings/744000135469549",
       "jobAd": {
         "sections": {
           "jobDescription": {

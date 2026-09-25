@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StrategicStaffingSolutionsS3/743999679839885",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StrategicStaffingSolutionsS3/postings/743999679839885",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StrategicStaffingSolutionsS3/743999671141463",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StrategicStaffingSolutionsS3/postings/743999671141463",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StrategicStaffingSolutionsS3/743999671019700",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StrategicStaffingSolutionsS3/postings/743999671019700",
       "jobAd": {
         "sections": {
           "jobDescription": {

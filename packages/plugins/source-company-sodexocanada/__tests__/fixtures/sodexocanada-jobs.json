@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SodexoCanadaLtd/744000135778169",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SodexoCanadaLtd/postings/744000135778169",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SodexoCanadaLtd/744000135775039",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SodexoCanadaLtd/postings/744000135775039",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SodexoCanadaLtd/744000135774709",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SodexoCanadaLtd/postings/744000135774709",
       "jobAd": {
         "sections": {
           "jobDescription": {

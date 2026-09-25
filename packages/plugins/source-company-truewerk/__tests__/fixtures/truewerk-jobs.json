@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Truewerk/744000133467589",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Truewerk/postings/744000133467589",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Truewerk/744000132501139",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Truewerk/postings/744000132501139",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Truewerk/744000129244500",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Truewerk/postings/744000129244500",
       "jobAd": {
         "sections": {
           "jobDescription": {

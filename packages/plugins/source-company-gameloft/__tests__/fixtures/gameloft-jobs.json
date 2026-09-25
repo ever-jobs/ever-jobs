@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Gameloft/744000135690239",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Gameloft/postings/744000135690239",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Gameloft/744000135681359",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Gameloft/postings/744000135681359",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Gameloft/744000135653869",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Gameloft/postings/744000135653869",
       "jobAd": {
         "sections": {
           "jobDescription": {
