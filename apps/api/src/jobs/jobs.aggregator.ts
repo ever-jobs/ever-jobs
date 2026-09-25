@@ -9,6 +9,7 @@ import {
   JOB_OBSERVATION_STORE_TOKEN,
   JOB_STORE_TOKEN,
   JobPostDto,
+  LocationDto,
   ScraperInputDto,
 } from '@ever-jobs/models';
 import { dedupKeyForJob } from '@ever-jobs/common';
@@ -222,14 +223,26 @@ export class JobsAggregator {
     // is the most-recent-on-the-best-site entry — and the output keeps
     // the same site/date ordering as a non-deduped response.
     const seen = new Set<string>();
-    const deduped: JobPostDto[] = [];
+    const representatives: JobPostDto[] = [];
+    const representativeIds: string[] = [];
+    const clusterSize = new Map<string, number>();
     for (let i = 0; i < rawJobs.length; i++) {
       const canonId = result.assignments[i];
       if (!canonId) continue; // rejected by engine
+      clusterSize.set(canonId, (clusterSize.get(canonId) ?? 0) + 1);
       if (seen.has(canonId)) continue;
       seen.add(canonId);
-      deduped.push(rawJobs[i]);
+      representatives.push(rawJobs[i]);
+      representativeIds.push(canonId);
     }
+    // Spec 1724 — merged representatives carry the cluster's union of
+    // locations, and representatives the engine kept apart never share a key.
+    const deduped = await finalizeRepresentatives(
+      representatives,
+      representativeIds,
+      clusterSize,
+      result.canonical,
+    );
 
     this.logger.log(
       `dedup: ${rawCount} → ${deduped.length} (merged ${result.metrics.mergedPairs} pairs in ${result.metrics.elapsedMs}ms)`,
@@ -385,6 +398,76 @@ export const OBSERVATION_WRITE_CONCURRENCY = 8;
 const DEDUP_KEY_YIELD_EVERY = 500;
 
 /**
+ * Jobs whose `dedupKey` {@link finalizeRepresentatives} already set during
+ * this pass. {@link stampDedupKeys} consumes the mark (skip + delete) instead
+ * of hashing the job a second time; it must not recompute a copy's key from
+ * its widened `locations[]` (Spec 1724). A mark left on a cached raw job by
+ * an interleaved request is harmless: that job's key is its own per-job key,
+ * which is what recomputing would write.
+ */
+const PRE_KEYED = new WeakSet<JobPostDto>();
+
+/**
+ * Final shape of the deduped representatives (Spec 1724).
+ *
+ * 1. **Union of locations.** A representative whose cluster merged several
+ *    postings carries the cluster's `locations[]` union (the engine's
+ *    `CanonicalJob.locations`, head first) when that adds a site it did not
+ *    list itself — e.g. a board listing merged into the ATS posting that
+ *    names every office.
+ * 2. **Distinct keys.** `dedupKey` is the representative's own per-job key,
+ *    computed from its fields BEFORE the union, so it stays equal to the
+ *    engine's cluster id. When two representatives share that key — the
+ *    engine kept them apart although title, company and location coincide
+ *    (conflicting employment types) — each carries its cluster id instead, so
+ *    distinct postings never share a `dedupKey`.
+ *
+ * Representatives that change are shallow COPIES: the input may be the cached
+ * fan-out, which a later `dedup=false` request must see unchanged. The rest
+ * are keyed in place, as {@link stampDedupKeys} would.
+ */
+async function finalizeRepresentatives(
+  representatives: JobPostDto[],
+  ids: ReadonlyArray<string>,
+  clusterSize: ReadonlyMap<string, number>,
+  canonical: ReadonlyArray<CanonicalJob>,
+): Promise<JobPostDto[]> {
+  const keys: (string | undefined)[] = new Array(representatives.length);
+  const perKey = new Map<string, number>();
+  for (let i = 0; i < representatives.length; i++) {
+    if (i > 0 && i % DEDUP_KEY_YIELD_EVERY === 0) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    const key = dedupKeyForJob(representatives[i]!);
+    keys[i] = key;
+    if (key !== undefined) perKey.set(key, (perKey.get(key) ?? 0) + 1);
+  }
+
+  let byId: Map<string, CanonicalJob> | undefined;
+  return representatives.map((job, i) => {
+    const id = ids[i]!;
+    const ownKey = keys[i];
+    const key = ownKey !== undefined && (perKey.get(ownKey) ?? 0) > 1 ? id : ownKey;
+    let union: LocationDto[] | undefined;
+    if ((clusterSize.get(id) ?? 1) > 1) {
+      byId ??= new Map(canonical.map((c) => [c.canonicalJobId, c]));
+      const merged = byId.get(id)?.locations;
+      const own = new Set<LocationDto>(job.locations ?? []);
+      if (merged && merged.some((loc) => !own.has(loc))) union = [...merged];
+    }
+    if (key === ownKey && union === undefined) {
+      if (key !== undefined) job.dedupKey = key;
+      PRE_KEYED.add(job);
+      return job;
+    }
+    const copy = new JobPostDto({ ...job, ...(union ? { locations: union } : {}) });
+    if (key !== undefined) copy.dedupKey = key;
+    PRE_KEYED.add(copy);
+    return copy;
+  });
+}
+
+/**
  * Stamp `dedupKey` (Spec 1721 / contract C9) on every job, in place.
  *
  * Always derived from the job's own normalised company/title/location via
@@ -393,6 +476,9 @@ const DEDUP_KEY_YIELD_EVERY = 500;
  * key is identical with `dedup=false`, with a swapped engine, from a cache hit
  * or a fresh fan-out, and across runs. For every representative the default
  * engine returns, the two coincide (the representative is the cluster head).
+ * One exception (Spec 1724): deduped representatives that would share a key
+ * carry their cluster ids — see {@link finalizeRepresentatives}, which also
+ * keys the deduped path so this pass does not hash those jobs twice.
  *
  * Yields to the event loop every {@link DEDUP_KEY_YIELD_EVERY} jobs: a
  * 25 k-job list-mode corpus would otherwise block for ~0.3 s.
@@ -404,6 +490,7 @@ export async function stampDedupKeys(jobs: JobPostDto[]): Promise<void> {
     }
     const job = jobs[i];
     if (!job) continue;
+    if (PRE_KEYED.delete(job)) continue;
     const key = dedupKeyForJob(job);
     if (key !== undefined) job.dedupKey = key;
   }

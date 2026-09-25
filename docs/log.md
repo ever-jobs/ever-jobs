@@ -5,6 +5,50 @@
 
 ---
 
+## 2026-09-25 — Spec 1724 (with 1720–1722) — second review: dedup keeps per-office postings, one key input, CI and log fixes
+
+**Why:** a second review of the list-mode branch, and a live crawl through it, found that the
+default dedup engine dropped real postings (Jane Street: 30 in, 20 out — a New York
+"Full-Time: New Grad" posting was folded into a Hong Kong "Summer Internship"), that `dedupKey`
+and the engine's cluster id were built from different fields, that the durable store suites ran in
+no CI job, and that one log heading broke `lint:docs` once merged with another lane.
+
+**Spec 1724 — merge gate (new).** Every merge the hash or MinHash stage proposes now passes a gate:
+postings are merged only when their locations are compatible (the same place, one side naming
+none, or a multi-office posting that covers the other; sites match when no field both name
+disagrees) and their employment types do not conflict (disjoint classes from `jobType[]` and the
+`employmentType` label, or two different labels from one source). Compatibility is checked
+against every member, so no chain bridges two incompatible postings; clusters the gate splits get
+distinct ids (`sha256(<key>|<employment label>)`); the kept job of a merged cluster carries the
+union of `locations[]` as a copy; postings kept apart never share a `dedupKey` with
+`dedup=true`. The captured crawl is a regression fixture (descriptions encoded token-for-token,
+so every shingle Jaccard is preserved; its control reproduces 30 → 20). No existing dedup test
+changed — none encoded the lossy behaviour; Spec 5123's "MinHash-welded cluster with differing site
+sets" case still merges because "compatible" is covers-or-empty (D-01).
+
+**Spec 1721 FR-10 — one key input.** `canonicalKeyInputForJob` (`@ever-jobs/common`) builds
+`{ title, company, location, locations, isRemote }` for both the engine and `dedupKeyForJob`.
+Before, `dedupKeyForJob` omitted `locations[]` and `isRemote`, so every multi-location posting
+and every remote posting without a concrete site got a key different from its cluster id; those
+keys change once (T12).
+
+**CI / docs.** The feature-plugin job now runs `store-sqlite-drizzle` and `store-postgres-prisma`
+(hermetic), and `ci-workflow.spec.ts` derives the list of feature plugins with unit specs from the
+filesystem so a new one cannot fall outside CI again. The list-mode log heading reads
+"Spec 1720 (with 1721–1723)": "Specs 1720–1723" was keyed date-only by docs-lint and collided with
+another lane's date-only entry of the same day.
+
+**Files:** `packages/plugins/dedup-hybrid/src/{merge-gate.ts (new),dedup-hybrid.service.ts}`,
+`packages/plugins/dedup-hybrid/__tests__/{dedup-merge-gate.spec.ts,fixtures/janestreet-list-mode.fixture.ts}` (new),
+`apps/api/src/jobs/jobs.aggregator.ts`, `apps/api/src/jobs/__tests__/jobs.aggregator.merge-gate.spec.ts` (new),
+`packages/common/src/canonical-key.ts`, `packages/common/__tests__/dedup-key.spec.ts`,
+`packages/plugins/dedup-hybrid/__tests__/dedup-hybrid.service.spec.ts`,
+`apps/api/src/jobs/__tests__/jobs.aggregator.dedup-key.spec.ts`, `.github/workflows/ci.yml`,
+`scripts/__tests__/ci-workflow.spec.ts`, `.specify/specs/1724-dedup-merge-gate/{spec,plan,tasks}.md` (new),
+`.specify/specs/1721-ndjson-search-stream/{spec,tasks}.md`, `README.md`, `docs/index.md`, this log.
+
+---
+
 ## 2026-09-25 — Spec 1721 FR-15..FR-18 — the NDJSON end line says when the crawl was incomplete
 
 **Why:** an integration check of the list-mode branch against its consumer found a contract gap:

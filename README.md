@@ -587,9 +587,19 @@ with back-pressure — the server never builds the whole payload as one string. 
 sets `X-Accel-Buffering: no` so nginx-style proxies pass lines through as they are written.
 
 Every job in every format (JSON, CSV column, NDJSON, GraphQL) carries **`dedupKey`**: the sha-256
-of the normalised `company|title|location` — the same key the dedup engine clusters on. The same
+of the normalised `company|title|location` — the same key the dedup engine clusters on, built from
+the same fields (the flat `location`, every per-site `locations[]` entry and `isRemote`). The same
 posting seen from a job board and from the company's ATS, today or next week, has the same
 `dedupKey`, so a consumer can upsert on it.
+
+Dedup (default `dedup=true`) only merges postings whose **locations are compatible** (the same
+place, one side naming none, or a multi-office posting that lists the other's office) and whose
+**employment types do not conflict** (an internship is never merged into a full-time posting, and
+two different employment labels from one source are two postings) — Spec 1724. A role posted once
+per office therefore comes back once per office. The kept job of a merged cluster carries the
+union of the cluster's `locations[]`. Two postings the engine keeps apart although their company,
+title and location coincide (e.g. a New York internship and a New York new-grad posting of the same
+title) get distinct `dedupKey`s on the default path; with `dedup=false` they share one.
 
 #### Choosing sources by category
 
