@@ -530,6 +530,7 @@ curl -N -X POST "http://localhost:3001/api/jobs/search?format=ndjson" \
 `Content-Type: application/x-ndjson; charset=utf-8`, one JSON object per line:
 
 ```text
+{"type":"progress","sourcesDone":0,"sourcesTotal":0,"jobs":0}
 {"type":"progress","sourcesDone":0,"sourcesTotal":1669,"jobs":0}
 {"type":"progress","sourcesDone":412,"sourcesTotal":1669,"jobs":6120}
 {"type":"job","data":{"id":"li-3693012711","title":"…","dedupKey":"4f1c…", …}}
@@ -539,13 +540,17 @@ curl -N -X POST "http://localhost:3001/api/jobs/search?format=ndjson" \
 
 | Line | When |
 | ---- | ---- |
-| `progress` | once as soon as the fan-out starts (this is what flushes the headers), then at most every ~10 s while scraping, dedup and liveness run — doubles as a keep-alive for idle-timeout proxies |
+| `progress` | first, immediately (`0/0/0` — this is what flushes the headers, also on a cache hit), again when the fan-out starts (real `sourcesTotal`), then at most every ~10 s while scraping, dedup, persistence and liveness run — doubles as a keep-alive for idle-timeout proxies |
 | `job` | one per job, **same order and same per-job JSON as the JSON response** (including `dedupKey` and any field another feature adds) |
 | `end` | exactly once, last; `total` equals the number of `job` lines |
 | `error` | `{"type":"error","message":"…"}` if anything fails after the headers were sent — the stream then closes **without** an `end` line |
 
 Consumer rules: **treat a missing `end` line as a truncated, failed result**, and ignore line
-types you do not know (new ones may be added). `paginate`, `page` and `page_size` are ignored;
+types you do not know (new ones may be added). Input the search rejects before scraping (an
+unknown `siteCategories` value, a `companyDomain` that maps to no plugin) is answered with a
+plain **400** before any line is sent. If the client disconnects, the server stops starting
+new sources (in-flight ones finish) and discards the partial result — it is not cached, so a
+retry never receives a truncated set. `paginate`, `page` and `page_size` are ignored;
 `dedup`, `liveness` and `legitimacy` behave exactly as for JSON. Lines are written one at a time
 with back-pressure — the server never builds the whole payload as one string. The response
 sets `X-Accel-Buffering: no` so nginx-style proxies pass lines through as they are written.

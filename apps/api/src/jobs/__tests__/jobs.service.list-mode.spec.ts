@@ -377,3 +377,113 @@ describe('JobsService — progress hook (Spec 1721)', () => {
     expect(events[0]!.sourcesTotal).toBe(1);
   });
 });
+
+describe('JobsService.assertSearchable (Spec 1721 / FR-13)', () => {
+  const plugins = () => [recording(Site.LINKEDIN, 'job-board')];
+
+  it('throws the SAME BadRequestException the search would, before any source is called', async () => {
+    const all = plugins();
+    const service = createService(all);
+    const input = () => new ScraperInputDto({ companyDomain: ['no-such-company.example'] });
+
+    let pre: unknown;
+    try {
+      service.assertSearchable(input());
+    } catch (err) {
+      pre = err;
+    }
+    expect(pre).toBeInstanceOf(BadRequestException);
+    await expect(service.searchJobsWithDiagnostics(input())).rejects.toThrow((pre as Error).message);
+    expect(all[0]!.scraper.scrape).not.toHaveBeenCalled();
+  });
+
+  it('throws for an unknown siteCategories value (callers that skipped ValidationPipe)', () => {
+    const service = createService(plugins());
+    expect(() =>
+      service.assertSearchable(new ScraperInputDto({ siteCategories: ['boards'] as never })),
+    ).toThrow(BadRequestException);
+  });
+
+  it.each([
+    ['no companyDomain at all', {}],
+    ['an unresolvable domain next to an explicit siteType', { companyDomain: ['nope.example'], siteType: [Site.LINKEDIN] }],
+    ['an unresolvable domain with a canonical ATS companyUrl', { companyDomain: ['nope.example'], companyUrl: 'https://boards.greenhouse.io/acme' }],
+    ['valid categories', { siteCategories: ['job-board', 'company'] }],
+  ])('accepts %s', (_label, extra) => {
+    const service = createService(plugins());
+    expect(() => service.assertSearchable(new ScraperInputDto(extra as Partial<ScraperInputDto>))).not.toThrow();
+  });
+
+  it('does not mutate the input (the controller builds its cache key from it afterwards)', () => {
+    const service = createService(plugins());
+    const input = new ScraperInputDto({ companyUrl: 'https://boards.greenhouse.io/acme', searchTerm: '  go ' });
+    const before = JSON.stringify(input);
+    service.assertSearchable(input);
+    expect(JSON.stringify(input)).toBe(before);
+  });
+});
+
+describe('JobsService — isCancelled stops the fan-out (Spec 1721 / FR-14)', () => {
+  function sequential(service: JobsService): JobsService {
+    const base = (service as any).configService.get;
+    (service as any).configService = {
+      get: (key: string, def?: unknown) => (key === 'search.concurrency' ? 1 : base(key, def)),
+    };
+    return service;
+  }
+
+  it('no source starts after the caller goes away; the result is flagged cancelled', async () => {
+    let gone = false;
+    const first = recording(Site.LINKEDIN, 'job-board', { count: 2 });
+    const scrapeMock = first.scraper.scrape as jest.Mock;
+    const firstScrape = scrapeMock.getMockImplementation()!;
+    scrapeMock.mockImplementation(async (input: ScraperInputDto) => {
+      const out = await firstScrape(input);
+      gone = true; // the client disconnects while the first source runs
+      return out;
+    });
+    const rest = [
+      recording(Site.INDEED, 'job-board'),
+      recording(Site.REMOTEOK, 'remote'),
+      recording(Site.GLASSDOOR, 'job-board'),
+    ];
+    const service = sequential(createService([first, ...rest]));
+
+    const result = await service.searchJobsWithDiagnostics(new ScraperInputDto({}), {
+      isCancelled: () => gone,
+    });
+
+    expect(result.cancelled).toBe(true);
+    expect(result.jobs).toHaveLength(2); // the in-flight source finished
+    for (const p of rest) expect(p.scraper.scrape).not.toHaveBeenCalled();
+    const statuses = ((service as any).metrics.scraperRequestsTotal.inc as jest.Mock).mock.calls.map(
+      (c: [{ status: string }]) => c[0].status,
+    );
+    expect(statuses.filter((s: string) => s === 'cancelled_skipped')).toHaveLength(3);
+    expect((service as any).logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('did not start 3 of 4 sources'),
+    );
+  });
+
+  it('a caller that stays has no cancelled flag and every source runs', async () => {
+    const all = [recording(Site.LINKEDIN, 'job-board'), recording(Site.INDEED, 'job-board')];
+    const service = sequential(createService(all));
+    const result = await service.searchJobsWithDiagnostics(new ScraperInputDto({}), {
+      isCancelled: () => false,
+    });
+    expect('cancelled' in result).toBe(false);
+    for (const p of all) expect(p.scraper.scrape).toHaveBeenCalledTimes(1);
+  });
+
+  it('a throwing isCancelled is treated as "still here"', async () => {
+    const all = [recording(Site.LINKEDIN, 'job-board'), recording(Site.INDEED, 'job-board')];
+    const service = sequential(createService(all));
+    const result = await service.searchJobsWithDiagnostics(new ScraperInputDto({}), {
+      isCancelled: () => {
+        throw new Error('bug');
+      },
+    });
+    expect(result.jobs).toHaveLength(2);
+    expect('cancelled' in result).toBe(false);
+  });
+});

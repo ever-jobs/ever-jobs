@@ -38,10 +38,27 @@ import {
   NDJSON_HEARTBEAT_MS,
   NdjsonWriter,
 } from './ndjson-writer';
-import { SearchProgress, describeTerm, normalizeSearchInput } from './search-input';
+import {
+  SearchProgress,
+  SearchRunOptions,
+  describeTerm,
+  normalizeSearchInput,
+} from './search-input';
 import { DEFAULT_LIVENESS_MAX_URLS } from '../config/search-config';
 import { AnalyticsService } from '@ever-jobs/analytics';
 import { CacheService } from '../cache/cache.service';
+
+/**
+ * The fan-out stopped starting sources because the NDJSON client disconnected
+ * (Spec 1721 / FR-14). Thrown by `runSearch` so the partial result is never
+ * cached, deduped or persisted.
+ */
+export class SearchCancelledError extends Error {
+  constructor() {
+    super('client disconnected; the fan-out stopped starting sources and the partial result was discarded');
+    this.name = 'SearchCancelledError';
+  }
+}
 
 @ApiTags('Jobs')
 @Controller('api/jobs')
@@ -95,7 +112,7 @@ export class JobsController {
     enum: ['json', 'csv', 'ndjson'],
     description:
       'Output format: json (default), csv, or ndjson. ndjson streams Content-Type application/x-ndjson: ' +
-      '{"type":"progress","sourcesDone":n,"sourcesTotal":m,"jobs":k} at fan-out start and at most every ~10 s, ' +
+      '{"type":"progress","sourcesDone":n,"sourcesTotal":m,"jobs":k} immediately (0/0/0), at fan-out start and at most every ~10 s, ' +
       'then one {"type":"job","data":{…}} per job (same order and per-job shape as json), then ' +
       '{"type":"end","total":N,"deduped":bool,"durationMs":ms}. On failure after headers: {"type":"error","message":"…"} ' +
       'and NO end line — treat a missing end line as a truncated result. Ignore unknown line types. ' +
@@ -141,7 +158,11 @@ export class JobsController {
     description: 'Attach an in-process legitimacy verdict {state, reasons} to each returned job. Off unless requested.',
   })
   @ApiResponse({ status: 200, description: 'Job search results (json / csv / ndjson)' })
-  @ApiResponse({ status: 400, description: 'Invalid input, e.g. an unknown siteCategories value' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid input, e.g. an unknown siteCategories value or a companyDomain that maps to no plugin (also for ndjson — checked before the stream starts)',
+  })
   @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   async searchJobs(
     @Body() input: ScraperInputDto,
@@ -216,6 +237,10 @@ export class JobsController {
     // Same cache → fan-out → dedup → corpus-signal pipeline as JSON, but the
     // whole set is streamed line by line; pagination params are ignored.
     if (format?.toLowerCase() === 'ndjson') {
+      // Spec 1721 / FR-13 — input the search would reject before scraping is
+      // a 400 here, while no status line has been committed yet; inside the
+      // stream it could only be a `201` + an `error` line.
+      this.jobsService.assertSearchable(input);
       return this.streamNdjson(
         input,
         { dedup, liveness: parseBool(livenessRaw), legitimacy: parseBool(legitimacyRaw) },
@@ -341,7 +366,7 @@ export class JobsController {
   private async runSearch(
     input: ScraperInputDto,
     dedup: boolean,
-    onProgress?: (progress: SearchProgress) => void,
+    hooks: SearchRunOptions = {},
   ): Promise<{ aggregated: AggregateResult; perSource: SourceDiagnosticDto[]; fromCache: boolean }> {
     // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
     const cacheParams = { ...input, endpoint: 'search' };
@@ -357,9 +382,16 @@ export class JobsController {
       fromCache = true;
       this.logger.log(`Cache hit — returning ${rawJobs.length} cached results`);
     } else {
-      const result = onProgress
-        ? await this.jobsService.searchJobsWithDiagnostics(input, { onProgress })
-        : await this.jobsService.searchJobsWithDiagnostics(input);
+      const result =
+        hooks.onProgress || hooks.isCancelled
+          ? await this.jobsService.searchJobsWithDiagnostics(input, hooks)
+          : await this.jobsService.searchJobsWithDiagnostics(input);
+      // Spec 1721 / FR-14 — sources were left unstarted because the caller
+      // went away: a partial answer must never be cached (a retry would be
+      // served the truncated set), deduped or persisted.
+      if (result.cancelled) {
+        throw new SearchCancelledError();
+      }
       rawJobs = result.jobs;
       perSource = result.perSource;
       await this.cacheService.set(cacheParams, rawJobs);
@@ -386,8 +418,10 @@ export class JobsController {
    * The producer runs detached: this method returns before any scraping so
    * Nest's interceptors finish first (flushing from inside the handler would
    * make `LoggingInterceptor`'s `X-Process-Time` header throw). The first
-   * line — a progress line at fan-out start, or the first job on a cache hit —
-   * is what pushes the headers to the client.
+   * line is written into the stream synchronously, here (Spec 1721 / FR-12),
+   * so the headers reach the client as soon as Nest pipes the stream — before
+   * the cache lookup, and on a cache hit before dedup/persistence of the whole
+   * cached set, which can take seconds.
    */
   private streamNdjson(
     input: ScraperInputDto,
@@ -402,8 +436,10 @@ export class JobsController {
     res?.setHeader('X-Accel-Buffering', 'no');
 
     const writer = new NdjsonWriter();
-    // A client that goes away stops the writer; the fan-out itself cannot be
-    // cancelled (no AbortSignal in the plugin contract) and finishes detached.
+    // A client that goes away stops the writer and, through `isCancelled`
+    // below, stops the fan-out from STARTING further sources (Spec 1721 /
+    // FR-14). In-flight scrapers cannot be aborted (no AbortSignal in the
+    // plugin contract) and finish detached, as they do at the deadline.
     res?.once?.('close', () => {
       if (!writer.isClosed) {
         this.logger.warn('NDJSON client disconnected before the end line');
@@ -411,10 +447,13 @@ export class JobsController {
       }
     });
 
-    let latest: SearchProgress | undefined;
+    // Spec 1721 / FR-12 — the first line, synchronously. It is also what the
+    // heartbeat repeats until the fan-out reports real progress.
+    let latest: SearchProgress = { sourcesDone: 0, sourcesTotal: 0, jobs: 0 };
+    writer.writeNow({ type: 'progress', ...latest });
     let announced = false;
     let heartbeat: ReturnType<typeof setInterval> | undefined = setInterval(() => {
-      if (latest) writer.writeNow({ type: 'progress', ...latest });
+      writer.writeNow({ type: 'progress', ...latest });
     }, NDJSON_HEARTBEAT_MS);
     heartbeat.unref?.();
     const stopHeartbeat = (): void => {
@@ -434,12 +473,13 @@ export class JobsController {
 
     void this.produceNdjson(input, flags, writer, onProgress, startedAt, {
       onFetched: (rawCount) => {
-        // Cache hit: no fan-out ran, but heartbeats must keep the connection
-        // alive while dedup / liveness work through the set.
-        if (!latest) latest = { sourcesDone: 0, sourcesTotal: 0, jobs: rawCount };
+        // Cache hit: no fan-out ran; report the set's size in the heartbeats
+        // that keep the connection alive while liveness works through it.
+        if (!announced) latest = { sourcesDone: 0, sourcesTotal: 0, jobs: rawCount };
       },
       // No progress line may land between job lines or after the end line.
       onStreamStart: stopHeartbeat,
+      isCancelled: () => writer.isClosed,
     }).finally(stopHeartbeat);
 
     return new StreamableFile(writer.stream, { type: NDJSON_CONTENT_TYPE });
@@ -456,10 +496,17 @@ export class JobsController {
     writer: NdjsonWriter,
     onProgress: (progress: SearchProgress) => void,
     startedAt: number,
-    hooks: { onFetched: (rawCount: number) => void; onStreamStart: () => void },
+    hooks: {
+      onFetched: (rawCount: number) => void;
+      onStreamStart: () => void;
+      isCancelled: () => boolean;
+    },
   ): Promise<void> {
     try {
-      const { aggregated, fromCache } = await this.runSearch(input, flags.dedup, onProgress);
+      const { aggregated, fromCache } = await this.runSearch(input, flags.dedup, {
+        onProgress,
+        isCancelled: hooks.isCancelled,
+      });
       hooks.onFetched(aggregated.rawCount);
       const jobs = aggregated.jobs;
       await this.applyCorpusSignals(jobs, flags.liveness, flags.legitimacy);
@@ -479,6 +526,12 @@ export class JobsController {
         `NDJSON stream complete: ${jobs.length} jobs (cached=${fromCache}) in ${Date.now() - startedAt}ms`,
       );
     } catch (err) {
+      if (err instanceof SearchCancelledError) {
+        // Nobody is reading: nothing to write, nothing cached or persisted.
+        this.logger.warn(`NDJSON search abandoned after ${Date.now() - startedAt}ms: ${err.message}`);
+        writer.end();
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`NDJSON stream failed after headers: ${message}`);
       writer.writeNow({ type: 'error', message });

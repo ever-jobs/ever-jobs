@@ -23,6 +23,13 @@ export interface SearchProgress {
 export interface SearchRunOptions {
   /** Called once when the fan-out starts, then after every source settles. */
   onProgress?: (progress: SearchProgress) => void;
+  /**
+   * Spec 1721 / FR-14 — polled before each source is STARTED, next to the
+   * deadline check. Once it returns `true` no further source starts (in-flight
+   * ones finish) and the result carries `cancelled: true`. The NDJSON path
+   * passes "the client has disconnected".
+   */
+  isCancelled?: () => boolean;
 }
 
 /**

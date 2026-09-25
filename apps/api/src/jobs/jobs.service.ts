@@ -27,6 +27,17 @@ export const LIST_MODE_SKIPPED_DETAIL =
   'requires a searchTerm; not queried in list mode (Spec 1720)';
 
 /**
+ * The 400 message for `companyDomain` values that map to no plugin. One
+ * builder for the search and for {@link JobsService.assertSearchable}, so the
+ * NDJSON pre-check and the search can never word it differently.
+ */
+function unresolvedDomainsMessage(domains: ReadonlyArray<string>): string {
+  return domains
+    .map((domain) => `domain \`${domain}\` → token \`${deriveSiteToken(domain)}\` is not a registered plugin`)
+    .join('; ');
+}
+
+/**
  * Default ceiling on simultaneously-dispatched sources (Spec 5026).
  *
  * Chosen to bound peak memory without materially regressing latency for the
@@ -180,10 +191,30 @@ export class JobsService implements OnModuleInit {
    * count and a categorized `reason`, so a caller can tell an empty board apart
    * from a blocked/errored source. `searchJobs` is a thin wrapper over this.
    */
+  /**
+   * Spec 1721 / FR-13 — reject, before anything is streamed, the input that
+   * {@link searchJobsWithDiagnostics} would reject before scraping: an unknown
+   * `siteCategories` value, or `companyDomain` values that resolve to no
+   * plugin while nothing else selects a source. Throws the same
+   * `BadRequestException` (same message) the search itself would, so the
+   * NDJSON path can answer 400 instead of `201` + an `error` line.
+   *
+   * Pure: unlike the search it does not normalise or mutate `input`, so the
+   * caller's cache key is unaffected.
+   */
+  assertSearchable(input: ScraperInputDto): void {
+    parseSiteCategories(input.siteCategories);
+    const { resolved, unresolved } = this.resolveCompanyDomains(input.companyDomain);
+    if (unresolved.length === 0) return;
+    const selected = this.buildEffectiveSites(input.siteType, resolved);
+    if (selected.length > 0 || resolveCompanyUrl(input.companyUrl).site) return;
+    throw new BadRequestException(unresolvedDomainsMessage(unresolved));
+  }
+
   async searchJobsWithDiagnostics(
     input: ScraperInputDto,
     options: SearchRunOptions = {},
-  ): Promise<{ jobs: JobPostDto[]; perSource: SourceDiagnosticDto[] }> {
+  ): Promise<{ jobs: JobPostDto[]; perSource: SourceDiagnosticDto[]; cancelled?: true }> {
     // Spec 1720 — one keyword semantics for every entry point: omitted, null,
     // "" and whitespace-only all mean list mode and reach plugins as an absent
     // `searchTerm`, never as "undefined"/"null"/"   ".
@@ -218,11 +249,7 @@ export class JobsService implements OnModuleInit {
     }
 
     if (effectiveSites.length === 0 && unresolvedDomains.length > 0) {
-      const messages = unresolvedDomains.map(
-        (domain) =>
-          `domain \`${domain}\` → token \`${deriveSiteToken(domain)}\` is not a registered plugin`,
-      );
-      throw new BadRequestException(messages.join('; '));
+      throw new BadRequestException(unresolvedDomainsMessage(unresolvedDomains));
     }
 
     let sites: Site[];
@@ -322,6 +349,16 @@ export class JobsService implements OnModuleInit {
     );
     let cursor = 0;
     let skipped = 0;
+    // Spec 1721 / FR-14 — sources not started because the caller went away.
+    let cancelledSkipped = 0;
+    const isCancelled = (): boolean => {
+      if (!options.isCancelled) return false;
+      try {
+        return options.isCancelled() === true;
+      } catch {
+        return false;
+      }
+    };
 
     // Spec 1721 — progress for the NDJSON heartbeat. A throwing listener must
     // never break the fan-out it is observing.
@@ -372,6 +409,18 @@ export class JobsService implements OnModuleInit {
           reportProgress(results[index]);
           continue;
         }
+        // Spec 1721 / FR-14 — same shape as the deadline: nobody is waiting
+        // for this answer any more, so stop scraping third-party sites for it.
+        if (isCancelled()) {
+          cancelledSkipped++;
+          this.metrics.scraperRequestsTotal.inc({ site, status: 'cancelled_skipped' });
+          results[index] = {
+            status: 'rejected',
+            reason: new Error(`${site}: skipped (caller disconnected)`),
+          };
+          reportProgress(results[index]);
+          continue;
+        }
 
         try {
           // Race against the deadline as well as checking it before starting:
@@ -403,6 +452,12 @@ export class JobsService implements OnModuleInit {
         `Search deadline (${deadlineMs}ms) exceeded — skipped ${skipped} of ` +
           `${selectedScrapers.length} sources. Raise EVER_JOBS_FANOUT_DEADLINE_MS ` +
           `or narrow siteType to cover more of the catalogue.`,
+      );
+    }
+    if (cancelledSkipped > 0) {
+      this.logger.warn(
+        `Caller disconnected — did not start ${cancelledSkipped} of ${selectedScrapers.length} sources ` +
+          `(in-flight sources were allowed to finish).`,
       );
     }
     // Aggregate results from fulfilled searches + derive a per-source outcome
@@ -470,7 +525,11 @@ export class JobsService implements OnModuleInit {
     perSource.push(...keywordSkippedRows);
 
     this.logger.log(`Total aggregated jobs: ${allJobs.length}`);
-    return { jobs: allJobs, perSource };
+    // `cancelled` marks a PARTIAL result (sources were not started): callers
+    // must not cache or persist it as if it were the answer to the request.
+    return cancelledSkipped > 0
+      ? { jobs: allJobs, perSource, cancelled: true }
+      : { jobs: allJobs, perSource };
   }
 
   /**
