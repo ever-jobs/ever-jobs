@@ -369,10 +369,14 @@ const EARLY_CUES: readonly EarlyCue[] = [
     // nothing else in the title explains it. It is the weakest cue: any other title signal
     // outranks it (see resolve()), and the guards below drop it where the season is a start
     // date, a seasonal job, an academic term or the term of a programme someone runs.
+    // Always LOW confidence (Q-105 item 10): what survives the guards is still ambiguous by
+    // construction ("Software Engineer, Fall 2026" is as often a new-grad or quant start date as a
+    // work term), so a consumer can threshold it out. Independent evidence (an internship
+    // description, jobType internship) lifts it to medium.
     re: /\b(?:summer|fall|autumn|winter|spring)(?: (?:term|semester|session|cohort))? ?(?:20\d{2}|'\d{2})\b|\b20\d{2} (?:summer|fall|autumn|winter|spring)\b/g,
     needles: SEASONS,
     level: 'internship',
-    confidence: 'medium',
+    confidence: 'low',
     weak: true,
     guard: (after, ctx) => {
       if (after[0] && SEASON_START_NEXT.has(after[0])) return 'start date, not a term';
@@ -754,7 +758,8 @@ function analyzeTitle(raw: string, origin: Source): Analysis {
             notes.push(`ignored ${quote(m[0])} (${why})`);
             return;
           }
-          add(cue.level, cue.confidence, quote(m[0]), cue.weak ? { weak: true, cue: m[0] } : undefined);
+          if (cue.weak) add(cue.level, cue.confidence, `${quote(m[0])} (season + year only)`, { weak: true, cue: m[0] });
+          else add(cue.level, cue.confidence, quote(m[0]));
         });
       }
       graduateSignals(seg, segIndex, ctx, add, notes);

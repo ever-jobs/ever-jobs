@@ -143,11 +143,29 @@ describe('classifyCareerLevel — rules (Spec 1730)', () => {
       expect(v.reasons.join(' ')).toMatch(/ignored "fall 2026" \(an explicit level in the title\)/);
     });
 
-    it('a season + year alone still reads as a work term (weak cue, medium confidence)', () => {
-      expect(classifyCareerLevel({ title: 'Software Engineer - Summer 2026' })).toMatchObject({
-        level: 'internship',
-        confidence: 'medium',
-      });
+    it('a season + year alone still reads as a work term, at LOW confidence (it may be a start date)', () => {
+      // Q-105 item 10: ambiguous by construction (new-grad / quant / banking start dates look the
+      // same), so it never reaches medium on its own and a consumer can threshold it out.
+      for (const title of [
+        'Software Engineer - Summer 2026',
+        'Software Engineer, Fall 2026',
+        'Quantitative Trader - Fall 2026',
+        'Fall 2026 Software Engineer',
+        'Software Engineer (Winter 2027)',
+      ]) {
+        const v = classifyCareerLevel({ title });
+        expect({ title, level: v.level, confidence: v.confidence }).toEqual({ title, level: 'internship', confidence: 'low' });
+        expect(v.reasons[0]).toMatch(/season \+ year only/);
+      }
+    });
+
+    it('a season + year is lifted to medium only by independent evidence of an internship', () => {
+      expect(
+        classifyCareerLevel({ title: 'Software Engineer - Summer 2026', description: 'This is a 12-week internship.' }),
+      ).toMatchObject({ level: 'internship', confidence: 'medium' });
+      expect(
+        classifyCareerLevel({ title: 'Software Engineer - Summer 2026', jobType: ['internship'] }),
+      ).toMatchObject({ level: 'internship', confidence: 'medium' });
     });
 
     it('treats "<season> <year> start" as a start date, not a work term', () => {
