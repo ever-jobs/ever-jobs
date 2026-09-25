@@ -4,7 +4,7 @@
 | ------------ | ---------- |
 | Spec ID      | 1722       |
 | Status       | done       |
-| Last updated | 2026-09-24 |
+| Last updated | 2026-09-25 |
 
 - [x] T1 — `store-config.ts` with aliases, conflict, persist default, resolvers, redaction. Acceptance: matrix unit tests (memory default off; `PERSIST=true` memory on; postgres selected → on; explicit `false` wins; missing URL fails fast naming both variables).
 - [x] T2 — `configuration.ts` reads `resolvePersistSearch`. Acceptance: our deployment env → `false`.
@@ -17,7 +17,7 @@
 
 Review fixes (2026-09-25):
 
-- [ ] T9 — Postgres set-based `upsertMany` + `putAllMany` (FR-12, FR-13), `transactionOptions` from env (FR-14). Acceptance: `RUN_PG_TESTS` 10 000-row case green through the production client constructor; re-persist reports all `updated` and leaves unchanged observations untouched; conformance suite still green.
-- [ ] T10 — SQLite chunked prepared-statement writes with event-loop yields (FR-15). Acceptance: 33 000-row `upsertMany` + `putAllMany` succeed (red before: `too many SQL variables`); an event-loop probe runs before `upsertMany` resolves; conformance suite still green.
-- [ ] T11 — Aggregator: `putAllMany` when available, otherwise `putAll` with ≤ 8 in flight; failures logged with a count and never flip `persisted`. Acceptance: aggregator unit tests.
-- [ ] T12 — `resolveStoreWriteTuning` + bootstrap wiring + docs (`README`, `.env.example`). Acceptance: store-config tests; bootstrap test sees `transactionOptions` passed to the Prisma constructor.
+- [x] T9 — Postgres set-based `upsertMany` + `putAllMany` (FR-12, FR-13), `transactionOptions` from env (FR-14). Acceptance: `RUN_PG_TESTS` 10 000-row case green through the production client constructor; re-persist reports all `updated` and leaves unchanged observations untouched; conformance suite still green.
+- [x] T10 — SQLite chunked prepared-statement writes with event-loop yields (FR-15). Acceptance: 33 000-row `upsertMany` + `putAllMany` succeed (red before: `too many SQL variables`); an event-loop probe runs before `upsertMany` resolves; conformance suite still green.
+- [x] T11 — Aggregator: `putAllMany` when available, otherwise `putAll` with ≤ 8 in flight; failures logged with a count and never flip `persisted`. Acceptance: aggregator unit tests.
+- [x] T12 — `resolveStoreWriteTuning` + bootstrap wiring + docs (`README`, `.env.example`). Acceptance: store-config tests; bootstrap test sees `transactionOptions` passed to the Prisma constructor.

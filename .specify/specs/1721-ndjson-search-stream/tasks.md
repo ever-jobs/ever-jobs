@@ -4,7 +4,7 @@
 | ------------ | ---------- |
 | Spec ID      | 1721       |
 | Status       | done       |
-| Last updated | 2026-09-24 |
+| Last updated | 2026-09-25 |
 
 - [x] T1 — `formatJobLocation` + `dedupKeyForJob` in `@ever-jobs/common`; `dedup-hybrid` uses the shared formatter. Acceptance: same posting from two sources → same key; equals `canonicalJobId`; class and plain location → same key; dedup-hybrid suites unchanged.
 - [x] T2 — `JobPostDto.dedupKey`; aggregator stamps keys on every exit path. Acceptance: aggregator tests for dedup on / off / no engine / empty.
@@ -16,6 +16,6 @@
 
 Review fixes (2026-09-25):
 
-- [ ] T8 — Initial progress line written synchronously (FR-12). Acceptance: cache-hit stream is `progress, job, end`; the first line is readable while `aggregateRaw` is still pending.
-- [ ] T9 — `JobsService.assertSearchable` + controller pre-check (FR-13). Acceptance: unresolvable `companyDomain` → `BadRequestException` thrown by the handler, no stream, no fan-out; the service's own message is reused.
-- [ ] T10 — `SearchRunOptions.isCancelled` + controller wiring (FR-14). Acceptance: service test — cancelled after the first source → no further scraper called, `cancelled: true`, `cancelled_skipped` metric; controller test — after `close`, no cache write and no dedup.
+- [x] T8 — Initial progress line written synchronously (FR-12). Acceptance: cache-hit stream is `progress, job, end`; the first line is readable while `aggregateRaw` is still pending.
+- [x] T9 — `JobsService.assertSearchable` + controller pre-check (FR-13). Acceptance: unresolvable `companyDomain` → `BadRequestException` thrown by the handler, no stream, no fan-out; the service's own message is reused.
+- [x] T10 — `SearchRunOptions.isCancelled` + controller wiring (FR-14). Acceptance: service test — cancelled after the first source → no further scraper called, `cancelled: true`, `cancelled_skipped` metric; controller test — after `close`, no cache write and no dedup.

@@ -5,6 +5,58 @@
 
 ---
 
+## 2026-09-25 — Spec 1722 (with 1720, 1721) — review fixes: store write path, NDJSON edges, result bounds, keyword-only plugins
+
+**Why:** a review of the list-mode branch found that the durable stores failed or stalled at
+list-mode size, that the NDJSON stream did not flush on a cache hit, answered bad input with
+`201` + an `error` line and kept crawling for a client that had left, that one request could hold
+an unbounded corpus in memory, and that two plugins still applied a keyword in list mode.
+
+**Spec 1722 — write path (FR-12..FR-15, NFR-3).**
+
+- Postgres `upsertMany`: one `INSERT … ON CONFLICT DO UPDATE` per chunk of
+  `EVER_JOBS_STORE_BATCH_SIZE` rows (default 500), fed by one `jsonb` parameter, rows
+  de-duplicated (last wins) and sorted by id; no interactive transaction. Measured on a throwaway
+  PostgreSQL 16 cluster: before, 10 000 rows failed with P2028 after 5 128 ms (Prisma's default
+  5 s interactive-transaction timeout); after, 10 000 rows in 681 ms.
+- New optional `IJobObservationStore.putAllMany`: Postgres replaces observation sets with one
+  statement per chunk that rewrites only rows whose URL, date or raw title changed (a re-persist
+  of an unchanged corpus leaves `xmin` untouched) and skips unknown canonical ids; SQLite chunks
+  it. `JobsAggregator` uses it, or `putAll` with at most 8 in flight (was one per job, all at
+  once — which drained the pool).
+- SQLite: prepared statements, one transaction per chunk, `setImmediate` between chunks. Before:
+  one `IN (…)` over the whole batch (`too many SQL variables` past 32 766 rows) and a ~4 s
+  event-loop stall for 10 000 rows.
+- `EVER_JOBS_STORE_TX_TIMEOUT_MS` (30 000) / `EVER_JOBS_STORE_TX_MAX_WAIT_MS` (10 000) become the
+  Prisma client's `transactionOptions`; invalid tuning values fail the boot
+  (`ERR_STORE_CONFIG_INVALID`). A repeated id in one batch now counts as an update everywhere
+  (new conformance case). Persistence stays awaited (Spec 1722 D-07, Q-102 addendum).
+
+**Spec 1721 — NDJSON (FR-12..FR-14).**
+
+- The first line `{"type":"progress","sourcesDone":0,"sourcesTotal":0,"jobs":0}` is written
+  synchronously, so headers flush before the cache lookup and heartbeats cover dedup and
+  persistence on a cache hit.
+- `JobsService.assertSearchable` runs before the stream exists: an unknown `siteCategories`
+  value or an unresolvable `companyDomain` is a 400 again.
+- `SearchRunOptions.isCancelled`: on client disconnect no further source starts
+  (`cancelled_skipped` metric); the partial result is not cached, deduped or persisted.
+
+**Spec 1720 — list mode (FR-11, FR-12).**
+
+- `stepstone` (searched "developer" without a term) and `careeronestop` (keyword is an API path
+  segment) are flagged `requiresSearchTerm`; the static guard now also catches default keywords
+  and term-as-path-segment in plugins list mode calls (Q-100 addendum 1).
+- `EVER_JOBS_MAX_RESULTS_WANTED` (default 1 000) clamps `resultsWanted` per source, before the
+  cache key; `EVER_JOBS_MAX_JOBS_PER_SEARCH` (default 100 000) stops starting sources once that
+  many raw jobs are in. README states the memory arithmetic; the list-mode example now uses 100
+  per source (Q-100 addendum 2).
+
+**Files:** `.specify/specs/172{0,1,2}-*/{spec,tasks}.md`, `docs/questions.md` (Q-100, Q-102
+addenda), `README.md`, `.env.example`, `tool_manifest.json`.
+
+---
+
 ## 2026-09-25 — Specs 1720–1723 — list mode, NDJSON stream, store selection, liveness gate
 
 **Why:** the main consumer (a corpus builder) ingests from `POST /api/jobs/search` on a

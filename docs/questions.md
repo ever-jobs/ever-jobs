@@ -82,6 +82,17 @@ to be chosen.
 `EVER_JOBS_PERSIST_SEARCH=false` temporarily; persistence failures *after* boot are already
 best-effort (Spec 004 / T11).
 
+**Addendum (review fix, 2026-09-25) — should persistence leave the response's critical path?**
+After the write path became set-based (Spec 1722 FR-12/FR-13; 10 000 rows in ~0.7 s on
+loopback), the remaining question was whether the search should return before the store write.
+
+- **E. Keep it awaited.** A slow store slows the requester (natural back-pressure); the NDJSON
+  heartbeat keeps the connection alive meanwhile; `persisted` / `persistError` stay accurate.
+- **F. Fire and forget.** Faster responses, but a slow or down store lets pending 25 k-job corpora
+  pile up in the heap across requests, and failures surface only in logs.
+
+**Default (proceeding): E** (Spec 1722 D-07).
+
 **Resolution:** _pending review._
 
 ---

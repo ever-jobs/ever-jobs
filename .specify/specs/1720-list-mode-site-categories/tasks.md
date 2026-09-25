@@ -4,7 +4,7 @@
 | ------------ | ---------- |
 | Spec ID      | 1720       |
 | Status       | done       |
-| Last updated | 2026-09-24 |
+| Last updated | 2026-09-25 |
 
 - [x] T1 — `SITE_CATEGORIES` / `SiteCategory` / `isSiteCategory` in `@ever-jobs/models`; `PluginCategory` aliases it. Acceptance: the eight categories in plugin metadata today are exactly the allowed set.
 - [x] T2 — `ScraperInputDto.siteCategories` with `@IsIn(..., { each: true })`. Acceptance: `validate()` rejects `["boards"]` with a message listing the allowed values; accepts `["job-board","company"]`.
@@ -18,5 +18,5 @@
 
 Review fixes (2026-09-25):
 
-- [ ] T10 — Flag `stepstone` + `careeronestop`; extend the static guard (keyword fallback literal, term as a path segment; exemptions for log calls and flagged plugins). Acceptance: red controls in the test; the real tree passes; Q-100 addendum.
-- [ ] T11 — `EVER_JOBS_MAX_RESULTS_WANTED` + `EVER_JOBS_MAX_JOBS_PER_SEARCH` (config resolvers, service clamp + ceiling, controller clamp before the cache key). Acceptance: config, service and controller tests; README/.env.example document both with the memory arithmetic.
+- [x] T10 — Flag `stepstone` + `careeronestop`; extend the static guard (keyword fallback literal, term as a path segment; exemptions for log calls and flagged plugins). Acceptance: red controls in the test; the real tree passes; Q-100 addendum.
+- [x] T11 — `EVER_JOBS_MAX_RESULTS_WANTED` + `EVER_JOBS_MAX_JOBS_PER_SEARCH` (config resolvers, service clamp + ceiling, controller clamp before the cache key). Acceptance: config, service and controller tests; README/.env.example document both with the memory arithmetic.
