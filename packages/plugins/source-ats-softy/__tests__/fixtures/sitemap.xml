@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic fixture shaped like a live Softy tenant sitemap (Spec 1691 section 2). -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://acme.softy.pro</loc>
+    <lastmod>2026-09-24</lastmod>
+  </url>
+  <url>
+    <loc>https://acme.softy.pro/offers?page=1</loc>
+    <lastmod>2026-09-24</lastmod>
+  </url>
+  <url>
+    <loc>https://acme.softy.pro/offers?page=2</loc>
+    <lastmod>2026-09-24</lastmod>
+  </url>
+  <url>
+    <loc>https://acme.softy.pro/offers/1001</loc>
+    <lastmod>2026-09-20 09:30:00</lastmod>
+  </url>
+  <url>
+    <loc>https://acme.softy.pro/offers/1002</loc>
+    <lastmod>2026-09-18 14:00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://acme.softy.pro/offers/1005</loc>
+    <lastmod>2026-09-22 11:15:00</lastmod>
+  </url>
+  <url>
+    <loc>https://acme.softy.pro/offers/1003</loc>
+    <lastmod>2026-09-15 10:00:00</lastmod>
+  </url>
+  <url>
+    <loc>https://acme.softy.pro/offers/1004</loc>
+    <lastmod>2026-09-10 07:45:00</lastmod>
+  </url>
+</urlset>
