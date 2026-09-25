@@ -8,6 +8,8 @@ import {
   WORKDAY_DETAIL_DELAY_MAX_MS,
   workdaySearchText,
   workdayListingRequisitionId,
+  hasWorkdayLocationShape,
+  splitWorkdayAdditionalLocations,
   readWorkdayMaxDetailFetches,
   readWorkdayScrapeTimeBudgetMs,
   DEFAULT_WORKDAY_MAX_DETAIL_FETCHES,
@@ -289,5 +291,95 @@ describe('workdayListingRequisitionId', () => {
     expect(workdayListingRequisitionId({})).toBeNull();
     expect(workdayListingRequisitionId({ bulletFields: ['Remote'], externalPath: '/job/X/Some_Title' })).toBeNull();
     expect(workdayListingRequisitionId({ externalPath: '/job/X/No-Suffix-123' })).toBeNull();
+  });
+});
+
+/** Spec 1736 T12 — which labels count as places. */
+describe('hasWorkdayLocationShape', () => {
+  it('accepts labels the shared parser reads a state, a country or remote work from', () => {
+    for (const label of [
+      'Norwood, Massachusetts',
+      'Cambridge, Massachusetts',
+      'Rockville, MD',
+      'Warsaw - Poland',
+      'Melbourne - Australia',
+      'Hong Kong',
+      'Singapore',
+      'Remote - US',
+      'Remote_USA',
+      'USA - CA - San Jose',
+      'Texas',
+    ]) {
+      expect([label, hasWorkdayLocationShape(label)]).toEqual([label, true]);
+    }
+  });
+
+  it('accepts a US state or a UK nation the parser keeps as a site name', () => {
+    expect(hasWorkdayLocationShape('Oxford - England')).toBe(true);
+    expect(hasWorkdayLocationShape('London - England')).toBe(true);
+    expect(hasWorkdayLocationShape('Austin - TX')).toBe(true);
+  });
+
+  it('rejects departments, badges, counts and bare cities', () => {
+    for (const label of [
+      'Drug Manufacturing',
+      'Technical Development',
+      'Clinical Development',
+      'Digital',
+      'Engineering - Software',
+      'Spotlight Job',
+      'Posting End Date: 09/30/2026',
+      'R19827',
+      '2 Locations',
+      'Norwood',
+      '',
+      '   ',
+      null,
+      undefined,
+    ]) {
+      expect([label, hasWorkdayLocationShape(label)]).toEqual([label, false]);
+    }
+  });
+});
+
+describe('splitWorkdayAdditionalLocations', () => {
+  it("rejects the department Moderna files under additionalLocations", () => {
+    expect(splitWorkdayAdditionalLocations('Norwood, Massachusetts', ['Drug Manufacturing'])).toEqual({
+      locations: [],
+      rejected: ['Drug Manufacturing'],
+    });
+  });
+
+  it('keeps every entry with a location shape, in order, normalised', () => {
+    expect(
+      splitWorkdayAdditionalLocations('Rockville, MD', [
+        'Oak Ridge, TN',
+        'Drug Manufacturing',
+        'Remote_USA',
+        '  Oxford  -  England ',
+      ]),
+    ).toEqual({ locations: ['Oak Ridge, TN', 'Remote USA', 'Oxford - England'], rejected: ['Drug Manufacturing'] });
+  });
+
+  it('keeps bare entries when the primary is itself a bare site name', () => {
+    expect(splitWorkdayAdditionalLocations('Bengaluru', ['Hyderabad'])).toEqual({
+      locations: ['Hyderabad'],
+      rejected: [],
+    });
+  });
+
+  it('rejects bare entries when there is no primary to compare with', () => {
+    expect(splitWorkdayAdditionalLocations(null, ['Drug Manufacturing', 'Cambridge, Massachusetts'])).toEqual({
+      locations: ['Cambridge, Massachusetts'],
+      rejected: ['Drug Manufacturing'],
+    });
+  });
+
+  it('skips blank and non-string entries and a missing list', () => {
+    expect(splitWorkdayAdditionalLocations('Rockville, MD', ['', '  ', 42, null] as unknown[])).toEqual({
+      locations: [],
+      rejected: [],
+    });
+    expect(splitWorkdayAdditionalLocations('Rockville, MD', null)).toEqual({ locations: [], rejected: [] });
   });
 });

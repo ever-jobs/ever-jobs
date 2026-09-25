@@ -5,7 +5,7 @@
  * The company slug format for Workday is: {company}:{wd_number}:{site}
  * e.g., "tesla:5:Tesla" or "microsoft:1:External"
  */
-import { toDateOnly } from '@ever-jobs/common';
+import { normalizeUsState, parseLocationList, toDateOnly } from '@ever-jobs/common';
 
 /** Default page size for Workday pagination */
 export const WORKDAY_PAGE_SIZE = 20;
@@ -182,6 +182,74 @@ export function workdayListingRequisitionId(listing: {
   if (underscore < 0) return null;
   const tail = lastSegment.slice(underscore + 1);
   return REQUISITION_TOKEN_RE.test(tail) ? tail : null;
+}
+
+/**
+ * A Workday location label as the shared parser should see it: Workday
+ * sometimes slugifies labels with underscores ("Remote_USA"), which defeats the
+ * parser's `\bremote\b` boundary, so "_" becomes a space (Spec 5025).
+ */
+export function normalizeWorkdayLocationLabel(label: string | null | undefined): string | null {
+  if (typeof label !== 'string') return null;
+  return label.replace(/_/g, ' ').replace(/\s+/g, ' ').trim() || null;
+}
+
+/**
+ * UK nations the shared parser does not read as countries: in
+ * "Oxford - England" it keeps "England" as a site name.
+ */
+const UK_NATIONS: ReadonlySet<string> = new Set(['england', 'scotland', 'wales', 'northern ireland']);
+
+/**
+ * True when a label looks like a place (Spec 1736 T12), judged by the shared
+ * location parser: it mentions remote work, or yields a state or a country
+ * ("Norwood, Massachusetts", "Warsaw - Poland", "Hong Kong", "Remote - US").
+ * A part the parser leaves as a site name also counts when it is a US state
+ * ("Austin - TX", Q-096) or a UK nation ("Oxford - England").
+ *
+ * A bare word or phrase has no location shape — "Drug Manufacturing",
+ * "Technical Development", "Spotlight Job", "2 Locations" — and neither does a
+ * bare city ("Norwood", "Bengaluru"): the parser has no gazetteer, so a city
+ * alone cannot be told from a department.
+ */
+export function hasWorkdayLocationShape(label: string | null | undefined): boolean {
+  const text = normalizeWorkdayLocationLabel(label);
+  if (!text) return false;
+  const parsed = parseLocationList([text]);
+  if (parsed.remoteMentioned) return true;
+  if (parsed.location?.state || parsed.location?.country) return true;
+  return text
+    .split(/\s+[-–]\s+|\s*,\s*/)
+    .some((part) => UK_NATIONS.has(part.toLowerCase()) || normalizeUsState(part) !== null);
+}
+
+/**
+ * Split a detail response's `additionalLocations` into places and the rest
+ * (Spec 1736 T12). Some tenants put a department there — Moderna's detail for
+ * "Sr. Specialist, Maintenance" lists `["Drug Manufacturing"]` next to the
+ * primary "Norwood, Massachusetts" — which the parser would turn into a second
+ * site, "Norwood, Massachusetts; Drug Manufacturing".
+ *
+ * An entry is kept when it has a location shape ({@link hasWorkdayLocationShape}).
+ * When the primary location itself has none (a tenant that names sites by a
+ * bare city, "Bengaluru" + "Hyderabad"), shapeless entries are kept too: there
+ * is nothing to tell them from, and dropping a real site would be worse.
+ */
+export function splitWorkdayAdditionalLocations(
+  primary: string | null | undefined,
+  additional: ReadonlyArray<unknown> | null | undefined,
+): { locations: string[]; rejected: string[] } {
+  const primaryText = normalizeWorkdayLocationLabel(primary);
+  const bareSiteTenant = primaryText !== null && !hasWorkdayLocationShape(primaryText);
+  const locations: string[] = [];
+  const rejected: string[] = [];
+  for (const entry of additional ?? []) {
+    const text = normalizeWorkdayLocationLabel(typeof entry === 'string' ? entry : null);
+    if (!text) continue;
+    if (bareSiteTenant || hasWorkdayLocationShape(text)) locations.push(text);
+    else rejected.push(text);
+  }
+  return { locations, rejected };
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;

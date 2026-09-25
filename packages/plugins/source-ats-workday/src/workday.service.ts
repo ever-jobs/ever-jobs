@@ -36,6 +36,8 @@ import {
   parseWorkdayPostedOn,
   workdayListingKey,
   workdayListingRequisitionId,
+  normalizeWorkdayLocationLabel,
+  splitWorkdayAdditionalLocations,
   readAtsCountryOverlay,
   readWorkdayMaxDetailFetches,
   readWorkdayScrapeTimeBudgetMs,
@@ -403,14 +405,18 @@ export class WorkdayService implements IScraper {
     // `locationsText` is sometimes a bare "N Locations" count rather than a
     // place; drop it so the parser doesn't treat the count as a location.
     const summaryText = listing.locationsText?.trim();
+    // Spec 1736 T12: an `additionalLocations` entry without a location shape
+    // is a department some tenants file there (Moderna: "Drug Manufacturing"),
+    // not a second site; it becomes the department when there is none.
+    const additional = splitWorkdayAdditionalLocations(info?.location, info?.additionalLocations);
     // Workday sometimes emits slugified location labels with underscores
     // (e.g. "Remote_USA"); the underscore is a word character that defeats the
     // shared parser's `\bremote\b` boundary check, so normalize "_" to spaces.
     const locationLabels = [
       info?.location,
-      ...(info?.additionalLocations ?? []),
+      ...additional.locations,
       summaryText && !/^\d+\s+locations?$/i.test(summaryText) ? summaryText : null,
-    ].map((label) => label?.replace(/_/g, ' ').replace(/\s+/g, ' ').trim() || null);
+    ].map((label) => normalizeWorkdayLocationLabel(label));
     const parsedLocations = parseLocationList(locationLabels);
     const countryCode = info?.jobRequisitionLocation?.country?.alpha2Code;
     const overlayCountry = readAtsCountryOverlay();
@@ -478,7 +484,7 @@ export class WorkdayService implements IScraper {
       countryCode: countryCode ?? null,
       atsId,
       atsType: 'workday',
-      department: info?.jobFamily?.[0]?.name ?? subtitleTexts[0] ?? null,
+      department: info?.jobFamily?.[0]?.name ?? subtitleTexts[0] ?? additional.rejected[0] ?? null,
       employmentType: info?.timeType ?? info?.workerSubType ?? null,
     });
   }

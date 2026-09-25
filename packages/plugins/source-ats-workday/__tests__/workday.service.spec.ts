@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Test } from '@nestjs/testing';
 import { DescriptionFormat, ScraperInputDto, Site } from '@ever-jobs/models';
 
@@ -1043,6 +1045,72 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(result.jobs).toHaveLength(20);
       expect(mockPost).toHaveBeenCalledTimes(1);
       expect(randomSleep).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Recorded from Moderna's public board (`modernatx:1:M_tx`) on 2026-09-25:
+   * the first page of the search and the detail of its first posting,
+   * verbatim except the description body, which is a stand-in.
+   */
+  describe('recorded Moderna posting — Spec 1736 T12', () => {
+    const FIXTURES = path.join(__dirname, 'fixtures');
+    const MODERNA_LIST = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'moderna-list.json'), 'utf8'));
+    const MODERNA_DETAIL = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'moderna-detail.json'), 'utf8'));
+
+    /** The recorded page cut to its first posting, the one the detail belongs to. */
+    function firstPostingPage() {
+      return { ...clone(MODERNA_LIST), total: 1, jobPostings: clone(MODERNA_LIST.jobPostings.slice(0, 1)) };
+    }
+
+    async function scrapeEnriched(detail: unknown = MODERNA_DETAIL) {
+      mockPost.mockResolvedValueOnce({ data: firstPostingPage() });
+      mockGet.mockResolvedValueOnce({ data: clone(detail) });
+      const result = await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'modernatx:1:M_tx',
+      } as ScraperInputDto);
+      expect(mockGet).toHaveBeenCalledWith(
+        'https://modernatx.wd1.myworkdayjobs.com/wday/cxs/modernatx/M_tx/job/Norwood-Massachusetts/Sr-Specialist--Maintenance_R19827',
+      );
+      expect(result.jobs).toHaveLength(1);
+      return result.jobs[0];
+    }
+
+    it('records a department under additionalLocations', () => {
+      expect(MODERNA_DETAIL.jobPostingInfo.location).toBe('Norwood, Massachusetts');
+      expect(MODERNA_DETAIL.jobPostingInfo.additionalLocations).toEqual(['Drug Manufacturing']);
+      expect(MODERNA_DETAIL.jobPostingInfo.jobFamily).toBeUndefined();
+    });
+
+    it('keeps the department out of the location and uses it as the department', async () => {
+      const job = await scrapeEnriched();
+
+      expect(job.description).not.toBeNull();
+      expect(job.location).toMatchObject({ city: 'Norwood', state: 'MA', country: 'United States' });
+      expect(job.locations).toHaveLength(1);
+      expect(JSON.stringify([job.location, job.locations])).not.toContain('Drug Manufacturing');
+      expect(job.department).toBe('Drug Manufacturing');
+    });
+
+    it('keeps an additional site next to the rejected entry', async () => {
+      const detail = clone(MODERNA_DETAIL);
+      detail.jobPostingInfo.additionalLocations = ['Drug Manufacturing', 'Cambridge, Massachusetts'];
+
+      const job = await scrapeEnriched(detail);
+
+      expect(job.locations?.map((l) => `${l.city}, ${l.state}`)).toEqual(['Norwood, MA', 'Cambridge, MA']);
+      expect(job.department).toBe('Drug Manufacturing');
+    });
+
+    it("never overrides the posting's own job family", async () => {
+      const detail = clone(MODERNA_DETAIL);
+      detail.jobPostingInfo.jobFamily = [{ name: 'Manufacturing Engineering' }];
+
+      const job = await scrapeEnriched(detail);
+
+      expect(job.department).toBe('Manufacturing Engineering');
+      expect(job.locations).toHaveLength(1);
     });
   });
 

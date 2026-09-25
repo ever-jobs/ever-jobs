@@ -305,6 +305,21 @@ level, and it made the same posting read `ModernaTX, Inc.` (enriched) and
 and `RTX`. The company plugins re-stamp the tenant to their display name
 (Spec 1735 §4.2.1). Nothing else carries the business unit.
 
+**Location — additional sites (T12).** Some tenants file a department under
+the detail's `additionalLocations`: Moderna's "Sr. Specialist, Maintenance"
+(R19827, recorded 2026-09-25) lists `["Drug Manufacturing"]` next to the
+primary "Norwood, Massachusetts", which the parser turned into a second site
+(`city: "Norwood, Massachusetts; Drug Manufacturing"`). An additional entry is
+now kept only when it has a location shape (`hasWorkdayLocationShape`, judged
+by the shared parser): it mentions remote work or yields a state or a country,
+or one of its ` - ` / `,` parts is a US state ("Austin - TX", which the parser
+keeps as a site name, Q-096) or a UK nation ("Oxford - England"). A rejected
+entry becomes the `department` when neither `jobFamily` nor the row's
+subtitles give one. The parser has no gazetteer, so a bare city ("Bengaluru")
+has no shape either; when the primary location is itself shapeless (a tenant
+naming sites by bare city), shapeless additional entries are kept as before,
+because dropping a real site is the worse error.
+
 **Consumers key Workday postings on `id`.** `id` (`wd-{tenant}-{reqId}`, and
 `<key>-{reqId}` after a company plugin's rewrite) and `atsId` are the stable
 identity: the detail's `jobReqId` and the search row's requisition id are the
