@@ -47,7 +47,12 @@ import {
 } from './search-input';
 import { SearchCompleteness, isSearchCompleteness } from './search-completeness';
 import { SEARCH_CACHE_ENDPOINT, readCachedSearch, toCachedSearch } from './search-cache';
-import { DEFAULT_LIVENESS_MAX_URLS, DEFAULT_MAX_RESULTS_WANTED } from '../config/search-config';
+import {
+  DEFAULT_CACHE_MAX_JOBS,
+  DEFAULT_LIVENESS_MAX_URLS,
+  DEFAULT_MAX_RESULTS_WANTED,
+  isCacheableJobCount,
+} from '../config/search-config';
 import { AnalyticsService } from '@ever-jobs/analytics';
 import { CacheService } from '../cache/cache.service';
 
@@ -107,7 +112,9 @@ export class JobsController {
       'Supports caching, CSV export (via ?format=csv), NDJSON streaming (via ?format=ndjson), pagination ' +
       '(via ?paginate=true), and cross-source deduplication (default ?dedup=true; pass ?dedup=false to opt out). ' +
       'Omit `searchTerm` for LIST MODE: every selected source returns what it can list without a keyword, ' +
-      'up to `resultsWanted` per source. Every job carries a stable cross-source `dedupKey`.',
+      'up to `resultsWanted` per source. Use ?format=ndjson (streamed) or ?paginate=true for list mode: an ' +
+      'unpaginated JSON or CSV body is built as one string and is capped only by EVER_JOBS_MAX_JOBS_PER_SEARCH ' +
+      '(default 40000 raw jobs). Every job carries a stable cross-source `dedupKey`.',
   })
   @ApiQuery({
     name: 'format',
@@ -437,7 +444,16 @@ export class JobsController {
       } else {
         this.logger.warn('JobsService reported no crawl completeness; the NDJSON end line will omit it');
       }
-      await this.cacheService.set(cacheParams, toCachedSearch(rawJobs, completeness));
+      // Spec 1720 / FR-13 — a large set is served but not cached: in the
+      // in-process LRU it would pin every job for the whole TTL.
+      const cacheMaxJobs = this.configService.get<number>('cache.maxJobs', DEFAULT_CACHE_MAX_JOBS);
+      if (isCacheableJobCount(rawJobs.length, cacheMaxJobs)) {
+        await this.cacheService.set(cacheParams, toCachedSearch(rawJobs, completeness));
+      } else {
+        this.logger.log(
+          `Not caching ${rawJobs.length} raw jobs (EVER_JOBS_CACHE_MAX_JOBS=${cacheMaxJobs})`,
+        );
+      }
     }
 
     // ── Dedup (Spec 003 / FR-1) ───────────

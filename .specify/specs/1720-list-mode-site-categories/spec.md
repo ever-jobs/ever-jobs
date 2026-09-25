@@ -74,7 +74,8 @@ Ever Jobs for "everything you can list":
 | FR-9  | `siteCategories` participates in the cache key (it changes the result set). | must |
 | FR-10 | GraphQL `SearchJobsInput.searchTerm` becomes nullable (list mode) and gains `siteCategories`. | should |
 | FR-11 | (review fix, 2026-09-25) A plugin that substitutes a **default keyword** when none is given (`input.searchTerm ?? 'developer'`) or puts the term in a URL **path segment** (`/{userId}/{keyword}/{location}/…` → `//` when absent) is not listing — it is a keyword search or a malformed request. Such plugins are flagged `requiresSearchTerm`: `stepstone` (falls back to searching "developer"), `careeronestop` (keyword is a path segment of its v2 API). The static guard (FR-T8) additionally fails on (a) `searchTerm ?? '<non-empty literal>'` / `\|\| '<literal>'` outside a log call and (b) a term-derived value interpolated as a whole path segment, in any plugin **not** flagged `requiresSearchTerm`. | must |
-| FR-12 | (review fix) Server-side bounds on result size, applied to every entry point (JSON, CSV, NDJSON, GraphQL, CLI) inside `JobsService` and before the controller's cache lookup: `EVER_JOBS_MAX_RESULTS_WANTED` (default **1000**, `0` = no cap) clamps `resultsWanted` per source, with a warning log; `EVER_JOBS_MAX_JOBS_PER_SEARCH` (default **100000**, `0` = no cap) stops **starting** sources once the fan-out has collected that many raw jobs (in-flight sources finish, exactly like the deadline; skipped sources get a `per_source` row whose detail names the variable, and a warning log). Peak raw jobs per request are therefore bounded by `MAX_JOBS_PER_SEARCH + concurrency × MAX_RESULTS_WANTED`. | must |
+| FR-12 | (review fix) Server-side bounds on result size, applied to every entry point (JSON, CSV, NDJSON, GraphQL, CLI) inside `JobsService` and before the controller's cache lookup: `EVER_JOBS_MAX_RESULTS_WANTED` (default **1000**, `0` = no cap) clamps `resultsWanted` per source, with a warning log; `EVER_JOBS_MAX_JOBS_PER_SEARCH` (default **40000** since FR-13, was 100000; `0` = no cap) stops **starting** sources once the fan-out has collected that many raw jobs (in-flight sources finish, exactly like the deadline; skipped sources get a `per_source` row whose detail names the variable, and a warning log). Peak raw jobs per request are therefore bounded by `MAX_JOBS_PER_SEARCH + concurrency × MAX_RESULTS_WANTED`. | must |
+| FR-13 | (second review, 2026-09-25) Memory of list mode. (a) `EVER_JOBS_CACHE_MAX_JOBS` (default **5000**; `0` = **never cache**; unset/blank/junk = default): a raw fan-out with more jobs is served but NOT written to the search cache (REST and GraphQL), with a log line — in the in-process LRU a 20–30 k list-mode set would pin every job, descriptions included, for the whole TTL. (b) The default `EVER_JOBS_MAX_JOBS_PER_SEARCH` drops to **40000** until the per-job footprint is measured in a pod. (c) Documented: list mode should use NDJSON (`?format=ndjson`, streamed line by line) or pagination (`?paginate=true`); unpaginated JSON (and CSV) builds the whole body as one string and is capped only by the job ceiling. | must |
 
 ## 6. Non-Functional Requirements
 
@@ -133,6 +134,12 @@ searchJobsWithDiagnostics(input, options?: { onProgress?: (p: SearchProgress) =>
   carry the flag. `search-config.spec.ts`: both caps' env parsing. Service: `resultsWanted`
   clamped before dispatch; the job ceiling stops starting sources and reports them; `0`
   disables both. Controller: the clamp happens before the cache key is built.
+- FR-13: `search-config.spec.ts` — `resolveCacheMaxJobs` default / floor / `0` / junk,
+  `isCacheableJobCount` at and above the limit and with `0`, `configuration().cache.maxJobs`, the
+  40000 ceiling default. Controller (`jobs.controller.list-mode.spec.ts`): a set at the limit is
+  cached, one above is served but not cached (and logged), `0` never caches, the 5000 default.
+  Resolver (`jobs.resolver.cache-bound.spec.ts`): the same three cases. Making the bound always
+  cache fails 6 of them.
 
 ## 9. Open Questions
 
@@ -151,6 +158,11 @@ searchJobsWithDiagnostics(input, options?: { onProgress?: (p: SearchProgress) =>
   Q-OOM-1 proposed for `requiresCompanySlug`).
 - D-03 — `siteCategories` narrows the *default* selection rather than replacing it, which is
   what keeps "ATS still needs a slug" true without a special case.
+- D-04 (FR-13) — **Skip the cache write, do not truncate the answer.** A large set is still
+  returned in full; only the copy that would outlive the request is refused. `0` means "never
+  cache" for this variable (the one place it does not mean "no cap"), because "cache sets of any
+  size" is exactly the memory hazard FR-13 removes; a deployment that wants it sets a large
+  number explicitly.
 
 ## 11. References
 

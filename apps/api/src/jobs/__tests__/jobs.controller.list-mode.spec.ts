@@ -152,3 +152,37 @@ describe('JobsController — resultsWanted cap (Spec 1720 / FR-12)', () => {
     expect((h.cacheService.get.mock.calls[0]![0] as { resultsWanted: number }).resultsWanted).toBe(50_000);
   });
 });
+
+describe('JobsController — cache bound (Spec 1720 / FR-13)', () => {
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => new JobPostDto({ id: `j${i}`, title: `Role ${i}`, jobUrl: `https://e.test/${i}` }));
+
+  it('caches a set at the limit', async () => {
+    const h = createController(many(3), { 'cache.maxJobs': 3 });
+    await h.controller.searchJobs(new ScraperInputDto({}));
+    expect(h.cacheService.set).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves but does not cache a set above EVER_JOBS_CACHE_MAX_JOBS', async () => {
+    const h = createController(many(4), { 'cache.maxJobs': 3 });
+    const result = (await h.controller.searchJobs(new ScraperInputDto({}))) as { count: number };
+    expect(result.count).toBe(4);
+    expect(h.cacheService.set).not.toHaveBeenCalled();
+    expect(h.log).toHaveBeenCalledWith(expect.stringContaining('Not caching 4 raw jobs (EVER_JOBS_CACHE_MAX_JOBS=3)'));
+  });
+
+  it('EVER_JOBS_CACHE_MAX_JOBS=0 never caches, not even an empty set', async () => {
+    const h = createController([], { 'cache.maxJobs': 0 });
+    await h.controller.searchJobs(new ScraperInputDto({}));
+    expect(h.cacheService.set).not.toHaveBeenCalled();
+  });
+
+  it('defaults to 5000 when the config has no value', async () => {
+    const at = createController(many(5_000));
+    await at.controller.searchJobs(new ScraperInputDto({}));
+    expect(at.cacheService.set).toHaveBeenCalledTimes(1);
+    const over = createController(many(5_001));
+    await over.controller.searchJobs(new ScraperInputDto({}));
+    expect(over.cacheService.set).not.toHaveBeenCalled();
+  });
+});

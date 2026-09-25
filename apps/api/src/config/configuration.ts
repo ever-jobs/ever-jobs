@@ -1,4 +1,9 @@
-import { resolveFanoutDeadlineMs, resolveLivenessConfig, resolveResultCaps } from './search-config';
+import {
+  resolveCacheMaxJobs,
+  resolveFanoutDeadlineMs,
+  resolveLivenessConfig,
+  resolveResultCaps,
+} from './search-config';
 import { resolvePersistSearch } from './store-config';
 
 /**
@@ -63,6 +68,11 @@ export default () => {
       expirySec: parseInt(process.env.CACHE_EXPIRY, 3600),
       redisUrl: process.env.REDIS_URL || null,
       maxItems: parseInt(process.env.CACHE_MAX_ITEMS, 500),
+      /**
+       * Spec 1720 / FR-13 — `EVER_JOBS_CACHE_MAX_JOBS` (default 5000): a raw
+       * fan-out larger than this is served but not cached; `0` never caches.
+       */
+      maxJobs: resolveCacheMaxJobs(process.env),
     },
 
     // Search fan-out bounds (Spec 5026)
@@ -83,8 +93,8 @@ export default () => {
       /**
        * Spec 1720 / FR-12 — `EVER_JOBS_MAX_RESULTS_WANTED` (default 1000)
        * clamps `resultsWanted` per source; `EVER_JOBS_MAX_JOBS_PER_SEARCH`
-       * (default 100000) stops starting sources once that many raw jobs are
-       * in. `0` disables either.
+       * (default 40000 since FR-13) stops starting sources once that many raw
+       * jobs are in. `0` disables either.
        */
       ...resolveResultCaps(process.env),
     },

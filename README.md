@@ -517,18 +517,25 @@ curl -N -X POST "http://localhost:3001/api/jobs/search?format=ndjson" \
   -d '{"resultsWanted": 100}'
 ```
 
+**Use NDJSON (or pagination) for list mode.** `?format=ndjson` streams the result line by
+line; `?paginate=true` returns one page at a time. An **unpaginated JSON** (or CSV) list-mode
+response builds the whole body as one string and is capped only by
+`EVER_JOBS_MAX_JOBS_PER_SEARCH` (40 000 raw jobs by default) — at a few KB per job that is a
+string of 100 MB or more on top of the jobs themselves.
+
 **Memory.** The whole result is held in memory until it has been deduplicated, even when
 streamed (NDJSON only serialises line by line): a catalogue-wide list-mode crawl returns
-20–30 k jobs today, at a few KB per job. Two server-side bounds keep one request from
+20–30 k jobs today, at a few KB per job. These server-side bounds keep one request from
 exhausting the heap, for JSON, CSV, NDJSON and GraphQL alike:
 
 | Variable | Default | Effect |
 | -------- | ------- | ------ |
 | `EVER_JOBS_MAX_RESULTS_WANTED` | `1000` | `resultsWanted` is clamped to this, per source (warning logged). `0` = no cap |
-| `EVER_JOBS_MAX_JOBS_PER_SEARCH` | `100000` | once the fan-out holds this many raw jobs, no further source is **started** (in-flight ones finish, like the deadline); each skipped source gets a `per_source` row with the detail `skipped: per-search job ceiling reached`. `0` = no cap |
+| `EVER_JOBS_MAX_JOBS_PER_SEARCH` | `40000` | once the fan-out holds this many raw jobs, no further source is **started** (in-flight ones finish, like the deadline); each skipped source gets a `per_source` row with the detail `skipped: per-search job ceiling reached`. `0` = no cap. Lowered from 100 000 until the per-job footprint is measured in a pod |
+| `EVER_JOBS_CACHE_MAX_JOBS` | `5000` | a search whose raw fan-out holds more jobs is served in full but **not cached** (the in-process cache would pin every job for the whole TTL). `0` = never cache |
 
 Peak raw jobs per request ≤ `EVER_JOBS_MAX_JOBS_PER_SEARCH + EVER_JOBS_SEARCH_CONCURRENCY ×
-EVER_JOBS_MAX_RESULTS_WANTED` (100 000 + 64 × 1 000 with the defaults). Size both to your heap
+EVER_JOBS_MAX_RESULTS_WANTED` (40 000 + 64 × 1 000 with the defaults). Size both to your heap
 before raising either.
 
 - The request log prints `term=<none>` in list mode (never `term="undefined"`), and `""`,

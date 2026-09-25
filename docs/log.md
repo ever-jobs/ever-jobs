@@ -40,6 +40,13 @@ real `lruSize: 1` store proves page 2 is now a hit (it fails with the two-entry 
 supersedes D-07. Two develop controller tests asserted the cached value was the bare job array;
 they now assert `{ jobs }`.
 
+**Spec 1720 FR-13 — list-mode memory.** `EVER_JOBS_CACHE_MAX_JOBS` (default 5000; `0` = never
+cache): a raw fan-out with more jobs is served in full but not cached, on the REST and GraphQL
+paths — in the in-process LRU a list-mode set would pin every job for the whole TTL. The default
+`EVER_JOBS_MAX_JOBS_PER_SEARCH` drops from 100000 to 40000 until the per-job footprint is
+measured in a pod. README, `.env.example` and the OpenAPI description now say list mode should
+use NDJSON or pagination, and that unpaginated JSON/CSV is capped only by the job ceiling.
+
 **CI / docs.** The feature-plugin job now runs `store-sqlite-drizzle` and `store-postgres-prisma`
 (hermetic), and `ci-workflow.spec.ts` derives the list of feature plugins with unit specs from the
 filesystem so a new one cannot fall outside CI again. The list-mode log heading reads
@@ -53,7 +60,10 @@ another lane's date-only entry of the same day.
 `packages/plugins/dedup-hybrid/__tests__/dedup-hybrid.service.spec.ts`,
 `apps/api/src/jobs/__tests__/jobs.aggregator.dedup-key.spec.ts`, `.github/workflows/ci.yml`,
 `scripts/__tests__/ci-workflow.spec.ts`, `.specify/specs/1724-dedup-merge-gate/{spec,plan,tasks}.md` (new),
-`apps/api/src/jobs/{search-cache.ts (new),search-completeness.ts,jobs.controller.ts}`,
+`apps/api/src/jobs/{search-cache.ts (new),search-completeness.ts,jobs.controller.ts,jobs.resolver.ts}`,
+`apps/api/src/config/{search-config.ts,configuration.ts}`, `apps/api/src/config/__tests__/search-config.spec.ts`,
+`apps/api/src/jobs/__tests__/{jobs.controller.list-mode.spec.ts,jobs.resolver.cache-bound.spec.ts (new)}`,
+`.specify/specs/1720-list-mode-site-categories/{spec,tasks}.md`, `.env.example`,
 `apps/api/src/jobs/__tests__/{search-cache.spec.ts,jobs.controller.cache-lru.spec.ts}` (new),
 `apps/api/src/jobs/__tests__/{jobs.controller.spec.ts,jobs.controller.ndjson.spec.ts,search-completeness.spec.ts}`,
 `.specify/specs/1721-ndjson-search-stream/{spec,plan,tasks}.md`, `README.md`, `docs/index.md`, this log.

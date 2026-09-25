@@ -6,6 +6,7 @@ import { JobsService } from './jobs.service';
 import { JobsAggregator } from './jobs.aggregator';
 import { CacheService } from '../cache/cache.service';
 import { describeTerm, normalizeSearchInput } from './search-input';
+import { DEFAULT_CACHE_MAX_JOBS, isCacheableJobCount } from '../config/search-config';
 import {
   SearchJobsInput,
   SearchJobsResult,
@@ -95,7 +96,15 @@ export class JobsResolver {
         siteCategories: input.siteCategories,
       };
       rawJobs = await this.jobsService.searchJobs(scraperInput);
-      await this.cacheService.set(cacheParams, rawJobs);
+      // Spec 1720 / FR-13 — same bound as the REST path.
+      if (
+        isCacheableJobCount(
+          rawJobs.length,
+          this.configService.get<number>('cache.maxJobs', DEFAULT_CACHE_MAX_JOBS),
+        )
+      ) {
+        await this.cacheService.set(cacheParams, rawJobs);
+      }
     }
 
     // Spec 5024 — same opt-out as the REST path (`EVER_JOBS_PERSIST_SEARCH`).

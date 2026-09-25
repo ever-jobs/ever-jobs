@@ -1,8 +1,11 @@
 import {
+  DEFAULT_CACHE_MAX_JOBS,
   DEFAULT_FANOUT_DEADLINE_MS,
   DEFAULT_LIVENESS_MAX_URLS,
   DEFAULT_MAX_JOBS_PER_SEARCH,
   DEFAULT_MAX_RESULTS_WANTED,
+  isCacheableJobCount,
+  resolveCacheMaxJobs,
   resolveFanoutDeadlineMs,
   resolveLivenessConfig,
   resolveResultCaps,
@@ -122,10 +125,10 @@ describe('configuration() wiring', () => {
 });
 
 describe('resolveResultCaps (Spec 1720 / FR-12)', () => {
-  it('defaults: 1000 per source, 100000 per search', () => {
+  it('defaults: 1000 per source, 40000 per search (FR-13 lowered it from 100000)', () => {
     expect(DEFAULT_MAX_RESULTS_WANTED).toBe(1_000);
-    expect(DEFAULT_MAX_JOBS_PER_SEARCH).toBe(100_000);
-    expect(resolveResultCaps({})).toEqual({ maxResultsWanted: 1_000, maxJobsPerSearch: 100_000 });
+    expect(DEFAULT_MAX_JOBS_PER_SEARCH).toBe(40_000);
+    expect(resolveResultCaps({})).toEqual({ maxResultsWanted: 1_000, maxJobsPerSearch: 40_000 });
   });
 
   it('reads both variables and floors them', () => {
@@ -140,7 +143,7 @@ describe('resolveResultCaps (Spec 1720 / FR-12)', () => {
     ).toEqual({ maxResultsWanted: 0, maxJobsPerSearch: 0 });
     expect(
       resolveResultCaps({ EVER_JOBS_MAX_RESULTS_WANTED: '', EVER_JOBS_MAX_JOBS_PER_SEARCH: 'lots' }),
-    ).toEqual({ maxResultsWanted: 1_000, maxJobsPerSearch: 100_000 });
+    ).toEqual({ maxResultsWanted: 1_000, maxJobsPerSearch: 40_000 });
   });
 
   it('configuration() exposes them under search.*', () => {
@@ -151,6 +154,41 @@ describe('resolveResultCaps (Spec 1720 / FR-12)', () => {
     } finally {
       if (saved === undefined) delete process.env.EVER_JOBS_MAX_JOBS_PER_SEARCH;
       else process.env.EVER_JOBS_MAX_JOBS_PER_SEARCH = saved;
+    }
+  });
+});
+
+describe('resolveCacheMaxJobs / isCacheableJobCount (Spec 1720 / FR-13)', () => {
+  it('defaults to 5000', () => {
+    expect(DEFAULT_CACHE_MAX_JOBS).toBe(5_000);
+    expect(resolveCacheMaxJobs({})).toBe(5_000);
+    expect(resolveCacheMaxJobs({ EVER_JOBS_CACHE_MAX_JOBS: '  ' })).toBe(5_000);
+    expect(resolveCacheMaxJobs({ EVER_JOBS_CACHE_MAX_JOBS: 'many' })).toBe(5_000);
+  });
+
+  it('reads and floors a value; 0 or negative means never cache', () => {
+    expect(resolveCacheMaxJobs({ EVER_JOBS_CACHE_MAX_JOBS: '1200.7' })).toBe(1_200);
+    expect(resolveCacheMaxJobs({ EVER_JOBS_CACHE_MAX_JOBS: '0' })).toBe(0);
+    expect(resolveCacheMaxJobs({ EVER_JOBS_CACHE_MAX_JOBS: '-5' })).toBe(0);
+  });
+
+  it('caches up to and including the limit, never with 0', () => {
+    expect(isCacheableJobCount(5_000, 5_000)).toBe(true);
+    expect(isCacheableJobCount(5_001, 5_000)).toBe(false);
+    expect(isCacheableJobCount(0, 0)).toBe(false);
+    expect(isCacheableJobCount(1, 0)).toBe(false);
+  });
+
+  it('configuration() exposes it as cache.maxJobs', () => {
+    const saved = process.env.EVER_JOBS_CACHE_MAX_JOBS;
+    try {
+      delete process.env.EVER_JOBS_CACHE_MAX_JOBS;
+      expect(configuration().cache.maxJobs).toBe(5_000);
+      process.env.EVER_JOBS_CACHE_MAX_JOBS = '0';
+      expect(configuration().cache.maxJobs).toBe(0);
+    } finally {
+      if (saved === undefined) delete process.env.EVER_JOBS_CACHE_MAX_JOBS;
+      else process.env.EVER_JOBS_CACHE_MAX_JOBS = saved;
     }
   });
 });

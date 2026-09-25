@@ -20,3 +20,7 @@ Review fixes (2026-09-25):
 
 - [x] T10 — Flag `stepstone` + `careeronestop`; extend the static guard (keyword fallback literal, term as a path segment; exemptions for log calls and flagged plugins). Acceptance: red controls in the test; the real tree passes; Q-100 addendum.
 - [x] T11 — `EVER_JOBS_MAX_RESULTS_WANTED` + `EVER_JOBS_MAX_JOBS_PER_SEARCH` (config resolvers, service clamp + ceiling, controller clamp before the cache key). Acceptance: config, service and controller tests; README/.env.example document both with the memory arithmetic.
+
+Second review (2026-09-25):
+
+- [x] T12 — `EVER_JOBS_CACHE_MAX_JOBS` (default 5000, `0` = never) on the REST and GraphQL cache writes; `EVER_JOBS_MAX_JOBS_PER_SEARCH` default 40000; README / `.env.example` / OpenAPI say list mode should use NDJSON or pagination and that unpaginated JSON is capped only by the job ceiling (FR-13). Acceptance: config, controller and resolver tests; an always-cache mutation fails 6.

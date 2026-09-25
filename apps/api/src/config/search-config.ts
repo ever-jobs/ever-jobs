@@ -60,10 +60,12 @@ export const DEFAULT_MAX_RESULTS_WANTED = 1_000;
 
 /**
  * Default ceiling on raw jobs collected by one fan-out (Spec 1720 / FR-12).
- * ~4× the 20–30 k a catalogue-wide list-mode search returns today, and at a
- * few KB per job well inside a 2.5 GB heap.
+ * Lowered from 100 000 to 40 000 (FR-13) until the real per-job footprint is
+ * measured in a pod: it still covers the 20–30 k a catalogue-wide list-mode
+ * search returns today, and the whole set is held in memory through dedup
+ * and serialisation (and, for unpaginated JSON, built into one string).
  */
-export const DEFAULT_MAX_JOBS_PER_SEARCH = 100_000;
+export const DEFAULT_MAX_JOBS_PER_SEARCH = 40_000;
 
 export const MAX_RESULTS_WANTED_ENV_VAR = 'EVER_JOBS_MAX_RESULTS_WANTED';
 export const MAX_JOBS_PER_SEARCH_ENV_VAR = 'EVER_JOBS_MAX_JOBS_PER_SEARCH';
@@ -90,6 +92,36 @@ export function resolveResultCaps(env: Env): ResultCaps {
     maxResultsWanted: cap(env[MAX_RESULTS_WANTED_ENV_VAR], DEFAULT_MAX_RESULTS_WANTED),
     maxJobsPerSearch: cap(env[MAX_JOBS_PER_SEARCH_ENV_VAR], DEFAULT_MAX_JOBS_PER_SEARCH),
   };
+}
+
+/**
+ * Largest raw fan-out the search cache stores (Spec 1720 / FR-13). A
+ * list-mode set of 20–30 k jobs cached in the in-process LRU pins every job
+ * (descriptions included) for the whole TTL, on top of the request that is
+ * still serialising it; above this many jobs the set is served but not cached.
+ */
+export const DEFAULT_CACHE_MAX_JOBS = 5_000;
+
+export const CACHE_MAX_JOBS_ENV_VAR = 'EVER_JOBS_CACHE_MAX_JOBS';
+
+/**
+ * Resolve `EVER_JOBS_CACHE_MAX_JOBS` (Spec 1720 / FR-13): unset / blank /
+ * non-numeric → {@link DEFAULT_CACHE_MAX_JOBS}; `0` or negative → `0`, which
+ * here means **never cache** (unlike the result caps, where `0` lifts the
+ * cap); otherwise floored.
+ */
+export function resolveCacheMaxJobs(env: Env): number {
+  const parsed = parseFiniteNumber(env[CACHE_MAX_JOBS_ENV_VAR]);
+  if (parsed === undefined) return DEFAULT_CACHE_MAX_JOBS;
+  return parsed <= 0 ? 0 : Math.floor(parsed);
+}
+
+/**
+ * May a raw fan-out of `jobCount` jobs be cached under `maxJobs`
+ * (`resolveCacheMaxJobs`)? `0` never caches.
+ */
+export function isCacheableJobCount(jobCount: number, maxJobs: number): boolean {
+  return maxJobs > 0 && jobCount <= maxJobs;
 }
 
 export interface LivenessConfig {
