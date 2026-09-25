@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { ServiceUnavailableException } from '@nestjs/common';
+import { ServiceUnavailableException, StreamableFile } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CareerLevelClassifierModule, CareerLevelClassifierService } from '@ever-jobs/career-level-classifier';
@@ -19,6 +19,7 @@ import { JobsAggregator } from '../jobs.aggregator';
 import { JobsController } from '../jobs.controller';
 import { JobsService } from '../jobs.service';
 import { SEARCH_CACHE_ENDPOINT } from '../search-cache';
+import { COMPLETE_SEARCH } from '../search-completeness';
 
 /**
  * Spec 1730 (contract C7) — the aggregator attaches `careerLevel` to every returned job after
@@ -373,7 +374,8 @@ describe('JobsController → aggregator → classifier, end to end (Spec 1730)',
     opts: { cache?: ReturnType<typeof mockCache>; classifier?: ICareerLevelClassifier | null } = {},
   ) {
     const service = {
-      searchJobsWithDiagnostics: jest.fn(async () => ({ jobs, perSource: [] })),
+      assertSearchable: jest.fn(),
+      searchJobsWithDiagnostics: jest.fn(async () => ({ jobs, perSource: [], completeness: { ...COMPLETE_SEARCH } })),
     } as unknown as JobsService;
     const cache = opts.cache ?? mockCache();
     const passConfig = { get: (_k: string, def?: unknown) => def } as unknown as ConfigService;
@@ -450,5 +452,64 @@ describe('JobsController → aggregator → classifier, end to end (Spec 1730)',
     const header = csv.split('\n')[0]!.split(',');
     expect(header).toEqual(expect.arrayContaining(['careerLevel.level', 'careerLevel.confidence', 'careerLevel.reasons']));
     expect(csv).toContain('internship');
+  });
+
+  /** `POST /api/jobs/search?format=ndjson` (Spec 1721), read to the end and parsed line by line. */
+  async function ndjson(ctl: JobsController, input: ScraperInputDto): Promise<Array<Record<string, any>>> {
+    const res = { setHeader: jest.fn() };
+    const file = (await ctl.searchJobs(
+      input,
+      'ndjson',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      res as never,
+    )) as StreamableFile;
+    const chunks: Buffer[] = [];
+    for await (const c of file.getStream() as AsyncIterable<Buffer>) chunks.push(Buffer.from(c));
+    return Buffer.concat(chunks)
+      .toString('utf-8')
+      .split('\n')
+      .filter((l) => l.length > 0)
+      .map((l) => JSON.parse(l) as Record<string, any>);
+  }
+
+  it('NDJSON: every job line carries careerLevel; careerLevels filters; end.total is post-filter', async () => {
+    const all = await ndjson(controller(sampleJobs()), new ScraperInputDto({}));
+    const allJobs = all.filter((l) => l.type === 'job').map((l) => l.data as JobPostDto);
+    expect(allJobs).toHaveLength(6);
+    expect(allJobs.every((j) => j.careerLevel)).toBe(true);
+
+    const lines = await ndjson(controller(sampleJobs()), new ScraperInputDto({ careerLevels: ['internship', 'new_grad'] }));
+    const early = lines.filter((l) => l.type === 'job').map((l) => l.data as JobPostDto);
+    expect(early.map((j) => j.careerLevel?.level)).toEqual(['internship', 'new_grad', 'internship']);
+    expect(lines[lines.length - 1]).toMatchObject({ type: 'end', total: 3, complete: true });
+
+    // The same set, in the same order, as the JSON response for the same request.
+    const json = (await controller(sampleJobs()).searchJobs(
+      new ScraperInputDto({ careerLevels: ['internship', 'new_grad'] }),
+    )) as { jobs: JobPostDto[] };
+    expect(early.map((j) => j.id)).toEqual(json.jobs.map((j) => j.id));
+  });
+
+  it('NDJSON: a careerLevels filter with no classifier bound is an error line, never an unfiltered stream (Q-106)', async () => {
+    const lines = await ndjson(
+      controller(sampleJobs(), { classifier: null }),
+      new ScraperInputDto({ careerLevels: ['internship'] }),
+    );
+    expect(lines.filter((l) => l.type === 'job')).toEqual([]);
+    expect(lines.some((l) => l.type === 'end')).toBe(false);
+    expect(lines[lines.length - 1]).toEqual({
+      type: 'error',
+      message: expect.stringMatching(/careerLevels filter could not be applied/),
+    });
+
+    // Without a filter the same setup streams every job, just without careerLevel.
+    const unfiltered = await ndjson(controller(sampleJobs(), { classifier: null }), new ScraperInputDto({}));
+    expect(unfiltered.filter((l) => l.type === 'job')).toHaveLength(6);
+    expect(unfiltered[unfiltered.length - 1]).toMatchObject({ type: 'end', total: 6 });
   });
 });

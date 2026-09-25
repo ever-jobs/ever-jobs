@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { createCache } from 'cache-manager';
 import Keyv from 'keyv';
 import { CacheableMemory } from 'cacheable';
-import { JobPostDto, ScraperInputDto } from '@ever-jobs/models';
+import { type CareerLevel, JobPostDto, ScraperInputDto } from '@ever-jobs/models';
 import { CacheService } from '../../cache/cache.service';
 import { JobsController } from '../jobs.controller';
 import { COMPLETE_SEARCH } from '../search-completeness';
@@ -122,5 +122,27 @@ describe('JobsController — search cache with CACHE_MAX_ITEMS=1 (Spec 1721 / FR
     expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledTimes(1);
     expect(lines.filter((l) => l.type === 'job')).toHaveLength(25);
     expect(lines[lines.length - 1]).toMatchObject({ type: 'end', total: 25, complete: true });
+  });
+
+  it('a careerLevels filter reuses the same entry: filtered and unfiltered pages share one fan-out (Spec 1730)', async () => {
+    const { controller, jobsService, metrics } = createHarness(1);
+    const search = (careerLevels?: CareerLevel[]) =>
+      controller.searchJobs(
+        new ScraperInputDto({ siteType: ['linkedin' as any], resultsWanted: 25, careerLevels }),
+        undefined,
+        'true',
+        '1',
+        '10',
+      ) as Promise<Page>;
+
+    const filtered = await search(['internship']);
+    const unfiltered = await search();
+    const otherFilter = await search(['senior', 'staff']);
+
+    expect(filtered).toMatchObject({ cached: false });
+    expect(unfiltered).toMatchObject({ cached: true });
+    expect(otherFilter).toMatchObject({ cached: true });
+    expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledTimes(1);
+    expect(metrics.cacheHitsTotal.inc).toHaveBeenCalledTimes(2);
   });
 });

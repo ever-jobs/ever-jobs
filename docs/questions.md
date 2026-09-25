@@ -58,8 +58,9 @@ rejected. Every `SearchJobsInput` field is now decorated, the unknown-level chec
 pipe (`BAD_REQUEST`) with the resolver's own check as a second line, and an integration suite
 sends real requests through the production pipe on GraphQL and REST. `aggregateRaw` also makes
 `careerLevels` a required key of its options, so a call site that drops the filter no longer
-compiles (Spec 1730 §7.3). "Identical in REST, GraphQL and NDJSON" now holds for REST and GraphQL;
-NDJSON is verified when that lane is integrated. **Default (proceeding)** for the fields that now
+compiles (Spec 1730 §7.3). "Identical in REST, GraphQL and NDJSON" now holds for all three: at
+integration (Spec 1730 §12.7) JSON and NDJSON share one `runSearch()` that passes the filter, and
+NDJSON tests show the same filtered set and, with no classifier, an `error` line instead of a stream. **Default (proceeding)** for the fields that now
 reach `JobsService`: GraphQL `country` and `descriptionFormat` keep the lenient rules Spec 1689
 put on `develop`. `country` accepts a `Country` value, a name or alias, or an ISO alpha-2 code and
 is resolved to a `Country` before any plugin sees it (an unrecognised value is dropped with a

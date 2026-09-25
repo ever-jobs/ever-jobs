@@ -231,6 +231,38 @@ re-measured idle (spec §12.4).
 `packages/plugins/career-level-classifier/{src/career-level.rules.ts,__tests__/**}`, `.github/workflows/ci.yml`,
 `.specify/specs/1730-career-level-classifier/spec.md` (FR-3, FR-9, NFR-1, §7.3, §7.5, §7.6, §8, §12.4, §12.6), `docs/questions.md` (Q-105, Q-106), README.
 
+**Integration with list mode and the NDJSON stream (same day, spec §12.7):** the classifier
+branch was rebased onto the list-mode / NDJSON / store branch (Specs 1720–1723, on the Spec 1689
+fork sync). An integration check of the two merged together found the merge hazard Spec 1730
+§12.6 predicted: the list-mode branch serves JSON and NDJSON from one
+`runSearch()` written before the filter existed, so its `aggregateRaw` call and its cache key both
+ignored `careerLevels`; and two of its suites no longer compiled against the required key.
+
+- `runSearch()` passes `careerLevels: input.careerLevels` to `aggregateRaw` and leaves it out of
+  the cache key. The Spec 1721 crawl-completeness record derives its key from the same
+  parameters, so a filtered and an unfiltered search share both cached entries.
+- New tests: the exact NDJSON `aggregateRaw` options on a fresh fan-out and on a cache hit, both
+  cache keys, and end to end with the real classifier: NDJSON streams the same filtered set, in
+  the same order, as JSON (`end.total` post-filter), and with no classifier bound a filter ends
+  the stream with an `error` line. Mutation checks: passing `careerLevels: undefined` in
+  `runSearch()` fails 8 tests; keying the cache on it again fails 2.
+- `jobs.aggregator.dedup-key.spec.ts` and `store-postgres.boot.spec.ts` pass
+  `careerLevels: undefined` (`tsc` failed with 6 × TS2345 before).
+- `SearchJobsInput`: `develop`'s class-validator decorators on every field, list mode's nullable
+  `searchTerm`, `siteCategories` and `careerLevels` each checked against their list.
+- GraphQL `country` / `descriptionFormat`: `develop`'s lenient rules win over this branch's
+  earlier REST-enum validation (Q-106); the pipe suite pins them.
+- CI: one Feature Plugins pattern (`…|legitimacy-detector|career-level-classifier`). The separate
+  career-level API step is dropped: `develop`'s blocking *Test (Core)* job already runs those
+  suites.
+- README: `careerLevel` and the filter on NDJSON (post-filter `total`, fail-closed `error` line).
+
+**Integration files:** `apps/api/src/jobs/jobs.controller.ts`,
+`apps/api/src/jobs/__tests__/{jobs.controller.ndjson,jobs.aggregator.career-level,jobs.aggregator.dedup-key,store-postgres.boot}.spec.ts`,
+`apps/api/__tests__/integration/search-input-pipe.integration.spec.ts`, `apps/api/src/jobs/gql-types.ts`,
+`.github/workflows/ci.yml`, `.specify/specs/1730-career-level-classifier/{spec,plan,tasks}.md`,
+`docs/questions.md` (Q-106), `docs/index.md`, README.
+
 ---
 
 ## 2026-09-25 — Spec 1721 FR-15..FR-18 — the NDJSON end line says when the crawl was incomplete

@@ -9,7 +9,7 @@
 | Created        | 2026-09-24                         |
 | Last updated   | 2026-09-25                         |
 | Supersedes     | (none)                             |
-| Related specs  | 003, 740, 5024                     |
+| Related specs  | 003, 740, 5024, 1689, 1720, 1721   |
 
 ## 1. Problem Statement
 
@@ -154,14 +154,16 @@ interface AggregateResult {
 ```
 
 `aggregate(input, options)` reads `input.careerLevels` when `options.careerLevels` is absent.
-`aggregateRaw` callers (REST controller, GraphQL resolver, future NDJSON path) pass
-`careerLevels: input.careerLevels`. `aggregateRaw` never sees the request DTO, so its options type
+`aggregateRaw` callers (the REST controller's shared `runSearch()`, which serves both JSON and
+NDJSON (Spec 1721), and the GraphQL resolver) pass `careerLevels: input.careerLevels`. `aggregateRaw` never sees the request DTO, so its options type
 (`AggregateRawOptions`) makes `careerLevels` a **required key** whenever options are passed
 (`careerLevels: undefined` means no filter): a call site rebuilt as `{ dedup, persist }`, by a
 refactor or by a merge resolved against a branch that predates the filter, does not compile
 instead of silently serving the unfiltered set. The filter is applied after the raw fan-out cache, so both the
 REST controller and the GraphQL resolver leave `careerLevels` out of the cache key: the same search
 with a different (or no) filter reuses the cached fan-out instead of re-scraping every source.
+The crawl-completeness record Spec 1721 caches next to the raw set derives its key from the same
+parameters, so it is shared the same way.
 
 **Cooperative classification (NFR-2).** Classification runs on the thread that answers
 `GET /health`, straight after dedup. `aggregateRaw` therefore classifies in 16-job chunks and
@@ -301,6 +303,12 @@ Years are a *lower bound*: they conflict with the title only when the title is m
   `CAREER_LEVEL_LOOP_MAX_STALL_MS`), and while 3,000 real jobs with 3 KB descriptions are
   classified, with verdicts identical to a synchronous pass. A synchronous pass ticks 0 times.
   **REST cache key:** `careerLevels` is not part of it; a cache hit is filtered per request.
+  **NDJSON:** every `job` line carries `careerLevel`; `careerLevels` filters the stream to the
+  same set, in the same order, as JSON, and `end.total` is post-filter; with no classifier bound
+  a filter ends the stream with an `error` line and no `end` line.
+- **NDJSON wiring** (`apps/api/src/jobs/__tests__/jobs.controller.ndjson.spec.ts`): the exact
+  `aggregateRaw` options (`careerLevels` included) on a fresh fan-out and on a cache hit; neither
+  the raw-set nor the completeness cache key contains `careerLevels`.
 - **Shared helpers** (`packages/common/__tests__/cooperative.spec.ts`): `yieldToEventLoop`
   resumes after a queued `setImmediate`; `YieldBudget` expires, renews and yields only when spent.
 - **DTO validation**: `careerLevels` with an unknown value fails `class-validator`.
@@ -314,8 +322,10 @@ Years are a *lower bound*: they conflict with the title only when the title is m
   directly cannot see a pipe that strips the input; only this suite can.
 - **Call-site guard**: a `@ts-expect-error` test fails the build if `careerLevels` ever becomes an
   optional key of `AggregateRawOptions` again.
-- **CI**: the classifier's three suites run in the gating *Feature Plugins* job, and the pipe suite
-  plus the aggregator / resolver career-level specs in the same job's *career-level API* step.
+- **CI**: the classifier's three suites run in the gating *Feature Plugins* job. The pipe suite and
+  the aggregator / resolver / NDJSON career-level specs are hermetic and live under `apps/api/src`
+  and `apps/api/__tests__/integration`, which the blocking *Test (Core)* job (`npm run test:core`,
+  Spec 1689) runs.
 
 ## 9. Open Questions
 
@@ -503,3 +513,20 @@ inputs. Findings and fixes:
 
 Whole fixture after these fixes: **567 cases, 567 correct**; the held-out titles: 174/174 (the
 first-run figure in §12.1 remains the honest generalisation estimate).
+
+### 12.7 Integration with list mode and the NDJSON stream (2026-09-25)
+
+The branch was rebased onto the list-mode / NDJSON / store branch (Specs 1720–1723, itself on the
+Spec 1689 fork sync). An integration check of the two branches merged together found:
+
+| Finding | Fix |
+| ------- | --- |
+| The list-mode branch serves JSON and NDJSON from one `runSearch()`, written before the filter existed: its `aggregateRaw(rawJobs, { dedup, persist })` call (the merge hazard in §12.6) and its raw-set cache key (`{ ...input, endpoint: 'search' }`) both predated `careerLevels`. | `runSearch()` passes `careerLevels: input.careerLevels` and its cache key sets `careerLevels: undefined`. The Spec 1721 crawl-completeness record derives its key from the same parameters, so a filtered and an unfiltered search share both entries. NDJSON tests send `careerLevels` and count the `job` lines (§8). Mutation checks: passing `careerLevels: undefined` there fails 8 tests (dropping the key is a compile error), and keying the cache on `careerLevels` again fails 2. |
+| Two suites of that branch (`jobs.aggregator.dedup-key.spec.ts`, `store-postgres.boot.spec.ts`) called `aggregateRaw` with options that lack the required `careerLevels` key: `tsc` failed (TS2345, 6 errors). | They pass `careerLevels: undefined`, like every other call site. |
+| Both sides decorated `SearchJobsInput` to survive the global whitelist pipe (Spec 1689 on `develop`, §12.6 here). | `develop`'s decorators are kept on every field; `careerLevels` keeps `@IsIn(CAREER_LEVELS)`; list mode's `searchTerm` is nullable and optional; `siteCategories` is checked against `SITE_CATEGORIES`. The pipe suite's every-field case also sends `siteCategories`, and its decorator guard covers every field of the merged input. |
+| `country` / `descriptionFormat`: this branch had made GraphQL reject values outside the REST enums; `develop` resolves country codes and names and accepts any format string. | `develop`'s lenient rules are kept (§12.6, Q-106); the pipe suite pins them. |
+| CI: both branches added a plugin to the *Feature Plugins* pattern, and `develop`'s new *Test (Core)* job already runs every career-level API suite. | One pattern with both (`…|liveness-http|legitimacy-detector|career-level-classifier`); the separate *career-level API* step was dropped rather than run the same suites twice. |
+
+`aggregateRaw` keeps one public entry point in the order T18 asked for: dedup and persistence,
+then the `dedupKey` stamp (Spec 1721), then career level. T19 (classify only the paginated
+window) stays open.

@@ -254,6 +254,63 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
     expect(lines[lines.length - 1]).toMatchObject({ type: 'end', deduped: false });
   });
 
+  it('passes the careerLevels filter to the aggregator, exactly as the JSON path does (Spec 1730)', async () => {
+    const { controller, aggregator } = createHarness();
+    await readAll(
+      (await callNdjson(controller, new ScraperInputDto({ careerLevels: ['internship', 'new_grad'] }))).file,
+    );
+    // The exact options object: a call rebuilt as { dedup, persist } would stream the
+    // unfiltered set (the filter reaches the aggregator only through these options).
+    expect(aggregator.aggregateRaw).toHaveBeenCalledTimes(1);
+    expect(aggregator.aggregateRaw.mock.calls[0]![1]).toStrictEqual({
+      dedup: true,
+      persist: true,
+      careerLevels: ['internship', 'new_grad'],
+    });
+  });
+
+  it('keeps careerLevels out of the search cache key (Spec 1730; the single FR-19 entry)', async () => {
+    const { controller, cacheService } = createHarness();
+    await readAll(
+      (await callNdjson(controller, new ScraperInputDto({ searchTerm: 'go', careerLevels: ['senior'] }))).file,
+    );
+    await readAll((await callNdjson(controller, new ScraperInputDto({ searchTerm: 'go' }))).file);
+
+    const gets = cacheService.get.mock.calls.map(([key]) => key as Record<string, unknown>);
+    const sets = cacheService.set.mock.calls.map(([key]) => key as unknown as Record<string, unknown>);
+    // Each stream: one lookup of the search entry (a miss), then one write of that entry, which
+    // holds the raw set and its completeness record together.
+    expect(gets).toHaveLength(2);
+    expect(sets).toHaveLength(2);
+    for (const key of [...gets, ...sets]) {
+      expect(key.careerLevels).toBeUndefined();
+      expect(key.searchTerm).toBe('go');
+      expect(key.endpoint).toBe(SEARCH_CACHE_ENDPOINT);
+    }
+    // The filtered and the unfiltered search share the entry.
+    expect(gets[0]).toEqual(gets[1]);
+    expect(sets[0]).toEqual(gets[0]);
+    expect(sets[1]).toEqual(sets[0]);
+  });
+
+  it('filters a cache hit per stream: careerLevels reaches the aggregator without a fan-out (Spec 1730)', async () => {
+    const cached = [makeJob(1), makeJob(2)];
+    const { controller, jobsService, aggregator } = createHarness({
+      cached,
+      cachedCompleteness: { ...COMPLETE_SEARCH },
+    });
+    const lines = parseLines(
+      await readAll((await callNdjson(controller, new ScraperInputDto({ careerLevels: ['executive'] }))).file),
+    );
+    expect(jobsService.searchJobsWithDiagnostics).not.toHaveBeenCalled();
+    expect(aggregator.aggregateRaw).toHaveBeenCalledWith(cached, {
+      dedup: true,
+      persist: true,
+      careerLevels: ['executive'],
+    });
+    expect(lines[lines.length - 1]).toMatchObject({ type: 'end', complete: true });
+  });
+
   it('a failure after headers writes an error line and NO end line', async () => {
     const { controller } = createHarness({
       search: async (_input, options) => {

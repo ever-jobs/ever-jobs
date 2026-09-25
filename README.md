@@ -690,8 +690,9 @@ the deadline (or `EVER_JOBS_MAX_JOBS_PER_SEARCH`) cut short is reported on the N
 #### Career level
 
 Every job in every response format carries a server-computed `careerLevel` (Spec 1730): JSON,
-paginated JSON, CSV (`careerLevel.level`, `careerLevel.confidence` and `careerLevel.reasons`
-columns) and GraphQL (`careerLevel { level confidence reasons }`).
+paginated JSON, NDJSON (inside each `job` line's `data`), CSV (`careerLevel.level`,
+`careerLevel.confidence` and `careerLevel.reasons` columns) and GraphQL
+(`careerLevel { level confidence reasons }`).
 
 ```json
 "careerLevel": {
@@ -716,11 +717,13 @@ columns) and GraphQL (`careerLevel { level confidence reasons }`).
   `low` confidence: it may be a full-time start date. Threshold on `confidence` if you need
   high-precision internships; the `careerLevels` filter itself ignores confidence.
 - Filter server-side with `"careerLevels": ["internship", "new_grad"]` in the request body
-  (GraphQL: `careerLevels: [...]`). Unknown values are rejected (REST 400, GraphQL
-  `BAD_REQUEST`). `count` is post-filter.
+  (GraphQL: `careerLevels: [...]`). JSON and `?format=ndjson` share one pipeline, so they
+  return the same filtered set in the same order. Unknown values are rejected (REST and NDJSON
+  400, GraphQL `BAD_REQUEST`). `count` and the NDJSON `end` line's `total` are post-filter.
   The filter fails closed: if it cannot be applied (no classifier bound, or classification
-  failed) the request is a 503, never an unfiltered 200. It is applied after the cache, so it
-  does not change the cache key.
+  failed) the request is a 503, never an unfiltered 200; on NDJSON, whose status line is already
+  sent, it is an `error` line and no `end` line. It is applied after the cache, so it changes
+  neither the cached fan-out's key nor its crawl-completeness record's.
 - Operators can switch the field off with `EVER_JOBS_CLASSIFY_CAREER_LEVEL=false`; an explicit
   `careerLevels` filter is still honoured.
 - Rules, evaluation and decisions: [Spec 1730](.specify/specs/1730-career-level-classifier/spec.md).

@@ -63,12 +63,14 @@
   - **Files:** `apps/api/src/jobs/jobs.aggregator.ts`, tests
 - [x] T17 — REST cache key excludes `careerLevels` (the resolver already did).
   - **Files:** `apps/api/src/jobs/jobs.controller.ts`, tests
-- [ ] T18 — At integration with the NDJSON / list-mode lane (`feat/list-mode-ndjson-store`): keep **one**
+- [x] T18 — At integration with the NDJSON / list-mode lane (`feat/list-mode-ndjson-store`): keep **one**
   public `aggregateRaw` that runs `dedupAndPersist`, then stamps `dedupKey`, then applies career
   level (that lane's `aggregateRawUnkeyed` becomes the body of `dedupAndPersist` + the stamp);
   pass `careerLevels: input.careerLevels` from the single shared controller call for both JSON and
   NDJSON; keep `careerLevels: undefined` in the REST cache key; re-run
   `jobs.aggregator.career-level.spec.ts` together with that lane's tests on the merge.
+  - **Done 2026-09-25** (rebase onto `feat/list-mode-ndjson-store`, spec §12.7): git merged the
+    aggregator into exactly this order; `runSearch()` and its cache key were fixed by hand.
 - [ ] T19 — Optional, at the same integration: when no `careerLevels` filter is set, classify only
   the paginated output window (needs the controller to resolve the window before `aggregateRaw`).
 
@@ -88,6 +90,15 @@
   - **Files:** `__tests__/career-level.evaluation.spec.ts`
 - [x] T26 — `careerLevels` is a required key of `AggregateRawOptions`; `@ts-expect-error` guard, red-controlled.
   - **Files:** `apps/api/src/jobs/jobs.aggregator.ts`, `apps/api/src/jobs/__tests__/*.spec.ts`
-- [x] T27 — CI runs the classifier suites and the career-level API tests in the gating Feature Plugins job.
+- [x] T27 — CI runs the classifier suites in the gating Feature Plugins job; the career-level API tests run in the blocking Test (Core) job (`npm run test:core`, from Spec 1689), so the separate step was dropped at integration (§12.7).
   - **Files:** `.github/workflows/ci.yml`
-- [ ] T28 — At the T18 integration, `runSearch()` must pass `careerLevels: input.careerLevels` (now a compile error if it does not) and an NDJSON test must send `careerLevels` and assert the filtered `job` line count.
+- [x] T28 — At the T18 integration, `runSearch()` must pass `careerLevels: input.careerLevels` (now a compile error if it does not) and an NDJSON test must send `careerLevels` and assert the filtered `job` line count.
+  - **Files:** `apps/api/src/jobs/jobs.controller.ts`, `apps/api/src/jobs/__tests__/{jobs.controller.ndjson,jobs.aggregator.career-level}.spec.ts`
+
+## Phase 8 — Integration with list mode / NDJSON (2026-09-25)
+
+- [x] T29 — `careerLevels: undefined` in the list-mode branch's `aggregateRaw` call sites (`jobs.aggregator.dedup-key.spec.ts`, `store-postgres.boot.spec.ts`).
+- [x] T30 — Merged `SearchJobsInput`: `develop`'s decorators on every field, nullable `searchTerm`, `siteCategories` checked against `SITE_CATEGORIES`, `careerLevels` against `CAREER_LEVELS`; the pipe suite also sends `siteCategories`.
+- [x] T31 — Keep `develop`'s lenient GraphQL `country` / `descriptionFormat` rules; the pipe suite pins them (§12.6, Q-106).
+- [x] T32 — CI: one Feature Plugins pattern with `legitimacy-detector` and `career-level-classifier`.
+- [x] T33 — Docs: README (NDJSON), spec §7.3 / §8 / §12.7, Q-106, log, index.
