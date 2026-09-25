@@ -71,8 +71,9 @@
   `jobs.aggregator.career-level.spec.ts` together with that lane's tests on the merge.
   - **Done 2026-09-25** (rebase onto `feat/list-mode-ndjson-store`, spec §12.7): git merged the
     aggregator into exactly this order; `runSearch()` and its cache key were fixed by hand.
-- [ ] T19 — Optional, at the same integration: when no `careerLevels` filter is set, classify only
+- [x] T19 — Optional, at the same integration: when no `careerLevels` filter is set, classify only
   the paginated output window (needs the controller to resolve the window before `aggregateRaw`).
+  - **Done 2026-09-26** as FR-12 (T36): the page, the unpaginated set, and each NDJSON chunk.
 
 ## Phase 7 — Second review fixes (2026-09-25)
 
@@ -102,3 +103,25 @@
 - [x] T31 — Keep `develop`'s lenient GraphQL `country` / `descriptionFormat` rules; the pipe suite pins them (§12.6, Q-106).
 - [x] T32 — CI: one Feature Plugins pattern with `legitimacy-detector` and `career-level-classifier`.
 - [x] T33 — Docs: README (NDJSON), spec §7.3 / §8 / §12.7, Q-106, log, index.
+
+## Phase 9 — Rebase onto the list-mode second review; returned jobs only (2026-09-26)
+
+- [x] T34 — Rebase onto the list-mode branch after its second review (Specs 1720 / 1721 / 1724):
+  the REST cache is ONE `search-v2` entry (raw set + completeness); keep `careerLevels: undefined`
+  in its key; one Feature Plugins pattern with the store suites and `career-level-classifier`.
+  - **Files:** `apps/api/src/jobs/jobs.controller.ts`, `.github/workflows/ci.yml`, `docs/{index,log}.md`
+- [x] T35 — `careerLevels: undefined` in that branch's new `aggregateRaw` call sites
+  (`jobs.aggregator.merge-gate.spec.ts`, `jobs.aggregator.dedup-key.spec.ts`); the NDJSON cache-key
+  test asserts the single entry; a one-slot-LRU test with the real `CacheService` shows filtered
+  and unfiltered searches share one fan-out.
+  - **Files:** `apps/api/src/jobs/__tests__/*.spec.ts`
+- [x] T36 — FR-12: `AggregateOptions.deferCareerLevel`, `AggregateResult.careerLevelDeferred`,
+  `JobsAggregator.attachCareerLevel`; the controller attaches to the output window and to each
+  256-job NDJSON chunk; tests with mutation checks (§12.8).
+  - **Files:** `apps/api/src/jobs/{jobs.aggregator,jobs.controller}.ts`, `apps/api/src/jobs/__tests__/{jobs.aggregator.career-level,jobs.controller,jobs.controller.ndjson}.spec.ts`
+- [x] T37 — Live-sample ladder nouns for level numerals (`publisher`, `executive`, `handler`,
+  `assembler`, `processor`, `custodian`, `cook`, `biostatistician`, `epidemiologist`); fixture
+  live-sample part (22 cases, 589/589); red first (14 failing).
+  - **Files:** `packages/plugins/career-level-classifier/src/career-level.rules.ts`, `__tests__/**`
+- [x] T38 — Docs: spec FR-6 / FR-12 / §7.3 / §7.5 / §8 / D-11 / §12.8, plan risk, README, Q-105 item 5,
+  index, log.

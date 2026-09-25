@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-09-26 — Spec 1730 FR-12 — classify only the jobs a search returns; rebased onto the list-mode second review; live-sample ladder nouns
+
+**Why:** the classifier branch was rebased onto the list-mode branch after its second review
+(Specs 1720, 1721, 1724), and the integration review asked for classification scoped to what a
+request returns (T19): page 2 of a 30,000-job list-mode search classified 30,000 jobs to return
+10, and an NDJSON stream held its first job line until every job was classified. A live
+list-mode crawl also showed IC ladder titles the numeral rule ignored.
+
+**Change:**
+
+- **FR-12.** Without a `careerLevels` filter only the returned jobs are classified: the REST
+  `runSearch()` passes `deferCareerLevel: true`, `aggregateRaw` answers
+  `careerLevelDeferred: true`, and the controller calls `JobsAggregator.attachCareerLevel` on the
+  output window (the page, or every job for unpaginated JSON and CSV) and on NDJSON on each 256
+  jobs just before their lines are written. A filter still classifies the whole set once (it needs
+  every verdict); GraphQL returns every job and does not defer. Every format still carries
+  `careerLevel` on every returned job. `attachCareerLevel` never throws.
+- **Rebase.** The REST cache is one `search-v2` entry (raw set + completeness, Spec 1721 FR-19);
+  its key keeps `careerLevels: undefined`, and a test with the real `CacheService` over a one-slot
+  LRU shows filtered and unfiltered searches share one fan-out. The list-mode branch's new
+  `aggregateRaw` call sites pass the required `careerLevels` key. CI keeps one Feature Plugins
+  pattern with the store suites and `career-level-classifier`.
+- **Classifier.** Level numerals count only after a job noun on an allow-list; `publisher`,
+  `executive` (numerals only: *Account Executive I/II*), `handler`, `assembler`, `processor`,
+  `custodian`, `cook`, `biostatistician` and `epidemiologist` join it. A new live-sample fixture
+  part (22 cases with controls such as *Paraprofessional - Title I* and *Warehouse Associate -
+  Shift 1*). Whole fixture 589/589; thresholds unchanged. Q-105 item 5.
+
+**Verification:** `tsc` (repo typecheck and the API build config) clean; `lint:docs` clean; jest
+for apps/api (no e2e), the classifier, packages/models and packages/common green. Mutation
+checks for FR-12: not deferring fails 15 tests, no window attach 4, no NDJSON chunk attach 3,
+classifying the whole stream up front 2, deferring a filter too 6 (all over the apps/api suite).
+The ladder nouns were red first (14 failing).
+
+**Files:** `apps/api/src/jobs/{jobs.aggregator,jobs.controller}.ts`,
+`apps/api/src/jobs/__tests__/{jobs.aggregator.career-level,jobs.controller,jobs.controller.ndjson,jobs.controller.cache-lru,jobs.aggregator.merge-gate,jobs.aggregator.dedup-key}.spec.ts`,
+`packages/plugins/career-level-classifier/{src/career-level.rules.ts,__tests__/**}`,
+`.specify/specs/1730-career-level-classifier/{spec,plan,tasks}.md`, `README.md`,
+`docs/questions.md` (Q-105 item 5), `docs/index.md`, this log.
+
+---
+
 ## 2026-09-26 — Spec 1721 (with 1720) — third review: list mode means NDJSON, a problemSources cap that fits the catalogue, two limits of the expiry rule
 
 **Why:** a third review of the list-mode branch found that README, the OpenAPI description,

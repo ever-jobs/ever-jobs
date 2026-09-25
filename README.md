@@ -722,8 +722,13 @@ paginated JSON, NDJSON (inside each `job` line's `data`), CSV (`careerLevel.leve
   400, GraphQL `BAD_REQUEST`). `count` and the NDJSON `end` line's `total` are post-filter.
   The filter fails closed: if it cannot be applied (no classifier bound, or classification
   failed) the request is a 503, never an unfiltered 200; on NDJSON, whose status line is already
-  sent, it is an `error` line and no `end` line. It is applied after the cache, so it changes
-  neither the cached fan-out's key nor its crawl-completeness record's.
+  sent, it is an `error` line and no `end` line. It is applied after the cache, so it does not
+  change the search's cache entry (one entry holds the raw fan-out and its crawl-completeness
+  record): a filtered and an unfiltered search share it.
+- Only the jobs a response returns are classified when no filter is set: a page of
+  `?paginate=true` classifies that page, and `?format=ndjson` classifies each batch of 256 jobs
+  just before writing their lines, so a client that stops reading stops the classification. A
+  `careerLevels` filter needs every job's level, so it classifies the whole deduplicated set once.
 - Operators can switch the field off with `EVER_JOBS_CLASSIFY_CAREER_LEVEL=false`; an explicit
   `careerLevels` filter is still honoured.
 - Rules, evaluation and decisions: [Spec 1730](.specify/specs/1730-career-level-classifier/spec.md).

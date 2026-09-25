@@ -7,9 +7,9 @@
 | Status         | done                               |
 | Owner          | agent                              |
 | Created        | 2026-09-24                         |
-| Last updated   | 2026-09-25                         |
+| Last updated   | 2026-09-26                         |
 | Supersedes     | (none)                             |
-| Related specs  | 003, 740, 5024, 1689, 1720, 1721   |
+| Related specs  | 003, 740, 5024, 1689, 1720, 1721, 1724 |
 
 ## 1. Problem Statement
 
@@ -79,12 +79,13 @@ tech company but a senior individual contributor at a bank.
 | FR-3  | Inputs: `title` (primary; first 300 characters, cut at a word boundary), `description` (the first 3,000 *visible* characters after stripping tags / entities / markdown, found by scanning raw windows of 4.5 KB, 16 KB and at most 64 KB; secondary), source `jobType`, `employmentType` and `jobLevel` (capped like the title: 300 characters at a word boundary), `experienceRange` (first 120 characters). Every scraped string is capped before analysis, so no single field can make one `classify` call expensive. | must |
 | FR-4  | Title signals beat structured source fields, which beat description signals. A lower-priority signal that disagrees by ≥ 2 rungs lowers confidence one step; a structured field that agrees raises it one step. | must |
 | FR-5  | `unknown` (confidence `low`) when no signal is found anywhere. | must |
-| FR-6  | Applied in `JobsAggregator.aggregateRaw` after dedup (and on the no-dedup / no-engine paths), once per returned job, before the response is shaped — so JSON, pagination, CSV, NDJSON and GraphQL all see it. Not applied in the controller. | must |
+| FR-6  | Applied after dedup (and on the no-dedup / no-engine paths), once per returned job, before the response is shaped — so JSON, pagination, CSV, NDJSON and GraphQL all see it. `JobsAggregator.aggregateRaw` classifies the whole deduplicated set, except that a caller returning only part of it defers to FR-12. The controller never runs classification rules itself; it only chooses which jobs the aggregator classifies. | must |
 | FR-7  | `EVER_JOBS_CLASSIFY_CAREER_LEVEL` (default `true`); `false` → `careerLevel` is absent from every job. | must |
 | FR-8  | Optional `ScraperInputDto.careerLevels?: string[]`; unknown values are a 400 (class-validator `@IsIn`). When non-empty, only jobs whose level is in the set are returned. Applied after classification. The filter is honoured even when FR-7 disabled attachment (the level is computed transiently), and it fails closed: when it cannot be applied the request is a 503, never an unfiltered 200 — see Q-106. It is not part of the raw fan-out cache key. | must |
 | FR-9  | GraphQL: `JobPostGql.careerLevel` (`CareerLevelGql { level, confidence, reasons }`) and `SearchJobsInput.careerLevels: [String!]` with the same validation. Every `SearchJobsInput` field carries a class-validator decorator, because the global `ValidationPipe` (`whitelist: true`) also runs on GraphQL `@Args` and strips undecorated fields. | should |
 | FR-10 | Source `jobType` / `jobLevel` / `experienceRange` are never mutated. | must |
 | FR-11 | A labelled fixture of ≥ 250 titles (+ description / structured-field cases) is evaluated in CI with per-class precision/recall thresholds. | must |
+| FR-12 | Without a `careerLevels` filter only the jobs a request actually returns are classified: the page of a paginated search, every job of unpaginated JSON and CSV, and each chunk of an NDJSON stream as it is written (`aggregateRaw(…, { deferCareerLevel: true })` + `JobsAggregator.attachCareerLevel(jobs)`, §7.3). With a filter the whole deduplicated set is classified once, as before, because the filter needs every verdict. Every format still carries `careerLevel` on every returned job. | must |
 
 ## 6. Non-Functional Requirements
 
@@ -146,10 +147,16 @@ plugin — no `Site` enum entry, not in `ALL_SOURCE_MODULES`).
 interface AggregateOptions {
   // … existing
   readonly careerLevels?: ReadonlyArray<string>;   // FR-8
+  readonly deferCareerLevel?: boolean;              // FR-12; ignored when a filter is set
 }
 interface AggregateResult {
   // … existing; `jobs` / `outputCount` are post-filter
   readonly careerLevelFilteredOut?: number;        // set only when a filter ran
+  readonly careerLevelDeferred?: boolean;          // FR-12: the caller must attach
+}
+class JobsAggregator {
+  // FR-12 — classify exactly these jobs, in place; never throws (false = classifier failed).
+  attachCareerLevel(jobs: ReadonlyArray<JobPostDto>): Promise<boolean>;
 }
 ```
 
@@ -162,8 +169,20 @@ refactor or by a merge resolved against a branch that predates the filter, does 
 instead of silently serving the unfiltered set. The filter is applied after the raw fan-out cache, so both the
 REST controller and the GraphQL resolver leave `careerLevels` out of the cache key: the same search
 with a different (or no) filter reuses the cached fan-out instead of re-scraping every source.
-The crawl-completeness record Spec 1721 caches next to the raw set derives its key from the same
-parameters, so it is shared the same way.
+Since Spec 1721 FR-19 the REST cache holds ONE entry (endpoint `search-v2`) with the raw set and
+the crawl-completeness record together, so a filtered and an unfiltered search share both.
+
+**Classify what is returned (FR-12).** The REST `runSearch()` passes `deferCareerLevel: true`.
+Without a filter `aggregateRaw` then classifies nothing and returns `careerLevelDeferred: true`,
+and the controller calls `attachCareerLevel` on exactly what it returns: the output window after
+pagination (a page, or every job for unpaginated JSON and CSV), and on NDJSON each
+`NDJSON_CAREER_LEVEL_CHUNK` (256) jobs right before their lines are written, so the first job
+line does not wait for the whole set and a consumer that leaves stops the classification. With a
+filter nothing is deferred: every job is classified once (the filter needs every verdict), attached
+and filtered, and the page is not classified again. Nothing is deferred either when attachment is
+off (FR-7) or no classifier is bound. The GraphQL resolver returns every job, so it does not defer.
+`attachCareerLevel` never throws: a failure logs and leaves those jobs unclassified, as
+`aggregateRaw` does without a filter; an NDJSON stream stops attaching after the first failure.
 
 **Cooperative classification (NFR-2).** Classification runs on the thread that answers
 `GET /health`, straight after dedup. `aggregateRaw` therefore classifies in 16-job chunks and
@@ -203,7 +222,10 @@ matching class wins; within a class the strongest confidence wins):
 | 10 | `entry` | `junior`, `jr`, `jnr`, `entry level`, `associate` + role (`Associate Engineer`, `Associate Product Manager`), numerals `I`/`1`/`level 1`, `trainee`, `apprentice(ship)`, `staff accountant/auditor`, `postdoc(toral)` | `junior high`, `junior college`; `associate director/principal/partner/professor/dean/counsel/vp` |
 
 **Numerals** count only directly after a role noun (`engineer`, `analyst`, `SDE`, `nurse`, …) or
-`level`; `Tier N` and `Level N support` are support tiers, not seniority. A numeral range
+`level`; `Tier N` and `Level N support` are support tiers, not seniority. The role nouns are an
+allow-list, so `Title I`, `Shift 1` or `Class 1` never read as a level. `executive` is on it for
+the IC sales ladder (*Account Executive I/II*); the list is read only by this numeral rule, so it
+never makes a title `executive` (§12.8). A numeral range
 (`Engineer I/II`) resolves to the lower bound with `low` confidence. A keyword range
 (`Junior/Mid`, `Senior/Staff`, `Mid-Senior`) resolves to the lower level with `low` confidence;
 stacked modifiers without a separator (`Senior Staff`, `Senior Principal`) are not ranges and
@@ -303,12 +325,21 @@ Years are a *lower bound*: they conflict with the title only when the title is m
   `CAREER_LEVEL_LOOP_MAX_STALL_MS`), and while 3,000 real jobs with 3 KB descriptions are
   classified, with verdicts identical to a synchronous pass. A synchronous pass ticks 0 times.
   **REST cache key:** `careerLevels` is not part of it; a cache hit is filtered per request.
+  **Returned jobs only (FR-12):** `deferCareerLevel` without a filter classifies nothing and
+  reports `careerLevelDeferred`; `attachCareerLevel` classifies exactly the jobs passed, with the
+  verdicts an undeferred pass attaches, and never throws; a filter ignores the option; nothing is
+  deferred with attachment off or no classifier. Through the controller: a paginated page
+  classifies only its jobs (10 of 25; control: unpaginated classifies 25), a filtered page
+  classifies the set once, CSV classifies every row, NDJSON attaches in 256-job chunks with
+  `careerLevel` on every line, and a consumer that disconnects leaves the rest unclassified.
   **NDJSON:** every `job` line carries `careerLevel`; `careerLevels` filters the stream to the
   same set, in the same order, as JSON, and `end.total` is post-filter; with no classifier bound
   a filter ends the stream with an `error` line and no `end` line.
 - **NDJSON wiring** (`apps/api/src/jobs/__tests__/jobs.controller.ndjson.spec.ts`): the exact
-  `aggregateRaw` options (`careerLevels` included) on a fresh fan-out and on a cache hit; neither
-  the raw-set nor the completeness cache key contains `careerLevels`.
+  `aggregateRaw` options (`careerLevels` and `deferCareerLevel` included) on a fresh fan-out and
+  on a cache hit; the single `search-v2` cache key (raw set + completeness, Spec 1721 FR-19) does
+  not contain `careerLevels`. `jobs.controller.cache-lru.spec.ts`, with the real `CacheService`
+  over a one-slot LRU: a filtered page, an unfiltered one and another filter run one fan-out.
 - **Shared helpers** (`packages/common/__tests__/cooperative.spec.ts`): `yieldToEventLoop`
   resumes after a queued `setImmediate`; `YieldBudget` expires, renews and yields only when spent.
 - **DTO validation**: `careerLevels` with an unknown value fails `class-validator`.
@@ -358,6 +389,10 @@ Recorded in `docs/questions.md`:
   is a 503, not an unfiltered 200 (Q-106, review 2026-09-25).
 - D-10: Classification yields to the event loop every 10 ms (shared `YieldBudget` in
   `@ever-jobs/common`), so it can never block `/health` (review 2026-09-25).
+- D-11: Without a filter only the returned jobs are classified (FR-12): the caller that shapes
+  the response (the REST controller) asks `aggregateRaw` to defer and attaches to the page or to
+  each streamed chunk. This amends D-07 only in *which* jobs are classified: the rules still run
+  in the aggregator, and a filter still classifies the whole set there (2026-09-26).
 
 ## 11. References
 
@@ -370,7 +405,7 @@ Recorded in `docs/questions.md`:
 ## 12. Evaluation results (2026-09-25)
 
 The fixture (`packages/plugins/career-level-classifier/__tests__/fixtures/career-level.fixture.ts`)
-has three parts:
+has five parts:
 
 | Part | Cases | How it was built |
 | ---- | ----: | ---------------- |
@@ -378,6 +413,7 @@ has three parts:
 | Context cases | 17 | Title silent or conflicting; `jobType` / `employmentType` / `jobLevel` / `experienceRange` / description decide, plus incidental-mention negatives. |
 | Held-out titles | 174 | Labelled under the same policy **before the classifier was first run on them**. |
 | Review regressions | 32 | Added after the 2026-09-25 code review: reviewer probes that the rules got wrong, plus controls (§12.5). Not blind. |
+| Live sample | 22 | Titles from a live list-mode crawl of company ATS boards (2026-09-25) that the rules got wrong, one case per IC ladder noun added for them, and controls (§12.8). Not blind. |
 
 The design set scores 100% by construction, so it proves the guards work but says nothing about
 generalisation. **The held-out first run is the honest estimate:**
@@ -472,7 +508,8 @@ re-classifies the whole deduplicated set (the filter needs every verdict to coun
 Scoping classification to the output window when no filter is set needs the controller to resolve
 the page window before `aggregateRaw`; that controller block is being rewritten by the NDJSON lane,
 so it is left to the integration of the two branches (with the cache off by default, every page
-request already pays a full fan-out that dwarfs classification).
+request already pays a full fan-out that dwarfs classification). *Resolved 2026-09-26 (FR-12,
+§12.8):* without a filter only the page, the unpaginated set or each streamed chunk is classified.
 
 ### 12.5 Review regressions (2026-09-25)
 
@@ -529,4 +566,18 @@ Spec 1689 fork sync). An integration check of the two branches merged together f
 
 `aggregateRaw` keeps one public entry point in the order T18 asked for: dedup and persistence,
 then the `dedupKey` stamp (Spec 1721), then career level. T19 (classify only the paginated
-window) stays open.
+window) stayed open here; it is done in §12.8.
+
+### 12.8 Rebase onto the list-mode second review; returned jobs only; live-sample ladder nouns (2026-09-26)
+
+The branch was rebased onto the list-mode branch after its second review (Specs 1720, 1721, 1724).
+
+| Finding | Fix |
+| ------- | --- |
+| The list-mode branch now caches ONE entry per search (endpoint `search-v2`, raw set + completeness record; Spec 1721 FR-19) instead of two. | `runSearch()` keys that entry with `careerLevels: undefined`. The NDJSON spec asserts one lookup and one write per stream under `search-v2` without `careerLevels`; a new test with the real `CacheService` over a one-slot LRU shows a filtered page, an unfiltered one and another filter share one fan-out (two cache hits). Keying the entry on `careerLevels` again fails 3 tests. |
+| Its new suites (`jobs.aggregator.merge-gate.spec.ts`, one `dedup-key` case) call `aggregateRaw` without the required `careerLevels` key: TS2345. | They pass `careerLevels: undefined` (folded into the commit that made the key required). |
+| Every page of a paginated search classified the whole deduplicated set (§12.4, T19), and an NDJSON stream held its first job line until every job was classified. | FR-12 (§7.3): without a filter only the returned jobs are classified — the page, every job of unpaginated JSON / CSV, each 256-job NDJSON chunk as it is written. A filter still classifies the set once. Mutation checks: not deferring fails 15 tests, no window attach 4, no chunk attach 3, classifying the whole stream up front 2, deferring a filter too 6 (over the apps/api suite). |
+| A live list-mode crawl of company ATS boards showed IC ladders the numeral rule ignored because their noun was not a role noun: *Medical Writing Coordinator/Publisher I* and three *Account Executive I/II, …* postings were `unknown`. | Role nouns gain `publisher` and `executive` (numerals only), plus common ATS ladder nouns: `handler`, `assembler`, `processor`, `custodian`, `cook`, `biostatistician`, `epidemiologist`. A suffix rule (*-er*, *-or*, *-ist*) was rejected: *Floor 1*, *Plant 1*, *Tier 1*, *Sector 1* would read as levels. The fixture's live-sample part pins the titles and controls (*Paraprofessional - Title I*, *Warehouse Associate - Shift 1*, *Senior Account Executive*, the live *Senior / Principal … Scientist I* titles). Q-105 item 5. |
+
+Whole fixture after these fixes: **589 cases, 589 correct**; thresholds unchanged, and the
+regression gate still lists no known misses.

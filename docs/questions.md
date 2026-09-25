@@ -94,6 +94,14 @@ implementation. Each choice below changes which jobs an "internship" or "new gra
 5. **Level numerals:** `I`/`1` → entry, `II`/`2` → mid, `III`/`3` → senior (low confidence,
    because companies disagree), `IV`/`V` → senior (medium). A range (`I/II`) takes the lower bound at
    low confidence. `Tier N` and `Level N support` are support tiers, not seniority.
+   *Live sample (2026-09-26):* a numeral counts only after a job noun on an allow-list. A live
+   list-mode crawl found IC ladders missing from it, so *Account Executive I/II* and *Coordinator/
+   Publisher I* were `unknown`. **Default (proceeding):** add the observed nouns (`executive`,
+   `publisher`) and common ATS ladder nouns (`handler`, `assembler`, `processor`, `custodian`,
+   `cook`, `biostatistician`, `epidemiologist`). `executive` counts for numerals only: it never
+   makes a title `executive`, so *Account Executive I* is `entry`. *Alternative:* any agentive
+   noun (*-er*, *-or*, *-ist*) before a trailing numeral. Rejected: *Floor 1*, *Plant 1*, *Tier 1*,
+   *Sector 1* would read as levels, and the `careerLevels` filter ignores confidence.
 6. **Product / program / project / account / case / customer-success "manager" titles are IC
    roles.** Without another modifier they are `unknown`; `Senior Product Manager` is senior and
    `Group Product Manager` is manager. *Alternative:* `mid` at low confidence.
