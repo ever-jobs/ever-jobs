@@ -1,7 +1,6 @@
 import type { ScrapeReason } from '@ever-jobs/models';
 import {
   COMPLETE_SEARCH,
-  SEARCH_COMPLETENESS_CACHE_ENDPOINT,
   buildSearchCompleteness,
   isFailedSourceReason,
   isSearchCompleteness,
@@ -84,10 +83,5 @@ describe('search-completeness (Spec 1721 / FR-15)', () => {
   it('COMPLETE_SEARCH is frozen (callers spread it, never mutate the shared value)', () => {
     expect(Object.isFrozen(COMPLETE_SEARCH)).toBe(true);
     expect(isSearchCompleteness(COMPLETE_SEARCH)).toBe(true);
-  });
-
-  it('the completeness record has its own cache endpoint, distinct from the raw set', () => {
-    expect(SEARCH_COMPLETENESS_CACHE_ENDPOINT).toBe('search-completeness');
-    expect(SEARCH_COMPLETENESS_CACHE_ENDPOINT).not.toBe('search');
   });
 });

@@ -46,6 +46,7 @@
 | `apps/api/src/config/search-config.ts`, `configuration.ts` | deadline alias |
 | `apps/api/src/jobs/search-completeness.ts` | new — FR-15 record, cache endpoint, guard |
 | `apps/api/src/jobs/jobs.service.ts` | FR-15 — `FanoutDeadlineError`, completeness tracking |
+| `apps/api/src/jobs/search-cache.ts` | new — FR-19 one cache entry `{ jobs, completeness? }` under `search-v2` |
 
 ## Risks
 

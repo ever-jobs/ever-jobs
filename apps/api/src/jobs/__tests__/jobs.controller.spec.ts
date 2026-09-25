@@ -135,9 +135,11 @@ describe('JobsController', () => {
 
       await controller.searchJobs(new ScraperInputDto({ searchTerm: 'node' }));
 
+      // Spec 1721 / FR-19 — one entry holds the raw set (and its completeness
+      // record when the service reports one; this stub reports none).
       expect(cacheService.set).toHaveBeenCalledWith(
         expect.any(Object),
-        jobs,
+        { jobs },
       );
     });
   });
@@ -393,8 +395,9 @@ describe('JobsController', () => {
 
       await controller.searchJobs(new ScraperInputDto({ searchTerm: 'node' }));
 
-      // Cache write should hold the unmodified raw list
-      expect(cacheService.set).toHaveBeenCalledWith(expect.any(Object), jobs);
+      // Cache write should hold the unmodified raw list (Spec 1721 / FR-19: in
+      // the one entry that also carries the completeness record).
+      expect(cacheService.set).toHaveBeenCalledWith(expect.any(Object), { jobs });
     });
 
     it('returns dedup_metrics when the engine ran', async () => {

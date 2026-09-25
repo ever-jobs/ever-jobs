@@ -45,11 +45,8 @@ import {
   describeTerm,
   normalizeSearchInput,
 } from './search-input';
-import {
-  SEARCH_COMPLETENESS_CACHE_ENDPOINT,
-  SearchCompleteness,
-  isSearchCompleteness,
-} from './search-completeness';
+import { SearchCompleteness, isSearchCompleteness } from './search-completeness';
+import { SEARCH_CACHE_ENDPOINT, readCachedSearch, toCachedSearch } from './search-cache';
 import { DEFAULT_LIVENESS_MAX_URLS, DEFAULT_MAX_RESULTS_WANTED } from '../config/search-config';
 import { AnalyticsService } from '@ever-jobs/analytics';
 import { CacheService } from '../cache/cache.service';
@@ -394,29 +391,23 @@ export class JobsController {
     fromCache: boolean;
     /**
      * Spec 1721 / FR-15 — completeness of the crawl that produced the raw set.
-     * `undefined` on a cache hit without `requireCompleteness` (the JSON path
-     * does not report it, so it does not read it), or when a `JobsService`
-     * reported none.
+     * `undefined` when the crawl's record is unknown: a `JobsService` that
+     * reported none, or a cache entry without one (served on the JSON path only).
      */
     completeness: SearchCompleteness | undefined;
   }> {
     // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
-    const cacheParams = { ...input, endpoint: 'search' };
-    // The completeness record lives next to the raw set under the same
-    // parameters, so any change to the cache key moves both.
-    const completenessParams = { ...cacheParams, endpoint: SEARCH_COMPLETENESS_CACHE_ENDPOINT };
-    let cached = await this.cacheService.get<JobPostDto[]>(cacheParams);
-    let completeness: SearchCompleteness | undefined;
-    if (cached && options.requireCompleteness) {
-      const record = await this.cacheService.get<unknown>(completenessParams);
-      if (isSearchCompleteness(record)) {
-        completeness = record;
-      } else {
-        // Written before FR-15 (or its record was evicted on its own): the
-        // NDJSON end line would have to guess, so run the fan-out instead.
-        this.logger.log('Cache hit without a completeness record — running the fan-out (NDJSON reports completeness)');
-        cached = null;
-      }
+    // Spec 1721 / FR-19 — ONE entry holds the raw set and the completeness
+    // record of the crawl that produced it (see ./search-cache).
+    const cacheParams = { ...input, endpoint: SEARCH_CACHE_ENDPOINT };
+    const hit = readCachedSearch(await this.cacheService.get<unknown>(cacheParams));
+    let cached: JobPostDto[] | null = hit?.jobs ?? null;
+    let completeness: SearchCompleteness | undefined = hit?.completeness;
+    if (cached && options.requireCompleteness && !completeness) {
+      // No valid record in the entry: the NDJSON end line would have to
+      // guess, so run the fan-out instead (FR-17).
+      this.logger.log('Cache hit without a completeness record — running the fan-out (NDJSON reports completeness)');
+      cached = null;
     }
     let rawJobs: JobPostDto[];
     let fromCache = false;
@@ -441,13 +432,12 @@ export class JobsController {
       }
       rawJobs = result.jobs;
       perSource = result.perSource;
-      await this.cacheService.set(cacheParams, rawJobs);
       if (isSearchCompleteness(result.completeness)) {
         completeness = result.completeness;
-        await this.cacheService.set(completenessParams, completeness);
       } else {
         this.logger.warn('JobsService reported no crawl completeness; the NDJSON end line will omit it');
       }
+      await this.cacheService.set(cacheParams, toCachedSearch(rawJobs, completeness));
     }
 
     // ── Dedup (Spec 003 / FR-1) ───────────

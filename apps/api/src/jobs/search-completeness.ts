@@ -12,8 +12,8 @@ import type { ScrapeReason, SourceDiagnosticDto } from '@ever-jobs/models';
  * crawl" as "the posting is gone" had no way to know when it must not.
  *
  * The record is reported on the NDJSON `end` line (additive fields) and cached
- * next to the raw fan-out, so a cache hit reports the completeness of the
- * crawl that produced it.
+ * in the same entry as the raw fan-out (`./search-cache`, FR-19), so a cache
+ * hit reports the completeness of the crawl that produced it.
  */
 
 /** Why the fan-out stopped before every selected source had run. */
@@ -56,13 +56,6 @@ export const COMPLETE_SEARCH: Readonly<SearchCompleteness> = Object.freeze({
   sourcesSkipped: 0,
   sourcesFailed: 0,
 });
-
-/**
- * Cache `endpoint` of the completeness record written next to the raw fan-out
- * (whose `endpoint` is `search`). Same parameters otherwise, so every change
- * to the search cache key moves both entries together.
- */
-export const SEARCH_COMPLETENESS_CACHE_ENDPOINT = 'search-completeness';
 
 /**
  * Reasons that count a source as failed. `ok`, `empty` and `partial` returned

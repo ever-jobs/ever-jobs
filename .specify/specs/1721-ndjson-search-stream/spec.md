@@ -83,7 +83,8 @@ In addition:
 | FR-14 | (review fix) When the NDJSON client disconnects, the fan-out stops **starting** sources (checked next to the deadline; in-flight sources finish), skipped sources count as `cancelled_skipped` in `scraper_requests_total`, and the partial result is **not** cached, deduped or persisted — a retry must never be served a truncated set from the cache. | must |
 | FR-15 | (integration fix, 2026-09-25) The `end` line carries four additive fields: `complete` (boolean), `stopReason` (`"deadline"` \| `"job_ceiling"` \| `null`), `sourcesSkipped` (integer ≥ 0) and `sourcesFailed` (integer ≥ 0). `complete` is `false` exactly when `stopReason` is set: the fan-out deadline (`EVER_JOBS_FANOUT_DEADLINE_MS`) or the raw-job ceiling (`EVER_JOBS_MAX_JOBS_PER_SEARCH`) left at least one selected source unscraped. `stopReason` names the bound that tripped **first** when both did. | must |
 | FR-16 | Counting. `sourcesSkipped` = selected sources that contributed nothing because the fan-out stopped: not started at the deadline, not started at the job ceiling, or abandoned mid-flight at the deadline (`FanoutDeadlineError`). `sourcesFailed` = sources that **ran** and ended with a failure reason (`blocked`, `browser_unavailable`, `fetch_error`, `timeout`, `bad_input`, `circuit_open`, `not_registered`, `unknown`); `ok`, `empty` and `partial` (jobs AND an error) are not failures, and a skipped source is never also counted as failed. Failures never make a crawl incomplete. Keyword-only sources that list mode does not dispatch (Spec 1720) are neither skipped nor failed. The per-source rows keep their existing reasons (an abandoned source is still `timeout`). Once the deadline has abandoned a source, no further source starts: the deadline timer is scheduled against libuv's cached loop time and can fire a few ms before `Date.now()` reaches the deadline, which used to let the worker start one more source after the deadline had already cut one short. | must |
-| FR-17 | Cache. A fresh fan-out writes the completeness record next to the raw set, under the same cache parameters with `endpoint: "search-completeness"`, so every change to the search cache key moves both. A cache hit reports the record of the crawl that produced it. On the NDJSON path a hit whose record is missing or malformed (written before FR-15, or evicted on its own) is treated as a **miss** — the fan-out runs and both entries are rewritten — so the `end` line never guesses. The JSON path serves such a hit as before and never reads the record (it does not report completeness). | must |
+| FR-17 | Cache (storage superseded by FR-19: one entry). A fresh fan-out writes the completeness record next to the raw set, under the same cache parameters with `endpoint: "search-completeness"`, so every change to the search cache key moves both. A cache hit reports the record of the crawl that produced it. On the NDJSON path a hit whose record is missing or malformed (written before FR-15, or evicted on its own) is treated as a **miss** — the fan-out runs and both entries are rewritten — so the `end` line never guesses. The JSON path serves such a hit as before and never reads the record (it does not report completeness). | must |
+| FR-19 | (second review, 2026-09-25 — supersedes FR-17's two entries) The raw set and its completeness record are ONE cache entry, `{ jobs, completeness? }`, under the new `endpoint: "search-v2"` (the same parameters otherwise). With `CACHE_MAX_ITEMS=1` — every deployed environment — FR-17's second entry evicted the raw set from the LRU, so page 2 of a paginated search ran the fan-out again. Both paths read both from the one entry; the JSON path serves an entry without a (valid) record, the NDJSON path treats it as a miss (FR-17 unchanged). Entries of the old layout (`search`, `search-completeness`) are never read again and expire on their TTL. | must |
 | FR-18 | A `JobsService` that reports no completeness (not the shipped one) gets the four fields **omitted** from the `end` line and a warning logged — never a guessed value. Consumers must therefore treat a missing `complete` (also what servers older than FR-15 send) as "not known to be complete". | must |
 
 ## 6. Non-Functional Requirements
@@ -132,7 +133,11 @@ export interface SearchCompleteness {
   sourcesSkipped: number;             // not started, or abandoned mid-flight, because of a bound
   sourcesFailed: number;              // ran and ended with a failure reason (not ok/empty/partial)
 }
-export const SEARCH_COMPLETENESS_CACHE_ENDPOINT = 'search-completeness';
+// FR-19 — apps/api/src/jobs/search-cache.ts (replaces FR-17's SEARCH_COMPLETENESS_CACHE_ENDPOINT)
+export const SEARCH_CACHE_ENDPOINT = 'search-v2';
+export interface CachedSearch { jobs: JobPostDto[]; completeness?: SearchCompleteness }
+export function toCachedSearch(jobs, completeness?): CachedSearch;
+export function readCachedSearch(value: unknown): CachedSearch | null; // bad record dropped, bare array = no record
 export function isSearchCompleteness(value: unknown): value is SearchCompleteness; // cache read-back guard
 export class FanoutDeadlineError extends Error {} // jobs.service.ts — the mid-flight abandonment (message unchanged)
 // JobsService.assertSearchable(input): void — FR-13, throws the service's own BadRequestException
@@ -178,6 +183,12 @@ class JobPostDto { dedupKey?: string | null }
   cancelled fan-out still has no `end` line. Pure helpers (`search-completeness.spec.ts`):
   failure reasons, record building, the cache guard (legacy job array, bad `stopReason`, bad
   counts).
+- FR-19 — `jobs.controller.cache-lru.spec.ts`: the real `CacheService` over the real
+  Keyv/`CacheableMemory` store with `lruSize: 1` (as `AppCacheModule` builds it): page 2 of a
+  paginated search is a cache hit and the fan-out runs once; an NDJSON request after a JSON page
+  reads the completeness from the same entry. Writing a second entry after the first (FR-17's
+  layout) fails both. `search-cache.spec.ts`: namespace, JSON round-trip, omitted and malformed
+  records, bare array, rejected values.
 
 ## 9. Open Questions
 
@@ -215,6 +226,11 @@ class JobPostDto { dedupKey?: string | null }
   relies on ("the cache holds the RAW fan-out"), and entries written by the previous version would
   have become unreadable mid-rollout. The sibling entry costs one extra cache read per hit; the two
   entries share parameters and TTL, and the rare case where only one survives is FR-17's miss.
+- D-09 (FR-19) — **One entry after all; D-07 is superseded.** D-07 chose a sibling entry so
+  existing readers kept seeing a bare raw array. That cost the raw set itself under the LRU every
+  environment runs (`CACHE_MAX_ITEMS=1`): the sibling write evicted it. A new namespace
+  (`search-v2`) removes D-07's other concern — no reader ever sees an old-shape value under the new
+  key — so the envelope has no remaining downside.
 - D-08 (FR-17) — **An NDJSON hit without a record re-runs the fan-out** rather than reporting
   "unknown". The window is one cache TTL after an upgrade, only for Redis-backed caches (the
   in-memory cache starts empty), and it lets a consumer of this version rely on the fields always

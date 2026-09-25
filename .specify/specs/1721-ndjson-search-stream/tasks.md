@@ -31,3 +31,4 @@ Review fixes, second round (2026-09-25):
   both use it. Acceptance: `dedupKeyForJob` equals the engine `canonicalJobId` for a remote
   country-only posting, a multi-location posting and a mixed batch; reverting `dedupKeyForJob` to
   the 3-field input fails 5 tests; FR-10 records the one-time key change for those postings.
+- [x] T13 — One cache entry (FR-19). `search-cache.ts` (`search-v2`, `toCachedSearch`, `readCachedSearch`); `runSearch` reads and writes `{ jobs, completeness? }` once. Acceptance: with a real `lruSize: 1` store page 2 is a cache hit and NDJSON after JSON needs no fan-out; the FR-17 two-entry write fails both tests; the two develop controller tests that asserted the bare-array value now assert `{ jobs }`.

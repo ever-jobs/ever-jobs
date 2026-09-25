@@ -5,11 +5,8 @@ import { JobPostDto, LocationDto, ScraperInputDto } from '@ever-jobs/models';
 import { JobsController } from '../jobs.controller';
 import { NDJSON_CONTENT_TYPE, NDJSON_HEARTBEAT_MS } from '../ndjson-writer';
 import type { SearchProgress, SearchRunOptions } from '../search-input';
-import {
-  COMPLETE_SEARCH,
-  SEARCH_COMPLETENESS_CACHE_ENDPOINT,
-  type SearchCompleteness,
-} from '../search-completeness';
+import { COMPLETE_SEARCH, type SearchCompleteness } from '../search-completeness';
+import { SEARCH_CACHE_ENDPOINT } from '../search-cache';
 
 /**
  * Spec 1721 — `POST /api/jobs/search?format=ndjson`.
@@ -46,7 +43,7 @@ interface Harness {
 function createHarness(opts: {
   jobs?: JobPostDto[];
   cached?: JobPostDto[] | null;
-  /** Spec 1721 / FR-15 — the completeness record stored next to `cached` (absent: none). */
+  /** Spec 1721 / FR-15, FR-19 — the completeness record stored in the same entry as `cached` (absent: none). */
   cachedCompleteness?: unknown;
   /** What the default fan-out reports; `null` = a service that reports none. */
   completeness?: SearchCompleteness | null;
@@ -79,8 +76,14 @@ function createHarness(opts: {
     })),
   };
   const cacheService = {
+    // FR-19 — one entry: `{ jobs, completeness? }` under endpoint `search-v2`.
     get: jest.fn(async (params: { endpoint?: string }) =>
-      params.endpoint === SEARCH_COMPLETENESS_CACHE_ENDPOINT ? (opts.cachedCompleteness ?? null) : (opts.cached ?? null),
+      params.endpoint === SEARCH_CACHE_ENDPOINT && opts.cached
+        ? {
+            jobs: opts.cached,
+            ...(opts.cachedCompleteness !== undefined ? { completeness: opts.cachedCompleteness } : {}),
+          }
+        : null,
     ),
     set: jest.fn(async () => undefined),
   };
@@ -393,23 +396,24 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
     release();
     for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
 
-    // The raw set (and, when the service reports one, its completeness record).
-    expect(harness.cacheService.set).toHaveBeenCalledWith(expect.objectContaining({ endpoint: 'search' }), [
-      expect.objectContaining({ id: 'job-1' }),
-    ]);
+    // One entry: the raw set (and, when the service reports one, its completeness record).
+    expect(harness.cacheService.set).toHaveBeenCalledWith(expect.objectContaining({ endpoint: SEARCH_CACHE_ENDPOINT }), {
+      jobs: [expect.objectContaining({ id: 'job-1' })],
+    });
   });
 
   it('uses the same cache key as the JSON path and writes the raw fan-out to it', async () => {
     const { controller, cacheService } = createHarness();
     await readAll((await callNdjson(controller, new ScraperInputDto({ searchTerm: 'go' }))).file);
-    expect(cacheService.get).toHaveBeenCalledWith(expect.objectContaining({ searchTerm: 'go', endpoint: 'search' }));
-    // The raw fan-out, then its completeness record (Spec 1721 / FR-15).
-    expect(cacheService.set).toHaveBeenCalledTimes(2);
-    expect(cacheService.set.mock.calls[0]![0]).toMatchObject({ searchTerm: 'go', endpoint: 'search' });
-    expect(cacheService.set.mock.calls[1]![0]).toMatchObject({
-      searchTerm: 'go',
-      endpoint: SEARCH_COMPLETENESS_CACHE_ENDPOINT,
-    });
+    expect(cacheService.get).toHaveBeenCalledWith(
+      expect.objectContaining({ searchTerm: 'go', endpoint: SEARCH_CACHE_ENDPOINT }),
+    );
+    // ONE entry: the raw fan-out and its completeness record (Spec 1721 / FR-19).
+    expect(cacheService.set).toHaveBeenCalledTimes(1);
+    const [key, value] = cacheService.set.mock.calls[0] as unknown as [Record<string, unknown>, { jobs: unknown[]; completeness: unknown }];
+    expect(key).toMatchObject({ searchTerm: 'go', endpoint: SEARCH_CACHE_ENDPOINT });
+    expect(value.jobs).toHaveLength(3);
+    expect(value.completeness).toEqual(COMPLETE_SEARCH);
   });
 
   it('the first line is readable while the fan-out is still running (headers flush immediately)', async () => {
@@ -619,7 +623,7 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
       expect(endOf(lines)).toMatchObject({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 17 });
     });
 
-    it('a fresh fan-out caches its completeness next to the raw set, under the same parameters', async () => {
+    it('a fresh fan-out caches its completeness in the same entry as the raw set (FR-19)', async () => {
       const completeness: SearchCompleteness = {
         complete: false,
         stopReason: 'deadline',
@@ -630,15 +634,13 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
 
       await readAll((await callNdjson(controller, new ScraperInputDto({ searchTerm: 'rust', location: 'Berlin' }))).file);
 
-      const [[rawKey], [recordKey, record]] = cacheService.set.mock.calls as unknown as [
-        [Record<string, unknown>, unknown],
-        [Record<string, unknown>, unknown],
+      expect(cacheService.set).toHaveBeenCalledTimes(1);
+      const [[key, value]] = cacheService.set.mock.calls as unknown as [
+        [Record<string, unknown>, { jobs: unknown[]; completeness: unknown }],
       ];
-      expect(rawKey.endpoint).toBe('search');
-      expect(recordKey.endpoint).toBe(SEARCH_COMPLETENESS_CACHE_ENDPOINT);
-      // Every other parameter is identical, so a cache-key change moves both entries.
-      expect({ ...recordKey, endpoint: 'search' }).toEqual(rawKey);
-      expect(record).toEqual(completeness);
+      expect(key).toMatchObject({ searchTerm: 'rust', location: 'Berlin', endpoint: SEARCH_CACHE_ENDPOINT });
+      expect(value.jobs).toHaveLength(3);
+      expect(value.completeness).toEqual(completeness);
     });
 
     it('a cache hit reports the completeness of the crawl that produced it, without a fan-out', async () => {
@@ -674,9 +676,9 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
         'job-2',
       ]);
       expect(endOf(lines)).toMatchObject({ total: 2, complete: true, stopReason: null });
-      // Both entries are rewritten, so the next hit has a record.
-      expect(cacheService.set).toHaveBeenCalledTimes(2);
-      expect(cacheService.set.mock.calls[1]![0]).toMatchObject({ endpoint: SEARCH_COMPLETENESS_CACHE_ENDPOINT });
+      // The entry is rewritten with a record, so the next hit has one.
+      expect(cacheService.set).toHaveBeenCalledTimes(1);
+      expect(cacheService.set.mock.calls[0]![1]).toMatchObject({ completeness: COMPLETE_SEARCH });
     });
 
     it('the JSON path still serves a cache hit that has no completeness record', async () => {

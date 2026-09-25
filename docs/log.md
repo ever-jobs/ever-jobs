@@ -32,6 +32,14 @@ Before, `dedupKeyForJob` omitted `locations[]` and `isRemote`, so every multi-lo
 and every remote posting without a concrete site got a key different from its cluster id; those
 keys change once (T12).
 
+**Spec 1721 FR-19 — one cache entry.** The raw set and its completeness record are one entry,
+`{ jobs, completeness? }`, under the new namespace `search-v2` (`apps/api/src/jobs/search-cache.ts`).
+FR-17 wrote the record as a second entry; with `CACHE_MAX_ITEMS=1` (every deployed environment)
+that write evicted the raw set, so page 2 of a paginated search re-ran the fan-out. A test over the
+real `lruSize: 1` store proves page 2 is now a hit (it fails with the two-entry write). D-09
+supersedes D-07. Two develop controller tests asserted the cached value was the bare job array;
+they now assert `{ jobs }`.
+
 **CI / docs.** The feature-plugin job now runs `store-sqlite-drizzle` and `store-postgres-prisma`
 (hermetic), and `ci-workflow.spec.ts` derives the list of feature plugins with unit specs from the
 filesystem so a new one cannot fall outside CI again. The list-mode log heading reads
@@ -45,7 +53,10 @@ another lane's date-only entry of the same day.
 `packages/plugins/dedup-hybrid/__tests__/dedup-hybrid.service.spec.ts`,
 `apps/api/src/jobs/__tests__/jobs.aggregator.dedup-key.spec.ts`, `.github/workflows/ci.yml`,
 `scripts/__tests__/ci-workflow.spec.ts`, `.specify/specs/1724-dedup-merge-gate/{spec,plan,tasks}.md` (new),
-`.specify/specs/1721-ndjson-search-stream/{spec,tasks}.md`, `README.md`, `docs/index.md`, this log.
+`apps/api/src/jobs/{search-cache.ts (new),search-completeness.ts,jobs.controller.ts}`,
+`apps/api/src/jobs/__tests__/{search-cache.spec.ts,jobs.controller.cache-lru.spec.ts}` (new),
+`apps/api/src/jobs/__tests__/{jobs.controller.spec.ts,jobs.controller.ndjson.spec.ts,search-completeness.spec.ts}`,
+`.specify/specs/1721-ndjson-search-stream/{spec,plan,tasks}.md`, `README.md`, `docs/index.md`, this log.
 
 ---
 
