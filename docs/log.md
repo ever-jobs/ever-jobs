@@ -202,7 +202,12 @@ re-measured idle (spec §12.4).
   either** — every GraphQL search on the deployed API has been running keyword-less with default
   settings. That part predates Spec 1730; it is fixed here because decorating every field fixes
   both. `main.ts` and the e2e helper now share `createGlobalValidationPipe()`, and a new
-  integration suite sends real GraphQL and REST requests through that pipe.
+  integration suite sends real GraphQL and REST requests through that pipe. GraphQL `country` and
+  `descriptionFormat`, which now reach `JobsService`, keep the lenient rules Spec 1689 put on
+  `develop`: a country code or name (`DE`, `germany`) is resolved to a `Country` before the
+  plugins see it and an unrecognised one is dropped; any `descriptionFormat` string is accepted
+  (an unknown one leaves descriptions unconverted). An earlier cut rejected both with
+  `BAD_REQUEST` (REST's enums); the integration kept develop's rules (spec §12.6).
 - **Oversized source fields.** `employmentType` / `jobLevel` went through the super-linear title
   rules uncapped (~21 s for one 240 KB value, inside one synchronous call). The title analysis now
   caps its own input; `experienceRange` and quoted reasons are capped too.

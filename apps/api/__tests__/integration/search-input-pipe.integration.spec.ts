@@ -146,6 +146,7 @@ describe('GraphQL searchJobs input through the production ValidationPipe (Spec 1
         companySlug: "acme"
         descriptionFormat: "html"
         siteType: [LINKEDIN]
+        siteCategories: ["remote"]
         dedup: false
       }) { count deduped }
     }`);
@@ -162,7 +163,38 @@ describe('GraphQL searchJobs input through the production ValidationPipe (Spec 1
       companySlug: 'acme',
       descriptionFormat: 'html',
       siteType: [Site.LINKEDIN],
+      siteCategories: ['remote'],
     });
+  });
+
+  it('keeps the lenient GraphQL rules for country and descriptionFormat (Spec 1689; Spec 1730 §12.6)', async () => {
+    // Both fields now reach JobsService. They follow the GraphQL rules Spec 1689 put on develop,
+    // not the REST enums: `country` takes a Country value, a name / alias or an ISO alpha-2 code
+    // and is resolved to a Country BEFORE any plugin sees it (a raw "DE" used to make
+    // getIndeedDomain throw); an unrecognised country is dropped, not rejected.
+    // `descriptionFormat` is any string: a value outside markdown / plain reaches the plugins
+    // as-is, and they leave the description unconverted, as for html.
+    const code = await gql(
+      `{ searchJobs(input: { searchTerm: "engineer", country: "DE", descriptionFormat: "text" }) { count } }`,
+    );
+    expect(code.body.errors).toBeUndefined();
+    expect(code.body.data.searchJobs.count).toBe(2);
+    expect(jobsService.searchJobs.mock.calls[0]![0]).toEqual(
+      expect.objectContaining({ country: 'GERMANY', descriptionFormat: 'text' }),
+    );
+
+    const unknown = await gql(`{ searchJobs(input: { searchTerm: "engineer", country: "Atlantis" }) { count } }`);
+    expect(unknown.body.errors).toBeUndefined();
+    expect(unknown.body.data.searchJobs.count).toBe(2);
+    expect(jobsService.searchJobs.mock.calls[1]![0].country).toBeUndefined();
+
+    const exact = await gql(
+      `{ searchJobs(input: { searchTerm: "engineer", country: "GERMANY", descriptionFormat: "plain" }) { count } }`,
+    );
+    expect(exact.body.errors).toBeUndefined();
+    expect(jobsService.searchJobs.mock.calls[2]![0]).toEqual(
+      expect.objectContaining({ country: 'GERMANY', descriptionFormat: 'plain' }),
+    );
   });
 
   it('gives every SearchJobsInput field a class-validator decorator (whitelist keeps it)', async () => {

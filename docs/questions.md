@@ -59,7 +59,14 @@ pipe (`BAD_REQUEST`) with the resolver's own check as a second line, and an inte
 sends real requests through the production pipe on GraphQL and REST. `aggregateRaw` also makes
 `careerLevels` a required key of its options, so a call site that drops the filter no longer
 compiles (Spec 1730 §7.3). "Identical in REST, GraphQL and NDJSON" now holds for REST and GraphQL;
-NDJSON is verified when that lane is integrated.
+NDJSON is verified when that lane is integrated. **Default (proceeding)** for the fields that now
+reach `JobsService`: GraphQL `country` and `descriptionFormat` keep the lenient rules Spec 1689
+put on `develop`. `country` accepts a `Country` value, a name or alias, or an ISO alpha-2 code and
+is resolved to a `Country` before any plugin sees it (an unrecognised value is dropped with a
+warning, so Indeed / Glassdoor domain lookup never gets one); `descriptionFormat` accepts any
+string, and an unknown one leaves descriptions unconverted. *Alternative (dropped at
+integration):* validate both against the REST enums and answer `BAD_REQUEST`; stricter, but it
+breaks the `DE`-style codes GraphQL has always documented.
 
 ---
 
