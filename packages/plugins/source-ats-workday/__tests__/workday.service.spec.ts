@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Test } from '@nestjs/testing';
-import { DescriptionFormat, ScraperInputDto, Site } from '@ever-jobs/models';
+import { DescriptionFormat, JobPostDto, LocationDto, ScraperInputDto, Site } from '@ever-jobs/models';
 
 const mockPost = jest.fn();
 const mockGet = jest.fn();
@@ -20,6 +20,7 @@ jest.mock('@ever-jobs/common', () => {
   };
 });
 
+import { canonicalKey } from '@ever-jobs/common';
 import { WorkdayModule } from '../src/workday.module';
 import { WorkdayService } from '../src/workday.service';
 import {
@@ -658,7 +659,18 @@ describe('WorkdayService — Spec 720 / T05', () => {
         detail({ location: 'Rockville, MD', additionalLocations: [], jobRequisitionLocation: null }),
       );
       expect(job.countryCode == null).toBe(true);
-      expect(job.location?.country == null).toBe(true);
+      // Spec 1736 T13: a single site in a US state implies the country the
+      // overlay would fold in for a US requisition, so this posting keys like
+      // its list-level copy (which never has a requisition country).
+      expect(job.location?.country).toBe('United States');
+      expect(job.locations?.[0]?.country).toBe('United States');
+    });
+
+    it('implies no country for a site outside the 50 states and DC', async () => {
+      for (const location of ['Warsaw', 'San Juan, PR']) {
+        const job = await scrapeWith(detail({ location, additionalLocations: [], jobRequisitionLocation: null }));
+        expect([location, job.location?.country == null]).toEqual([location, true]);
+      }
     });
 
     it('prefers the absolute startDate over the lossy relative postedOn label', async () => {
@@ -1053,7 +1065,7 @@ describe('WorkdayService — Spec 720 / T05', () => {
    * the first page of the search and the detail of its first posting,
    * verbatim except the description body, which is a stand-in.
    */
-  describe('recorded Moderna posting — Spec 1736 T12', () => {
+  describe('recorded Moderna posting — Spec 1736 T12, T13', () => {
     const FIXTURES = path.join(__dirname, 'fixtures');
     const MODERNA_LIST = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'moderna-list.json'), 'utf8'));
     const MODERNA_DETAIL = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'moderna-detail.json'), 'utf8'));
@@ -1111,6 +1123,125 @@ describe('WorkdayService — Spec 720 / T05', () => {
 
       expect(job.department).toBe('Manufacturing Engineering');
       expect(job.locations).toHaveLength(1);
+    });
+
+    /**
+     * Spec 1736 T13 / §8.1: the same posting, enriched in one search and past
+     * the detail cap in the next, must give the dedup key the same title,
+     * company and location, and keep its id.
+     */
+    describe('one identity, enriched or list level (T13)', () => {
+      // The day the fixtures were recorded: "Posted Today" and startDate agree.
+      const RECORDED_AT = new Date('2026-09-25T15:00:00Z');
+
+      beforeEach(() => {
+        // Fake the clock only: pagination and enrichment still run on real ticks.
+        jest.useFakeTimers({
+          now: RECORDED_AT,
+          doNotFake: [
+            'hrtime',
+            'nextTick',
+            'performance',
+            'queueMicrotask',
+            'setImmediate',
+            'clearImmediate',
+            'setInterval',
+            'clearInterval',
+            'setTimeout',
+            'clearTimeout',
+          ],
+        });
+        delete process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR];
+      });
+
+      afterEach(() => {
+        jest.useRealTimers();
+        delete process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR];
+      });
+
+      async function scrapeListLevel(page: unknown = firstPostingPage()) {
+        process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR] = '0';
+        mockPost.mockResolvedValueOnce({ data: page });
+        const result = await new WorkdayService().scrape({
+          siteType: [Site.WORKDAY],
+          companySlug: 'modernatx:1:M_tx',
+        } as ScraperInputDto);
+        delete process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR];
+        return result;
+      }
+
+      /** The key the dedup engine builds (dedup-hybrid: title, company, location, locations, isRemote). */
+      function dedupKeyOf(job: JobPostDto): string {
+        return canonicalKey({
+          title: job.title,
+          company: job.companyName,
+          location: job.location ? new LocationDto(job.location).displayLocation() : '',
+          locations: job.locations,
+          isRemote: job.isRemote,
+        });
+      }
+
+      it('gives the recorded posting the same dedup fields and id at both levels', async () => {
+        const enriched = await scrapeEnriched();
+        const listLevel = (await scrapeListLevel()).jobs[0];
+
+        expect(enriched.description).not.toBeNull();
+        expect(listLevel.description).toBeNull();
+        expect(mockGet).toHaveBeenCalledTimes(1);
+
+        expect(listLevel.id).toBe('wd-modernatx-R19827');
+        expect(listLevel.id).toBe(enriched.id);
+        expect(listLevel.atsId).toBe(enriched.atsId);
+        expect(listLevel.title).toBe(enriched.title);
+        expect(listLevel.companyName).toBe('modernatx');
+        expect(listLevel.companyName).toBe(enriched.companyName);
+        expect(listLevel.location).toEqual(enriched.location);
+        expect(listLevel.location).toMatchObject({ city: 'Norwood', state: 'MA', country: 'United States' });
+        expect(listLevel.locations).toEqual(enriched.locations);
+        expect(listLevel.isRemote).toBe(enriched.isRemote);
+        expect(dedupKeyOf(listLevel)).toBe(dedupKeyOf(enriched));
+        expect(dedupKeyOf(listLevel)).toBe('modernatx|senior specialist maintenance|norwood massachusetts united states');
+        // Absolute at both levels: the detail's startDate, the row's "Posted Today" on the recording day.
+        expect(enriched.datePosted).toBe('2026-09-25');
+        expect(listLevel.datePosted).toBe(enriched.datePosted);
+        // Only the requisition country is ATS-declared.
+        expect(enriched.countryCode).toBe('US');
+        expect(listLevel.countryCode).toBeNull();
+      });
+
+      it('takes every recorded row its place from the location bullet, never the department', async () => {
+        const result = await scrapeListLevel(clone(MODERNA_LIST));
+
+        expect(result.jobs).toHaveLength(MODERNA_LIST.jobPostings.length);
+        for (const [index, job] of result.jobs.entries()) {
+          const row = MODERNA_LIST.jobPostings[index];
+          expect(row.locationsText).toBeUndefined();
+          expect(job.id).toBe(`wd-modernatx-${row.bulletFields[2]}`);
+          expect(job.location?.text).toBe(row.bulletFields[0]);
+          expect(job.location?.country).toBe('United States');
+          expect(JSON.stringify(job.location)).not.toContain(row.bulletFields[1]);
+        }
+        expect(result.jobs.map((job) => job.location?.city)).toEqual([
+          'Norwood',
+          'Norwood',
+          'Norwood',
+          'Norwood',
+          'Cambridge',
+        ]);
+      });
+
+      it('leaves the country out when the overlay is off, at both levels', async () => {
+        process.env[ATS_COUNTRY_OVERLAY_ENV_VAR] = 'false';
+        try {
+          const enriched = await scrapeEnriched();
+          const listLevel = (await scrapeListLevel()).jobs[0];
+          expect(enriched.location?.country).toBeUndefined();
+          expect(listLevel.location).toEqual(enriched.location);
+          expect(dedupKeyOf(listLevel)).toBe(dedupKeyOf(enriched));
+        } finally {
+          delete process.env[ATS_COUNTRY_OVERLAY_ENV_VAR];
+        }
+      });
     });
   });
 

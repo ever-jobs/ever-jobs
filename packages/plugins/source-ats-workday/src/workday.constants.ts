@@ -273,6 +273,57 @@ export function splitWorkdayAdditionalLocations(
   return { locations, rejected };
 }
 
+/**
+ * The search row's own location label (Spec 1736 T13): `locationsText`, or —
+ * when the tenant leaves it out, as Moderna does — the first `bulletFields`
+ * entry that is not the row's requisition id and has a location shape
+ * ({@link hasWorkdayLocationShape}). Moderna's row is
+ * `["Norwood, Massachusetts", "Drug Manufacturing", "R19827"]`: the department
+ * has no location shape, so it is never taken for the place.
+ *
+ * `locationsText` is returned as given, a bare "N Locations" count included;
+ * the caller drops the count. The label joins an enriched posting's detail
+ * locations too, so both levels see the same row label.
+ */
+export function workdayListingLocationLabel(listing: {
+  locationsText?: string | null;
+  bulletFields?: ReadonlyArray<unknown> | null;
+  externalPath?: string | null;
+}): string | null {
+  const text = typeof listing.locationsText === 'string' ? listing.locationsText.trim() : '';
+  if (text) return text;
+  const requisitionId = workdayListingRequisitionId(listing);
+  for (const bullet of listing.bulletFields ?? []) {
+    if (typeof bullet !== 'string') continue;
+    const label = bullet.trim();
+    if (!label || label === requisitionId) continue;
+    if (hasWorkdayLocationShape(label)) return label;
+  }
+  return null;
+}
+
+/** The 50 US states and DC (territories excluded: "MH", "PR" … are also country-like codes). */
+const US_STATES_AND_DC: ReadonlySet<string> = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS',
+  'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC',
+  'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+]);
+
+/**
+ * `'US'` when a parsed site names a US state (or DC) and no country (Spec 1736
+ * T13). A list-level posting has no requisition country for the Spec 1689
+ * overlay to fold in, so without this its "Norwood, MA" would key differently
+ * from the enriched copy's "Norwood, MA, United States". For a US requisition
+ * it is the value the overlay adds anyway.
+ */
+export function workdayImpliedCountryCode(
+  site: { state?: string | null; country?: string | null } | null | undefined,
+): 'US' | null {
+  if (!site || site.country) return null;
+  const state = typeof site.state === 'string' ? site.state.trim().toUpperCase() : '';
+  return US_STATES_AND_DC.has(state) ? 'US' : null;
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**

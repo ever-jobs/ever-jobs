@@ -38,6 +38,8 @@ import {
   workdayListingRequisitionId,
   normalizeWorkdayLocationLabel,
   splitWorkdayAdditionalLocations,
+  workdayListingLocationLabel,
+  workdayImpliedCountryCode,
   readAtsCountryOverlay,
   readWorkdayMaxDetailFetches,
   readWorkdayScrapeTimeBudgetMs,
@@ -404,7 +406,10 @@ export class WorkdayService implements IScraper {
     // in `countryCode` only).
     // `locationsText` is sometimes a bare "N Locations" count rather than a
     // place; drop it so the parser doesn't treat the count as a location.
-    const summaryText = listing.locationsText?.trim();
+    // Spec 1736 T13: the row's label, from `bulletFields` when the tenant
+    // sends no `locationsText` (Moderna), so a list-level posting has the
+    // place its enriched copy has.
+    const summaryText = workdayListingLocationLabel(listing);
     // Spec 1736 T12: an `additionalLocations` entry without a location shape
     // is a department some tenants file there (Moderna: "Drug Manufacturing"),
     // not a second site; it becomes the department when there is none.
@@ -420,11 +425,19 @@ export class WorkdayService implements IScraper {
     const parsedLocations = parseLocationList(locationLabels);
     const countryCode = info?.jobRequisitionLocation?.country?.alpha2Code;
     const overlayCountry = readAtsCountryOverlay();
+    // Spec 1736 T13: with no requisition country (always so at list level), a
+    // single site in a US state implies the United States — what the overlay
+    // folds in for a US requisition — so both levels key the same place.
+    const overlayCode =
+      countryCode ??
+      (parsedLocations.locations.length === 1
+        ? workdayImpliedCountryCode(parsedLocations.locations[0])
+        : null);
     const location = overlayCountry
-      ? this.applyCountry(parsedLocations.location, countryCode)
+      ? this.applyCountry(parsedLocations.location, overlayCode)
       : parsedLocations.location;
     const locations = overlayCountry
-      ? this.applyCountryToSingleSite(parsedLocations.locations, countryCode)
+      ? this.applyCountryToSingleSite(parsedLocations.locations, overlayCode)
       : parsedLocations.locations;
 
     // Remote detection: Workday's remoteType enum, plus the parsed labels.
@@ -441,7 +454,10 @@ export class WorkdayService implements IScraper {
       parsedLocations.workFromHomeType;
 
     // Date: prefer the absolute startDate (drift-free), fall back to the
-    // relative postedOn label. Both go through the validated ISO/relative parser.
+    // relative postedOn label. Both go through the validated ISO/relative parser,
+    // so datePosted is always an absolute calendar date (or null). A list-level
+    // posting has only the row's label, resolved at scrape time; "Posted 30+
+    // Days Ago" stays null rather than inventing a date (Spec 1736 §8.1).
     const datePosted =
       parseWorkdayPostedOn(info?.startDate) ??
       parseWorkdayPostedOn(info?.postedOn ?? listing.postedOn);

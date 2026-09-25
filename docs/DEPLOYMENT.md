@@ -132,3 +132,12 @@ Keep `WORKDAY_SCRAPE_TIME_BUDGET_MS` below the fan-out deadline
 (`EVER_JOBS_SEARCH_DEADLINE_MS`, 120 000 by default). A full sync that needs
 every description raises all three together and selects the boards
 explicitly (`siteType`).
+
+**Key Workday postings on `id`.** A posting is enriched while it is among a
+board's first `WORKDAY_MAX_DETAIL_FETCHES` and returned at list level once newer
+postings push it past the cap. Both copies carry the same `id` (the
+requisition id) and the same title, company and location, but a list-level
+copy can still differ where the search row cannot know what the detail says
+(several locations, a newer relative posted date). A consumer that stores
+these postings upserts on `id` and lets a later enriched copy fill in the
+description (Spec 1736 §8.1).

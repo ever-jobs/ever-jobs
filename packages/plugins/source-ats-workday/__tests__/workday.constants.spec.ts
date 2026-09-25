@@ -10,6 +10,8 @@ import {
   workdayListingRequisitionId,
   hasWorkdayLocationShape,
   splitWorkdayAdditionalLocations,
+  workdayListingLocationLabel,
+  workdayImpliedCountryCode,
   readWorkdayMaxDetailFetches,
   readWorkdayScrapeTimeBudgetMs,
   DEFAULT_WORKDAY_MAX_DETAIL_FETCHES,
@@ -423,5 +425,61 @@ describe('splitWorkdayAdditionalLocations', () => {
       rejected: [],
     });
     expect(splitWorkdayAdditionalLocations('Rockville, MD', null)).toEqual({ locations: [], rejected: [] });
+  });
+});
+
+/** Spec 1736 T13 — the row's own place, for a posting returned at list level. */
+describe('workdayListingLocationLabel', () => {
+  // Recorded Moderna row, 2026-09-25: no locationsText.
+  const MODERNA_ROW = {
+    externalPath: '/job/Norwood-Massachusetts/Sr-Specialist--Maintenance_R19827',
+    bulletFields: ['Norwood, Massachusetts', 'Drug Manufacturing', 'R19827'],
+  };
+
+  it('takes the location bullet when locationsText is missing', () => {
+    expect(workdayListingLocationLabel(MODERNA_ROW)).toBe('Norwood, Massachusetts');
+    expect(workdayListingLocationLabel({ ...MODERNA_ROW, locationsText: '   ' })).toBe('Norwood, Massachusetts');
+    expect(workdayListingLocationLabel({ ...MODERNA_ROW, locationsText: null })).toBe('Norwood, Massachusetts');
+  });
+
+  it('skips the requisition id and bullets without a location shape, wherever the place sits', () => {
+    expect(
+      workdayListingLocationLabel({
+        externalPath: '/job/X/Role_JR1',
+        bulletFields: ['JR1', 'Spotlight Job', 'Drug Manufacturing', 'Warsaw - Poland'],
+      }),
+    ).toBe('Warsaw - Poland');
+    expect(
+      workdayListingLocationLabel({ externalPath: '/job/X/Role_R2', bulletFields: ['Drug Manufacturing', 'R2'] }),
+    ).toBeNull();
+  });
+
+  it('prefers locationsText, returned as given', () => {
+    expect(workdayListingLocationLabel({ ...MODERNA_ROW, locationsText: ' Cambridge, Massachusetts ' })).toBe(
+      'Cambridge, Massachusetts',
+    );
+    // The count is dropped by the caller, not replaced by a bullet.
+    expect(workdayListingLocationLabel({ ...MODERNA_ROW, locationsText: '2 Locations' })).toBe('2 Locations');
+  });
+
+  it('returns null without either', () => {
+    expect(workdayListingLocationLabel({})).toBeNull();
+    expect(workdayListingLocationLabel({ bulletFields: [42, null] as unknown[] })).toBeNull();
+  });
+});
+
+describe('workdayImpliedCountryCode', () => {
+  it('implies US for a site in one of the 50 states or DC with no country', () => {
+    expect(workdayImpliedCountryCode({ city: 'Norwood', state: 'MA' } as never)).toBe('US');
+    expect(workdayImpliedCountryCode({ state: 'dc' })).toBe('US');
+  });
+
+  it('implies nothing with a country, without a state, or for a territory or non-US code', () => {
+    expect(workdayImpliedCountryCode({ state: 'MA', country: 'United States' })).toBeNull();
+    expect(workdayImpliedCountryCode({ state: null })).toBeNull();
+    expect(workdayImpliedCountryCode({ state: 'PR' })).toBeNull();
+    expect(workdayImpliedCountryCode({ state: 'MH' })).toBeNull();
+    expect(workdayImpliedCountryCode({ state: 'ON' })).toBeNull();
+    expect(workdayImpliedCountryCode(null)).toBeNull();
   });
 });

@@ -54,6 +54,7 @@ Enterprise-grade human capital management platform used by the world's largest o
 - **Data Format**: JSON with compensation, requisition metadata
 - **Notable Users**: Amazon, Salesforce, Target, Bank of America, Visa, Netflix
 - **Cost bounds**: one detail request per posting, one at a time and paced, so each scrape enriches at most `WORKDAY_MAX_DETAIL_FETCHES` (50) postings and stops starting requests after `WORKDAY_SCRAPE_TIME_BUDGET_MS` (90 s); the rest come back at list level without a description (Spec 1736 §8, [deployment notes](DEPLOYMENT.md#workday-backed-company-sources-specs-1736--1737))
+- **Identity**: key Workday postings on `id` (`wd-{tenant}-{requisition id}`; `atsId` is the requisition id). The same posting can come back enriched in one search and at list level in the next; title, company (the tenant, or the company plugin's display name) and location are aligned so content dedup agrees, but only `id` is guaranteed stable (Spec 1736 §8.1)
 
 ### Ashby
 

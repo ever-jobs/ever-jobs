@@ -238,7 +238,8 @@ until it had fetched every detail.
 from its search row: title, `jobUrl` =
 `https://{tenant}.wd{n}.myworkdayjobs.com/{site}{externalPath}` (the shape of
 the detail's `externalUrl`), location from `locationsText` (a bare
-"N Locations" count dropped), `datePosted` from `postedOn`, `department`
+"N Locations" count dropped) or, when the tenant sends none, from the row's
+location bullet (§8.1), `datePosted` from `postedOn`, `department`
 from the subtitles, `isRemote` / `workFromHomeType` from the row's
 `remoteType` and location, and the requisition id. It has no description,
 compensation, emails or employment type. Its `companyName` is the tenant
@@ -321,6 +322,46 @@ subtitles give one. The parser has no gazetteer, so a bare city ("Bengaluru")
 has no shape either; when the primary location is itself shapeless (a tenant
 naming sites by bare city), shapeless additional entries are kept as before,
 because dropping a real site is the worse error.
+
+**Location — the row's place (T13).** Moderna's search rows carry no
+`locationsText`; the place is a `bulletFields` entry next to the department
+and the requisition id (`["Norwood, Massachusetts", "Drug Manufacturing",
+"R19827"]`), so a list-level posting had no location at all while its
+enriched copy had Norwood. The row label is now `locationsText` or, when that
+is absent or blank, the first bullet that is not the requisition id and has a
+location shape (`workdayListingLocationLabel`). It is used exactly where
+`locationsText` was — with the detail's locations for an enriched posting,
+alone at list level — so both levels read the same row label. A bare
+"N Locations" count still counts as present (and is dropped), so a
+multi-location row is not narrowed to whichever site a bullet names.
+
+**Location — country (T13).** The Spec 1689 overlay folds the requisition
+country (`jobRequisitionLocation.country.alpha2Code`, detail only) into a
+location the parser left without one. A list-level posting has no requisition
+country, so "Norwood, MA" (list level) and "Norwood, MA, United States"
+(enriched) keyed differently. With no requisition country, a posting with a
+single site in one of the 50 US states or DC now takes `United States`
+(`workdayImpliedCountryCode`; territories such as `PR` or `MH` are excluded,
+their codes double as country codes) — the value the overlay adds for a US
+requisition. `countryCode` stays the ATS-declared value only (null at list
+level), and with `EVER_JOBS_ATS_COUNTRY_OVERLAY=false` neither level gets a
+country.
+
+**Date.** `datePosted` stays absolute wherever the source allows: the
+detail's `startDate` first, else the relative `postedOn` label resolved to a
+calendar date at scrape time; "Posted 30+ Days Ago" stays null rather than
+inventing one. A list-level posting has only the row's label. On the day the
+Moderna fixtures were recorded both levels give `2026-09-25`; for a repost
+the row's label can be newer than `startDate`, which is one reason to key on
+`id` (below).
+
+**Verified on the recorded Moderna board** (`__tests__/fixtures/moderna-*.json`,
+recorded 2026-09-25, description body replaced by a stand-in): the enriched
+and the list-level copy of R19827 have the same `id`, `atsId`, title,
+company, location, `locations`, `isRemote` and dedup key
+(`modernatx|senior specialist maintenance|norwood massachusetts united
+states`); every recorded row takes its place from the location bullet, never
+the department.
 
 **Consumers key Workday postings on `id`.** `id` (`wd-{tenant}-{reqId}`, and
 `<key>-{reqId}` after a company plugin's rewrite) and `atsId` are the stable
