@@ -243,6 +243,24 @@ describe('BrowserPool', () => {
       expect(contexts[0].close).not.toHaveBeenCalled();
     });
 
+    it('counts launches still in flight against the cap, so a concurrent burst cannot leave idle contexts over it', async () => {
+      process.env.EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS = '2';
+      const first = await BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy: 'http://p:1' });
+      await first.close(); // p:1 is now idle
+      await Promise.all([
+        BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy: 'http://p:2' }),
+        BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy: 'http://p:3' }),
+      ]);
+      const contexts = await Promise.all(launched());
+
+      expect(contexts).toHaveLength(3);
+      // Without reserving in-flight launches both see one cached context,
+      // evict nothing, and three contexts stay alive under a cap of two.
+      expect(contexts[0].close).toHaveBeenCalledTimes(1);
+      expect(contexts[1].close).not.toHaveBeenCalled();
+      expect(contexts[2].close).not.toHaveBeenCalled();
+    });
+
     it('never closes a context whose page is still open; launches over the cap instead', async () => {
       process.env.EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS = '1';
       await BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy: 'http://p:1' }); // left open

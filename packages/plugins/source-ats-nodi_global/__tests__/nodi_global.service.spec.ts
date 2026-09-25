@@ -134,6 +134,21 @@ describe('NodiGlobalService', () => {
     expect(res.jobs).toHaveLength(1);
   });
 
+  it('honours offset (plugins own it; the core does not apply it)', async () => {
+    mockApi();
+    const first = await service.scrape(
+      new ScraperInputDto({ companySlug: 'radical ai', resultsWanted: 2 }),
+    );
+    mockApi();
+    const second = await service.scrape(
+      new ScraperInputDto({ companySlug: 'radical ai', resultsWanted: 1, offset: 1 }),
+    );
+
+    expect(first.jobs.length).toBe(2);
+    expect(second.jobs).toHaveLength(1);
+    expect(second.jobs[0].id).toBe(first.jobs[1].id);
+  });
+
   it('returns empty when the company endpoint 404s', async () => {
     getMock.mockImplementation((url: string) => {
       if (url.includes('/job-offers/')) {

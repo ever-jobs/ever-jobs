@@ -98,6 +98,8 @@ NFR-1 (1,000 jobs < 250 ms, local budget) failed 2 of 6 runs at 278–284 ms wit
 loaded host and passed in isolation; the changed tree is ~5–10% slower there, and CI runs that
 suite with a 1,000 ms budget.
 
+**Review follow-ups (PR #91, automated review):** (1) `source-ats-adp` now returns the requested window (`offset` .. `offset + resultsWanted`) and spends detail requests only on it - it previously sliced from row 0, so `offset` was ignored (pre-existing, made visible by the new list budget); `source-ats-wellfound`, `source-ats-nodi_global` and `source-ats-octbr_ai` (new from the fork) honour `offset` too. (2) `BrowserPool` counts launches still in flight against `EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS` and re-checks after each launch, so a burst of concurrent identities can no longer leave idle contexts over the cap (red control: the new test fails without the fix). Validation: the four plugin suites 66/66, browser-pool 22/22, `tsc --project tsconfig.typecheck.json` clean.
+
 ---
 
 ## 2026-09-24 — Spec 5152 — `source-company-soundryx`: Soundryx careers plugin

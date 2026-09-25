@@ -211,7 +211,10 @@ export class BrowserPool {
 
     const profileDir = this.profileDirFor(userDataDir, identity);
     const promise = (async () => {
-      await this.evictIdleOverCap();
+      // This launch is not in `persistentLaunching` yet (the map is written
+      // after the IIFE yields), so reserve one slot for it plus one per
+      // launch already in flight.
+      await this.evictIdleOverCap(this.persistentLaunching.size + 1);
       this.logger.log(
         `Launching persistent Chromium context (headful=${identity.headful}) at ${profileDir}…`,
       );
@@ -234,6 +237,10 @@ export class BrowserPool {
 
       this.persistentContexts.set(key, context);
       this.logger.log('Persistent Chromium context launched');
+      // Re-check now that this context is cached: launches that overlapped
+      // this one may have left idle contexts over the cap. This launch is
+      // still in `persistentLaunching`, so it is not reserved twice.
+      await this.evictIdleOverCap(Math.max(0, this.persistentLaunching.size - 1));
       return context;
     })();
 
@@ -346,16 +353,23 @@ export class BrowserPool {
   }
 
   /**
-   * Make room under {@link maxPersistentContexts} before a launch: close the
-   * least-recently-used contexts that have no open page. When every context
-   * is busy the launch goes ahead over the cap (a scrape in flight is never
-   * cut off) and says so.
+   * Keep live persistent contexts within {@link maxPersistentContexts}: close
+   * the least-recently-used contexts that have no open page until the cached
+   * contexts plus `reserved` slots fit under the cap. When every context is
+   * busy the launch goes ahead over the cap (a scrape in flight is never cut
+   * off) and says so.
+   *
+   * `reserved` counts launches that are still in flight — they are not in
+   * `persistentContexts` yet, so without it a burst of concurrent launches
+   * with different identities would each see the old size, evict nothing, and
+   * leave the pool over the cap once they land.
    */
-  private static async evictIdleOverCap(): Promise<void> {
+  private static async evictIdleOverCap(reserved: number): Promise<void> {
     const cap = this.maxPersistentContexts;
     if (cap <= 0) return;
+    const over = (): boolean => this.persistentContexts.size + reserved > cap;
     for (const [key, context] of [...this.persistentContexts]) {
-      if (this.persistentContexts.size < cap) return;
+      if (!over()) return;
       const open = context.pages().filter((page) => !page.isClosed());
       if (open.length > 0) continue;
       // unmapped first, so its 'close' event is not reported as unexpected
@@ -363,9 +377,10 @@ export class BrowserPool {
       this.logger.log(`Closing idle persistent Chromium context ${key} (over the cap of ${cap})`);
       await context.close().catch(() => undefined);
     }
-    if (this.persistentContexts.size >= cap) {
+    if (over()) {
       this.logger.warn(
-        `${this.persistentContexts.size} persistent Chromium contexts are busy; launching over the cap of ${cap}`,
+        `${this.persistentContexts.size} persistent Chromium contexts are busy ` +
+          `(${reserved} slot(s) reserved for launches); over the cap of ${cap}`,
       );
     }
   }
