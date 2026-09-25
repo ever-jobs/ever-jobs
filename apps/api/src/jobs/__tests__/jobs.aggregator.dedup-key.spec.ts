@@ -48,6 +48,33 @@ describe('JobsAggregator — dedupKey (Spec 1721)', () => {
     expect(dedupKeyForJob(raw[1]!)).toBe(result.jobs[0]!.dedupKey);
   });
 
+  it('dedup=true: a remote country-only and a multi-location posting carry exactly the engine cluster id', async () => {
+    const engine = new DedupHybridService();
+    const aggregator = new JobsAggregator(jobsService, engine);
+    const raw = [
+      job('lv-1', Site.LEVER, {
+        title: 'Data Engineer',
+        location: new LocationDto({ country: 'US' }),
+        locations: [new LocationDto({ country: 'US', text: 'Remote - US' })],
+        isRemote: true,
+      }),
+      job('gh-2', Site.GREENHOUSE, {
+        title: 'Quant Researcher',
+        location: new LocationDto({ city: 'New York', state: 'NY' }),
+        locations: [
+          new LocationDto({ city: 'New York', state: 'NY' }),
+          new LocationDto({ city: 'London', country: 'GB' }),
+        ],
+      }),
+    ];
+
+    const engineResult = await engine.dedup(raw);
+    const result = await aggregator.aggregateRaw(raw, { dedup: true, persist: false });
+
+    expect(result.jobs).toHaveLength(2);
+    result.jobs.forEach((out, i) => expect(out.dedupKey).toBe(engineResult.assignments[i]));
+  });
+
   it('dedup=false: every raw observation carries its key; duplicates share it', async () => {
     const aggregator = new JobsAggregator(jobsService, new DedupHybridService());
     const raw = [job('li-1', Site.LINKEDIN), job('in-1', Site.INDEED), job('li-2', Site.LINKEDIN, { title: 'PM' })];

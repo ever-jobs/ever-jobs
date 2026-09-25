@@ -76,7 +76,7 @@ In addition:
 | FR-7  | Lines are written one at a time with back-pressure (`write()` → `drain`); the full payload is never materialised as one string. On client disconnect the writer stops writing (the scrape itself cannot be cancelled). | must |
 | FR-8  | Unknown `type` values are reserved for future use; consumers must ignore them. | must |
 | FR-9  | `search.deadlineMs` resolves `EVER_JOBS_FANOUT_DEADLINE_MS`, then `EVER_JOBS_SEARCH_DEADLINE_MS`, then `120000`. Blank / non-numeric values fall through to the next source; `0` or negative disables the deadline (existing semantics). | must |
-| FR-10 | Every returned job carries `dedupKey`: `sha256(normalizeCompany(company) + "|" + normalizeTitle(title) + "|" + normalizeLocation(location))` — the same function the dedup engine uses for `canonicalJobId`. Computed on the output set for `dedup=true` and `dedup=false`, from cache or fresh. Absent only when a job has neither title nor company. | must |
+| FR-10 | Every returned job carries `dedupKey`: `canonicalJobId(canonicalKeyInputForJob(job))` — `sha256(normalizeCompany(company) + "|" + normalizeTitle(title) + "|" + <location component>)`, where the location component is built from the flat `location`, the per-site `locations[]` (Spec 5123) and `isRemote` (Spec 1689 remote bucket) exactly as the dedup engine builds `canonicalJobId`. The engine and `dedupKeyForJob` both take their key input from the one shared helper `canonicalKeyInputForJob` (`@ever-jobs/common`), so they cannot read different fields. Computed on the output set for `dedup=true` and `dedup=false`, from cache or fresh. Absent only when a job has neither title nor company. **Keys change once (2026-09-25 review fix):** before the shared helper, `dedupKeyForJob` passed only title/company/flat location, so for a posting with `locations[]` whose site set differs from its flat label (every multi-location posting) or a remote posting with no concrete site (`isRemote` + country-only or no location, e.g. a parsed `Remote - US`) the returned key differed from the engine's cluster id. Those postings get a new `dedupKey` once — now equal to the cluster id; every other posting keeps its key. | must |
 | FR-11 | CSV gains a `dedupKey` column automatically; nested arrays inside object fields are joined with `; ` (same as top-level arrays) so extra structured fields remain readable. GraphQL `JobPostGql` gains `dedupKey`. | must |
 | FR-12 | (review fix, 2026-09-25 — tightens FR-1) The very first line, `{"type":"progress","sourcesDone":0,"sourcesTotal":0,"jobs":0}`, is written synchronously when the stream is created — before the cache lookup — so headers flush immediately on a cache hit too (where dedup and persistence of a large set can take seconds before the first job line) and heartbeats cover that phase. The fan-out-start line with the real `sourcesTotal` follows as before. | must |
 | FR-13 | (review fix) Input the service would reject before any scraping — a `companyDomain` that resolves to no plugin while nothing else is selected, an unknown `siteCategories` value from a caller that bypassed validation — is checked before the stream is created and answered with **400**, not with `201` + an `error` line. | must |
@@ -136,7 +136,8 @@ export const SEARCH_COMPLETENESS_CACHE_ENDPOINT = 'search-completeness';
 export function isSearchCompleteness(value: unknown): value is SearchCompleteness; // cache read-back guard
 export class FanoutDeadlineError extends Error {} // jobs.service.ts — the mid-flight abandonment (message unchanged)
 // JobsService.assertSearchable(input): void — FR-13, throws the service's own BadRequestException
-export function dedupKeyForJob(job: Pick<JobPostDto,'title'|'companyName'|'location'>): string | undefined; // @ever-jobs/common
+export function canonicalKeyInputForJob(job: Pick<JobPostDto,'title'|'companyName'|'location'|'locations'|'isRemote'>): CanonicalKeyInput; // @ever-jobs/common — the ONE key input
+export function dedupKeyForJob(job: Pick<JobPostDto,'title'|'companyName'|'location'|'locations'|'isRemote'>): string | undefined; // = canonicalJobId(canonicalKeyInputForJob(job))
 class JobPostDto { dedupKey?: string | null }
 ```
 
@@ -150,7 +151,11 @@ class JobPostDto { dedupKey?: string | null }
 - Config (`search-config.spec.ts`): deadline env precedence and parsing.
 - `dedupKeyForJob` (common): same posting from two sources (different `site`, `id`, URL, case,
   punctuation, `Inc.` suffix) → same key; different title → different key; matches
-  `canonicalJobId`; class vs plain `LocationDto` → same key.
+  `canonicalJobId`; class vs plain `LocationDto` → same key. Review fix: `canonicalKeyInputForJob`
+  passes `locations[]` and `isRemote`; `dedupKeyForJob` equals the `DedupHybridService` cluster id
+  for a remote country-only posting (parsed `Remote - US`), a multi-location posting and every
+  input of a mixed batch (`dedup-hybrid.service.spec.ts`), and the aggregator's returned key equals
+  the engine assignment for both (`jobs.aggregator.dedup-key.spec.ts`).
 - Aggregator: `dedupKey` present on `dedup=true`, `dedup=false`, no-engine paths.
 - Review fixes: a cache hit streams `progress` → `job` → `end`, and the first line is readable
   while dedup/persistence of the cached set is still running (FR-12); an unresolvable

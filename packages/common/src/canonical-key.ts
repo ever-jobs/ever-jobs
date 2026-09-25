@@ -293,17 +293,48 @@ export function formatJobLocation(loc: JobLocationLike | null | undefined): stri
   return parts.join(', ');
 }
 
-/** The job fields {@link dedupKeyForJob} reads. */
-export interface DedupKeyJobInput {
+/**
+ * The job fields the canonical key reads — `JobPostDto` is assignable, and so
+ * is the plain object a JSON / Redis cache round-trip turns it into.
+ */
+export interface CanonicalKeyJob {
   readonly title?: string | null;
   readonly companyName?: string | null;
   readonly location?: JobLocationLike | null;
+  /** Per-site locations (Spec 5123) — the key's location component when present. */
+  readonly locations?: ReadonlyArray<CanonicalKeySite> | null;
+  /** Feeds the key's remote bucket (Spec 1689). */
+  readonly isRemote?: boolean | null;
 }
 
 /**
+ * The ONE place a job becomes a {@link CanonicalKeyInput} (Spec 1721 / FR-10).
+ *
+ * The dedup engine builds `canonicalJobId` from it and {@link dedupKeyForJob}
+ * builds the API's `dedupKey` from it, so the two can never read different
+ * fields again. (Until this helper, `dedupKeyForJob` passed only
+ * title/company/location while the engine also passed `locations` and
+ * `isRemote`, so a remote country-only or a multi-location posting got a
+ * `dedupKey` that differed from its cluster id.)
+ */
+export function canonicalKeyInputForJob(job: CanonicalKeyJob): CanonicalKeyInput {
+  return {
+    title: job.title ?? '',
+    company: job.companyName ?? '',
+    location: formatJobLocation(job.location),
+    locations: job.locations,
+    isRemote: job.isRemote,
+  };
+}
+
+/** The job fields {@link dedupKeyForJob} reads. */
+export type DedupKeyJobInput = CanonicalKeyJob;
+
+/**
  * Stable cross-source key for one job posting (Spec 1721 / contract C9):
- * `canonicalJobId({ company, title, location })` — the exact key the dedup
- * engine buckets on. Independent of `site`, source id, URL, letter case,
+ * `canonicalJobId(canonicalKeyInputForJob(job))` — the exact key the dedup
+ * engine buckets on (company, title, flat location, per-site `locations[]` and
+ * the remote flag). Independent of `site`, source id, URL, letter case,
  * punctuation and legal-suffix noise, so the same posting seen on a job board
  * and on the company's ATS, today and tomorrow, gets the same key.
  *
@@ -314,9 +345,5 @@ export function dedupKeyForJob(job: DedupKeyJobInput): string | undefined {
   const title = job.title ?? '';
   const company = job.companyName ?? '';
   if (title.trim() === '' && company.trim() === '') return undefined;
-  return canonicalJobId({
-    title,
-    company,
-    location: formatJobLocation(job.location),
-  });
+  return canonicalJobId(canonicalKeyInputForJob(job));
 }

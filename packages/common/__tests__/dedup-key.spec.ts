@@ -1,5 +1,5 @@
 import { Country, JobPostDto, LocationDto } from '@ever-jobs/models';
-import { canonicalJobId, dedupKeyForJob, formatJobLocation } from '@ever-jobs/common';
+import { canonicalJobId, canonicalKeyInputForJob, dedupKeyForJob, formatJobLocation } from '@ever-jobs/common';
 
 /**
  * Spec 1721 / contract C9 — `dedupKey`: the same posting seen through
@@ -70,6 +70,56 @@ describe('dedupKeyForJob (Spec 1721)', () => {
   it('returns undefined when there is neither a title nor a company', () => {
     expect(dedupKeyForJob({ title: '', companyName: '  ' })).toBeUndefined();
     expect(dedupKeyForJob({ title: null, companyName: null })).toBeUndefined();
+  });
+});
+
+describe('canonicalKeyInputForJob — the one key input shared with the dedup engine (Spec 1721)', () => {
+  it('passes title, company, flat location, locations[] and isRemote', () => {
+    const locations = [new LocationDto({ city: 'Austin', state: 'TX' })];
+    const input = canonicalKeyInputForJob({
+      title: 'Engineer',
+      companyName: 'Acme',
+      location: new LocationDto({ city: 'Austin', state: 'TX', country: Country.USA }),
+      locations,
+      isRemote: false,
+    });
+    expect(input).toEqual({
+      title: 'Engineer',
+      company: 'Acme',
+      location: formatJobLocation(new LocationDto({ city: 'Austin', state: 'TX', country: Country.USA })),
+      locations,
+      isRemote: false,
+    });
+  });
+
+  it('maps missing fields to the same empty values the engine always used', () => {
+    expect(canonicalKeyInputForJob({})).toEqual({
+      title: '',
+      company: '',
+      location: '',
+      locations: undefined,
+      isRemote: undefined,
+    });
+  });
+
+  it('dedupKeyForJob reads isRemote: a remote country-only posting keys to the remote bucket', () => {
+    const remoteUs = { title: 'Engineer', companyName: 'Acme', location: { country: 'US' }, isRemote: true };
+    expect(dedupKeyForJob(remoteUs)).toBe(canonicalJobId({ title: 'Engineer', company: 'Acme', location: 'Remote' }));
+    // Without the flag it is an office posting in the United States.
+    expect(dedupKeyForJob({ ...remoteUs, isRemote: false })).not.toBe(dedupKeyForJob(remoteUs));
+  });
+
+  it('dedupKeyForJob reads locations[]: every site of a multi-location posting is in the key', () => {
+    const base = {
+      title: 'Engineer',
+      companyName: 'Acme',
+      location: { city: 'New York', state: 'NY' },
+      locations: [{ city: 'New York', state: 'NY' }],
+    };
+    const multi = { ...base, locations: [...base.locations, { city: 'London', country: 'GB' }] };
+    expect(dedupKeyForJob(multi)).not.toBe(dedupKeyForJob(base));
+    // Site order never changes the key.
+    expect(dedupKeyForJob({ ...multi, locations: [...multi.locations].reverse() })).toBe(dedupKeyForJob(multi));
   });
 });
 

@@ -23,3 +23,11 @@ Review fixes (2026-09-25):
 Integration fix (2026-09-25):
 
 - [x] T11 — Crawl completeness on the `end` line (FR-15..FR-18). `search-completeness.ts` (record, stop reasons, cache endpoint, read-back guard); `FanoutDeadlineError` for the mid-flight abandonment; the fan-out tracks the first bound, skipped and abandoned sources and the failures of the sources that ran, and returns `completeness`; the controller caches the record next to the raw set, reports it on the `end` line, re-runs the fan-out for an NDJSON hit without a valid record, and omits the fields if a service reports none. Acceptance: the service, controller and helper suites listed in spec §8 (FR-15..FR-18 bullet); a mutation that drops the `end`-line fields fails 7 controller tests, one that drops the abandonment's stop reason fails the service test, and removing the "deadline passed" flag fails the frozen-clock test; README "Streaming NDJSON" and the OpenAPI `format` description document the fields and the consumer rule.
+
+Review fixes, second round (2026-09-25):
+
+- [x] T12 — One shared key input (FR-10). `canonicalKeyInputForJob` in `@ever-jobs/common` builds
+  `{ title, company, location, locations, isRemote }`; `DedupHybridService` and `dedupKeyForJob`
+  both use it. Acceptance: `dedupKeyForJob` equals the engine `canonicalJobId` for a remote
+  country-only posting, a multi-location posting and a mixed batch; reverting `dedupKeyForJob` to
+  the 3-field input fails 5 tests; FR-10 records the one-time key change for those postings.

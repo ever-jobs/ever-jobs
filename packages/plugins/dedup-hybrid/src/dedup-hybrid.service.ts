@@ -13,7 +13,15 @@ import {
   SourceObservation,
   provenance,
 } from '@ever-jobs/models';
-import { canonicalJobId, canonicalKey, formatJobLocation, normalizeCompany, normalizeLocation, normalizeTitle } from '@ever-jobs/common';
+import {
+  canonicalJobId,
+  canonicalKey,
+  canonicalKeyInputForJob,
+  formatJobLocation,
+  normalizeCompany,
+  normalizeLocation,
+  normalizeTitle,
+} from '@ever-jobs/common';
 
 import { YieldBudget, yieldToEventLoop } from './cooperative';
 import { HashStrategy } from './strategies/hash-strategy';
@@ -145,13 +153,10 @@ export class DedupHybridService implements IDedupEngine {
       // 'Remote' (no location) or 'Remote - US' (`{ country }` only) keys to
       // `remote`, the same as a source emitting `{ city: 'Remote' }`, so the
       // two hash-merge in stage 1 instead of relying on MinHash.
-      const keyInput = {
-        title: raw.title ?? '',
-        company: raw.companyName ?? '',
-        location: raw.location ? formatLocation(raw.location) : '',
-        locations: raw.locations,
-        isRemote: raw.isRemote,
-      };
+      // Spec 1721 — built by the shared helper that also builds the API's
+      // `dedupKey`, so the cluster id and the key can never read different
+      // fields (title, company, flat location, `locations[]`, `isRemote`).
+      const keyInput = canonicalKeyInputForJob(raw);
       prepared.push({
         index: i,
         canonicalKey: canonicalKey(keyInput),
