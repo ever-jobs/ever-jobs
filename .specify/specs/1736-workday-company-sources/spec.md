@@ -188,6 +188,14 @@ EVER_JOBS_DISABLED_SOURCES=salesforce,adobe,intel,hp,hpe,mastercard,paypal,capit
 ```
 
 (the 53 plugins here plus the two Workday-backed quant plugins of Spec 1737;
-append to any existing value). Fan-out order also matters once a real
-fan-out deadline applies (contract C4): these plugins are registered at the
-tail, so they are the first sources a deadline skips (Q-107).
+append to any existing value). The list was checked against the source on
+2026-09-25: it is exactly the 55 plugins whose service delegates to
+`Site.WORKDAY`. Disabling them leaves the `workday` adapter itself
+registered.
+
+Fan-out order already matters: the fan-out deadline applies today (120 s by
+default, `EVER_JOBS_SEARCH_DEADLINE_MS`; contract C4 renames it), and these
+plugins are registered at the tail, so in a default fan-out that overruns it
+they are the first sources skipped or abandoned mid-flight. Sequential detail
+enrichment (T8) makes each Workday board slower, so a full sync that needs
+them should select them explicitly or raise the deadline (Q-107 follow-up 2).

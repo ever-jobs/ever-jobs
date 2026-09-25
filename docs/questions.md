@@ -134,15 +134,25 @@ Follow-ups and constraints recorded here:
    (NDJSON or all pages) is live — or it ships with the 55 Workday-backed site
    tokens in `EVER_JOBS_DISABLED_SOURCES` (the exact list is in Spec 1736 §7)
    until then.
-2. **Fan-out deadline order.** The plugins are registered at the tail of
-   `Site` / `ALL_SOURCE_MODULES`, so once a real fan-out deadline applies
-   (contract C4) they are the first sources the deadline skips. Today the
-   deadline never applies: `configuration.ts` parses
-   `EVER_JOBS_SEARCH_DEADLINE_MS` and `EVER_JOBS_SEARCH_CONCURRENCY` with
-   `parseInt(env, 120_000)` / `parseInt(env, 64)` — the second argument is the
-   radix, so both are always `NaN` (no deadline; concurrency silently 64). The
-   same pattern breaks `CACHE_EXPIRY` and `CACHE_MAX_ITEMS`. Handed to the
-   list-mode / C4 lane, which owns `configuration.ts`.
+2. **Fan-out deadline order — live today.** The plugins are registered at the
+   tail of `Site` / `ALL_SOURCE_MODULES`, and the fan-out deadline already
+   applies: `search.deadlineMs` is 120 000 ms by default
+   (`EVER_JOBS_SEARCH_DEADLINE_MS`; `0` disables) and `search.concurrency` is
+   64 (`EVER_JOBS_SEARCH_CONCURRENCY`). So in a default fan-out that overruns
+   120 s these are the first sources `JobsService` skips (`deadline_skipped`)
+   or abandons mid-flight. Sequential Workday enrichment (above) makes each
+   Workday board slower: up to `resultsWanted` detail requests, each after a
+   250–500 ms pause, plus 1–2 s between listing pages (for `resultsWanted = 80`,
+   at least ~20–40 s of pauses alone). Callers that need these boards in a
+   full sync should select them (`siteType`, or `siteCategories` once contract
+   C2 lands) or raise the deadline (contract C4). Correction (2026-09-25): an
+   earlier version of this item, following the review, said the deadline never
+   applies because `parseInt(env, 120_000)` / `parseInt(env, 64)` pass a radix.
+   That is wrong: `configuration.ts` shadows `parseInt` with a local
+   `(value, fallback)` helper, so both variables (and `CACHE_EXPIRY` /
+   `CACHE_MAX_ITEMS`) take effect. Pinned by
+   `apps/api/__tests__/config/fanout-config.spec.ts`; nothing to hand to the
+   C4 lane.
 3. **Per-host limits** for the shared Workday clusters and Lever's
    `Crawl-delay: 1`, and whether the adapters keep a desktop-Chrome
    User-Agent, are open items for the crawl-policy lane (Spec 1690; Spec 1735
