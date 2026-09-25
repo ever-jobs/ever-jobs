@@ -435,9 +435,33 @@ export function retryBackoffMs(
   return Math.min(capped, Math.floor(random() * (capped + 1)));
 }
 
+/** Answers that mean "slow down" (Spec 1690 §4.5). */
+const THROTTLE_STATUSES: ReadonlySet<number> = new Set([429, 503]);
+
+/**
+ * The back-off floor for retry number `attempt + 1` after a throttling answer
+ * (`throttleRetryDelayMs`, Spec 1690 §4.5): `throttleRetryDelayMs × 2^attempt`,
+ * capped at `max(retryMaxDelayMs, throttleRetryDelayMs)`. 0 when `status` is not
+ * 429/503 (502, 504, network errors keep the plain backoff) or the floor is off
+ * (`throttleRetryDelayMs` 0 or absent).
+ */
+export function throttleRetryFloorMs(
+  policy: Pick<CrawlPolicy, 'retryMaxDelayMs'> & Partial<Pick<CrawlPolicy, 'throttleRetryDelayMs'>>,
+  attempt: number,
+  status: number | undefined,
+): number {
+  if (status === undefined || !THROTTLE_STATUSES.has(status)) return 0;
+  const floor = policy.throttleRetryDelayMs;
+  if (typeof floor !== 'number' || !(floor > 0)) return 0;
+  const cap = Math.max(policy.retryMaxDelayMs, floor);
+  const raw = floor * Math.pow(2, Math.max(0, attempt));
+  return Math.min(Number.isFinite(raw) ? raw : cap, cap);
+}
+
 /**
  * How long to wait before retry number `attempt + 1`, given the server's
- * `Retry-After` in ms (null = none or `respectRetryAfter` off) — Spec 1690 §4.5:
+ * `Retry-After` in ms (null = none or `respectRetryAfter` off) and the answer's
+ * HTTP `status` (undefined = a network error) — Spec 1690 §4.5:
  *
  * - no Retry-After → the backoff;
  * - `give-up` (default): Retry-After ≤ `maxRetryAfterMs` → `max(backoff,
@@ -449,6 +473,12 @@ export function retryBackoffMs(
  *   `retryMaxDelayMs` (the resolver does it unless a layer sets
  *   `maxRetryAfterMs`), which makes this exactly the pre-1690
  *   `min(retryMaxDelay, max(backoff, Retry-After))`.
+ *
+ * For a 429/503 "the backoff" above is never less than `throttleRetryFloorMs`
+ * (`throttleRetryDelayMs × 2^attempt`): without it a jittered first backoff is
+ * 0–1 s, i.e. retrying faster instead of backing off. The give-up decision is
+ * unchanged. `throttleRetryDelayMs: 0` (the `legacy` preset) is the arithmetic
+ * above exactly.
  */
 export function retryDecision(
   policy: Pick<
@@ -460,12 +490,14 @@ export function retryDecision(
     | 'respectRetryAfter'
     | 'maxRetryAfterMs'
     | 'retryAfterOverMax'
-  >,
+  > &
+    Partial<Pick<CrawlPolicy, 'throttleRetryDelayMs'>>,
   attempt: number,
   retryAfterMs: number | null,
   random: () => number = Math.random,
+  status?: number,
 ): RetryDecision {
-  const backoff = retryBackoffMs(policy, attempt, random);
+  const backoff = Math.max(retryBackoffMs(policy, attempt, random), throttleRetryFloorMs(policy, attempt, status));
   if (!policy.respectRetryAfter || retryAfterMs === null) return { delayMs: backoff };
   const maxRetryAfter = Math.max(0, policy.maxRetryAfterMs);
   if (retryAfterMs <= maxRetryAfter) return { delayMs: Math.max(backoff, retryAfterMs) };
@@ -475,12 +507,21 @@ export function retryDecision(
 
 /**
  * Whether a 429/503 backs off the WHOLE bucket (`penalize`, Spec 1690 §4.5): when
- * the bucket is paced at all — a concurrency cap, a minimum interval or the
- * adaptive throttle. A completely unpaced policy (the `legacy` preset) never did,
- * and a `give-up` Retry-After always cools the bucket regardless.
+ * the bucket is paced at all — a concurrency cap, a minimum interval, the
+ * adaptive throttle or a throttle floor (`throttleRetryDelayMs`). A completely
+ * unpaced policy (the `legacy` preset) never did, and a `give-up` Retry-After
+ * always cools the bucket regardless.
  */
-export function penalizesBucket(policy: Pick<CrawlPolicy, 'maxConcurrentPerHost' | 'minIntervalMs' | 'adaptiveThrottle'>): boolean {
-  return policy.maxConcurrentPerHost > 0 || policy.minIntervalMs > 0 || policy.adaptiveThrottle;
+export function penalizesBucket(
+  policy: Pick<CrawlPolicy, 'maxConcurrentPerHost' | 'minIntervalMs' | 'adaptiveThrottle'> &
+    Partial<Pick<CrawlPolicy, 'throttleRetryDelayMs'>>,
+): boolean {
+  return (
+    policy.maxConcurrentPerHost > 0 ||
+    policy.minIntervalMs > 0 ||
+    policy.adaptiveThrottle ||
+    (policy.throttleRetryDelayMs ?? 0) > 0
+  );
 }
 
 /**
@@ -870,7 +911,8 @@ export class HttpClient {
         status !== undefined && policy.respectRetryAfter
           ? this.retryAfterMs((error as { response?: { headers?: unknown } }).response?.headers)
           : null;
-      const decision = retryDecision(policy, attempt, retryAfter);
+      // A 429/503 gets the throttle floor (`throttleRetryDelayMs`) under its wait.
+      const decision = retryDecision(policy, attempt, retryAfter, undefined, status);
       const willRetry = retryable && attempt < retries;
 
       if ('giveUpAfterMs' in decision) {
@@ -894,7 +936,7 @@ export class HttpClient {
       const delay = decision.delayMs;
       // Any 429/503 backs off the whole bucket, not just this request — whenever
       // the bucket is paced at all (`penalizesBucket`; the unpaced `legacy`
-      // preset never did).
+      // preset never did) — for at least the throttle floor.
       if (throttled && bucket && penalizesBucket(policy)) limiter.penalize(bucket, delay);
       if (!willRetry) throw error;
 
@@ -962,9 +1004,10 @@ export class HttpClient {
   /**
    * Feed a response the caller accepted (e.g. `validateStatus: () => true`) to
    * the limiter: a 429/503 still counts as throttling and backs off the bucket
-   * (the Retry-After, or the backoff, under the give-up/cap rules; Spec 1690
-   * §4.5) — it is just not retried, since the caller asked to see the status.
-   * Anything else is an `ok` outcome.
+   * (the Retry-After, or the backoff — never less than the throttle floor
+   * `throttleRetryDelayMs` — under the give-up/cap rules; Spec 1690 §4.5) — it is
+   * just not retried, since the caller asked to see the status. Anything else is
+   * an `ok` outcome.
    */
   private recordResponse(
     bucket: string,
@@ -981,7 +1024,7 @@ export class HttpClient {
     }
     limiter.recordOutcome(bucket, 'throttled');
     const retryAfter = policy.respectRetryAfter ? this.retryAfterMs(response.headers) : null;
-    const decision = retryDecision(policy, attempt, retryAfter);
+    const decision = retryDecision(policy, attempt, retryAfter, undefined, status);
     if ('giveUpAfterMs' in decision) {
       limiter.penalize(bucket, decision.giveUpAfterMs);
       this.logger.warn(

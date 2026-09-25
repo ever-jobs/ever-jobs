@@ -285,6 +285,12 @@
             ],
             "description": "give-up (default): no retry, cool the whole host; cap: wait maxRetryAfterMs then retry (pre-1690)."
           },
+          "throttleRetryDelayMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Back-off floor after a 429/503, ms: retry n waits at least this x 2^n (capped at max(retryMaxDelayMs, this)) unless Retry-After asks for longer; also the minimum whole-host cool-down. 0 = no floor (pre-1690).",
+            "default": 5000
+          },
           "robotsTxt": {
             "type": "string",
             "enum": [

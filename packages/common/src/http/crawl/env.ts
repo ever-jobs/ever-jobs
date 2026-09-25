@@ -150,6 +150,7 @@ const ENV_FIELDS: ReadonlyArray<readonly [string, keyof CrawlPolicy]> = [
   [CRAWL_ENV.RESPECT_RETRY_AFTER, 'respectRetryAfter'],
   [CRAWL_ENV.MAX_RETRY_AFTER_MS, 'maxRetryAfterMs'],
   [CRAWL_ENV.RETRY_AFTER_OVER_MAX, 'retryAfterOverMax'],
+  [CRAWL_ENV.THROTTLE_RETRY_DELAY_MS, 'throttleRetryDelayMs'],
   [CRAWL_ENV.ROBOTS_TXT, 'robotsTxt'],
   [CRAWL_ENV.BLOCK_PRIVATE_NETWORKS, 'blockPrivateNetworks'],
   [CRAWL_ENV.DISCOVERY, 'discovery'],

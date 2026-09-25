@@ -78,7 +78,7 @@ With no configuration at all (preset `polite`):
 | Bulk ATS APIs | `api.greenhouse.io` / `boards-api.greenhouse.io` 16 in flight, `api.lever.co` / `api.ashbyhq.com` / `api.smartrecruiters.com` 12, no gap |
 | Softy (plugin manifest) | one bucket for all of `softy.pro`, **1** in flight, **1 s** between requests |
 | Proxies | none, unless configured; when a list is configured, one stable proxy per host bucket (`per-host`) |
-| Retries | 2, on `429, 502, 503, 504`, exponential back-off from 1 s (cap 30 s) with full jitter |
+| Retries | 2, on `429, 502, 503, 504`, exponential back-off from 1 s (cap 30 s) with full jitter; a `429`/`503` waits **at least 5 s**, then 10 s (`throttleRetryDelayMs`) |
 | `Retry-After` | honoured; never retried earlier than asked; over **60 s** → give up and cool the whole bucket for the full period |
 | robots.txt | not fetched (`off`) |
 | Private networks | refused (loopback, RFC 1918, link-local, CGNAT, cluster names…) |
@@ -118,6 +118,7 @@ above it.
 | `respectRetryAfter` | `true` | `true` | `true` |
 | `maxRetryAfterMs` | `60000` | `30000` (follows `retryMaxDelayMs`) | `60000` |
 | `retryAfterOverMax` | `give-up` | `cap` | `give-up` |
+| `throttleRetryDelayMs` | `5000` | `0` (no floor) | `30000` |
 | `robotsTxt` | `off` | `off` | `respect` |
 | `blockPrivateNetworks` | `true` | `false` | `true` |
 | `discovery` | `auto` | `auto` | `auto` |
@@ -221,6 +222,7 @@ the CLI run) after changing it. The `SOFTY_*` variables are read per scrape.
 | `EVER_JOBS_CRAWL_RESPECT_RETRY_AFTER` | bool | `true` |
 | `EVER_JOBS_CRAWL_MAX_RETRY_AFTER_MS` | int | `60000` |
 | `EVER_JOBS_CRAWL_RETRY_AFTER_OVER_MAX` | `give-up` \| `cap` | `give-up` |
+| `EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS` | int, back-off floor after a `429`/`503` (§11); `0` = no floor | `5000` |
 | `EVER_JOBS_CRAWL_ROBOTS_TXT` | `off` \| `crawl-delay` \| `respect` | `off` |
 | `EVER_JOBS_CRAWL_BLOCK_PRIVATE_NETWORKS` | bool | `true` |
 | `EVER_JOBS_CRAWL_DISCOVERY` | `auto` \| `sitemap` \| `listing` | `auto` |
@@ -451,6 +453,7 @@ Invalid flag values are printed as warnings and skipped.
 | `rateLimitScope` | `domain` = `site` > `host` |
 | `maxConcurrentPerHost` | lower (`0` = unlimited = least strict) |
 | `minIntervalMs`, `jitterMs`, `retryBaseDelayMs`, `retryMaxDelayMs` | higher |
+| `throttleRetryDelayMs` | higher (`0` = no floor = least strict) |
 | `retries` | lower |
 | `retryStatuses` | a subset |
 | `retryBackoff` | `exponential` > `linear` > `constant` |
@@ -609,9 +612,23 @@ HTTP-date):
   `HostCoolingDownError`.
 - **> `maxRetryAfterMs`**, `cap` → wait `maxRetryAfterMs`, then retry (pre-1690).
 
+**A `429`/`503` never gets a fast retry** (`throttleRetryDelayMs`, default 5 s). With
+full jitter the first back-off is anywhere in 0–1 s, and many servers send `429`/`503`
+without a `Retry-After` — retrying a throttling answer that quickly is retrying *faster*
+instead of backing off. So for a `429` or `503`, retry *n + 1* waits at least
+`throttleRetryDelayMs × 2^n`, capped at `max(retryMaxDelayMs, throttleRetryDelayMs)`:
+with the defaults 5 s, then 10 s (20 s, 30 s, 30 s… with more retries); `strict` waits
+30 s every time. The floor is never less than the normal back-off, and a `Retry-After`
+within `maxRetryAfterMs` still wins when it is longer (`max(floor, back-off,
+Retry-After)`); over `maxRetryAfterMs` the rules above are unchanged (`cap` never waits
+less than the floor). Other retryable answers (`502`, `504`, network errors) keep the
+plain back-off. `0` turns the floor off — the `legacy` preset's value.
+
 Any `429`/`503` in a paced bucket also cools **the whole bucket** — not just the request
-that got it — and feeds the adaptive throttle. This includes a `429` your code accepted
-through `validateStatus` (it is not retried, but it still counts).
+that got it — for the same wait (so at least the floor), and feeds the adaptive throttle.
+A throttle floor counts as pacing: with `throttleRetryDelayMs > 0` the bucket is cooled
+even when concurrency, interval and adaptive throttle are all off. This includes a `429`
+your code accepted through `validateStatus` (it is not retried, but it still counts).
 
 ---
 
@@ -719,8 +736,8 @@ pre-1690 precedence (a request's own UA header, else the client's `userAgent` op
 else Chrome/120; UAs set through `setHeaders()` never reach the wire — exactly the old
 client), per-request proxy rotation with `DEFAULT_PROXIES` ignored, no pacing (the
 builtin host limits and plugin manifests are off too), 3 linear retries on
-`429,500,502,503,504` without jitter, `Retry-After` capped at the retry ceiling and
-retried, no whole-bucket back-off, no egress guard; `BrowserPool` pages get the
+`429,500,502,503,504` without jitter and no `429`/`503` floor, `Retry-After` capped at
+the retry ceiling and retried, no whole-bucket back-off, no egress guard; `BrowserPool` pages get the
 pre-1690 UA pool (a random entry for stealth pages, the first entry otherwise). Combine with `EVER_JOBS_CRAWL_ABORT_ON_DEADLINE=false` and
 `EVER_JOBS_CIRCUIT_MAX_SITES=250` for the old deadline and breaker behaviour.
 
@@ -733,7 +750,7 @@ pre-1690 UA pool (a random entry for stealth pages, the first entry otherwise). 
 | no pacing | `EVER_JOBS_CRAWL_MAX_CONCURRENT_PER_HOST=0`, `EVER_JOBS_CRAWL_MIN_INTERVAL_MS=0`, `EVER_JOBS_CRAWL_ADAPTIVE=false`, `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false`, `EVER_JOBS_CRAWL_PLUGIN_MANIFESTS=false` |
 | round-robin proxies | `EVER_JOBS_CRAWL_PROXY_ROTATION=per-request` |
 | `DEFAULT_PROXIES` unused | `EVER_JOBS_CRAWL_DEFAULT_PROXIES_FALLBACK=false` |
-| old retries | `EVER_JOBS_CRAWL_RETRIES=3`, `EVER_JOBS_CRAWL_RETRY_STATUSES=429,500,502,503,504`, `EVER_JOBS_CRAWL_RETRY_BACKOFF=linear`, `EVER_JOBS_CRAWL_RETRY_JITTER=false`, `EVER_JOBS_CRAWL_MAX_RETRY_AFTER_MS=30000`, `EVER_JOBS_CRAWL_RETRY_AFTER_OVER_MAX=cap` |
+| old retries | `EVER_JOBS_CRAWL_RETRIES=3`, `EVER_JOBS_CRAWL_RETRY_STATUSES=429,500,502,503,504`, `EVER_JOBS_CRAWL_RETRY_BACKOFF=linear`, `EVER_JOBS_CRAWL_RETRY_JITTER=false`, `EVER_JOBS_CRAWL_MAX_RETRY_AFTER_MS=30000`, `EVER_JOBS_CRAWL_RETRY_AFTER_OVER_MAX=cap`, `EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS=0` |
 | no egress guard | `EVER_JOBS_CRAWL_BLOCK_PRIVATE_NETWORKS=false` |
 | requests keep running after the deadline | `EVER_JOBS_CRAWL_ABORT_ON_DEADLINE=false` |
 | breaker tracks 250 sites | `EVER_JOBS_CIRCUIT_MAX_SITES=250` |
@@ -789,7 +806,7 @@ curl 'http://localhost:3001/api/sources/softy/crawl-policy?host=acme.softy.pro'
 }
 ```
 
-(Abridged: the real response lists every one of the 24 fields and its provenance.)
+(Abridged: the real response lists every one of the 25 fields and its provenance.)
 `userAgentReason` appears when a plugin's UA opt-in is in effect (try
 `/api/sources/usajobs/crawl-policy`). `warnings` carries env parse warnings and
 resolution notes, with any `user:password@` redacted. 404 for an unknown site, 400
@@ -829,7 +846,8 @@ Common symptoms:
   Then check `warnings` in §17 (a misspelt value is ignored with a warning).
 - **Still getting 429s.** Lower concurrency or raise the interval for that host
   (the adaptive throttle helps within a process, not across replicas — each replica
-  has its own limiter), or switch the bucket to `domain` scope.
+  has its own limiter), raise its `throttleRetryDelayMs` (the minimum back-off and
+  host cool-down after a `429`/`503`), or switch the bucket to `domain` scope.
 - **A proxy is not used.** Check `proxyRotation` is not `off`, `EVER_JOBS_CRAWL_PROXIES`
   is not `none`, `EVER_JOBS_CRAWL_CALLER_PROXIES` for request proxies, and that
   `legacy` ignores `DEFAULT_PROXIES`. `envProxyCount` in §17 shows what the env gave.

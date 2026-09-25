@@ -176,8 +176,20 @@ capped at `retryMaxDelayMs`, with full jitter if `retryJitter`. If
   full Retry-After, throw `HostCoolingDownError`; `cap`: wait `maxRetryAfterMs` then
   retry (pre-1690 behaviour).
 
+**Back-off floor for throttling answers** (`throttleRetryDelayMs`; polite `5000`,
+strict `30000`, legacy `0`). For a **429 or 503** the backoff above is never less than
+`throttleRetryDelayMs × 2^attempt`, capped at `max(retryMaxDelayMs,
+throttleRetryDelayMs)`: without a usable Retry-After the wait is `max(floor, backoff)`,
+with one ≤ `maxRetryAfterMs` it is `max(floor, backoff, retryAfter)`; over
+`maxRetryAfterMs` `give-up` is unchanged and `cap` waits `max(floor, backoff,
+maxRetryAfterMs)`. Other retryable outcomes (502, 504, network errors) keep the plain
+backoff; `0` disables the floor. Without it a jittered first backoff is 0–1 s, i.e. a
+429 without Retry-After was retried *faster* instead of backing off (an operator
+complaint; a live check saw LinkedIn retried 1.03 s after a 429).
+
 Any 429/503 also calls `recordOutcome('throttled')` and `penalize(bucket, delay)` so
-**the whole bucket** backs off, not only the request that got the 429. A request
+**the whole bucket** backs off, not only the request that got the 429 — for at least
+the floor. A request
 that arrives while its bucket cools down longer than `maxQueueWaitMs` (when set)
 fails fast with `HostCoolingDownError`.
 
@@ -247,6 +259,7 @@ in fork syncs (Specs 1688/1689) for every plugin at once.
 | `EVER_JOBS_CRAWL_RESPECT_RETRY_AFTER` | bool (`true`) |
 | `EVER_JOBS_CRAWL_MAX_RETRY_AFTER_MS` | int (`60000`) |
 | `EVER_JOBS_CRAWL_RETRY_AFTER_OVER_MAX` | `give-up` \| `cap` (`give-up`) |
+| `EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS` | int, 0 = no floor (`5000`; `30000` under `strict`, `0` under `legacy`) — §4.5 back-off floor for 429/503 |
 | `EVER_JOBS_CRAWL_ROBOTS_TXT` | `off` \| `crawl-delay` \| `respect` (`off`) |
 | `EVER_JOBS_CRAWL_BLOCK_PRIVATE_NETWORKS` | bool (`true`) |
 | `EVER_JOBS_CRAWL_DISCOVERY` | `auto` \| `sitemap` \| `listing` (`auto`) |
@@ -414,10 +427,11 @@ differently, and why. Where the design was silent the most flexible option was t
   is tolerated. Merge order per field: `RETRY_PER_SOURCE` < policy file <
   `EVER_JOBS_CRAWL_POLICIES`.
 - **Whole-bucket back-off only for paced buckets.** A 429/503 penalises the bucket
-  when it is paced at all (a concurrency cap, an interval or the adaptive throttle);
-  the completely unpaced `legacy` preset never did, and still does not. A `give-up`
-  Retry-After always cools the bucket. A 429/503 the caller accepted through
-  `validateStatus` still counts as throttling (it is just not retried).
+  when it is paced at all (a concurrency cap, an interval, the adaptive throttle or a
+  `throttleRetryDelayMs` floor); the completely unpaced `legacy` preset never did, and
+  still does not. A `give-up` Retry-After always cools the bucket. A 429/503 the caller
+  accepted through `validateStatus` still counts as throttling (it is just not
+  retried) and cools the bucket for at least the floor.
 - **Cool-downs are bounded**: any `penalize` is capped at `maxCooldownMs` (1 h,
   `EVER_JOBS_CRAWL_MAX_COOLDOWN_MS`) so one hostile `Retry-After` cannot wedge a shared
   bucket for the life of the process; longer timers are armed in chunks (Node's
@@ -469,6 +483,14 @@ differently, and why. Where the design was silent the most flexible option was t
 ### 9.2 Additions beyond §4–§5
 
 - The environment variables listed under §5.1 "Added during implementation".
+- **`throttleRetryDelayMs`** (the 25th field; env `EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS`;
+  polite `5000`, strict `30000`, legacy `0`), added after an operator complaint that
+  a 429 was answered by retrying immediately: the §4.5 back-off floor for 429/503 and
+  minimum whole-bucket cool-down. Wired like every other field — env, operator and
+  plugin layers, `CrawlPolicyDto`, GraphQL `CrawlPolicyInput`, MCP `crawl`,
+  `tool_manifest.json` — and under `stricter` a caller may only raise it (0 = no
+  floor = least strict). `retryDecision(policy, attempt, retryAfterMs, random,
+  status)` takes the answer's status; `throttleRetryFloorMs()` is exported with it.
 - `EVER_JOBS_CRAWL_PROXIES` also accepts a JSON array; `none`/`off`/`direct` = no
   proxies and no fallback to `DEFAULT_PROXIES`.
 - Value coercion: integers ≥ 0 (fractions floored, values above 2^31−1 clamped);

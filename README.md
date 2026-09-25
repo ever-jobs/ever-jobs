@@ -385,6 +385,7 @@ All settings are configurable via environment variables. Copy `.env.example` to 
 | `EVER_JOBS_CRAWL_PROXIES` | (empty) | Proxy list; falls back to `DEFAULT_PROXIES`          |
 | `EVER_JOBS_CRAWL_RETRIES` | `2`     | Retries on `EVER_JOBS_CRAWL_RETRY_STATUSES` (`429,502,503,504`) |
 | `EVER_JOBS_CRAWL_MAX_RETRY_AFTER_MS` | `60000` | Longer `Retry-After` → give up and cool the host |
+| `EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS` | `5000` | A `429`/`503` waits at least this (doubling per retry) and cools the host that long; `0` = no floor |
 | `EVER_JOBS_CRAWL_ROBOTS_TXT` | `off` | `off`, `crawl-delay`, `respect`                        |
 | `EVER_JOBS_CRAWL_BLOCK_PRIVATE_NETWORKS` | `true` | Refuse private/internal destinations (set `false` for local mocks) |
 | `EVER_JOBS_CRAWL_POLICIES` | (empty) | JSON per-site / per-host policies (`{"sites":{…},"hosts":{…}}`) |
@@ -543,6 +544,7 @@ All parameters are optional. When `siteType` is omitted, search + company scrape
 | `retryBaseDelayMs` / `retryMaxDelayMs` | `integer` | `1000` / `30000` | Back-off base and cap |
 | `retryJitter` / `retryOnNetworkError` | `boolean` | `true` / `false` | Full jitter; also retry connection errors |
 | `respectRetryAfter` / `maxRetryAfterMs` / `retryAfterOverMax` | `boolean` / `integer` / `string` | `true` / `60000` / `give-up` | Honour `Retry-After`; beyond the max `give-up` (cool the host) or `cap` |
+| `throttleRetryDelayMs` | `integer` | `5000` | Back-off floor after a `429`/`503`: retry *n* waits at least this × 2^n (capped at `max(retryMaxDelayMs, this)`), and the host cools down at least that long; `0` = no floor |
 | `robotsTxt` | `string` | `off` | `off`, `crawl-delay`, `respect` |
 | `blockPrivateNetworks` | `boolean` | `true` | Egress guard; a request can turn it on, never off |
 | `discovery` | `string` | `auto` | `auto`, `sitemap`, `listing` (plugins with several strategies, e.g. Softy) |

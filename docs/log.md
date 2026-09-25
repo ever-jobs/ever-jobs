@@ -58,7 +58,7 @@ User-Agent that hid who we are, and retries on 429/5xx. The audit found all four
 defects of the shared `HttpClient`, so they are fixed there, for every plugin, without
 editing plugin call sites:
 
-- **One policy object, six layers.** `CrawlPolicy` (24 knobs) is resolved per request from
+- **One policy object, six layers.** `CrawlPolicy` (25 knobs) is resolved per request from
   preset (`polite` default, `legacy` = exact pre-1690 behaviour, `strict`) → `EVER_JOBS_CRAWL_*`
   env → builtin limits for bulk ATS APIs (Greenhouse, Lever, Ashby, SmartRecruiters) → the
   plugin (`@SourcePlugin({ crawl })` + client options) → operator per-site / per-host JSON
@@ -76,6 +76,9 @@ editing plugin call sites:
   available); `DEFAULT_PROXIES`, parsed and never used before, is now the fallback list.
 - **Back-off.** 2 exponential retries with jitter on 429/502/503/504; never earlier than
   `Retry-After`; beyond 60 s give up and cool the whole bucket (`cap` restores the old retry).
+  A 429/503 without a longer `Retry-After` waits at least `throttleRetryDelayMs` × 2^n
+  (5 s, then 10 s; `strict` 30 s, `legacy` 0 = off) and cools the host that long — added
+  after an operator saw a 429 retried after ~1 s (`EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS`).
 - **Also:** opt-in robots.txt (`crawl-delay` / `respect`); egress guard against private and
   cluster-internal destinations with DNS-rebinding protection (Q-092 option B, for every
   plugin); the search deadline now aborts an abandoned source's queued and in-flight

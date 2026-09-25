@@ -167,6 +167,7 @@ describe('crawl policy env (Spec 1690)', () => {
       [CRAWL_ENV.RETRY_BASE_DELAY_MS, 'retryBaseDelayMs'],
       [CRAWL_ENV.RETRY_MAX_DELAY_MS, 'retryMaxDelayMs'],
       [CRAWL_ENV.MAX_RETRY_AFTER_MS, 'maxRetryAfterMs'],
+      [CRAWL_ENV.THROTTLE_RETRY_DELAY_MS, 'throttleRetryDelayMs'],
     ];
 
     describe.each(INT_VARS)('%s (int >= 0)', (name, field) => {
@@ -581,6 +582,7 @@ describe('crawl policy env (Spec 1690)', () => {
       RESPECT_RETRY_AFTER: 'false',
       MAX_RETRY_AFTER_MS: '5',
       RETRY_AFTER_OVER_MAX: 'cap',
+      THROTTLE_RETRY_DELAY_MS: '7',
       ROBOTS_TXT: 'respect',
       BLOCK_PRIVATE_NETWORKS: 'false',
       DISCOVERY: 'sitemap',
@@ -621,6 +623,7 @@ describe('crawl policy env (Spec 1690)', () => {
       respectRetryAfter: false,
       maxRetryAfterMs: 5,
       retryAfterOverMax: 'cap',
+      throttleRetryDelayMs: 7,
       robotsTxt: 'respect',
       blockPrivateNetworks: false,
       discovery: 'sitemap',

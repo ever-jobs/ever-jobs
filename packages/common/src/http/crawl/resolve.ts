@@ -261,6 +261,7 @@ export function explainCrawlPolicy(input: CrawlPolicyResolveInput, env?: CrawlPo
  * | rateLimitScope         | domain = site > host                                               |
  * | maxConcurrentPerHost   | lower; 0 means unlimited (least strict)                            |
  * | minIntervalMs, jitterMs, retryBaseDelayMs, retryMaxDelayMs | higher                         |
+ * | throttleRetryDelayMs   | higher (0 = no floor = least strict)                               |
  * | maxQueueWaitMs         | any — pacing is enforced either way (not a politeness knob)        |
  * | adaptiveThrottle       | true                                                               |
  * | retries                | lower                                                              |
@@ -412,6 +413,7 @@ function isAtLeastAsStrict(
     case 'jitterMs':
     case 'retryBaseDelayMs':
     case 'retryMaxDelayMs':
+    case 'throttleRetryDelayMs':
       return num(candidate) >= num(current);
     case 'retries':
       return num(candidate) <= num(current);

@@ -218,8 +218,10 @@ and they are imported by the consumer module directly, not via
   failures (per source).
   *Since Spec 1690* retries live in `HttpClient`, resolved from the crawl policy (default 2
   on 429/502/503/504, never earlier than `Retry-After`; a `Retry-After` over 60 s gives
-  up and cools the whole host bucket). A scrape aborted at the search deadline does not
-  count toward the circuit breaker.
+  up and cools the whole host bucket; a 429/503 without `Retry-After` waits at least
+  `throttleRetryDelayMs` — 5 s, then 10 s — and cools the host bucket just as long).
+  Never add a plugin-level retry loop that re-requests a 429 sooner. A scrape aborted
+  at the search deadline does not count toward the circuit breaker.
 - **Parsing.** Stream HTML through Cheerio when possible; reuse `Turndown` instance.
 - **JSON.** Use `JSON.parse` only on validated payloads; prefer `Zod.parse` for shape.
 - **Memory.** Bound result-set size per source (`maxResults`), enforce it in the plugin.

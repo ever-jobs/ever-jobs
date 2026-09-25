@@ -13,6 +13,7 @@ import {
   retryBackoffMs,
   retryDecision,
   selectWireUserAgent,
+  throttleRetryFloorMs,
 } from '../src/http/http-client';
 import { resetProxyScrapeSeed } from '../src/http/crawl/proxy-selector';
 import {
@@ -21,6 +22,7 @@ import {
   LEGACY_BROWSER_USER_AGENT,
   LEGACY_CRAWL_POLICY,
   POLITE_CRAWL_POLICY,
+  STRICT_CRAWL_POLICY,
 } from '../src/http/crawl/defaults';
 import { getGuardedAgents, resetGuardedAgents, EGRESS_GUARD_ENV } from '../src/http/crawl/egress-guard';
 import { CRAWL_EXTRA_ENV, resetCrawlPolicyEnvCache } from '../src/http/crawl/env';
@@ -906,6 +908,135 @@ describe('retries and back-off (Spec 1690 §4.5)', () => {
   });
 });
 
+// ── throttle floor ───────────────────────────────────────────────────────────
+
+describe('back-off floor for 429/503 without Retry-After (throttleRetryDelayMs, Spec 1690 §4.5)', () => {
+  it.each([429, 503])('a %d without Retry-After is not retried before 5 s, then 10 s (polite, jitter on)', async (status) => {
+    const client = new HttpClient();
+    const warn = jest.spyOn((client as any).logger, 'warn').mockImplementation(() => undefined);
+    const h = attach(client, (_c, i) => (i < 2 ? { status } : { status: 200 }));
+
+    const result = client.get(URL_A);
+    await jest.advanceTimersByTimeAsync(4_999);
+    const beforeFloor = h.sent.length;
+    await jest.advanceTimersByTimeAsync(1);
+    const atFloor = h.sent.length;
+    await jest.advanceTimersByTimeAsync(9_999);
+    const beforeSecondFloor = h.sent.length;
+    await jest.advanceTimersByTimeAsync(1);
+    const response = await result;
+
+    expect(beforeFloor).toBe(1);
+    expect(atFloor).toBe(2);
+    expect(beforeSecondFloor).toBe(2);
+    expect(h.sent).toHaveLength(3);
+    expect(response.status).toBe(200);
+    expect(gaps(h.sent)).toEqual([5000, 10_000]);
+    expect(warn.mock.calls.map((c) => /in (\d+)ms/.exec(c[0] as string)?.[1])).toEqual(['5000', '10000']);
+  });
+
+  it('a second request to the same host waits out the bucket cool-down; other hosts do not', async () => {
+    const client = new HttpClient({ retries: 0 });
+    const h = attach(client, (c) => (String(c.url).endsWith('/first') ? { status: 429 } : { status: 200 }));
+
+    const first = await settle(client.get(`${URL_A}/first`), 0);
+    const t0 = Date.now();
+    const cooling = getHostLimiter().coolingDownUntil('host:acme.example.com') - t0;
+    const second = client.get(`${URL_A}/second`);
+    const other = client.get('https://other.example.org/x');
+    await jest.advanceTimersByTimeAsync(4_999);
+    const sentBeforeCoolDownEnds = h.sent.map((s) => s.url);
+    await jest.advanceTimersByTimeAsync(1);
+    await Promise.all([second, other]);
+
+    expect((first as AxiosError).response?.status).toBe(429);
+    expect(cooling).toBe(5000);
+    expect(sentBeforeCoolDownEnds).toEqual([`${URL_A}/first`, 'https://other.example.org/x']);
+    expect(h.sent.find((s) => s.url.endsWith('/second'))!.startedAt - t0).toBe(5000);
+  });
+
+  it('a 429 the caller accepts (validateStatus) cools the bucket for the floor too', async () => {
+    const client = new HttpClient();
+    const h = attach(client, (_c, i) => (i === 0 ? { status: 429 } : { status: 200 }));
+
+    const first = await settle(client.get(URL_A, { validateStatus: () => true }), 0);
+    const cooling = getHostLimiter().coolingDownUntil('host:acme.example.com') - Date.now();
+    const second = client.get(URL_A);
+    await jest.advanceTimersByTimeAsync(4_999);
+    const sentBefore = h.sent.length;
+    await jest.advanceTimersByTimeAsync(1);
+    await second;
+
+    expect((first as { status: number }).status).toBe(429);
+    expect(cooling).toBe(5000);
+    expect(sentBefore).toBe(1);
+    expect(h.sent).toHaveLength(2);
+  });
+
+  it('a Retry-After shorter than the floor is lifted to the floor; a longer one wins', async () => {
+    const short = new HttpClient();
+    const hs = attach(short, (_c, i) => (i === 0 ? { status: 429, headers: { 'retry-after': '2' } } : { status: 200 }));
+    await settle(short.get(URL_A));
+
+    resetCrawlState();
+    const long = new HttpClient();
+    const hl = attach(long, (_c, i) => (i === 0 ? { status: 503, headers: { 'retry-after': '8' } } : { status: 200 }));
+    await settle(long.get(URL_A));
+
+    expect(gaps(hs.sent)).toEqual([5000]);
+    expect(gaps(hl.sent)).toEqual([8000]);
+  });
+
+  it('502 (and other non-throttling retries) keep the plain backoff and do not cool the bucket', async () => {
+    const client = new HttpClient({ crawl: { retryJitter: false } });
+    const h = attach(client, (_c, i) => (i === 0 ? { status: 502 } : { status: 200 }));
+    const penalize = jest.spyOn(getHostLimiter(), 'penalize');
+
+    await settle(client.get(URL_A));
+
+    expect(gaps(h.sent)).toEqual([1000]);
+    expect(penalize).not.toHaveBeenCalled();
+  });
+
+  it('EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS sets the floor; 0 restores the plain (jittered) backoff', async () => {
+    setEnv({ [CRAWL_ENV.THROTTLE_RETRY_DELAY_MS]: '2000' });
+    const custom = new HttpClient({ crawl: { retryJitter: false } });
+    const hc = attach(custom, (_c, i) => (i < 2 ? { status: 429 } : { status: 200 }));
+    await settle(custom.get(URL_A));
+
+    setEnv({ [CRAWL_ENV.THROTTLE_RETRY_DELAY_MS]: '0' });
+    const off = new HttpClient({ crawl: { retryJitter: false } });
+    const ho = attach(off, (_c, i) => (i < 2 ? { status: 429 } : { status: 200 }));
+    await settle(off.get(URL_A));
+
+    expect(gaps(hc.sent)).toEqual([2000, 4000]);
+    expect(gaps(ho.sent)).toEqual([1000, 2000]);
+  });
+
+  it('a per-request crawl override can raise the floor for one request', async () => {
+    const client = new HttpClient();
+    const h = attach(client, (_c, i) => (i === 0 ? { status: 429 } : { status: 200 }));
+
+    const config: import('../src/http/http-client').CrawlRequestConfig = { crawl: { throttleRetryDelayMs: 12_000 } };
+
+    await settle(client.get(URL_A, config));
+
+    expect(gaps(h.sent)).toEqual([12_000]);
+  });
+
+  it('legacy: a 429 without Retry-After is retried after the pre-1690 linear backoff, with no cool-down', async () => {
+    setEnv({ [CRAWL_ENV.PRESET]: 'legacy' });
+    const client = new HttpClient();
+    const h = attach(client, (_c, i) => (i === 0 ? { status: 429 } : { status: 200 }));
+
+    await settle(client.get(URL_A));
+
+    expect(client.crawlPolicyFor(URL_A).throttleRetryDelayMs).toBe(0);
+    expect(gaps(h.sent)).toEqual([1000]);
+    expect(getHostLimiter().coolingDownUntil('host:acme.example.com')).toBe(0);
+  });
+});
+
 // ── abort ────────────────────────────────────────────────────────────────────
 
 describe('abort (Spec 1690 §4.6)', () => {
@@ -1413,6 +1544,103 @@ describe('helpers', () => {
     expect(penalizesBucket({ ...POLITE_CRAWL_POLICY, adaptiveThrottle: false })).toBe(true);
     expect(penalizesBucket({ maxConcurrentPerHost: 0, minIntervalMs: 0, adaptiveThrottle: true })).toBe(true);
     expect(penalizesBucket(LEGACY_CRAWL_POLICY)).toBe(false);
+  });
+
+  it('penalizesBucket: a throttle floor counts as pacing; 0 (legacy) does not', () => {
+    const unpaced = { maxConcurrentPerHost: 0, minIntervalMs: 0, adaptiveThrottle: false };
+    expect(penalizesBucket({ ...unpaced, throttleRetryDelayMs: 5000 })).toBe(true);
+    expect(penalizesBucket({ ...unpaced, throttleRetryDelayMs: 0 })).toBe(false);
+    expect(penalizesBucket(unpaced)).toBe(false);
+  });
+
+  describe('throttle floor (throttleRetryDelayMs)', () => {
+    const polite = policy(); // jitter on, as by default
+    const zero = () => 0;
+    const almostOne = () => 0.999999;
+
+    it('throttleRetryFloorMs: floor × 2^attempt for 429/503, capped at max(retryMaxDelayMs, floor); 0 otherwise', () => {
+      expect([0, 1, 2, 3, 4, 40, 5000].map((a) => throttleRetryFloorMs(polite, a, 429))).toEqual([
+        5000, 10_000, 20_000, 30_000, 30_000, 30_000, 30_000,
+      ]);
+      expect(throttleRetryFloorMs(polite, 1, 503)).toBe(10_000);
+      for (const status of [502, 504, 500, 404, 200, undefined]) expect(throttleRetryFloorMs(polite, 0, status)).toBe(0);
+      expect(throttleRetryFloorMs(policy({ throttleRetryDelayMs: 0 }), 0, 429)).toBe(0);
+      expect(throttleRetryFloorMs({ retryMaxDelayMs: 30_000 }, 0, 429)).toBe(0); // field absent = off
+      // A floor above retryMaxDelayMs is its own cap.
+      expect([0, 1].map((a) => throttleRetryFloorMs(policy({ throttleRetryDelayMs: 60_000 }), a, 429))).toEqual([60_000, 60_000]);
+    });
+
+    it.each([429, 503])('%d without Retry-After: attempt 0 ≥ 5000, attempt 1 ≥ 10000, capped at 30000', (status) => {
+      for (const random of [zero, almostOne]) {
+        expect(retryDecision(polite, 0, null, random, status)).toEqual({ delayMs: 5000 });
+        expect(retryDecision(polite, 1, null, random, status)).toEqual({ delayMs: 10_000 });
+        expect(retryDecision(polite, 2, null, random, status)).toEqual({ delayMs: 20_000 });
+        expect(retryDecision(polite, 3, null, random, status)).toEqual({ delayMs: 30_000 });
+        expect(retryDecision(polite, 9, null, random, status)).toEqual({ delayMs: 30_000 });
+      }
+      // Never less than the normal backoff (here a linear 8 s one).
+      expect(retryDecision(policy({ retryBackoff: 'linear', retryBaseDelayMs: 8000, retryJitter: false }), 0, null, zero, status)).toEqual({
+        delayMs: 8000,
+      });
+      // With respectRetryAfter off there is never a usable Retry-After: the floor applies.
+      expect(retryDecision(policy({ respectRetryAfter: false }), 0, null, zero, status)).toEqual({ delayMs: 5000 });
+    });
+
+    it('502, 504 and network errors are unaffected', () => {
+      for (const status of [502, 504, undefined]) {
+        expect(retryDecision(polite, 0, null, zero, status)).toEqual({ delayMs: 0 });
+        expect(retryDecision(polite, 1, null, almostOne, status)).toEqual({ delayMs: 2000 });
+      }
+    });
+
+    it('a Retry-After within maxRetryAfterMs: max(floor, backoff, Retry-After)', () => {
+      expect(retryDecision(polite, 0, 2000, zero, 429)).toEqual({ delayMs: 5000 }); // floor beats a shorter Retry-After
+      expect(retryDecision(polite, 0, 7000, zero, 429)).toEqual({ delayMs: 7000 }); // a longer Retry-After wins
+      expect(retryDecision(polite, 1, 45_000, zero, 503)).toEqual({ delayMs: 45_000 });
+      expect(retryDecision(polite, 0, 0, zero, 429)).toEqual({ delayMs: 5000 }); // Retry-After: 0 / a past date
+    });
+
+    it('a Retry-After over maxRetryAfterMs keeps the give-up / cap behaviour', () => {
+      expect(retryDecision(polite, 0, 61_000, zero, 429)).toEqual({ giveUpAfterMs: 61_000 });
+      expect(retryDecision(policy({ retryAfterOverMax: 'cap' }), 0, 120_000, zero, 429)).toEqual({ delayMs: 60_000 });
+      // cap never waits less than the floor would have without any Retry-After.
+      expect(retryDecision(policy({ retryAfterOverMax: 'cap', throttleRetryDelayMs: 90_000 }), 0, 120_000, zero, 429)).toEqual({
+        delayMs: 90_000,
+      });
+    });
+
+    it('throttleRetryDelayMs 0 is exactly the pre-floor arithmetic', () => {
+      const off = policy({ throttleRetryDelayMs: 0 });
+      for (const attempt of [0, 1, 2, 5]) {
+        for (const retryAfter of [null, 0, 2000, 45_000, 61_000]) {
+          for (const status of [429, 503, 502, undefined]) {
+            expect(retryDecision(off, attempt, retryAfter, almostOne, status)).toEqual(retryDecision(off, attempt, retryAfter, almostOne));
+          }
+        }
+      }
+      expect(retryDecision(off, 0, null, zero, 429)).toEqual({ delayMs: 0 });
+    });
+
+    it('the legacy preset is unaffected (floor 0): pre-1690 linear arithmetic for 429/503', () => {
+      const legacy = { ...LEGACY_CRAWL_POLICY };
+      expect(legacy.throttleRetryDelayMs).toBe(0);
+      for (const status of [429, 503]) {
+        expect([0, 1, 2].map((a) => retryDecision(legacy, a, null, Math.random, status))).toEqual([
+          { delayMs: 1000 },
+          { delayMs: 2000 },
+          { delayMs: 3000 },
+        ]);
+        expect(retryDecision(legacy, 0, 120_000, Math.random, status)).toEqual({ delayMs: 30_000 });
+        expect(retryDecision(legacy, 1, 1_000, Math.random, status)).toEqual({ delayMs: 2000 });
+      }
+    });
+
+    it('the strict preset waits at least 30 s after a 429/503', () => {
+      expect(STRICT_CRAWL_POLICY.throttleRetryDelayMs).toBe(30_000);
+      expect(retryDecision(STRICT_CRAWL_POLICY, 0, null, zero, 429)).toEqual({ delayMs: 30_000 });
+      expect(retryDecision(STRICT_CRAWL_POLICY, 3, null, zero, 503)).toEqual({ delayMs: 30_000 });
+      expect(retryDecision(STRICT_CRAWL_POLICY, 0, 45_000, zero, 503)).toEqual({ delayMs: 45_000 });
+    });
   });
 
   it('parseRetryAfter reads seconds and HTTP-dates', () => {

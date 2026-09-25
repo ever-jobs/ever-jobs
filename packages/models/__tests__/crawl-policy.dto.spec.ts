@@ -43,6 +43,7 @@ describe('CrawlPolicyDto (Spec 1690)', () => {
       respectRetryAfter: true,
       maxRetryAfterMs: 60000,
       retryAfterOverMax: 'give-up',
+      throttleRetryDelayMs: 5000,
       robotsTxt: 'respect',
       blockPrivateNetworks: true,
       discovery: 'sitemap',
@@ -69,6 +70,7 @@ describe('CrawlPolicyDto (Spec 1690)', () => {
     'retryBaseDelayMs',
     'retryMaxDelayMs',
     'maxRetryAfterMs',
+    'throttleRetryDelayMs',
   ])('%s: accepts 0 and positive integers, rejects negatives, fractions and strings', async (field) => {
     expect(await errorsFor({ [field]: 0 })).toEqual([]);
     expect(await errorsFor({ [field]: 5 })).toEqual([]);

@@ -104,6 +104,12 @@ export class CrawlPolicyGqlInput extends CrawlPolicyDto {
   @Field(() => String, { nullable: true, description: oneOf(CRAWL_POLICY_DTO_VALUES.retryAfterOverMax) })
   retryAfterOverMax?: CrawlDtoRetryAfterOverMax;
 
+  @Field(() => Int, {
+    nullable: true,
+    description: 'Back-off floor after a 429/503, ms (doubles per retry; also the minimum host cool-down). 0 = no floor.',
+  })
+  throttleRetryDelayMs?: number;
+
   @Field(() => String, { nullable: true, description: oneOf(CRAWL_POLICY_DTO_VALUES.robotsTxt) })
   robotsTxt?: CrawlDtoRobotsTxt;
 

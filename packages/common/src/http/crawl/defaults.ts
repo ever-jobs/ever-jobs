@@ -66,6 +66,9 @@ export const POLITE_CRAWL_POLICY: CrawlPolicy = {
   respectRetryAfter: true,
   maxRetryAfterMs: 60000,
   retryAfterOverMax: 'give-up',
+  // A 429/503 without Retry-After waits ≥ 5 s, then ≥ 10 s — not the 0–1 s of a
+  // jittered first backoff (retrying faster instead of backing off).
+  throttleRetryDelayMs: 5000,
 
   robotsTxt: 'off',
   blockPrivateNetworks: true,
@@ -101,6 +104,7 @@ export const LEGACY_CRAWL_POLICY: CrawlPolicy = {
   respectRetryAfter: true,
   maxRetryAfterMs: 30000,
   retryAfterOverMax: 'cap',
+  throttleRetryDelayMs: 0,
 
   robotsTxt: 'off',
   blockPrivateNetworks: false,
@@ -109,7 +113,8 @@ export const LEGACY_CRAWL_POLICY: CrawlPolicy = {
 
 /**
  * `strict` — the most conservative crawler: honest UA everywhere, one request at
- * a time per registrable domain, one per second, robots.txt obeyed.
+ * a time per registrable domain, one per second, robots.txt obeyed, and at least
+ * 30 s of back-off after a 429/503.
  */
 export const STRICT_CRAWL_POLICY: CrawlPolicy = {
   ...POLITE_CRAWL_POLICY,
@@ -121,6 +126,7 @@ export const STRICT_CRAWL_POLICY: CrawlPolicy = {
   jitterMs: 250,
   retries: 1,
   retryStatuses: [429, 503],
+  throttleRetryDelayMs: 30000,
   robotsTxt: 'respect',
 };
 
@@ -173,6 +179,7 @@ export const CRAWL_ENV = {
   RESPECT_RETRY_AFTER: 'EVER_JOBS_CRAWL_RESPECT_RETRY_AFTER',
   MAX_RETRY_AFTER_MS: 'EVER_JOBS_CRAWL_MAX_RETRY_AFTER_MS',
   RETRY_AFTER_OVER_MAX: 'EVER_JOBS_CRAWL_RETRY_AFTER_OVER_MAX',
+  THROTTLE_RETRY_DELAY_MS: 'EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS',
   ROBOTS_TXT: 'EVER_JOBS_CRAWL_ROBOTS_TXT',
   BLOCK_PRIVATE_NETWORKS: 'EVER_JOBS_CRAWL_BLOCK_PRIVATE_NETWORKS',
   DISCOVERY: 'EVER_JOBS_CRAWL_DISCOVERY',

@@ -111,6 +111,15 @@ export interface CrawlPolicy {
   /** A `Retry-After` longer than this triggers `retryAfterOverMax`. */
   maxRetryAfterMs: number;
   retryAfterOverMax: RetryAfterOverMax;
+  /**
+   * Back-off floor for throttling answers (429/503), ms. Retry number n + 1 of a
+   * 429/503 waits at least `throttleRetryDelayMs × 2^n`, capped at
+   * `max(retryMaxDelayMs, throttleRetryDelayMs)` — never less than the normal
+   * backoff, never earlier than a `Retry-After` within `maxRetryAfterMs`. The same
+   * floor is the minimum whole-bucket cool-down after any 429/503 (retried or
+   * not). 0 = no floor (the pre-1690 behaviour).
+   */
+  throttleRetryDelayMs: number;
 
   // ── Other ─────────────────────────────────────────────────────────────────
   robotsTxt: RobotsTxtMode;

@@ -203,6 +203,16 @@ export class CrawlPolicyDto {
   @IsIn(CRAWL_POLICY_DTO_VALUES.retryAfterOverMax)
   retryAfterOverMax?: CrawlDtoRetryAfterOverMax;
 
+  @ApiPropertyOptional({
+    description:
+      'Back-off floor for a 429/503, ms: retry n waits at least this × 2^n (capped at max(retryMaxDelayMs, this)) when no usable `Retry-After` asks for longer, and any 429/503 cools the whole bucket at least that long. 0 = no floor.',
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  throttleRetryDelayMs?: number;
+
   // ── Other ───────────────────────────────────────────────────────────────
 
   @ApiPropertyOptional({

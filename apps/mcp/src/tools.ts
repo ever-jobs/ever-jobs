@@ -146,6 +146,9 @@ export const CRAWL_POLICY_INPUT_SCHEMA = {
     respectRetryAfter: { type: 'boolean' },
     maxRetryAfterMs: nonNegativeInt('A Retry-After longer than this triggers retryAfterOverMax, ms.'),
     retryAfterOverMax: { type: 'string', enum: [...MCP_CRAWL_ENUMS.retryAfterOverMax] },
+    throttleRetryDelayMs: nonNegativeInt(
+      'Back-off floor after a 429/503, ms: retry n waits at least this x 2^n; also the minimum host cool-down. 0 = no floor.',
+    ),
     robotsTxt: { type: 'string', enum: [...MCP_CRAWL_ENUMS.robotsTxt] },
     blockPrivateNetworks: { type: 'boolean' },
     discovery: { type: 'string', enum: [...MCP_CRAWL_ENUMS.discovery] },

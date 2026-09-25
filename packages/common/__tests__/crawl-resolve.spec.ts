@@ -134,6 +134,53 @@ describe('resolveCrawlPolicy (Spec 1690)', () => {
     });
   });
 
+  describe('throttleRetryDelayMs — the 429/503 back-off floor', () => {
+    it('presets: polite 5 s, strict 30 s, legacy 0 (off, as before 1690)', () => {
+      expect(resolveCrawlPolicy({}, envOf()).throttleRetryDelayMs).toBe(5000);
+      expect(resolveCrawlPolicy({}, envOf({ [CRAWL_ENV.PRESET]: 'strict' })).throttleRetryDelayMs).toBe(30_000);
+      expect(resolveCrawlPolicy({}, envOf({ [CRAWL_ENV.PRESET]: 'legacy' })).throttleRetryDelayMs).toBe(0);
+    });
+
+    it('EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS sets it at the env-global layer', () => {
+      const resolved = resolveCrawlPolicy({}, envOf({ [CRAWL_ENV.THROTTLE_RETRY_DELAY_MS]: '12000' }));
+      expect(resolved.throttleRetryDelayMs).toBe(12_000);
+      expect(resolved.provenance.throttleRetryDelayMs).toBe('env-global');
+      expect(resolveCrawlPolicy({}, envOf({ [CRAWL_ENV.THROTTLE_RETRY_DELAY_MS]: '0' })).throttleRetryDelayMs).toBe(0);
+    });
+
+    it.each(['-1', 'soon', '5s'])('an invalid env value (%j) is warned about and ignored (the preset stands)', (raw) => {
+      const env = envOf({ [CRAWL_ENV.THROTTLE_RETRY_DELAY_MS]: raw });
+      expect(env.warnings).toEqual([expect.stringContaining(CRAWL_ENV.THROTTLE_RETRY_DELAY_MS)]);
+      const resolved = resolveCrawlPolicy({}, env);
+      expect(resolved.throttleRetryDelayMs).toBe(POLITE_CRAWL_POLICY.throttleRetryDelayMs);
+      expect(resolved.provenance.throttleRetryDelayMs).toBe('preset');
+    });
+
+    it('operator site / host policies set it per site and per host', () => {
+      const env = policiesEnv({ sites: { softy: { throttleRetryDelayMs: 20_000 } }, hosts: { '*.softy.pro': { throttleRetryDelayMs: 60_000 } } });
+      expect(resolveCrawlPolicy({ site: 'softy' }, env).throttleRetryDelayMs).toBe(20_000);
+      const host = resolveCrawlPolicy({ site: 'softy', host: 'acme.softy.pro' }, env);
+      expect(host.throttleRetryDelayMs).toBe(60_000);
+      expect(host.provenance.throttleRetryDelayMs).toBe('operator-host');
+    });
+
+    it('caller under stricter: a higher floor is accepted, a lower one (or 0) is refused', () => {
+      const stricterEnv = envOf({ [CRAWL_ENV.CALLER_OVERRIDES]: 'stricter' });
+      const higher = explainCrawlPolicy({ caller: { throttleRetryDelayMs: 10_000 } }, stricterEnv);
+      expect(higher.policy.throttleRetryDelayMs).toBe(10_000);
+      expect(higher.policy.provenance.throttleRetryDelayMs).toBe('caller');
+      expect(higher.callerRejected).toEqual([]);
+
+      for (const lower of [4999, 0]) {
+        const refused = explainCrawlPolicy({ caller: { throttleRetryDelayMs: lower } }, stricterEnv);
+        expect(refused.policy.throttleRetryDelayMs).toBe(5000);
+        expect(refused.callerRejected).toEqual(['throttleRetryDelayMs']);
+      }
+      // Under `any` (the default) a caller may lower or disable it.
+      expect(resolveCrawlPolicy({ caller: { throttleRetryDelayMs: 0 } }, envOf()).throttleRetryDelayMs).toBe(0);
+    });
+  });
+
   describe('layer validation is memoised per layer object', () => {
     it('resolves identically on repeat, and re-reports the same notes each time', () => {
       const env = policiesEnv({ sites: { softy: { maxConcurrentPerHost: 'lots' } } });
@@ -535,6 +582,7 @@ describe('filterCallerOverride (Spec 1690)', () => {
     ['respectRetryAfter', [true], [false]],
     ['maxRetryAfterMs', [1, 60000, 120000], []], // any, under give-up
     ['retryAfterOverMax', ['give-up'], ['cap']],
+    ['throttleRetryDelayMs', [5000, 30000], [4999, 0]], // higher is stricter; 0 = no floor
     ['robotsTxt', ['off', 'crawl-delay', 'respect'], []],
     ['blockPrivateNetworks', [true], [false]],
     ['discovery', ['auto', 'sitemap', 'listing'], []],

@@ -71,6 +71,7 @@ export const CRAWL_POLICY_FIELD_SPECS: { readonly [K in keyof CrawlPolicy]-?: Cr
   respectRetryAfter: { kind: 'bool' },
   maxRetryAfterMs: { kind: 'int' },
   retryAfterOverMax: { kind: 'enum', values: RETRY_AFTER_OVER_MAX_MODES },
+  throttleRetryDelayMs: { kind: 'int' },
 
   robotsTxt: { kind: 'enum', values: ROBOTS_TXT_MODES },
   blockPrivateNetworks: { kind: 'bool' },

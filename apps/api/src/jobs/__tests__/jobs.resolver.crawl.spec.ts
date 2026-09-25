@@ -129,6 +129,7 @@ const CRAWL_POLICY_FIELD_TYPES: Record<string, string> = {
   respectRetryAfter: 'Boolean',
   maxRetryAfterMs: 'Int',
   retryAfterOverMax: 'String',
+  throttleRetryDelayMs: 'Int',
   robotsTxt: 'String',
   blockPrivateNetworks: 'Boolean',
   discovery: 'String',
