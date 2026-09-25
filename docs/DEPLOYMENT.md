@@ -98,15 +98,20 @@ See [`.env.example`](../.env.example) for all configurable options.
 
 55 company plugins (53 large US employers, Spec 1736, plus the Workday-backed
 quant firms `gresearch` and `arrowstreetcapital`, Spec 1737) delegate to the
-`workday` adapter and run in the default fan-out.
+`workday` adapter. They ship **enabled** and run in the default fan-out, as do
+the other quant-firm plugins of Spec 1737 (owner decision, 2026-09-26,
+Spec 1736 §7 / T16) — except SIG, which stays explicit-only because its
+careers host's robots.txt disallows crawlers (Spec 1735 §4.7). No deployment setting is required: the per-board bound
+below (`WORKDAY_MAX_DETAIL_FETCHES`, `WORKDAY_SCRAPE_TIME_BUDGET_MS`) caps
+what each Workday board can cost.
 
-### Deploy gate (Spec 1736 §7, T10)
+### Emergency switch (optional; Spec 1736 §7, T16)
 
-A consumer that keeps only page 1 of a response sorted by site name (ever-hust
-today: 80 jobs) sees `3m` first — about 700 3M postings — once these plugins
-are deployed. Until that consumer ingests full results (NDJSON stream or every
-page), deploy with the batch switched off. No code change, one line; append to
-any existing value and remove it once the consumer is live:
+If the batch misbehaves in production — a Workday cluster rate-limits the
+egress IP, a consumer is flooded, or a board regresses — it can be switched
+off without a code change or a rebuild. This is an emergency lever, not a
+deploy prerequisite: leave it unset normally. Append to any existing value,
+restart, and remove it again once the cause is fixed:
 
 ```bash
 EVER_JOBS_DISABLED_SOURCES=salesforce,adobe,intel,hp,hpe,mastercard,paypal,capitalone,walmart,target,northropgrumman,boozallen,caci,gdit,leidos,blueorigin,redhat,motorolasolutions,stryker,jnj,philips,mckesson,workdayinc,micron,analogdevices,tmobile,comcast,disney,nike,fidelity,statestreet,blackrock,autodesk,zillow,expediagroup,3m,rtx,humana,cvshealth,chevron,visa,geaerospace,wellsfargo,snap,morganstanley,copart,coxenterprises,broadcom,pfizer,marvell,generalmotors,warnerbrosdiscovery,moderna,gresearch,arrowstreetcapital

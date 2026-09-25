@@ -36,7 +36,7 @@
 | [`AUTHENTICATION.md`](./AUTHENTICATION.md)               | API-key & auth model.            |
 | [`SECURITY_GUIDELINES.md`](./SECURITY_GUIDELINES.md)     | Security baseline.               |
 | [`PERFORMANCE_TUNING.md`](./PERFORMANCE_TUNING.md)       | Performance knobs.               |
-| [`DEPLOYMENT.md`](./DEPLOYMENT.md)                       | Docker / deployment; Workday-backed company sources: deploy gate (kill-switch list) and per-board bounds (Spec 1736). |
+| [`DEPLOYMENT.md`](./DEPLOYMENT.md)                       | Docker / deployment; Workday-backed company sources: enabled by default, optional emergency switch (kill-switch list), per-board bounds and the fan-out deadline names, keying Workday postings on `id` (Spec 1736). |
 | [`UPGRADE_GUIDE.md`](./UPGRADE_GUIDE.md)                 | Version-to-version upgrade path. |
 | [`CLI.md`](./CLI.md)                                     | CLI command reference.           |
 

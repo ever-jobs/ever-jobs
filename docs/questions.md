@@ -127,7 +127,12 @@ enriched; detail enrichment is 1 request in flight with a 250–500 ms pause
 
 Follow-ups and constraints recorded here:
 
-1. **Merge/deploy gate (Spec 1736 §7, T10).** `JobsService` sorts results by
+1. **Merge/deploy gate (Spec 1736 §7, T10) — withdrawn.** **Decision (owner,
+   2026-09-26; Spec 1736 T16): the new Workday and quant plugins ship enabled
+   by default**; the per-board detail cap and time budget (follow-up 5, Spec
+   1736 §8/§8.2) bound their cost, and `EVER_JOBS_DISABLED_SOURCES` with the
+   55 tokens is an optional emergency switch, not a deploy prerequisite
+   (`docs/DEPLOYMENT.md`). The original gate, for the record: `JobsService` sorts results by
    site name and `3m` now sorts first (~700 postings). The ever-hust consumer
    still keeps only page 1 (80) of a site-sorted response, so this batch must
    not reach the deployment before the consumer's full-result ingestion

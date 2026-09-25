@@ -41,7 +41,9 @@
 2. Generator: Workday company-name rule (T9) and `auth: undefined`
    (Spec 1735 §4.5); re-scaffold all generated packages (fixtures unchanged),
    re-run every generated suite.
-3. **Release ordering (T10, spec §7):** this batch merges only after — or
+3. **Release ordering (T10, spec §7) — withdrawn by T16 (owner, 2026-09-26):
+   the batch ships enabled; the kill switch below is an optional emergency
+   lever.** As first planned: this batch merges only after — or
    together with — the ever-hust full-result consumer (NDJSON / all pages).
    Until that consumer is live in production, the deployment must carry the
    batch in `EVER_JOBS_DISABLED_SOURCES` (list in spec §7), otherwise the

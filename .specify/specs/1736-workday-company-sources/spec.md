@@ -183,9 +183,20 @@ same id for a posting whether or not it was enriched. A fake clock
 budget" fails against the pre-T11 adapter. The env readers and the list-row
 requisition id have their own cases in `workday.constants.spec.ts`.
 
-## 7. Release and deploy ordering (merge gate)
+## 7. Release and deploy ordering
 
-The consumer (ever-hust) currently keeps only page 1 (80 jobs) of a response
+**Decision (owner, 2026-09-26; T16): the batch ships enabled.** The 53
+Workday plugins here and the 31 quant-firm plugins of Spec 1737 (two of them
+Workday-backed) run in the default fan-out from their first deployment (SIG
+excepted: explicit-only, its robots.txt disallows crawlers — Spec 1735 §4.7). The
+owner wants these sources, and their cost is bounded per board by the detail
+cap and the time budget (§8, §8.2). The `EVER_JOBS_DISABLED_SOURCES` line
+below is kept as an **optional emergency switch** (a Workday cluster
+rate-limiting the egress IP, a flooded consumer, a regressing board), not as a
+deploy prerequisite. The gate this section first recorded (T10) is withdrawn;
+its reasoning is kept below for the record.
+
+*Superseded reasoning (review round 1, 2026-09-25).* The consumer (ever-hust) currently keeps only page 1 (80 jobs) of a response
 that `JobsService` sorts **by site name**. `3m` sorts before every existing
 site (`4earth_tech`, `abbvie`, …) and its board lists ~700 postings, so if
 this batch reaches the deployment before the consumer ingests full results,
@@ -193,10 +204,11 @@ the consumer's page 1 fills with 3M postings first (today it is 66% AbbVie).
 Sending the keyword to Workday (T6) narrows keyword searches to 3M's own
 matches, but a keyword-less call would still lead with 3M.
 
-**Gate:** deploy this batch only after the consumer's full-result ingestion
-(NDJSON stream or all pages) is live. If it must ship earlier, hold the batch
-out of the deployment with the existing kill switch — no code change, one env
-line — and remove the line once the consumer is live:
+*Former gate (withdrawn by T16):* deploy this batch only after the consumer's
+full-result ingestion (NDJSON stream or all pages) is live, or hold it out
+with the kill switch until then. **The switch itself stays available** — no
+code change, one env line, append to any existing value, remove once the
+cause is fixed:
 
 ```
 EVER_JOBS_DISABLED_SOURCES=salesforce,adobe,intel,hp,hpe,mastercard,paypal,capitalone,walmart,target,northropgrumman,boozallen,caci,gdit,leidos,blueorigin,redhat,motorolasolutions,stryker,jnj,philips,mckesson,workdayinc,micron,analogdevices,tmobile,comcast,disney,nike,fidelity,statestreet,blackrock,autodesk,zillow,expediagroup,3m,rtx,humana,cvshealth,chevron,visa,geaerospace,wellsfargo,snap,morganstanley,copart,coxenterprises,broadcom,pfizer,marvell,generalmotors,warnerbrosdiscovery,moderna,gresearch,arrowstreetcapital
