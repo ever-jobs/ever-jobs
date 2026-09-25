@@ -5,6 +5,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
 import { getRequestId } from '../context';
+import { memoisedRequest } from './http-memo';
 import { describeUrlForLog, pinUrlToHosts } from '../utils/url-guard';
 
 const RETRYABLE_STATUSES = [429, 500, 502, 503, 504];
@@ -266,6 +267,19 @@ export class HttpClient {
   }
 
   async request<T = any>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+    // Spec 1700 (T13) — inside a multi-location scope, a request identical to
+    // one already answered is served from the scope's memo (see http-memo.ts).
+    // A memo hit skips the response interceptors, so its Set-Cookie headers are
+    // replayed into this client's jar here (a no-op without a jar).
+    return memoisedRequest<T>(
+      config,
+      this.client.defaults.headers,
+      () => this.send<T>(config),
+      (response) => this.storeResponseCookies(response),
+    );
+  }
+
+  private async send<T = any>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     // Enforce rate limiting before making the request
     await this.enforceRateDelay();
 

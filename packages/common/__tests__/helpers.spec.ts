@@ -195,13 +195,21 @@ describe('extractSalary — single stated bound (Spec 5058)', () => {
     expect(result.maxAmount).toBe(150000);
   });
 
-  it('does not truncate a "from $X to $Y" range to a min-only floor', () => {
-    // The range cascade only recognises dash separators, so a "to"-range is
-    // still a no-match — but the single-bound guard must NOT rescue it as a
-    // bare $100,000 floor (which would silently drop the $150,000 ceiling).
+  it('reads a "from $X to $Y" range as a full range, never a min-only floor', () => {
+    // Spec 1695 — the range cascade reads the word separator "to" between two
+    // currency-marked amounts, so the whole range survives, with the period
+    // from its "per year" token.
     const result = extractSalary('from $100,000 to $150,000 per year');
-    expect(result.minAmount).toBeNull();
-    expect(result.maxAmount).toBeNull();
+    expect(result.minAmount).toBe(100000);
+    expect(result.maxAmount).toBe(150000);
+    expect(result.interval).toBe('yearly');
+
+    // The legacy (dash-only) grammar does not read "to"; the single-bound guard
+    // must still NOT rescue it as a bare $100,000 floor (which would silently
+    // drop the $150,000 ceiling).
+    const legacy = extractSalary('from $100,000 to $150,000 per year', { grammar: 'legacy' });
+    expect(legacy.minAmount).toBeNull();
+    expect(legacy.maxAmount).toBeNull();
   });
 
   it('ignores a symbol-less prose number even with a keyword', () => {
