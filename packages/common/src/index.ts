@@ -6,3 +6,4 @@ export * from './exceptions';
 export * from './browser';
 export * from './normalize';
 export * from './canonical-key';
+export * from './cooperative';
