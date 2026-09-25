@@ -155,6 +155,23 @@ export function workdayListingKey(listing: {
 const REQUISITION_TOKEN_RE = /^[A-Za-z0-9_-]*\d[A-Za-z0-9_-]*$/;
 
 /**
+ * True when `token` occurs in `path` with no letter or digit directly before
+ * or after it (case-insensitive): `R19827` is in `…/Maintenance_R19827`, but
+ * `R1000` is not in `…/Role_JR1000`.
+ */
+function pathHasToken(path: string, token: string): boolean {
+  if (!path || !token) return false;
+  const haystack = path.toLowerCase();
+  const needle = token.toLowerCase();
+  for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + 1)) {
+    const before = at === 0 ? '' : haystack[at - 1];
+    const after = haystack[at + needle.length] ?? '';
+    if (!/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after)) return true;
+  }
+  return false;
+}
+
+/**
  * Requisition id of a search-result row, for postings returned without a detail
  * response (Spec 1736 T11: past the detail cap or the time budget, or a failed
  * detail request).
@@ -164,20 +181,24 @@ const REQUISITION_TOKEN_RE = /^[A-Za-z0-9_-]*\d[A-Za-z0-9_-]*$/;
  * id whether or not it was enriched. `bulletFields` mixes the id with
  * tenant-specific badges ("Spotlight Job", "Exempt", a location, "Posting End
  * Date: 09/30/2026"), so the id is the first bullet that is a single token
- * containing a digit; failing that, the detail path's trailing `_<id>` suffix
- * when it contains a digit (`…/Software-Engineer_JR0271234` → `JR0271234`).
- * The same rule the Spec 1735 verifier recorded fixtures with.
+ * containing a digit AND appears in the detail path as a whole token (Spec
+ * 1736 T14: a badge such as "2026" or a stray code must never become the id);
+ * failing that, the detail path's trailing `_<id>` suffix when it contains a
+ * digit (`…/Software-Engineer_JR0271234` → `JR0271234`). The Spec 1735
+ * verifier recorded fixtures with the same rule minus the path check; every
+ * one of its 168 recorded rows passes the check, so the two agree on them.
  */
 export function workdayListingRequisitionId(listing: {
   bulletFields?: ReadonlyArray<unknown> | null;
   externalPath?: string | null;
 }): string | null {
+  const path = (listing.externalPath ?? '').split(/[?#]/)[0];
   for (const bullet of listing.bulletFields ?? []) {
     if (typeof bullet !== 'string') continue;
     const token = bullet.trim();
-    if (REQUISITION_TOKEN_RE.test(token)) return token;
+    if (REQUISITION_TOKEN_RE.test(token) && pathHasToken(path, token)) return token;
   }
-  const lastSegment = (listing.externalPath ?? '').split(/[?#]/)[0].split('/').pop() ?? '';
+  const lastSegment = path.split('/').pop() ?? '';
   const underscore = lastSegment.lastIndexOf('_');
   if (underscore < 0) return null;
   const tail = lastSegment.slice(underscore + 1);

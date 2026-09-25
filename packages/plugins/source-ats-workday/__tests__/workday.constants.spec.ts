@@ -270,11 +270,53 @@ describe('workdayListingRequisitionId', () => {
         externalPath: '/job/Santa-Clara/Engineer_JR0271234',
       }),
     ).toBe('JR0271234');
-    expect(workdayListingRequisitionId({ bulletFields: ['  R-2012345  '] })).toBe('R-2012345');
+    expect(
+      workdayListingRequisitionId({ bulletFields: ['  R-2012345  '], externalPath: '/job/X/Role_R-2012345' }),
+    ).toBe('R-2012345');
   });
 
   it('skips non-string bullets', () => {
-    expect(workdayListingRequisitionId({ bulletFields: [42, null, 'R1'] as unknown[] })).toBe('R1');
+    expect(
+      workdayListingRequisitionId({ bulletFields: [42, null, 'R1'] as unknown[], externalPath: '/job/X/Role_R1' }),
+    ).toBe('R1');
+  });
+
+  describe('only a bullet that appears in the detail path (Spec 1736 T14)', () => {
+    it('takes a bullet found in the path as a whole token, case-insensitively', () => {
+      // Recorded Moderna row, 2026-09-25: location, department, requisition id.
+      expect(
+        workdayListingRequisitionId({
+          bulletFields: ['Norwood, Massachusetts', 'Drug Manufacturing', 'R19827'],
+          externalPath: '/job/Norwood-Massachusetts/Sr-Specialist--Maintenance_R19827',
+        }),
+      ).toBe('R19827');
+      expect(
+        workdayListingRequisitionId({ bulletFields: ['jr0271234'], externalPath: '/job/X/Engineer_JR0271234' }),
+      ).toBe('jr0271234');
+      // The numeric-segment layout: the id sits between slashes.
+      expect(
+        workdayListingRequisitionId({ bulletFields: ['12345'], externalPath: '/job/Austin-TX/Engineer/12345?src=x' }),
+      ).toBe('12345');
+    });
+
+    it('skips a digit-bearing bullet that is not in the path, then takes the path suffix', () => {
+      expect(
+        workdayListingRequisitionId({ bulletFields: ['2026', 'Q3-2026'], externalPath: '/job/X/Role_R-7788' }),
+      ).toBe('R-7788');
+      // Not a whole token: "R1000" only occurs inside "JR1000".
+      expect(workdayListingRequisitionId({ bulletFields: ['R1000'], externalPath: '/job/X/Role_JR1000' })).toBe(
+        'JR1000',
+      );
+      // Only in the query string, which is not part of the path.
+      expect(
+        workdayListingRequisitionId({ bulletFields: ['R55'], externalPath: '/job/X/Some_Title?ref=R55' }),
+      ).toBeNull();
+    });
+
+    it('accepts no bullet without a detail path', () => {
+      expect(workdayListingRequisitionId({ bulletFields: ['R-2012345'] })).toBeNull();
+      expect(workdayListingRequisitionId({ bulletFields: ['R-2012345'], externalPath: '' })).toBeNull();
+    });
   });
 
   it("falls back to the detail path's trailing _<id> suffix", () => {

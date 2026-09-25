@@ -247,9 +247,11 @@ re-stamp to the display name (Spec 1735 §4.2.1).
 
 **Ids.** Without a detail response, `atsId` falls back to the search row's
 requisition id (`workdayListingRequisitionId`: the first `bulletFields`
-entry that is a single token containing a digit, else the detail path's
-trailing `_<id>` when it contains a digit — the rule the Spec 1735 verifier
-recorded fixtures with) before the whole `externalPath`. Order: detail
+entry that is a single token containing a digit **and appears in the detail
+path as a whole token** (T14, so a digit-bearing badge such as "2026" is never
+taken for the id), else the detail path's trailing `_<id>` when it contains a
+digit — the rule the Spec 1735 verifier recorded fixtures with, plus the path
+check, which all 168 recorded rows pass) before the whole `externalPath`. Order: detail
 `jobReqId` → numeric path segment (unchanged) → list requisition id →
 `externalPath`. A posting therefore keeps one id — `wd-{tenant}-{reqId}`, and
 `<key>-{reqId}` after a company plugin's rewrite — whether or not it was
