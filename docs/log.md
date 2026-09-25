@@ -5,6 +5,128 @@
 
 ---
 
+## 2026-09-25 — Spec 1690 — crawl policy: honest identity, per-host pacing, configurable proxies and back-off
+
+**Change:** The operator of the Softy ATS (`*.softy.pro`) reported that `source-ats-softy` was
+impolite: up to 100 detail requests at once, a different proxy per request, a Chrome
+User-Agent that hid who we are, and retries on 429/5xx. The audit found all four were
+defects of the shared `HttpClient`, so they are fixed there, for every plugin, without
+editing plugin call sites:
+
+- **One policy object, six layers.** `CrawlPolicy` (24 knobs) is resolved per request from
+  preset (`polite` default, `legacy` = exact pre-1690 behaviour, `strict`) → `EVER_JOBS_CRAWL_*`
+  env → builtin limits for bulk ATS APIs (Greenhouse, Lever, Ashby, SmartRecruiters) → the
+  plugin (`@SourcePlugin({ crawl })` + client options) → operator per-site / per-host JSON
+  (`EVER_JOBS_CRAWL_POLICIES` / `_POLICY_FILE`) → the search request's `crawl` object, filtered
+  by `EVER_JOBS_CRAWL_CALLER_OVERRIDES` (`any` | `stricter` | `none`). `provenance` records the
+  layer behind every field; `GET /api/sources/:site/crawl-policy` shows it.
+- **Identity.** The client-level UA default used to beat `setHeaders()`, silently discarding
+  every UA 266 plugins declared (USAJobs' *required* e-mail UA included). A request
+  interceptor now sends an honest UA naming the project (contact and `From:` configurable);
+  declared UAs are sent only in mode `plugin` or through a manifest opt-in with a reason
+  (USAJobs, HeadHunter). `BrowserPool` follows the same rules.
+- **Pacing.** One process-wide limiter per host / registrable domain / site: 4 in flight and
+  100 ms between starts by default, adaptive slow-down on 429/503, every retry holds a slot.
+- **Proxies.** `per-host` stable proxy by default (`per-scrape`, `per-request`, `off`
+  available); `DEFAULT_PROXIES`, parsed and never used before, is now the fallback list.
+- **Back-off.** 2 exponential retries with jitter on 429/502/503/504; never earlier than
+  `Retry-After`; beyond 60 s give up and cool the whole bucket (`cap` restores the old retry).
+- **Also:** opt-in robots.txt (`crawl-delay` / `respect`); egress guard against private and
+  cluster-internal destinations with DNS-rebinding protection (Q-092 option B, for every
+  plugin); the search deadline now aborts an abandoned source's queued and in-flight
+  requests, and such aborts are circuit-neutral; circuit-breaker cap 250 → 4,096
+  (`EVER_JOBS_CIRCUIT_MAX_SITES`); `rate_limited` scrape reason; MCP `search_jobs` posts
+  camelCase (the snake_case body was stripped by validation, turning every MCP search into a
+  whole-catalogue fan-out); `createHttpClient` keeps a plugin's `timeout` when proxies are set.
+- **Entry points:** REST `crawl`, GraphQL `CrawlPolicyInput`, MCP `crawl`, CLI `--crawl` and
+  convenience flags plus `--crawl-preset` / `--caller-overrides`.
+- **Nothing removed.** Pre-1690 behaviour: `EVER_JOBS_CRAWL_PRESET=legacy`, or one knob at a
+  time. `RETRY_DEFAULT_*` / `RETRY_PER_SOURCE` still honoured.
+- **Docs:** operator guide `docs/CRAWL_POLICY.md`; ADR 0001 amends constitution Art. 5.2,
+  5.4, 6.1, 6.2, 11.2 and adds 11.5 (annotations, no text removed); AGENTS.md rule 10 ("UA
+  rotation" marked superseded), rule 8 and §6; CLAUDE.md house style; README, `.env.example`,
+  `tool_manifest.json`, `docs/API_CHANGELOG.md`, `docs/CLI.md`, `docs/PERFORMANCE_TUNING.md`,
+  `docs/FAQ.md`. Spec updated with an "As built" section (§9) for every deviation; plan and
+  tasks added (plan §4 justifies `robots-parser` and `tldts`, constitution Art. 9.3).
+
+**UA opt-ins:** USAJobs and HeadHunter (API-required UAs) and SimplyHired (A/B evidence: 403 on
+every page with the honest UA — Q-097 option B, so the source keeps working). **Deliberately not
+done:** default pacing numbers are recorded as Q-098; no
+CI job runs `packages/common/__tests__` yet (plan §8); no production env change is needed.
+
+**Files:** `packages/common/src/http/crawl/*` (+ new `policy-schema.ts`),
+`packages/common/src/http/http-client.ts`, `packages/common/src/browser/{browser-pool,index}.ts`,
+`packages/common/src/context/request-context.ts`, `packages/models/src/dtos/{crawl-policy.dto,scraper-input.dto,scrape-diagnostics.dto,index}.ts`,
+`packages/plugin/src/circuit-breaker/circuit-breaker.service.ts`,
+`packages/plugins/source-{usajobs,headhunter}/src/*`, `apps/api/src/jobs/{jobs.service,jobs.controller,gql-types,jobs.resolver,health.controller,crawl-policy.mapping}.ts`,
+`apps/api/src/config/configuration.ts`, `apps/mcp/src/{tools,index}.ts`,
+`apps/cli/src/commands/{crawl-options,search.command,compare.command}.ts`, `package.json`,
+`package-lock.json`, 22 new or touched test suites, `.specify/specs/1690-crawl-policy/*`,
+`docs/CRAWL_POLICY.md`, `docs/adr/0001-crawl-policy.md`, `.specify/memory/constitution.md`,
+`AGENTS.md`, `CLAUDE.md`, `README.md`, `.env.example`, `tool_manifest.json`,
+`docs/{API_CHANGELOG,CLI,PERFORMANCE_TUNING,FAQ,index,questions}.md`.
+
+**Validation:** `tsc --noEmit -p apps/api/tsconfig.build.json` and `-p tsconfig.base.json`
+(every `.ts` in the repo): 0 errors. Jest, real config: 55/55 suites, 1,769/1,769 tests (all
+new crawl suites plus `softy.service`, `usajobs.crawl`, `headhunter.crawl`); integration,
+CLI, MCP, `softy.parser`, `softy.policy`, `corpus-signals`: 6/6 suites, 88/88;
+`browser-pool.spec.ts` 71/71; `npm run test:scripts` 12/12 suites, 193/193; full plugin sweep
+(fast config) 1,596/1,596 suites, 15,862/15,862 tests. Lanes: B1 415 tests, B2 227, B3 80 new
+(+ mutation check: breaking the interceptor, limiter acquire, egress check, legacy UA
+precedence, the DTO-in-context rule or whole-bucket penalize turns specific tests red), B4
+34 suites / 500 tests, B6 70. Offline default-search simulation (200 ms latency, real
+timers): 800 Greenhouse requests + a 100-wide fan-out to one host in 11.3 s vs the 120 s
+deadline, 0 failures, ≤ 16 / ≤ 3 in flight. Live UA A/B, 30 plugins / 166 requests: 18 work
+with the honest UA, 1 breaks only with it (SimplyHired), 7 broken either way, 4 inconclusive
+(Q-097). `lint:docs` clean.
+
+---
+
+## 2026-09-25 — Spec 1691 — Softy: sitemap discovery, paginated listing, polite detail fetches
+
+**Change:** A polite live check (4 requests, 2 s apart, honest UA) showed `source-ats-softy`
+returned **0 jobs** on the current markup: `/offres` 301-redirects to `/offers`, offer links
+are slug-less `/offers/{ID}`, and the board is paginated (21 cards per page). Rebuilt on the
+current surface, as the site operator asked:
+
+- **Discovery** is the crawl-policy field `discovery` (caller, operator site/host, env):
+  `sitemap` reads `/sitemap.xml`, takes `/offers/{ID}` entries newest `lastmod` first and
+  fetches only the detail pages needed, **one after another**; `listing` reads
+  `/offers?page=1..N` (legacy `/offres` parser kept as fallback); `auto` (default) = sitemap,
+  falling back to listing when the sitemap is missing, empty or unparseable, and listing
+  straight away for `descriptionDepth: board` or when the detail budget is smaller than
+  `offset + resultsWanted`.
+- **Pacing** from the manifest: all of `softy.pro` is one bucket, 1 in flight, 1 s apart.
+  The Chrome/129 UA is only *declared* now (sent in UA mode `plugin`).
+- **Cache** of extracted detail fields keyed `url|lastmod` (500 entries, 6 h), so a repeat
+  search re-reads only changed offers. **Failures:** 4xx/unknown host → empty; 5xx → partial
+  with diagnostic; a 429 after retries, an abort or a crawl-policy refusal stops the scrape
+  and keeps what it has; detail fetches stop after 3 consecutive failures.
+- Six `SOFTY_*` knobs (list pages, detail fetches, cache size/TTL, lastmod as date, failure
+  stop), read per scrape.
+- **Common toolkit:** `parseSitemapXml` (allocation-light scanner: namespaces, CDATA,
+  entities, `<image:loc>` ignored), `parseLastmod` (W3C, `YYYY-MM-DD HH:MM:SS`, RFC 1123;
+  zone-less = UTC), `fetchSitemap` (sitemap indexes, gzip by magic bytes, plain-text
+  sitemaps, size/depth/count bounds, same-domain nested scope) and `BoundedTtlCache`.
+- Spec updated with an "As built" section (§6); plan and tasks added.
+
+**Files:** `packages/common/src/http/crawl/{sitemap,ttl-cache}.ts`,
+`packages/common/__tests__/crawl-{sitemap,ttl-cache}.spec.ts`,
+`packages/plugins/source-ats-softy/src/{softy.service,softy.constants,softy.types,softy.config,softy.parser,index}.ts`,
+`packages/plugins/source-ats-softy/__tests__/{softy.service,softy.parser,softy.policy}.spec.ts`,
+`packages/plugins/source-ats-softy/__tests__/softy.e2e-spec.ts` (reduced),
+`packages/plugins/source-ats-softy/__tests__/fixtures/*` (8 synthetic files),
+`.specify/specs/1691-softy-sitemap-discovery/*`, `docs/index.md` (Spec 374 row annotated).
+
+**Validation:** 228 unit tests green (lane B5); type-check clean for the lane's files.
+Live wire proof (5 requests, captured after the UA interceptor): `auto` → `sitemap.xml` then
+three `/offers/{ID}` pages, all 200, Ever Jobs UA, no `sec-ch-ua`, never more than 1 in
+flight, gaps 1003.1 / 1010.1 / 1006.4 ms, 3 complete jobs (descriptions 3,878 / 6,278 /
+6,705 chars) in 3.6 s; `listing` with `descriptionDepth: board` → one request, 3 jobs. The
+live e2e spec was not run by the lane (no extra traffic to `softy.pro`). `lint:docs` clean.
+
+---
+
 ## 2026-09-13 — Spec 1688 — a Recruitee board is on the public internet, or it is not a board
 
 **Change:** Spec 5100 taught `source-ats-recruitee` to serve customers whose board sits on their

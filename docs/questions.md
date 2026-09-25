@@ -10,6 +10,118 @@
 
 ---
 
+## Q-098 — Default pacing numbers: 4 in flight per host, 100 ms apart, builtin bulk-host limits (Spec 1690)
+
+**Context:** Spec 1690 puts every request made through `HttpClient` behind a process-wide
+per-host limiter. Its defaults (preset `polite`) are **4 requests in flight and ≥ 100 ms
+between request starts per host** (at most 10 starts/s), no jitter, adaptive slow-down on
+429/503, bucket = exact hostname. Hosts that serve hundreds of company plugins through one
+CDN-backed API get **builtin** limits instead: `api.greenhouse.io` and
+`boards-api.greenhouse.io` 16 in flight, `api.lever.co`, `api.ashbyhq.com` and
+`api.smartrecruiters.com` 12, all with no gap. Softy's manifest sets its own (1 in flight,
+1 s, whole `softy.pro`).
+
+The constraint is the 120 s search deadline: a default search sends ~800 requests to
+Greenhouse alone. Evidence (offline simulation, 200 ms mocked latency, real timers, verification
+lane 2026-09-25): 800 Greenhouse requests plus a 100-wide fan-out to one ordinary host finished in
+**11.3 s**, 0 failures — Greenhouse in 10.5 s with ≤ 16 in flight, the ordinary host in 11.3 s
+with ≤ 3 in flight. Limiter grants were always ≥ 100 ms apart; the first wire gap of a burst
+measured 86–90 ms (grants are spaced, not wire starts). Before 1690, 23 fan-outs were unbounded
+(up to 300 requests at once to one host) and ~1,090 plugins sent requests back to back.
+
+Two properties worth knowing: the limiter is **per process** (N replicas → up to N × the limit
+per host), and the `strict` preset still applies the builtin bulk-host limits (layer 3 sits
+above the preset; `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false` turns them off).
+
+**Options:**
+
+- **A. 4 / 100 ms + builtin bulk hosts** (current). Bounds every host, keeps a default search
+  around 11 s in simulation; every number is overridable per env, host, site and request.
+- **B. Softer: 2 in flight / 250 ms** (4 starts/s). A 100-request fan-out to one host takes
+  ~25 s; more multi-page sources end near the deadline.
+- **C. The Softy operator's ask, globally: 1 / 1,000 ms** (what `strict` does). A 100-request
+  fan-out to one host takes ≥ 100 s; most multi-page sources would hit the deadline unless
+  given per-host exceptions.
+- **D. No global pacing** (as `legacy`), only plugin manifests. Leaves the 23 unbounded
+  fan-outs unbounded.
+- **E. Adaptive only**: unpaced until the first 429/503, then slow down. Lets the first burst
+  through — the thing site operators notice.
+- Sub-question: should `strict` also switch the builtin bulk-host limits off, and are 16/12
+  the right numbers for those APIs?
+
+**Default (proceeding):** **A** — it is the smallest default that bounds every host while
+keeping the default search well inside its deadline, and it needs no production env change.
+Revisit with production telemetry (`rate_limited` diagnostics and 429 counts per host) and the
+replica count. `strict` keeps the builtin limits for now (documented in `docs/CRAWL_POLICY.md`
+§3), so that preset does not by itself push Greenhouse-backed sources past the deadline.
+
+**Resolution:** _pending review._
+
+---
+
+## Q-097 — Default User-Agent mode (`identify` vs `strict`) and which plugins opt into `plugin` mode (Spec 1690)
+
+**Context:** Spec 1690 sends an honest UA naming the project by default. Three modes decide
+what goes on the wire: `identify` (default — our UA, except for plugins whose manifest opts
+into `userAgentMode: 'plugin'` with a `userAgentReason`), `strict` (our UA always) and
+`plugin` (every plugin's declared UA). Three plugins opt in: two because their API
+*requires* a specific UA — **USAJobs** (the registered e-mail) and **HeadHunter** (an
+application UA; others get `400 bad_user_agent`) — and **SimplyHired** on the live A/B
+evidence below (403 on every page with the honest UA). Before 1690 the client's Chrome/120 UA
+silently replaced every declared UA, so most plugins' own browser strings had never been sent.
+
+Evidence — live A/B, verification lane 2026-09-25: 30 plugins, 166 requests, each run once
+with the honest UA (`strict`) and once with its declared UA (`plugin`), every automatic verdict
+reviewed by hand:
+
+| Verdict | Count | Plugins |
+|---|---|---|
+| works with the honest UA | 18 | linkedin, dice, builtin, avature (bloomberg), catsone, flatchr, prescreen, recruitis, rexx, sagehr, teamdash, greenhouse, lever, ashby, workday, personio, remoteok, weworkremotely |
+| breaks only with the honest UA | 1 | simplyhired |
+| broken either way | 7 | indeed, glassdoor, ziprecruiter, naukri, bayt, careerbuilder, monster |
+| inconclusive | 4 | google, ceipal, smartrecruiters, recruitee |
+
+- **simplyhired** — honest UA: the search page got 403 (the browser fallback still got the
+  list) and 21/21 detail pages 403; declared UA: 22/22 200. The one candidate for an opt-in.
+- **sagehr** — the reverse: its declared Chrome/124 UA gets 403, the honest UA 200 (confirmed
+  with the arms swapped, so not rate limiting). Must **not** be opted in.
+- **careerbuilder, monster** — DataDome captcha with the honest UA; with the declared UA the
+  pages load but the parser finds 0 jobs (broken regardless). Would need the opt-in once fixed.
+- **naukri** — the honest UA hangs until the 60 s timeout (half the search deadline); the
+  declared UA gets a fast 406.
+- **bayt** — 403 with every UA tried (honest, declared = honest, Chrome/120).
+- The four inconclusives do not depend on the UA (stale tenant/slug fixtures returning 404,
+  a 200 with 0 postings, Google paging 404 with both UAs).
+- Caveats: all traffic came from one workstation IP, so some 403s may be about the IP; and
+  `plugin` mode is not pre-1690 behaviour — the `legacy` preset is.
+
+**Options:**
+
+- **A. `identify`, opt-ins only where an API requires a specific UA** (current: USAJobs,
+  HeadHunter).
+- **B. A + opt SimplyHired in now** (`userAgentMode: 'plugin'`, reason "refuses non-browser
+  clients: 403 on every page with the honest UA, live A/B 2026-09-25").
+- **C. `strict` by default.** Most honest; USAJobs and HeadHunter stop working unless an
+  operator opts them back in per site.
+- **D. `plugin` by default.** Every declared (mostly browser) UA goes out — the impersonation
+  the site operator complained about, and still not pre-1690 behaviour.
+- **E. `legacy` identity by default** (Chrome/120 everywhere).
+- Side issue for any option: naukri's 60 s hang with the honest UA costs half the deadline;
+  an opt-in would turn it into a fast failure but not a working source.
+
+**Default (proceeding):** **B** — honest identity everywhere else (what the site operator
+asked for), but SimplyHired worked before Spec 1690 and the owner's standing rule is that no
+functionality is removed; the opt-in is evidence-based and states its reason
+(`SIMPLYHIRED_CRAWL_POLICY`, shown by `/api/sources/simplyhired/crawl-policy`). An operator who
+wants no exceptions sets `EVER_JOBS_CRAWL_USER_AGENT_MODE=strict`; one who wants to undo just
+this opt-in sets `EVER_JOBS_CRAWL_POLICIES={"sites":{"simplyhired":{"userAgentMode":"identify"}}}`.
+Follow-ups: repeat the A/B from the production egress; fix the careerbuilder/monster parsers
+and re-test them; address naukri's hang.
+
+**Resolution:** _pending review._
+
+---
+
 ## Q-092 — `source-ats-avature` honours a verbatim `companyUrl` (pre-existing)
 
 **Context:** Spec 1688 closed the same shape in `source-ats-recruitee`, where Spec 5100 had let

@@ -7,9 +7,12 @@
 | Status | Implemented |
 | Owner | agent |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-24 |
+| Last updated | 2026-09-25 |
 | Supersedes | — |
-| Related specs | 374 (source-ats-softy), 5085 (retry attribution + Retry-After), 5026 (fan-out bounds), 5093 (cookie jar), 1678 (BrowserPool identity), 005 (circuit breaker), 1691 (Softy sitemap discovery) |
+| Related specs | 374 (source-ats-softy), 5085 (retry attribution + Retry-After), 5026 (fan-out bounds), 5093 (cookie jar), 1678 (BrowserPool identity), 005 (circuit breaker), 1691 (Softy sitemap discovery), 1688 (Recruitee public board host; the egress guard is Q-092 option B) |
+| Plan / tasks | [plan.md](./plan.md) · [tasks.md](./tasks.md) |
+| Operator guide | [docs/CRAWL_POLICY.md](../../../docs/CRAWL_POLICY.md) |
+| ADR | [docs/adr/0001-crawl-policy.md](../../../docs/adr/0001-crawl-policy.md) |
 
 ## 1. Problem Statement
 
@@ -253,6 +256,30 @@ in fork syncs (Specs 1688/1689) for every plugin at once.
 | `EVER_JOBS_CRAWL_ABORT_ON_DEADLINE` | bool (`true`) |
 | `EVER_JOBS_CIRCUIT_MAX_SITES` | int (`4096`) |
 
+Added during implementation (see §9.2 — each defaults to the documented behaviour,
+so none of them changes the defaults above):
+
+| Variable | Values (default) |
+|---|---|
+| `EVER_JOBS_CRAWL_BUILTIN_HOSTS` | bool (`true`; `false` under `legacy`) — apply layer 3 |
+| `EVER_JOBS_CRAWL_PLUGIN_MANIFESTS` | bool (`true`; `false` under `legacy`) — apply `@SourcePlugin({ crawl })` |
+| `EVER_JOBS_CRAWL_CALLER_PROXIES` | `any` \| `none` (`any` when caller overrides are `any`, else `none`) |
+| `EVER_JOBS_CRAWL_DEFAULT_PROXIES_FALLBACK` | bool (`true`; `false` under `legacy`) — use `DEFAULT_PROXIES` when `EVER_JOBS_CRAWL_PROXIES` is unset |
+| `EVER_JOBS_CRAWL_MAX_BUCKETS` | int (`10000`) — soft LRU cap of the host limiter |
+| `EVER_JOBS_CRAWL_MAX_COOLDOWN_MS` | int (`3600000`) — ceiling on any bucket cool-down (Retry-After, Crawl-delay) |
+| `EVER_JOBS_CRAWL_EGRESS_ALLOW_HOSTS` | comma list of hosts / `*.suffix` / IP literals exempt from the egress guard (unset) |
+| `EVER_JOBS_CRAWL_ROBOTS_MAX_ORIGINS` | int (`5000`) |
+| `EVER_JOBS_CRAWL_ROBOTS_TTL_MS` | int (`21600000` = 6 h) |
+| `EVER_JOBS_CRAWL_ROBOTS_ERROR_TTL_MS` | int (`300000` = 5 min) — lifetime of an unreachable result |
+| `EVER_JOBS_CRAWL_ROBOTS_MAX_BYTES` | int (`524288`) — bytes of robots.txt parsed |
+| `EVER_JOBS_CRAWL_ROBOTS_UNREACHABLE` | `allow` \| `disallow` (`allow`) |
+| `EVER_JOBS_CRAWL_ROBOTS_MAX_RULES_PER_GROUP` | int (`2000`) |
+| `EVER_JOBS_CRAWL_ROBOTS_MAX_PATTERN_CHARS` | int (`512`) |
+| `EVER_JOBS_CRAWL_ROBOTS_MAX_MATCH_COST` | int (`5000000`) |
+| `EVER_JOBS_LIVENESS_DEADLINE_MS` | int, 0 = none (`60000`) — bound on one liveness-enrichment batch |
+| `RETRY_DEFAULT_RETRIES` / `_DELAY_MS` / `_BACKOFF` | pre-1690, still honoured: env-global layer, only when set and the `EVER_JOBS_CRAWL_*` twin is not |
+| `RETRY_PER_SOURCE` | pre-1690 JSON, still honoured: operator-site layer, below the policy file and `EVER_JOBS_CRAWL_POLICIES` |
+
 Booleans accept `true/false/1/0/yes/no/on/off`. Invalid values are ignored with a
 startup warning, never a crash.
 
@@ -263,6 +290,15 @@ class-validator (enums, `@Min(0)`, arrays of ints). CLI: `--crawl <json>`,
 `--user-agent-mode`, `--proxy-rotation`, `--max-per-host`, `--min-interval-ms`,
 `--crawl-retries`, `--robots-txt`, `--discovery`, `--crawl-preset`-style flags.
 
+As built: the `--crawl-preset`-style flags are `--crawl-preset <polite|legacy|strict>`
+and `--caller-overrides <any|stricter|none>`; both set the matching
+`EVER_JOBS_CRAWL_*` variable for that CLI process (the preset is process-wide, so it
+cannot be a per-request field). Convenience flags win over the same field in
+`--crawl`; invalid values are warned about and skipped. GraphQL exposes the object as
+input type `CrawlPolicyInput` (enum-like fields are `String`s, because `per-request`,
+`give-up` and `crawl-delay` are not valid GraphQL enum names). MCP `search_jobs`
+accepts `crawl` as an object or a JSON-object string.
+
 ### 5.3 Plugin manifest
 
 `IPluginMetadata.crawl?: PluginCrawlPolicy` — e.g. Softy:
@@ -272,6 +308,16 @@ class-validator (enums, `@Min(0)`, arrays of ints). CLI: `--crawl <json>`,
 
 `GET /api/sources/:site/crawl-policy?host=<host>` → `ResolvedCrawlPolicy` with
 provenance (read-only; same auth as other `/api/sources` reads).
+
+As built: an optional `crawl=<json>` query previews a caller override (refused fields
+listed in `meta.caller.rejected`). The response is the resolved policy at the top
+level plus `site`, `host`, `provenance`, `userAgentReason` (when a plugin opt-in is in
+effect), `meta` (`preset`, `callerOverrides`, `abortOnDeadline`, `envProxyCount` —
+a count, never the list — `plugin`, `builtinHost`, `operatorSite`,
+`operatorHostPatterns`) and `warnings` (env parse warnings + resolution notes,
+`user:password@` redacted). 404 for a site that is neither a `Site`, a registered
+plugin nor a crawl pseudo-site (`liveness-http`, or a `sites` key of the operator
+policy); 400 for an unparseable `host` or `crawl`.
 
 ### 5.5 Errors
 
@@ -310,4 +356,174 @@ provenance (read-only; same auth as other `/api/sources` reads).
 ## 8. References
 
 - Softy CTO e-mail, 2026-09-24 (summarised in §1).
-- `docs/CRAWL_POLICY.md` — operator guide.
+- `docs/CRAWL_POLICY.md` — operator guide: [docs/CRAWL_POLICY.md](../../../docs/CRAWL_POLICY.md).
+- [plan.md](./plan.md), [tasks.md](./tasks.md); ADR
+  [0001 — crawl policy](../../../docs/adr/0001-crawl-policy.md) (constitution amendments).
+- Open questions: Q-097 (default UA mode and plugin opt-ins), Q-098 (default pacing
+  numbers) in [docs/questions.md](../../../docs/questions.md).
+- RFC 9309 (robots.txt), RFC 9110 §10.1.2 (`From`), §10.2.3 (`Retry-After`).
+
+## 9. As built (2026-09-25)
+
+Implemented in six lanes on top of the contract commit (`19384068`): B1 policy core
+(`env.ts`, `resolve.ts`, `scrape-context.ts`, new `policy-schema.ts`), B2 mechanisms
+(`host-limiter.ts`, `proxy-selector.ts`, `robots.ts`, `egress-guard.ts`), B3
+`HttpClient` integration, B4 entry points (REST, GraphQL, MCP, CLI, liveness, the
+policy endpoint, circuit breaker), B5 Spec 1691 (Softy + sitemap toolkit), B6
+`BrowserPool` identity and the USAJobs/HeadHunter UA opt-ins. §1–§8 above are the
+design as agreed; this section records every place the build went further or
+differently, and why. Where the design was silent the most flexible option was taken
+(owner rule) and is noted.
+
+### 9.1 Where the build differs from §4
+
+- **A plugin-layer `userAgent` is never the configured UA** (§4.2 sharpened). A
+  `userAgent` option, a client `crawl.userAgent` or a manifest `userAgent` is always a
+  *declared* UA, sent only when the resolved mode lets the plugin choose. Mapping it
+  into the configured UA would have let any plugin put its own UA on the wire under
+  `identify` and even `strict`.
+- **A plugin cannot relax `strict`.** When the layers below the plugin pin
+  `userAgentMode: 'strict'`, a plugin's `identify`/`plugin` request is dropped with a
+  resolution note (strict means "no exceptions").
+- **`legacy` reproduces pre-1690 wire behaviour through a dedicated precedence**, not
+  through `strict` alone: the request's own UA header, else the `userAgent` option,
+  else the configured Chrome/120 UA; `setHeaders()` UAs never reach the wire — exactly
+  what the pre-1690 client did. Under `legacy` the builtin-host layer, plugin
+  manifests and the `DEFAULT_PROXIES` fallback are also off (pre-1690 had none of
+  them), and `maxRetryAfterMs` follows `retryMaxDelayMs` unless a layer sets it (the
+  single pre-1690 ceiling), so the `cap` arithmetic equals the old
+  `min(retryMaxDelay, max(backoff, Retry-After))`.
+- **Caller layer is not pre-filtered in the scrape context** (§4.6 said "already
+  filtered"). At scrape time there is no host, so filtering against a host-less base
+  would wrongly drop, e.g., `maxConcurrentPerHost: 8` aimed at Greenhouse (builtin 16).
+  `resolveCrawlPolicy` filters it per request against that host's own base.
+- **`blockPrivateNetworks` is a security field**: a caller may turn it on under every
+  `EVER_JOBS_CRAWL_CALLER_OVERRIDES` mode but may never turn it off, not even under
+  `any`. Operators disable it with env or operator policy.
+- **`stricter` comparators** are defined per field (table in `filterCallerOverride`,
+  mirrored in the operator guide): e.g. `maxConcurrentPerHost` lower (0 = unlimited
+  = least strict), intervals higher, `retries` lower, `retryStatuses` a subset,
+  identity changes never "stricter", `maxQueueWaitMs`/`discovery` always accepted.
+  Unknown mode → treated as `stricter` (fail safe).
+- **A caller `userAgent` without `userAgentMode` implies `strict`** in the resolver
+  as well as in the legacy DTO mapping, so every entry point behaves the same.
+- **Operator host patterns stack.** Every matching pattern applies, least specific
+  first (`*` < shorter `*.suffix` < longer `*.suffix` < exact host), so the most
+  specific wins field by field; `*` (every host) is accepted in addition to exact and
+  `*.suffix`. Policy-file keys starting with `$`, `_` or `//` are comments; a UTF-8 BOM
+  is tolerated. Merge order per field: `RETRY_PER_SOURCE` < policy file <
+  `EVER_JOBS_CRAWL_POLICIES`.
+- **Whole-bucket back-off only for paced buckets.** A 429/503 penalises the bucket
+  when it is paced at all (a concurrency cap, an interval or the adaptive throttle);
+  the completely unpaced `legacy` preset never did, and still does not. A `give-up`
+  Retry-After always cools the bucket. A 429/503 the caller accepted through
+  `validateStatus` still counts as throttling (it is just not retried).
+- **Cool-downs are bounded**: any `penalize` is capped at `maxCooldownMs` (1 h,
+  `EVER_JOBS_CRAWL_MAX_COOLDOWN_MS`) so one hostile `Retry-After` cannot wedge a shared
+  bucket for the life of the process; longer timers are armed in chunks (Node's
+  `setTimeout` turns anything above 2^31−1 ms into 1 ms). With `maxQueueWaitMs: 0` a
+  request still fails fast with `HostCoolingDownError` when the cool-down exceeds
+  `maxRetryAfterMs` — it never waits longer for a cool-down than it would wait for the
+  server itself.
+- **`domain` scope uses the ICANN section of the Public Suffix List only**, so every
+  tenant of a hosting platform shares the platform's budget (the point of `domain`);
+  `bucketKeyFor(..., { allowPrivateDomains: true })` is available to code that wants
+  the private section too.
+- **Crawl-delay** (robots `crawl-delay`/`respect`) raises the bucket's
+  `minIntervalMs` for that request, capped at the limiter's `maxCooldownMs`. robots.txt
+  downloads are capped at 2 MiB and parsed up to 512 KiB (Google's limit); rule
+  count, pattern length and matcher cost are bounded (hostile-input hardening); an
+  over-budget file falls back to the `unreachable` policy for that URL.
+- **Unreachable robots.txt** (5xx, 429, network) → `allow` for 5 minutes, then
+  retried; `EVER_JOBS_CRAWL_ROBOTS_UNREACHABLE=disallow` selects the RFC 9309 §2.3.1.4
+  reading (complete disallow; matters only in `respect`).
+- **Egress guard** blocks more name suffixes than §4.8 listed (`svc`, `localdomain`,
+  `home.arpa`), checks every redirect target, and egress-checks any proxy that is not
+  one of the operator's env proxies (a caller-supplied proxy is itself checked,
+  literally and through a guarded DNS lookup). Requests routed by `HTTP(S)_PROXY`
+  keep axios' own agents (a `NO_PROXY`-exempt URL goes direct and is guarded). An
+  allow-list exists for local mocks while the guard stays on
+  (`EVER_JOBS_CRAWL_EGRESS_ALLOW_HOSTS`, `HttpClientOptions.egressAllowHosts`).
+- **Calls straight through `getAxiosInstance()`** get the identity and the egress
+  check from the interceptor but are not paced or retried (they bypass `request()`).
+- **Circuit breaker: deadline aborts are neutral.** The brief said "breaker behaviour
+  unchanged", but without this a source that starts late in a wide search is aborted
+  at the deadline and five of those in a row would open its breaker. A failure after
+  our own abort now counts as neither failure nor success, and a half-open probe slot
+  is handed back. `EVER_JOBS_CIRCUIT_MAX_SITES=0` means no cap; `250` restores the
+  pre-1690 bound.
+- **Liveness enrichment** runs in a scrape context under the pseudo-site
+  `liveness-http` (tunable through `sites["liveness-http"]`), deliberately without the
+  search caller's `crawl` (a caller's `retries` would override the checker's own
+  `retries: 0`), and is bounded by `EVER_JOBS_LIVENESS_DEADLINE_MS` (60 s): probes
+  queued behind a paced or cooling-down host are aborted and reported `uncertain`.
+- **Caller proxies** reach every plugin client through the scrape context unless
+  `EVER_JOBS_CRAWL_CALLER_PROXIES=none` (the default whenever caller overrides are not
+  `any`); refused proxies reach neither the context nor the DTO.
+- **Env parse is cached once per process** (reading ~40 variables per request cost
+  ~0.1 ms on Windows); changing the environment needs a restart
+  (`resetCrawlPolicyEnvCache()` in tests). Resolved policies are memoised per
+  (env parse, plugin manifest, caller override, site, host, explicit options), LRU
+  8,192 per leaf; resolution notes are logged once at debug level.
+
+### 9.2 Additions beyond §4–§5
+
+- The environment variables listed under §5.1 "Added during implementation".
+- `EVER_JOBS_CRAWL_PROXIES` also accepts a JSON array; `none`/`off`/`direct` = no
+  proxies and no fallback to `DEFAULT_PROXIES`.
+- Value coercion: integers ≥ 0 (fractions floored, values above 2^31−1 clamped);
+  case-insensitive enums with `_` accepted for `-`; status lists `"429,503"` or
+  `[429,503]`, 100–599, `none` = empty; header-unsafe characters stripped from
+  `userAgent`/`from`; the contact loses parentheses (they would unbalance the UA
+  comment) and is inserted wherever any layer sets the `default` keyword.
+- `HttpClientOptions`: `crawl` (plugin layer, wins over the pre-1690 flat options),
+  `site`, `egressAllowHosts`, `hostLimiter`, `robotsTxtCache`;
+  `CrawlRequestConfig.crawl` for a per-request override; `crawlPolicyFor(url)` for
+  diagnostics; helpers `selectWireUserAgent`, `retryBackoffMs`, `retryDecision`,
+  `parseRetryAfter`, `isRetryableNetworkError`, `clientOptionsFromScraperInput`.
+- `explainCrawlPolicy()` (policy + preset, caller rejections, builtin host, operator
+  site and host patterns, notes) behind the policy endpoint.
+- `ScrapeReason` gains `rate_limited` (actionable); crawl error codes map by `code`,
+  not message: queue timeout / cooling down → `rate_limited`, robots → `blocked`,
+  egress → `bad_input`.
+- `RequestContext.requestId` is optional and `runWithRequestContext` exists, so a
+  scrape context works outside any HTTP request (CLI).
+- `BrowserPool`: `BrowserPageOptions.userAgent` / `host` / `crawl`;
+  `resolveBrowserUserAgent()`. In mode `plugin` with no declared UA the pre-1690
+  random pool UA stands in (so `EVER_JOBS_CRAWL_USER_AGENT_MODE=plugin` reproduces the
+  old pages), and the `legacy` preset reproduces pre-1690 pages byte for byte.
+- A compile-time check (`apps/api/src/jobs/crawl-policy.mapping.ts`) fails the build
+  if `CrawlPolicyDto` and `CrawlPolicy` drift apart in either direction; the MCP
+  schema is kept in step by a test.
+
+### 9.3 Plugin UA opt-ins (`userAgentMode: 'plugin'`)
+
+| Plugin | Reason (manifest `userAgentReason`) |
+|---|---|
+| `source-usajobs` | The Search API requires the UA to be the e-mail registered with the API key. |
+| `source-headhunter` | hh.ru requires an application-identifying UA (`AppName/Version`) and answers a missing or blacklisted one with `400 bad_user_agent`. |
+| `source-simplyhired` | Evidence-based (Q-097 option B): simplyhired.com answers HTTP 403 to search and detail pages with the Ever Jobs UA; live A/B 2026-09-25 — 22/22 requests 200 with the declared browser UA. |
+
+No site was opted in on A/B evidence alone yet; the live A/B (30 plugins, 166
+requests) and the candidates it found are recorded in Q-097.
+
+### 9.4 Verification (2026-09-25)
+
+- `tsc --noEmit -p apps/api/tsconfig.build.json` and `-p tsconfig.base.json` (every
+  `.ts` in the repo): 0 errors.
+- Jest, real config: 55/55 suites, 1,769/1,769 tests (all new crawl suites plus
+  `softy.service`, `usajobs.crawl`, `headhunter.crawl`); integration, CLI, MCP,
+  `softy.parser`, `softy.policy` and `corpus-signals` 6/6 suites, 88/88;
+  `browser-pool.spec.ts` 71/71; `npm run test:scripts` 12/12 suites, 193/193.
+  Full plugin sweep (fast config): 1,596/1,596 suites, 15,862/15,862 tests.
+- Mutation check (B3): breaking the interceptor, limiter acquire, egress check,
+  legacy UA precedence, the DTO-in-context rule and whole-bucket penalize each turned
+  specific tests red.
+- Default-search simulation (offline, 200 ms mocked latency, real timers): 800
+  requests to `api.greenhouse.io` plus a 100-wide fan-out to one ordinary host
+  finished in 11.3 s against the 120 s deadline, 0 failures; Greenhouse ≤ 16 in
+  flight, the ordinary host ≤ 3. Limiter grants were always ≥ 100 ms apart; the first
+  gap between wire starts of a burst measured 86–90 ms (the limiter spaces grants,
+  not wire starts — only the first pair of a burst is affected).
+- Softy live wire proof: see Spec 1691 §6.
+
