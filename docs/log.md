@@ -5,6 +5,101 @@
 
 ---
 
+## 2026-09-25 — Spec 1689 — Fork sync hardening: ReDoS, SSRF, shared state, and behaviour the fork removed
+
+**Change:** `fork-sync/makedeeply-2026-09-24` fast-forwards `origin/develop` (`574bd922`) to the
+MakeDeeply fork tip `11c61771` (118 commits: the fork's Specs 5118–5152, including the entries
+directly below this one). A read-only review of the fork in six lanes (supply chain, authorship,
+prompt injection, dangerous code, core, plugins) plus a merge test found no supply-chain or
+provenance compromise, but did find defects that would land with it. Commit `a243b1b9` fixes them
+on top of the fork tip, and keeps every behaviour the fork changed or removed reachable through an
+option or env variable:
+
+- **ReDoS (merge blocker).** The Spec 5124 parser's `remoteIn` regex
+  (`/^(?:remote|hybrid)\b(?:[\s-]*\w+)*?\s+in\s+(.+)$/i`) was exponential on any `Remote …`/
+  `Hybrid …` label without ` in ` — 7.2 s for `Hybrid Washington Metropolitan Area Office`, over
+  60 s at 53 characters — on a path ~978 plugins and `source-authenticjobs`' caller-supplied
+  `location` now reach. Replaced by the linear `matchRemoteInGeo` (0 disagreements with the old
+  regex over 300,000 fuzz strings), plus a per-chunk label cap
+  (`EVER_JOBS_LOCATION_MAX_LABEL_LENGTH`, 256), linear trims, a static country lookup instead of
+  `countryFromString`'s throw path (~4× faster), and the same fix in `scripts/proto`.
+- **Parser readings.** Ambiguous two-letter tails read as the US state (`Downtown, Los Angeles,
+  CA` was Canada; `EVER_JOBS_LOCATION_PREFER_US_STATE`), with vetoes that keep
+  `Bengaluru, KA, IN` in India and `Toronto, Ontario, CA` in Canada; region codes are no longer
+  re-read as countries (`Munich, BY, DE` was Belarus); `Remote, CA` reads as the state only with
+  `EVER_JOBS_LOCATION_PREFER_US_STATE_AFTER_QUALIFIER`. The fork's removed outputs are options
+  with the fork's defaults kept: `EVER_JOBS_LOCATION_REMOTE_CITY` (false, **Q-094**) and
+  `EVER_JOBS_LOCATION_BARE_STATE` (true, **Q-095**).
+- **Dedup.** The canonical key keeps a remote bucket and one spelling per country
+  (`EVER_JOBS_CANONICAL_KEY_REMOTE_BUCKET`, `EVER_JOBS_CANONICAL_KEY_NORMALIZE_COUNTRY`, both on),
+  and `dedup-hybrid` now passes `isRemote`, so a parsed `Remote` / `Remote - US` hash-merges with
+  an iCIMS `{ city: 'Remote' }` again. 🛑 Both options change `canonicalJobId` for remote-only
+  postings and labels ending in a country — one-time duplicates in a persistent store
+  (`store-sqlite-drizzle`, `store-postgres-prisma`); both `false` gives the fork's Spec 5123 key.
+  `CanonicalJob` gains `countryCode`.
+- **SSRF.** New shared `url-guard.ts` (`pinUrlToHosts`, `isPubliclyRoutableHostname`,
+  `describeUrlForLog`). `octbr_ai` spliced `companySlug` into its host and fetched every `job.url`
+  from tenant JSON; it now refuses a slug that is not one DNS label (`bad_input`, no request),
+  pins detail URLs to `{slug}.octbr.ai` and fetches them in batches of 5. The nine company plugins
+  (`4earth_tech`, `ampflame`, `getmaxspace`, `labs_actor`, `mundane_co`, `pulsespace`, `soundryx`,
+  `tau-robotics`, `thermwood`) pin `companyUrl` to their own domain or ignore it, logging the host
+  only. Every redirect hop of those clients is re-pinned (`HttpClientOptions.allowedRedirectHosts`;
+  escape hatch `EVER_JOBS_HTTP_PIN_REDIRECTS=false`).
+- **Shared state.** `mundane_co` closed the process-wide `BrowserPool` after every scrape, killing
+  other plugins' pages; it now closes only its own page (the old behaviour is
+  `MUNDANE_CO_CLOSE_BROWSER_POOL_AFTER_SCRAPE=true`). Idle persistent Chromium contexts are
+  LRU-capped (`EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS`, 4). Eightfold's endpoint and
+  Wellfound's remote-config map are per scrape instead of on the singleton service.
+- **Removed behaviour restored as options.** Dover's optional job-groups call no longer fails the
+  scrape (`DOVER_JOB_URL_STYLE=apply|board`); ADP stops paging at `offset + resultsWanted`
+  (`ADP_MAX_LIST_PAGES`, 100); the Lever/Workday ATS country overlay is back
+  (`EVER_JOBS_ATS_COUNTRY_OVERLAY`, on); PulseSpace's plain-HTTP bundle strategy is back beside
+  the browser one (`PULSESPACE_STRATEGY=rendered|bundle|auto`, default `rendered`) with its
+  fixtures restored; 11 plugins get their pre-Spec-5125 location heuristics back
+  (`<PLUGIN>_LOCATION_HEURISTICS`, on). Catastrophic-backtracking regexes in `tau-robotics`,
+  `4earth_tech`, `labs_actor` and nine quadratic ones elsewhere are linear.
+- **API surfaces.** MCP renders `location` as a string (`EVER_JOBS_MCP_LOCATION_FORMAT`) and
+  sends the camelCase keys the API's whitelist pipe keeps (`EVER_JOBS_MCP_REQUEST_KEYS`) — it was
+  searching with no search term. GraphQL exposes `countryCode`, `locations`, `offices` and the new
+  location fields; `SearchJobsInput` gets class-validator decorators (the whitelist pipe had been
+  stripping it to `{}`) and `country` is resolved to a `Country` or dropped with a warning.
+- **CI / tooling.** Unit shards take `JEST_SOURCE_UNIT_MAX_WORKERS` (5) on `RUNNER_SOURCE_UNIT`
+  instead of `--maxWorkers=75%` of the host; a new blocking `Test (Core)` job (`npm run
+  test:core`, `JEST_CORE_MAX_WORKERS` 3) runs the suites no job ran, and the two stale
+  `apps/api` specs it would have caught are fixed; `JEST_TRANSFORMER=ts-jest` / `npm run
+  test:typed` restore type-checked test runs; docs-lint check 8 flags conflict markers, and the
+  stray `||||||| 062a1346` line in `docs/questions.md` is removed.
+
+Not in scope and recorded: a global SSRF guard and resolved-IP checks for the older plugins, the
+two-label in-cluster hostname gap, caller-supplied `proxies`/`caCert`, and the shared-parser
+mis-splits in **Q-096**.
+
+**Files:** `packages/common/src/{utils/location-parser.ts,utils/url-guard.ts,utils/index.ts,canonical-key.ts,normalize.ts,http/http-client.ts,browser/browser-pool.ts}`,
+`packages/models/src/{interfaces/canonical-job.interface.ts,schemas/canonical-job.schema.ts}`,
+`packages/plugins/dedup-hybrid/src/dedup-hybrid.service.ts`,
+`packages/plugins/source-ats-{adp,catsone,cleverconnect,dover,eightfold,employmenthero,greenhouse,harri,jobsoid,lever,octbr_ai,pinpoint,umantis,wellfound,workday,workstream}/src/*`,
+`packages/plugins/source-company-{4earth_tech,amazon,ampflame,argospace,getmaxspace,labs_actor,mundane_co,pulsespace,soundryx,tau-robotics,thermwood,thinkorbital,zennoastronautics}/src/*`,
+`packages/plugins/source-company-pulsespace/__tests__/fixtures/{bundle.js,careers-bundle-shell.html,principal-avionics-architect.html}`,
+`apps/api/src/jobs/{gql-types.ts,jobs.resolver.ts}`, `apps/mcp/src/tools.ts`,
+`.github/workflows/ci.yml`, `jest.config.js`, `package.json`,
+`scripts/{docs-lint.ts,jest-typed.ts,proto/location-parser-v2.ts}`, the specs beside each of
+those, `apps/api/__tests__/{jobs/corpus-signals.spec.ts,integration/source-ats-batch-1.integration.spec.ts}`,
+`.env.example`, `apps/mcp/README.md`, `docs/questions.md` (Q-094–Q-096, marker removed),
+`.specify/specs/1689-fork-sync-hardening/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx tsc --project tsconfig.typecheck.json --noEmit` and
+`npx tsc --project apps/api/tsconfig.build.json --noEmit` clean; `npm run lint:docs` clean;
+`npm run test:scripts` 15/15 suites, 241 tests; jest `packages/(common|models|plugin)/` 751/751;
+`apps/(api|mcp)/` 316/316; the 30 touched plugin dirs 665/665; `packages/plugins/source-`
+1,626/1,626 suites, 16,226/16,226 tests. Each fix lane's new tests were run red against the fork's
+code first (e.g. Eightfold 3, Dover 8, ADP 6, MCP 4 failures; the fork parser took 11.2 s on
+`Remote Nationwide Opportunities Available`, the new one 3.9 ms). Known flake: `dedup-perf`
+NFR-1 (1,000 jobs < 250 ms, local budget) failed 2 of 6 runs at 278–284 ms with four workers on a
+loaded host and passed in isolation; the changed tree is ~5–10% slower there, and CI runs that
+suite with a 1,000 ms budget.
+
+---
+
 ## 2026-09-24 — Spec 5152 — `source-company-soundryx`: Soundryx careers plugin
 
 **Change:** New company plugin `source-company-soundryx` (`Site.SOUNDRYX = 'soundryx'` — the Spec 5069 domain derivation of `soundryx.com`; `companyDomains: ['soundryx.com']` declared to pre-claim the host). `soundryx.com/careers/` is an Astro static site — fully server-rendered, static GETs only: the index's `a.srx-tile.is-link` tiles map to per-role `/careers/NNNNN-slug/` detail pages rendered under `.vp-doc`. Per detail: `h1`'s first text node → `title` (the trailing `<br/>` meta parenthetical is dropped); the `<strong>Location</strong>: …` line → `parseLocationText` with an `(onsite)` marker → `workFromHomeType: 'On Site'`; the `h2#compensation` sibling `ul` text → `resolveCompensation`; the `h2#apply-now` scope's Cloudflare `data-cfemail` payload (first byte = XOR key for the rest) decodes to the shared careers `mailto:` — an `email-protection#hex` href or bare `mailto:` also resolve. `description` = the `.vp-doc` body minus `section.footnotes` via `htmlToPlainText` (h2 section headings + `ul/li` bullets). `jobUrl`/`jobUrlDirect` = the detail page; `applyUrl` = the decoded mailto; ids `soundryx-{url-slug}` (the `NNNNN-` prefix is already unique). No `datePosted`/`department`. Empty index → `empty` diagnostic; fetch failure → `classifyScrapeError`; `resultsWanted`/`searchTerm`/`location`/`offset` honored.
