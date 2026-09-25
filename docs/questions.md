@@ -177,6 +177,9 @@ request holds the whole raw fan-out in memory before the first NDJSON job line, 
 request valid. `0` disables either bound.
 
 **Resolution:** _pending review._
+
+---
+
 ## Q-096 — Shared location parser: known mis-splits carried in from the fork (Spec 1689)
 
 **Context:** The fork-sync review (Spec 1689, lane A4) found shared-parser outputs that no
