@@ -25,7 +25,8 @@ import {
  * resultsWanted budget), then re-stamps the company identity (site,
  * companyName, id prefix) so every Greenhouse field fix is inherited and no
  * plugin imports a peer. The search term and every other caller input pass
- * through untouched.
+ * through untouched, except credentials: auth is never forwarded to a third
+ * party board.
  *
  * Tags: segment=quant-trading; industry=market-making.
  */
@@ -77,6 +78,10 @@ export class ImcService implements IScraper {
       try {
         result = await backend.scrape({
           ...input,
+          // Never forward the caller's credentials to a third party's board
+          // (Spec 1735 §4.5): an authenticated ATS path would answer with the
+          // caller's own jobs under this company's name.
+          auth: undefined,
           companySlug: board.companySlug,
           ...(remaining !== undefined ? { resultsWanted: remaining } : {}),
         } as ScraperInputDto);

@@ -78,6 +78,13 @@ export interface SeedDescriptor {
   specNo: number;
   /** Boards in scrape order (early-career first). One backend per plugin. */
   boards: SeedBoard[];
+  /**
+   * When set, the plugin runs only when a caller selects it explicitly (its
+   * `Site` in `siteType`, or one of its domains in `companyDomain`) and never
+   * in the default fan-out. The value is the reason, e.g. a robots.txt that
+   * disallows crawling (Spec 1735 §4.7).
+   */
+  explicitOnly?: string;
 }
 
 export interface VerificationRecord {
@@ -129,6 +136,14 @@ interface BackendSpec {
    * with no total), so the recorded job count is a lower bound.
    */
   countIsFirstPageOnly?: boolean;
+  /**
+   * True when the adapter reports a per-posting organisation (Workday's
+   * `hiringOrganization.name`), which on a multi-business tenant names the
+   * business unit. The plugin then keeps it and re-stamps only empty,
+   * tenant-token and legal-form names (Spec 1735 §4.2.1); for every other
+   * backend the name is board-level and always re-stamped.
+   */
+  perPostingCompanyName?: boolean;
   /** Recorded HTTP responses (keyed by URL without query) + expected mapping. */
   fixture(d: AtsDelegateDescriptor, board: AssembledBoard): BoardFixture;
 }
@@ -184,6 +199,7 @@ export const BACKENDS: Record<string, BackendSpec> = {
     atsIdPrefix: (slug) => `wd-${parseWorkdaySlug(slug).tenant}-`,
     boardUrl: (slug) => `${workdayHost(slug)}/${parseWorkdaySlug(slug).site}`,
     notFoundReason: 'bad_input',
+    perPostingCompanyName: true,
     fixture(d, board) {
       const { tenant, site } = parseWorkdaySlug(board.slug);
       const host = workdayHost(board.slug);
@@ -451,6 +467,9 @@ export function assembleDescriptors(
     const backends = new Set(s.boards.map((b) => b.backend));
     if (backends.size !== 1) throw new Error(`${s.key}: boards mix backends`);
     if (!BACKENDS[s.boards[0].backend]) throw new Error(`${s.key}: unsupported backend ${s.boards[0].backend}`);
+    if (s.explicitOnly !== undefined && !(typeof s.explicitOnly === 'string' && s.explicitOnly.trim())) {
+      throw new Error(`${s.key}: explicitOnly must be a non-empty reason`);
+    }
     for (const domain of s.companyDomains ?? []) {
       if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) || domain.startsWith('www.')) {
         throw new Error(`${s.key}: bad companyDomains entry ${domain}`);
@@ -533,6 +552,120 @@ function boardLine(b: AssembledBoard, spec: BackendSpec): string[] {
   ];
 }
 
+/**
+ * Legal-form words dropped from the end of a company name before comparing a
+ * posting's organisation with the display name (Spec 1735 §4.2.1).
+ */
+export const LEGAL_FORM_WORDS: readonly string[] = [
+  'inc',
+  'incorporated',
+  'llc',
+  'corp',
+  'corporation',
+  'co',
+  'company',
+  'ltd',
+  'limited',
+  'lp',
+  'llp',
+  'plc',
+  'gmbh',
+  'ag',
+  'sa',
+  'nv',
+  'bv',
+];
+
+/**
+ * Generated helpers for a backend with per-posting organisation names
+ * (Workday), emitted verbatim after `COMPANY_NAME` is declared. Exported so the
+ * generator suite can evaluate exactly the code the plugins carry.
+ */
+export function companyNameHelpers(): string {
+  const words = LEGAL_FORM_WORDS.map((w) => `  '${w}',`).join('\n');
+  return `
+/** Trailing legal-form words ignored when comparing an organisation name with COMPANY_NAME. */
+const LEGAL_FORM_WORDS: ReadonlySet<string> = new Set([
+${words}
+]);
+
+/**
+ * A company name reduced to its core: lower case, '&' read as 'and',
+ * punctuation dropped, no leading 'The', no trailing legal form.
+ */
+function coreCompanyName(name: string): string {
+  const words = name
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[.'\\u2019]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  while (words.length > 1 && LEGAL_FORM_WORDS.has(words[words.length - 1])) words.pop();
+  while (words.length > 1 && words[0] === 'the') words.shift();
+  return words.join(' ');
+}
+
+/**
+ * Company name for a delegated posting (Spec 1735 §4.2.1). Workday reports each
+ * posting's hiring organisation; on a multi-business tenant that names the
+ * business unit, which is kept. Only what is not a real organisation name is
+ * re-stamped: empty, the tenant token the adapter falls back to, or
+ * COMPANY_NAME in legal form (e.g. "<name>, Inc.").
+ */
+function companyNameFor(sourceName: string | null | undefined, tenant: string): string {
+  const name = sourceName?.trim();
+  if (!name || name.toLowerCase() === tenant.toLowerCase()) return COMPANY_NAME;
+  return coreCompanyName(name) === coreCompanyName(COMPANY_NAME) ? COMPANY_NAME : name;
+}
+`;
+}
+
+/** Generated explicit-only constants (Spec 1735 §4.7). */
+function explicitOnlyConstants(d: AtsDelegateDescriptor): string {
+  return `
+/** Why this plugin runs only when a caller selects it explicitly (Spec 1735 §4.7). */
+const EXPLICIT_ONLY_REASON = '${sq(d.explicitOnly ?? '')}';
+`;
+}
+
+/** Generated first statement of `scrape()` for an explicit-only plugin. */
+function explicitGateBlock(d: AtsDelegateDescriptor): string {
+  const name = sq(d.displayName);
+  return [
+    '    if (!this.isExplicitlySelected(input)) {',
+    '      // The default fan-out never contacts this board (Spec 1735 §4.7).',
+    `      this.logger.debug(\`${name}: not selected explicitly, skipped (\${EXPLICIT_ONLY_REASON})\`);`,
+    '      return new JobResponseDto(',
+    '        [],',
+    "        new ScrapeDiagnostics('empty', `explicit-only source, not selected: ${EXPLICIT_ONLY_REASON}`),",
+    '      );',
+    '    }',
+    '',
+    '',
+  ].join('\n');
+}
+
+/** Generated selection check for an explicit-only plugin. */
+function explicitMethodBlock(d: AtsDelegateDescriptor): string {
+  return [
+    '',
+    '',
+    '  /**',
+    '   * True when the caller selected this plugin (Spec 1735 §4.7): its Site is in',
+    '   * siteType, or a companyDomain resolves to it the way JobsService resolves',
+    '   * domains. The default fan-out passes neither.',
+    '   */',
+    '  private isExplicitlySelected(input: ScraperInputDto): boolean {',
+    `    if (input.siteType?.includes(Site.${d.enumKey})) return true;`,
+    '    return (input.companyDomain ?? []).some((raw) => {',
+    "      const domain = typeof raw === 'string' ? raw.trim() : '';",
+    '      if (!domain) return false;',
+    `      return (this.registry?.siteForDomain(domain) ?? siteFromDomain(domain)) === Site.${d.enumKey};`,
+    '    });',
+    '  }',
+  ].join('\n');
+}
+
 export function serviceFile(d: AtsDelegateDescriptor): string {
   const spec = backendOf(d);
   const doc: string[] = [
@@ -548,7 +681,8 @@ export function serviceFile(d: AtsDelegateDescriptor): string {
         '(sequentially, early-career boards first, each with the remaining resultsWanted ' +
         'budget), then re-stamps the company identity (site, companyName, id prefix) so ' +
         `every ${spec.label} field fix is inherited and no plugin imports a peer. The ` +
-        'search term and every other caller input pass through untouched.',
+        'search term and every other caller input pass through untouched, except ' +
+        'credentials: auth is never forwarded to a third party board.',
       74,
     ).map((l) => ` * ${l}`),
     ' *',
@@ -564,6 +698,14 @@ export function serviceFile(d: AtsDelegateDescriptor): string {
   const domains = d.companyDomains.map((x) => `'${sq(x)}'`).join(', ');
   const description = `${d.displayName} careers via ${spec.label}. ${tagLine(d)}`;
   const name = sq(d.displayName);
+  const commonImport = d.explicitOnly ? "import { siteFromDomain } from '@ever-jobs/common';\n" : '';
+  const helpers =
+    (spec.perPostingCompanyName ? companyNameHelpers() : '') + (d.explicitOnly ? explicitOnlyConstants(d) : '');
+  const companyNameExpr = spec.perPostingCompanyName
+    ? `companyNameFor(job.companyName, board.${spec.inputField}.split(':')[0])`
+    : 'COMPANY_NAME';
+  const explicitGate = d.explicitOnly ? explicitGateBlock(d) : '';
+  const explicitMethod = d.explicitOnly ? explicitMethodBlock(d) : '';
   return `import { SourcePlugin, PluginRegistry } from '@ever-jobs/plugin';
 
 import { Injectable, Logger, Optional } from '@nestjs/common';
@@ -577,7 +719,7 @@ import {
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
-
+${commonImport}
 ${doc.join('\n')}
 const COMPANY_NAME = '${name}';
 const ID_PREFIX = '${sq(d.key)}-';
@@ -586,7 +728,7 @@ const ID_PREFIX = '${sq(d.key)}-';
 const BOARDS: ReadonlyArray<{ readonly ${spec.inputField}: string; readonly atsIdPrefix: string }> = [
 ${boards}
 ];
-
+${helpers}
 @SourcePlugin({
   site: Site.${d.enumKey},
   name: COMPANY_NAME,
@@ -601,7 +743,7 @@ export class ${d.serviceName} implements IScraper {
   constructor(@Optional() private readonly registry?: PluginRegistry) {}
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
-    const backend = this.registry?.getScraper(Site.${spec.siteKey});
+${explicitGate}    const backend = this.registry?.getScraper(Site.${spec.siteKey});
     if (!backend) {
       this.logger.error('${spec.label} source plugin is not registered; cannot scrape ${name}');
       // A registry miss is a wiring problem, not an empty board -
@@ -627,6 +769,10 @@ export class ${d.serviceName} implements IScraper {
       try {
         result = await backend.scrape({
           ...input,
+          // Never forward the caller's credentials to a third party's board
+          // (Spec 1735 §4.5): an authenticated ATS path would answer with the
+          // caller's own jobs under this company's name.
+          auth: undefined,
           ${spec.inputField}: board.${spec.inputField},
           ...(remaining !== undefined ? { resultsWanted: remaining } : {}),
         } as ScraperInputDto);
@@ -648,7 +794,7 @@ export class ${d.serviceName} implements IScraper {
 
       for (const job of result.jobs ?? []) {
         job.site = Site.${d.enumKey};
-        job.companyName = COMPANY_NAME;
+        job.companyName = ${companyNameExpr};
         if (job.id?.startsWith(board.atsIdPrefix)) {
           job.id = ID_PREFIX + job.id.slice(board.atsIdPrefix.length);
         }
@@ -664,7 +810,7 @@ export class ${d.serviceName} implements IScraper {
     // a benign one (e.g. empty) only when nothing was found at all.
     const diagnostics = actionable ?? (jobs.length === 0 ? fallback : undefined);
     return new JobResponseDto(jobs, diagnostics);
-  }
+  }${explicitMethod}
 }
 `;
 }
@@ -765,6 +911,149 @@ export function testFile(d: AtsDelegateDescriptor): string {
       const result = await service.scrape({ siteType: [Site.${d.enumKey}] } as ScraperInputDto);
       expect(result.jobs.map((j) => j.id)).toEqual([ID_PREFIX + 'b']);
       expect(result.diagnostics?.reason).toBe('fetch_error');
+    });
+  });
+`
+    : '';
+  const companyNameBlock = spec.perPostingCompanyName
+    ? `
+  describe('company name (Spec 1735 §4.2.1)', () => {
+    const TENANT = boardInputOf(FIXTURE.boards[0]).split(':')[0];
+
+    async function nameAfterRestamp(companyName: string | null): Promise<string | null | undefined> {
+      const service = new ${d.serviceName}(
+        registryWith(
+          fakeBackend(
+            () =>
+              new JobResponseDto([
+                new JobPostDto({ id: FIXTURE.boards[0].atsIdPrefix + 'n1', title: 'Role', jobUrl: 'u', companyName }),
+              ]),
+          ),
+        ),
+      );
+      const result = await service.scrape({ siteType: [Site.${d.enumKey}], resultsWanted: 1 } as ScraperInputDto);
+      return result.jobs[0]?.companyName;
+    }
+
+    it('re-stamps the tenant fallback, an empty name and the display name in legal form', async () => {
+      const sources = [
+        TENANT,
+        TENANT.toUpperCase(),
+        '',
+        '   ',
+        null,
+        COMPANY_NAME + ', Inc.',
+        'The ' + COMPANY_NAME + ' LLC',
+        COMPANY_NAME.toUpperCase(),
+      ];
+      for (const source of sources) {
+        expect(await nameAfterRestamp(source)).toBe(COMPANY_NAME);
+      }
+    });
+
+    it('keeps a business unit the posting names', async () => {
+      expect(await nameAfterRestamp('Example Business Unit LLC')).toBe('Example Business Unit LLC');
+      expect(await nameAfterRestamp('  Example Business Unit  ')).toBe('Example Business Unit');
+    });
+
+    it('keeps a business unit through the real ${spec.label} adapter', async () => {
+      const responses = clone(FIXTURE.responses) as Record<string, any>;
+      const detailUrl = Object.keys(responses).find((url) => responses[url]?.jobPostingInfo);
+      expect(detailUrl).toBeDefined();
+      responses[detailUrl!].hiringOrganization = { name: 'Example Business Unit LLC' };
+      const serveEdited = (url: string): Promise<{ data: unknown }> => {
+        const key = String(url).split('?')[0];
+        return Object.prototype.hasOwnProperty.call(responses, key)
+          ? Promise.resolve({ data: clone(responses[key]) })
+          : notFound(url);
+      };
+      mockGet.mockImplementation(serveEdited);
+      mockPost.mockImplementation(serveEdited);
+
+      const service = new ${d.serviceName}(registryWith());
+      const result = await service.scrape({ siteType: [Site.${d.enumKey}], resultsWanted: 100 } as ScraperInputDto);
+
+      expect(result.jobs.map((j) => j.id)).toEqual(FIXTURE.expected.map((e) => e.id));
+      const names = result.jobs.map((j) => j.companyName);
+      expect(names.filter((n) => n === 'Example Business Unit LLC')).toHaveLength(1);
+      expect(names.filter((n) => n !== 'Example Business Unit LLC').every((n) => n === COMPANY_NAME)).toBe(true);
+    });
+  });
+`
+    : '';
+  const credentialBlock =
+    spec.siteKey === 'GREENHOUSE'
+      ? `
+  describe('credential isolation (Spec 1735 §4.5)', () => {
+    const saved = {
+      key: process.env.GREENHOUSE_API_KEY,
+      board: process.env.GREENHOUSE_HARVEST_BOARD,
+    };
+
+    afterEach(() => {
+      if (saved.key === undefined) delete process.env.GREENHOUSE_API_KEY;
+      else process.env.GREENHOUSE_API_KEY = saved.key;
+      if (saved.board === undefined) delete process.env.GREENHOUSE_HARVEST_BOARD;
+      else process.env.GREENHOUSE_HARVEST_BOARD = saved.board;
+    });
+
+    it('requests only its own public board with GREENHOUSE_API_KEY set', async () => {
+      process.env.GREENHOUSE_API_KEY = 'operator-harvest-key';
+      delete process.env.GREENHOUSE_HARVEST_BOARD;
+      const service = new ${d.serviceName}(registryWith());
+      const result = await service.scrape({
+        siteType: [Site.${d.enumKey}],
+        resultsWanted: 100,
+        auth: { greenhouse: { apiKey: 'caller-harvest-key' } },
+      } as unknown as ScraperInputDto);
+
+      const urls = [...mockGet.mock.calls, ...mockPost.mock.calls].map((c) => String(c[0]).split('?')[0]);
+      expect(urls).toEqual(Object.keys(FIXTURE.responses));
+      expect(result.jobs.map((j) => j.id)).toEqual(FIXTURE.expected.map((e) => e.id));
+    });
+  });
+`
+      : '';
+  const explicitBlock = d.explicitOnly
+    ? `
+  describe('explicit-only (Spec 1735 §4.7)', () => {
+    it('makes no request outside an explicit selection', async () => {
+      const captured: ScraperInputDto[] = [];
+      const service = new ${d.serviceName}(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
+      const unselected = [
+        {},
+        { resultsWanted: 5 },
+        { siteType: [] },
+        { siteType: [Site.${spec.siteKey}] },
+        { siteCategories: ['company'] },
+        { companyDomain: ['example.com', '  '] },
+      ];
+      for (const input of unselected) {
+        const result = await service.scrape(input as unknown as ScraperInputDto);
+        expect(result.jobs).toEqual([]);
+        expect(result.diagnostics?.reason).toBe('empty');
+        expect(result.diagnostics?.detail).toContain('explicit-only');
+      }
+      expect(captured).toHaveLength(0);
+      expect(mockGet).not.toHaveBeenCalled();
+      expect(mockPost).not.toHaveBeenCalled();
+    });
+
+    it('runs when its Site is in siteType', async () => {
+      const captured: ScraperInputDto[] = [];
+      const service = new ${d.serviceName}(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
+      await service.scrape({ siteType: [Site.${spec.siteKey}, Site.${d.enumKey}] } as ScraperInputDto);
+      expect(captured).toHaveLength(FIXTURE.boards.length);
+    });
+
+    it('runs when addressed by one of its domains', async () => {
+      const captured: ScraperInputDto[] = [];
+      const registry = registryWith(fakeBackend(() => new JobResponseDto([]), captured));
+      const service = new ${d.serviceName}(registry);
+      const meta = Reflect.getMetadata(SOURCE_PLUGIN_METADATA, ${d.serviceName});
+      registry.register(meta, service);
+      await service.scrape({ companyDomain: ['www.' + meta.companyDomains[0]] } as ScraperInputDto);
+      expect(captured).toHaveLength(FIXTURE.boards.length);
     });
   });
 `
@@ -948,6 +1237,19 @@ ${reasonAssert}    });
       expect(result.jobs[0].companyName).toBe(COMPANY_NAME);
     });
 
+    it('never forwards the caller\\'s credentials to the board (Spec 1735 §4.5)', async () => {
+      const captured: ScraperInputDto[] = [];
+      const service = new ${d.serviceName}(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
+      await service.scrape({
+        siteType: [Site.${d.enumKey}],
+        auth: { ${spec.siteKey.toLowerCase()}: { apiKey: 'caller-key' } },
+      } as unknown as ScraperInputDto);
+      expect(captured).toHaveLength(FIXTURE.boards.length);
+      for (const forwarded of captured) {
+        expect(forwarded.auth).toBeUndefined();
+      }
+    });
+
     it('passes an absent resultsWanted through as absent', async () => {
       const captured: ScraperInputDto[] = [];
       const service = new ${d.serviceName}(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
@@ -1022,7 +1324,7 @@ ${reasonAssert}    });
       expect(result.diagnostics?.reason).not.toBe('ok');
     });
   });
-${multiBlock}});
+${companyNameBlock}${credentialBlock}${explicitBlock}${multiBlock}});
 `;
 }
 

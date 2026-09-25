@@ -178,6 +178,19 @@ describe('SigService — iCIMS delegation (Spec 1737)', () => {
       expect(result.jobs[0].companyName).toBe(COMPANY_NAME);
     });
 
+    it('never forwards the caller\'s credentials to the board (Spec 1735 §4.5)', async () => {
+      const captured: ScraperInputDto[] = [];
+      const service = new SigService(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
+      await service.scrape({
+        siteType: [Site.SIG],
+        auth: { icims: { apiKey: 'caller-key' } },
+      } as unknown as ScraperInputDto);
+      expect(captured).toHaveLength(FIXTURE.boards.length);
+      for (const forwarded of captured) {
+        expect(forwarded.auth).toBeUndefined();
+      }
+    });
+
     it('passes an absent resultsWanted through as absent', async () => {
       const captured: ScraperInputDto[] = [];
       const service = new SigService(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
@@ -250,6 +263,47 @@ describe('SigService — iCIMS delegation (Spec 1737)', () => {
       expect(result.jobs).toEqual([]);
       expect(result.diagnostics).toBeDefined();
       expect(result.diagnostics?.reason).not.toBe('ok');
+    });
+  });
+
+  describe('explicit-only (Spec 1735 §4.7)', () => {
+    it('makes no request outside an explicit selection', async () => {
+      const captured: ScraperInputDto[] = [];
+      const service = new SigService(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
+      const unselected = [
+        {},
+        { resultsWanted: 5 },
+        { siteType: [] },
+        { siteType: [Site.ICIMS] },
+        { siteCategories: ['company'] },
+        { companyDomain: ['example.com', '  '] },
+      ];
+      for (const input of unselected) {
+        const result = await service.scrape(input as unknown as ScraperInputDto);
+        expect(result.jobs).toEqual([]);
+        expect(result.diagnostics?.reason).toBe('empty');
+        expect(result.diagnostics?.detail).toContain('explicit-only');
+      }
+      expect(captured).toHaveLength(0);
+      expect(mockGet).not.toHaveBeenCalled();
+      expect(mockPost).not.toHaveBeenCalled();
+    });
+
+    it('runs when its Site is in siteType', async () => {
+      const captured: ScraperInputDto[] = [];
+      const service = new SigService(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
+      await service.scrape({ siteType: [Site.ICIMS, Site.SIG] } as ScraperInputDto);
+      expect(captured).toHaveLength(FIXTURE.boards.length);
+    });
+
+    it('runs when addressed by one of its domains', async () => {
+      const captured: ScraperInputDto[] = [];
+      const registry = registryWith(fakeBackend(() => new JobResponseDto([]), captured));
+      const service = new SigService(registry);
+      const meta = Reflect.getMetadata(SOURCE_PLUGIN_METADATA, SigService);
+      registry.register(meta, service);
+      await service.scrape({ companyDomain: ['www.' + meta.companyDomains[0]] } as ScraperInputDto);
+      expect(captured).toHaveLength(FIXTURE.boards.length);
     });
   });
 });

@@ -178,6 +178,19 @@ describe('BridgewaterService — Greenhouse delegation (Spec 1737)', () => {
       expect(result.jobs[0].companyName).toBe(COMPANY_NAME);
     });
 
+    it('never forwards the caller\'s credentials to the board (Spec 1735 §4.5)', async () => {
+      const captured: ScraperInputDto[] = [];
+      const service = new BridgewaterService(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
+      await service.scrape({
+        siteType: [Site.BRIDGEWATER],
+        auth: { greenhouse: { apiKey: 'caller-key' } },
+      } as unknown as ScraperInputDto);
+      expect(captured).toHaveLength(FIXTURE.boards.length);
+      for (const forwarded of captured) {
+        expect(forwarded.auth).toBeUndefined();
+      }
+    });
+
     it('passes an absent resultsWanted through as absent', async () => {
       const captured: ScraperInputDto[] = [];
       const service = new BridgewaterService(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
@@ -250,6 +263,35 @@ describe('BridgewaterService — Greenhouse delegation (Spec 1737)', () => {
       expect(result.jobs).toEqual([]);
       expect(result.diagnostics).toBeDefined();
       expect(result.diagnostics?.reason).not.toBe('ok');
+    });
+  });
+
+  describe('credential isolation (Spec 1735 §4.5)', () => {
+    const saved = {
+      key: process.env.GREENHOUSE_API_KEY,
+      board: process.env.GREENHOUSE_HARVEST_BOARD,
+    };
+
+    afterEach(() => {
+      if (saved.key === undefined) delete process.env.GREENHOUSE_API_KEY;
+      else process.env.GREENHOUSE_API_KEY = saved.key;
+      if (saved.board === undefined) delete process.env.GREENHOUSE_HARVEST_BOARD;
+      else process.env.GREENHOUSE_HARVEST_BOARD = saved.board;
+    });
+
+    it('requests only its own public board with GREENHOUSE_API_KEY set', async () => {
+      process.env.GREENHOUSE_API_KEY = 'operator-harvest-key';
+      delete process.env.GREENHOUSE_HARVEST_BOARD;
+      const service = new BridgewaterService(registryWith());
+      const result = await service.scrape({
+        siteType: [Site.BRIDGEWATER],
+        resultsWanted: 100,
+        auth: { greenhouse: { apiKey: 'caller-harvest-key' } },
+      } as unknown as ScraperInputDto);
+
+      const urls = [...mockGet.mock.calls, ...mockPost.mock.calls].map((c) => String(c[0]).split('?')[0]);
+      expect(urls).toEqual(Object.keys(FIXTURE.responses));
+      expect(result.jobs.map((j) => j.id)).toEqual(FIXTURE.expected.map((e) => e.id));
     });
   });
 });

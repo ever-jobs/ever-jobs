@@ -178,6 +178,19 @@ describe('VoleonService — Ashby delegation (Spec 1737)', () => {
       expect(result.jobs[0].companyName).toBe(COMPANY_NAME);
     });
 
+    it('never forwards the caller\'s credentials to the board (Spec 1735 §4.5)', async () => {
+      const captured: ScraperInputDto[] = [];
+      const service = new VoleonService(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
+      await service.scrape({
+        siteType: [Site.VOLEON],
+        auth: { ashby: { apiKey: 'caller-key' } },
+      } as unknown as ScraperInputDto);
+      expect(captured).toHaveLength(FIXTURE.boards.length);
+      for (const forwarded of captured) {
+        expect(forwarded.auth).toBeUndefined();
+      }
+    });
+
     it('passes an absent resultsWanted through as absent', async () => {
       const captured: ScraperInputDto[] = [];
       const service = new VoleonService(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));

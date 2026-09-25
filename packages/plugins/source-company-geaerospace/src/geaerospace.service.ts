@@ -25,7 +25,8 @@ import {
  * resultsWanted budget), then re-stamps the company identity (site,
  * companyName, id prefix) so every Workday field fix is inherited and no
  * plugin imports a peer. The search term and every other caller input pass
- * through untouched.
+ * through untouched, except credentials: auth is never forwarded to a third
+ * party board.
  *
  * Tags: segment=workday-enterprise; industry=aerospace.
  */
@@ -36,6 +37,56 @@ const ID_PREFIX = 'geaerospace-';
 const BOARDS: ReadonlyArray<{ readonly companySlug: string; readonly atsIdPrefix: string }> = [
   { companySlug: 'geaerospace:5:GE_ExternalSite', atsIdPrefix: 'wd-geaerospace-' },
 ];
+
+/** Trailing legal-form words ignored when comparing an organisation name with COMPANY_NAME. */
+const LEGAL_FORM_WORDS: ReadonlySet<string> = new Set([
+  'inc',
+  'incorporated',
+  'llc',
+  'corp',
+  'corporation',
+  'co',
+  'company',
+  'ltd',
+  'limited',
+  'lp',
+  'llp',
+  'plc',
+  'gmbh',
+  'ag',
+  'sa',
+  'nv',
+  'bv',
+]);
+
+/**
+ * A company name reduced to its core: lower case, '&' read as 'and',
+ * punctuation dropped, no leading 'The', no trailing legal form.
+ */
+function coreCompanyName(name: string): string {
+  const words = name
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[.'\u2019]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  while (words.length > 1 && LEGAL_FORM_WORDS.has(words[words.length - 1])) words.pop();
+  while (words.length > 1 && words[0] === 'the') words.shift();
+  return words.join(' ');
+}
+
+/**
+ * Company name for a delegated posting (Spec 1735 §4.2.1). Workday reports each
+ * posting's hiring organisation; on a multi-business tenant that names the
+ * business unit, which is kept. Only what is not a real organisation name is
+ * re-stamped: empty, the tenant token the adapter falls back to, or
+ * COMPANY_NAME in legal form (e.g. "<name>, Inc.").
+ */
+function companyNameFor(sourceName: string | null | undefined, tenant: string): string {
+  const name = sourceName?.trim();
+  if (!name || name.toLowerCase() === tenant.toLowerCase()) return COMPANY_NAME;
+  return coreCompanyName(name) === coreCompanyName(COMPANY_NAME) ? COMPANY_NAME : name;
+}
 
 @SourcePlugin({
   site: Site.GE_AEROSPACE,
@@ -77,6 +128,10 @@ export class GeAerospaceService implements IScraper {
       try {
         result = await backend.scrape({
           ...input,
+          // Never forward the caller's credentials to a third party's board
+          // (Spec 1735 §4.5): an authenticated ATS path would answer with the
+          // caller's own jobs under this company's name.
+          auth: undefined,
           companySlug: board.companySlug,
           ...(remaining !== undefined ? { resultsWanted: remaining } : {}),
         } as ScraperInputDto);
@@ -98,7 +153,7 @@ export class GeAerospaceService implements IScraper {
 
       for (const job of result.jobs ?? []) {
         job.site = Site.GE_AEROSPACE;
-        job.companyName = COMPANY_NAME;
+        job.companyName = companyNameFor(job.companyName, board.companySlug.split(':')[0]);
         if (job.id?.startsWith(board.atsIdPrefix)) {
           job.id = ID_PREFIX + job.id.slice(board.atsIdPrefix.length);
         }

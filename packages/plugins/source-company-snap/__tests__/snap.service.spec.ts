@@ -178,6 +178,19 @@ describe('SnapService — Workday delegation (Spec 1736)', () => {
       expect(result.jobs[0].companyName).toBe(COMPANY_NAME);
     });
 
+    it('never forwards the caller\'s credentials to the board (Spec 1735 §4.5)', async () => {
+      const captured: ScraperInputDto[] = [];
+      const service = new SnapService(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
+      await service.scrape({
+        siteType: [Site.SNAP],
+        auth: { workday: { apiKey: 'caller-key' } },
+      } as unknown as ScraperInputDto);
+      expect(captured).toHaveLength(FIXTURE.boards.length);
+      for (const forwarded of captured) {
+        expect(forwarded.auth).toBeUndefined();
+      }
+    });
+
     it('passes an absent resultsWanted through as absent', async () => {
       const captured: ScraperInputDto[] = [];
       const service = new SnapService(registryWith(fakeBackend(() => new JobResponseDto([]), captured)));
@@ -250,6 +263,69 @@ describe('SnapService — Workday delegation (Spec 1736)', () => {
       expect(result.jobs).toEqual([]);
       expect(result.diagnostics).toBeDefined();
       expect(result.diagnostics?.reason).not.toBe('ok');
+    });
+  });
+
+  describe('company name (Spec 1735 §4.2.1)', () => {
+    const TENANT = boardInputOf(FIXTURE.boards[0]).split(':')[0];
+
+    async function nameAfterRestamp(companyName: string | null): Promise<string | null | undefined> {
+      const service = new SnapService(
+        registryWith(
+          fakeBackend(
+            () =>
+              new JobResponseDto([
+                new JobPostDto({ id: FIXTURE.boards[0].atsIdPrefix + 'n1', title: 'Role', jobUrl: 'u', companyName }),
+              ]),
+          ),
+        ),
+      );
+      const result = await service.scrape({ siteType: [Site.SNAP], resultsWanted: 1 } as ScraperInputDto);
+      return result.jobs[0]?.companyName;
+    }
+
+    it('re-stamps the tenant fallback, an empty name and the display name in legal form', async () => {
+      const sources = [
+        TENANT,
+        TENANT.toUpperCase(),
+        '',
+        '   ',
+        null,
+        COMPANY_NAME + ', Inc.',
+        'The ' + COMPANY_NAME + ' LLC',
+        COMPANY_NAME.toUpperCase(),
+      ];
+      for (const source of sources) {
+        expect(await nameAfterRestamp(source)).toBe(COMPANY_NAME);
+      }
+    });
+
+    it('keeps a business unit the posting names', async () => {
+      expect(await nameAfterRestamp('Example Business Unit LLC')).toBe('Example Business Unit LLC');
+      expect(await nameAfterRestamp('  Example Business Unit  ')).toBe('Example Business Unit');
+    });
+
+    it('keeps a business unit through the real Workday adapter', async () => {
+      const responses = clone(FIXTURE.responses) as Record<string, any>;
+      const detailUrl = Object.keys(responses).find((url) => responses[url]?.jobPostingInfo);
+      expect(detailUrl).toBeDefined();
+      responses[detailUrl!].hiringOrganization = { name: 'Example Business Unit LLC' };
+      const serveEdited = (url: string): Promise<{ data: unknown }> => {
+        const key = String(url).split('?')[0];
+        return Object.prototype.hasOwnProperty.call(responses, key)
+          ? Promise.resolve({ data: clone(responses[key]) })
+          : notFound(url);
+      };
+      mockGet.mockImplementation(serveEdited);
+      mockPost.mockImplementation(serveEdited);
+
+      const service = new SnapService(registryWith());
+      const result = await service.scrape({ siteType: [Site.SNAP], resultsWanted: 100 } as ScraperInputDto);
+
+      expect(result.jobs.map((j) => j.id)).toEqual(FIXTURE.expected.map((e) => e.id));
+      const names = result.jobs.map((j) => j.companyName);
+      expect(names.filter((n) => n === 'Example Business Unit LLC')).toHaveLength(1);
+      expect(names.filter((n) => n !== 'Example Business Unit LLC').every((n) => n === COMPANY_NAME)).toBe(true);
     });
   });
 });

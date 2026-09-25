@@ -11,11 +11,13 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as ts from 'typescript';
 
 import {
   assembleDescriptors,
   AtsDelegateDescriptor,
   BACKENDS,
+  companyNameHelpers,
   fixtureFile,
   renderVerificationTable,
   scaffoldOne,
@@ -204,6 +206,121 @@ describe('serviceFile', () => {
   });
 });
 
+/** Review follow-ups (2026-09-25): Spec 1735 §4.2.1, §4.5, §4.7. */
+describe('serviceFile — credentials, company name, explicit-only', () => {
+  const [wd] = assembleDescriptors([seed()], VERIFICATION);
+  const [gh] = assembleDescriptors(
+    [seed({ key: 'acmetrading', enumKey: 'ACMETRADING', className: 'AcmeTrading', boards: [{ backend: 'greenhouse', slug: 'acmetrading' }] })],
+    VERIFICATION,
+  );
+  const [ic] = assembleDescriptors(
+    [
+      seed({
+        key: 'acmeic',
+        enumKey: 'ACMEIC',
+        className: 'AcmeIc',
+        boards: [{ backend: 'icims', slug: 'careers-acme' }],
+        explicitOnly: "robots.txt disallows all crawlers (Acme's board)",
+      }),
+    ],
+    VERIFICATION,
+  );
+
+  it('never forwards the caller credentials, for every backend', () => {
+    for (const d of [wd, gh, ic]) {
+      const src = serviceFile(d);
+      expect(src).toMatch(/\.\.\.input,\n(?: +\/\/.*\n)+ +auth: undefined,\n +companySlug: board\.companySlug,/);
+    }
+  });
+
+  it('keeps a Workday business-unit name, but re-stamps board-level names', () => {
+    expect(BACKENDS.workday.perPostingCompanyName).toBe(true);
+    const wdSrc = serviceFile(wd);
+    expect(wdSrc).toContain("job.companyName = companyNameFor(job.companyName, board.companySlug.split(':')[0]);");
+    expect(wdSrc).toContain(companyNameHelpers());
+    // The helpers read COMPANY_NAME, so they must come after it.
+    expect(wdSrc.indexOf('function companyNameFor(')).toBeGreaterThan(wdSrc.indexOf('const COMPANY_NAME = '));
+
+    for (const backend of ['greenhouse', 'lever', 'ashby', 'smartrecruiters', 'icims']) {
+      expect(BACKENDS[backend].perPostingCompanyName).toBeFalsy();
+    }
+    const ghSrc = serviceFile(gh);
+    expect(ghSrc).toContain('job.companyName = COMPANY_NAME;');
+    expect(ghSrc).not.toContain('companyNameFor');
+  });
+
+  it('emits the explicit-only gate only for a flagged seed', () => {
+    const icSrc = serviceFile(ic);
+    expect(icSrc).toContain("import { siteFromDomain } from '@ever-jobs/common';");
+    expect(icSrc).toContain("const EXPLICIT_ONLY_REASON = 'robots.txt disallows all crawlers (Acme\\'s board)';");
+    // The gate is the first statement of scrape(): no registry lookup, no request.
+    expect(icSrc).toMatch(
+      /async scrape\(input: ScraperInputDto\): Promise<JobResponseDto> \{\n +if \(!this\.isExplicitlySelected\(input\)\) \{/,
+    );
+    expect(icSrc).toContain('if (input.siteType?.includes(Site.ACMEIC)) return true;');
+    expect(icSrc).toContain('(this.registry?.siteForDomain(domain) ?? siteFromDomain(domain)) === Site.ACMEIC');
+
+    for (const d of [wd, gh]) {
+      const src = serviceFile(d);
+      expect(src).not.toContain('isExplicitlySelected');
+      expect(src).not.toContain('@ever-jobs/common');
+    }
+  });
+
+  it('refuses an empty explicit-only reason', () => {
+    expect(() => assembleDescriptors([seed({ explicitOnly: '   ' })], VERIFICATION)).toThrow(/explicitOnly/);
+  });
+});
+
+/**
+ * Spec 1735 §4.2.1 — evaluate exactly the helper code the Workday plugins carry.
+ */
+describe('companyNameHelpers (generated code, evaluated)', () => {
+  function companyNameFor(displayName: string): (source: string | null, tenant: string) => string {
+    const js = ts.transpileModule(companyNameHelpers(), {
+      compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.None },
+    }).outputText;
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    return new Function('COMPANY_NAME', `${js}\nreturn companyNameFor;`)(displayName);
+  }
+
+  it('re-stamps an empty name and the tenant token the adapter falls back to', () => {
+    const rtx = companyNameFor('RTX');
+    expect(rtx('', 'globalhr')).toBe('RTX');
+    expect(rtx('   ', 'globalhr')).toBe('RTX');
+    expect(rtx(null, 'globalhr')).toBe('RTX');
+    expect(rtx('globalhr', 'globalhr')).toBe('RTX');
+    expect(rtx('GlobalHR', 'globalhr')).toBe('RTX');
+  });
+
+  it('re-stamps the display name in legal form', () => {
+    expect(companyNameFor('Salesforce')('Salesforce, Inc.', 'salesforce')).toBe('Salesforce');
+    expect(companyNameFor('Blue Origin')('Blue Origin, L.L.C.', 'blueorigin')).toBe('Blue Origin');
+    expect(companyNameFor('HP Inc.')('HP', 'hp')).toBe('HP Inc.');
+    expect(companyNameFor('HP Inc.')('HP Inc.', 'hp')).toBe('HP Inc.');
+    expect(companyNameFor('Hewlett Packard Enterprise')('Hewlett Packard Enterprise Company', 'hpe')).toBe(
+      'Hewlett Packard Enterprise',
+    );
+    expect(companyNameFor('The Walt Disney Company')('Walt Disney Co.', 'disney')).toBe('The Walt Disney Company');
+    expect(companyNameFor('Johnson & Johnson')('Johnson and Johnson', 'jj')).toBe('Johnson & Johnson');
+    expect(companyNameFor('Micron Technology')('MICRON TECHNOLOGY INC', 'micron')).toBe('Micron Technology');
+    expect(companyNameFor('Snap Inc.')('Snap Inc.', 'snapchat')).toBe('Snap Inc.');
+  });
+
+  it('keeps a business unit or any other organisation the posting names, trimmed', () => {
+    const rtx = companyNameFor('RTX');
+    expect(rtx('Collins Aerospace', 'globalhr')).toBe('Collins Aerospace');
+    expect(rtx('Pratt & Whitney', 'globalhr')).toBe('Pratt & Whitney');
+    expect(rtx('  Raytheon  ', 'globalhr')).toBe('Raytheon');
+    const jnj = companyNameFor('Johnson & Johnson');
+    expect(jnj('Johnson & Johnson Innovative Medicine', 'jj')).toBe('Johnson & Johnson Innovative Medicine');
+    expect(companyNameFor('Cox Enterprises')('Cox Automotive', 'cox')).toBe('Cox Automotive');
+    expect(companyNameFor('Visa')('Visa U.S.A. Inc.', 'visa')).toBe('Visa U.S.A. Inc.');
+    // A legal-form word alone is not stripped down to nothing.
+    expect(companyNameFor('Acme')('Company', 'acme')).toBe('Company');
+  });
+});
+
 describe('fixtureFile', () => {
   it('reproduces the Workday search and detail URLs and the ids the adapter derives', () => {
     const [d] = assembleDescriptors([seed()], VERIFICATION);
@@ -276,6 +393,44 @@ describe('testFile', () => {
     );
     expect(testFile(ic)).not.toContain("toBe('bad_input')");
     expect(BACKENDS.icims.notFoundReason).toBeNull();
+  });
+
+  it('emits the review regression blocks only where they apply', () => {
+    const [wd] = assembleDescriptors([seed()], VERIFICATION);
+    const [gh] = assembleDescriptors(
+      [seed({ key: 'acmetrading', enumKey: 'ACMETRADING', className: 'AcmeTrading', boards: [{ backend: 'greenhouse', slug: 'acmetrading' }] })],
+      VERIFICATION,
+    );
+    const [ic] = assembleDescriptors(
+      [
+        seed({
+          key: 'acmeic',
+          enumKey: 'ACMEIC',
+          className: 'AcmeIc',
+          boards: [{ backend: 'icims', slug: 'careers-acme' }],
+          explicitOnly: 'robots.txt disallows all crawlers',
+        }),
+      ],
+      VERIFICATION,
+    );
+    const [wdTest, ghTest, icTest] = [testFile(wd), testFile(gh), testFile(ic)];
+
+    // Every plugin: the caller's credentials are never forwarded.
+    for (const t of [wdTest, ghTest, icTest]) {
+      expect(t).toContain("it('never forwards the caller\\'s credentials to the board (Spec 1735 §4.5)'");
+    }
+    // Workday only: business-unit names, incl. through the real adapter.
+    expect(wdTest).toContain("describe('company name (Spec 1735 §4.2.1)'");
+    expect(wdTest).toContain("it('keeps a business unit through the real Workday adapter'");
+    expect(ghTest).not.toContain("describe('company name");
+    // Greenhouse only: GREENHOUSE_API_KEY must not reach Harvest.
+    expect(ghTest).toContain("it('requests only its own public board with GREENHOUSE_API_KEY set'");
+    expect(wdTest).not.toContain('GREENHOUSE_API_KEY');
+    expect(icTest).not.toContain('GREENHOUSE_API_KEY');
+    // Explicit-only seeds only.
+    expect(icTest).toContain("describe('explicit-only (Spec 1735 §4.7)'");
+    expect(wdTest).not.toContain('explicit-only');
+    expect(ghTest).not.toContain('explicit-only');
   });
 });
 
