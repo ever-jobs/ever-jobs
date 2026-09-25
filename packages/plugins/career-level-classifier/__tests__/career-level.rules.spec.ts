@@ -354,8 +354,34 @@ describe('classifyCareerLevel — rules (Spec 1730)', () => {
         'Account Executive',
         'Executive Assistant',
         'Funeral Director',
+        'Partner Marketing Manager',
       ]) {
         expect(level(title)).toBe('unknown');
+      }
+    });
+
+    it('"senior partner" is a partnership rank only when partner is the head noun', () => {
+      for (const title of [
+        'Senior Partner Manager',
+        'Senior Partner Solutions Architect',
+        'Senior Partner Engineer, Google Cloud',
+        'Senior Partner Account Manager',
+      ]) {
+        const v = classifyCareerLevel({ title });
+        expect({ title, level: v.level }).toEqual({ title, level: 'senior' });
+        expect(v.reasons.some((r) => /ignored "senior partners?" \(partner modifies/.test(r))).toBe(true);
+      }
+      for (const title of [
+        'Senior Partner',
+        'Senior Partner - Audit',
+        'Senior Partner (Tax)',
+        'Senior Partner at Acme Law',
+        'Senior Partner of the Firm',
+        'Senior Partner & Head of Tax',
+        'Managing Partner and CEO',
+        'Equity Partner',
+      ]) {
+        expect({ title, level: level(title) }).toEqual({ title, level: 'executive' });
       }
     });
   });

@@ -713,6 +713,20 @@ export const CAREER_LEVEL_REVIEW_REGRESSION_CASES: readonly CareerLevelCase[] = 
   t('Food Co-op Cashier', 'unknown'),
   t('Co-op Cashier', 'unknown'),
   t('Grocery Co-op Deli Clerk', 'unknown'),
+  // "Senior partner" is a partnership rank only when partner is the head noun; before a role noun
+  // it names the partner / channel / alliances function of a senior IC.
+  t('Senior Partner Manager', 'senior', 'partner modifies the role noun'),
+  t('Senior Partner Success Manager', 'senior', 'partner modifies the role noun'),
+  t('Senior Partner Solutions Architect', 'senior', 'partner modifies the role noun'),
+  t('Senior Partner Marketing Manager', 'senior', 'partner marketing is an IC function'),
+  t('Senior Partner Account Manager', 'senior', 'partner modifies the role noun'),
+  t('Senior Partner Engineer, Google Cloud', 'senior', 'partner modifies the role noun'),
+  t('Senior Business Partner', 'senior', 'control'),
+  t('Senior Partner', 'executive', 'control: partnership rank'),
+  t('Senior Partner, Tax Advisory', 'executive', 'control: segment break after partner'),
+  t('Senior Partner at a Global Law Firm', 'executive', 'control'),
+  t('Senior Partner & Head of Tax', 'executive', 'control'),
+  t('General Partner', 'executive', 'control'),
 ];
 
 export const CAREER_LEVEL_FIXTURE: readonly CareerLevelCase[] = [

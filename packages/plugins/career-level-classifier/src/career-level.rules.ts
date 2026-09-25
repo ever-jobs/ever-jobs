@@ -165,6 +165,7 @@ const IC_MANAGER_PREFIX = set(`
 `);
 const IC_MANAGER_PREFIX2 = new Set([
   'product marketing',
+  'partner marketing',
   'social media',
   'customer success',
   'client success',
@@ -681,6 +682,8 @@ const CHIEF_RE = /\bchief\b(?! of staff)/g;
 const CXO_RE = /\b(?:ceo|cfo|cto|coo|cio|cmo|ciso|chro)\b/g;
 const EXEC_DIRECTOR_RE = /\b(?:executive|managing) director\b|\bc-(?:suite|level)\b/g;
 const EXEC_PARTNER_RE = /\b(?:managing|general|founding|senior|equity|salaried|name|named) partners?\b/g;
+/** Words that may follow a head-noun "partner(s)" in the same segment ("Senior Partner at X"). */
+const PARTNER_HEAD_NEXT = set('at of in and or');
 const FOUNDER_RE = /\b(?:co-?)?founders?\b/g;
 const DIRECTOR_RE = /\bdirectors?\b/g;
 const HEAD_OF_RE = /\bhead of\b/g;
@@ -835,7 +838,18 @@ function analyzeTitle(raw: string, origin: Source): Analysis {
     if (!someoneElses(m, start)) add('executive', 'high', quote(m[0]));
   });
   each('partner', EXEC_PARTNER_RE, (m, start) => {
-    if (!someoneElses(m, start)) add('executive', 'high', quote(m[0]));
+    if (someoneElses(m, start)) return;
+    // A partnership rank only when "partner(s)" is the head noun: end of the segment ("Managing
+    // Partner", "Senior Partner, Tax") or a connective ("… at X", "… & Head of Tax"). Before a
+    // role noun it names the partner / channel function of an IC ("Senior Partner Manager",
+    // "Senior Partner Solutions Architect"), and the rest of the title decides.
+    const rest = norm.slice(start + m[0].length).split(SEGMENT_BREAK_RE)[0] ?? '';
+    const next = /^\s*&/.test(rest) ? 'and' : tokenize(rest)[0];
+    if (next && !PARTNER_HEAD_NEXT.has(next)) {
+      notes.push(`ignored ${quote(m[0])} (partner modifies ${quote(next)}, not a partnership rank)`);
+      return;
+    }
+    add('executive', 'high', quote(m[0]));
   });
   if (ladder && norm.includes('partner')) {
     const firstSeg = tokenize(segments[0] ?? '');
