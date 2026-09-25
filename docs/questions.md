@@ -31,6 +31,25 @@ field and its cost from the default path. An explicit filter is a deliberate req
 fail silently. The filter never mutates the cached raw fan-out, and `careerLevelFilteredOut`
 reports how many jobs it removed.
 
+**Follow-up (2026-09-25, code review): what if the filter cannot be applied at all?** The first
+cut failed open. When no classifier was bound, or classification threw, the request returned 200
+with every job and only a server-side warning. A caller that asked for `["internship"]` silently got
+senior roles too.
+
+- **A. Report it in the response** (`career_level_filter: { applied: false }`). The caller has to
+  check a flag on every response, and the GraphQL `jobs` list and the NDJSON stream would each need
+  their own way to carry it.
+- **B. Fail closed with 503** `ServiceUnavailableException` ("careerLevels filter could not be
+  applied …"). Loud, identical in REST, GraphQL and NDJSON (an `error` line), and a 200 then always
+  means the filter ran.
+- **C. Keep failing open.**
+
+**Default (proceeding): B.** With no classifier bound the aggregator throws before dedup and
+persistence run; if classification throws, or returns the wrong number of verdicts, it throws
+afterwards. Without a filter nothing changes: a classifier failure only leaves `careerLevel` off
+the jobs, because the field is additive. The shipped classifier is total (it catches internally), so
+in practice this fires only when a fork drops or replaces the plugin.
+
 ---
 
 ## Q-105 — Career-level taxonomy boundaries (Spec 1730)

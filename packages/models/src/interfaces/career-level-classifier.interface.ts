@@ -77,7 +77,11 @@ export interface CareerLevelInput {
 export interface ICareerLevelClassifier {
   /** Classify a single posting. */
   classify(input: CareerLevelInput): CareerLevelVerdict;
-  /** Classify many postings; results align to input order. */
+  /**
+   * Classify many postings; results align to input order (one verdict per input). The jobs
+   * aggregator calls this on small slices of the result set, yielding to the event loop between
+   * slices, so an implementation must not assume it sees the whole set in one call.
+   */
   classifyBatch(inputs: ReadonlyArray<CareerLevelInput>): CareerLevelVerdict[];
 }
 

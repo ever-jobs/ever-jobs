@@ -81,7 +81,7 @@ tech company but a senior individual contributor at a bank.
 | FR-5  | `unknown` (confidence `low`) when no signal is found anywhere. | must |
 | FR-6  | Applied in `JobsAggregator.aggregateRaw` after dedup (and on the no-dedup / no-engine paths), once per returned job, before the response is shaped — so JSON, pagination, CSV, NDJSON and GraphQL all see it. Not applied in the controller. | must |
 | FR-7  | `EVER_JOBS_CLASSIFY_CAREER_LEVEL` (default `true`); `false` → `careerLevel` is absent from every job. | must |
-| FR-8  | Optional `ScraperInputDto.careerLevels?: string[]`; unknown values are a 400 (class-validator `@IsIn`). When non-empty, only jobs whose level is in the set are returned. Applied after classification. The filter is honoured even when FR-7 disabled attachment (the level is computed transiently) — see Q-106. | must |
+| FR-8  | Optional `ScraperInputDto.careerLevels?: string[]`; unknown values are a 400 (class-validator `@IsIn`). When non-empty, only jobs whose level is in the set are returned. Applied after classification. The filter is honoured even when FR-7 disabled attachment (the level is computed transiently), and it fails closed: when it cannot be applied the request is a 503, never an unfiltered 200 — see Q-106. It is not part of the raw fan-out cache key. | must |
 | FR-9  | GraphQL: `JobPostGql.careerLevel` (`CareerLevelGql { level, confidence, reasons }`) and `SearchJobsInput.careerLevels: [String!]` with the same validation. | should |
 | FR-10 | Source `jobType` / `jobLevel` / `experienceRange` are never mutated. | must |
 | FR-11 | A labelled fixture of ≥ 250 titles (+ description / structured-field cases) is evaluated in CI with per-class precision/recall thresholds. | must |
@@ -155,7 +155,21 @@ interface AggregateResult {
 
 `aggregate(input, options)` reads `input.careerLevels` when `options.careerLevels` is absent.
 `aggregateRaw` callers (REST controller, GraphQL resolver, future NDJSON path) pass
-`careerLevels: input.careerLevels`.
+`careerLevels: input.careerLevels`. The filter is applied after the raw fan-out cache, so both the
+REST controller and the GraphQL resolver leave `careerLevels` out of the cache key: the same search
+with a different (or no) filter reuses the cached fan-out instead of re-scraping every source.
+
+**Cooperative classification (NFR-2).** Classification runs on the thread that answers
+`GET /health`, straight after dedup. `aggregateRaw` therefore classifies in 16-job chunks and
+yields to the event loop (`setImmediate`) whenever a 10 ms slice is spent, using `YieldBudget` /
+`yieldToEventLoop` from `@ever-jobs/common` (the helpers `dedup-hybrid` introduced after its
+10.6 s synchronous-dedup incident, now shared so core code need not import a plugin). A chunk
+whose verdict count or shape is wrong is a classifier failure.
+
+**Fail closed (Q-106).** A `careerLevels` filter that cannot be applied is a
+`ServiceUnavailableException` (503), never an unfiltered 200: with no classifier bound
+`aggregateRaw` throws before dedup runs; if classification throws it throws after. Without a
+filter, a classifier failure only leaves the jobs unclassified (the field is additive).
 
 ### 7.4 Configuration
 
@@ -244,7 +258,9 @@ Years are a *lower bound*: they conflict with the title only when the title is m
 | Case | Result |
 | ---- | ------ |
 | `careerLevels` contains a value outside `CAREER_LEVELS` | 400 (REST `ValidationPipe`) / `BadRequestException` (GraphQL) |
-| Classifier throws (must not happen) | aggregator logs a warning and returns the jobs unclassified |
+| Classifier throws or returns a malformed batch (must not happen), no filter | aggregator logs a warning and returns the jobs unclassified |
+| Same, with a `careerLevels` filter | 503 `ServiceUnavailableException` ("careerLevels filter could not be applied …"), never an unfiltered result (Q-106) |
+| `careerLevels` filter with no classifier bound | 503, raised before dedup / persistence run (Q-106) |
 
 ## 8. Test Plan
 
@@ -265,7 +281,15 @@ Years are a *lower bound*: they conflict with the title only when the title is m
   every returned job gets `careerLevel` on the dedup, no-dedup and no-engine paths; toggle off →
   absent; `careerLevels` filter keeps only matching jobs, updates `outputCount`, reports
   `careerLevelFilteredOut`, does not mutate the raw (cached) array, and still works with the
-  toggle off; `aggregate()` reads `input.careerLevels`; source `jobType`/`jobLevel` untouched.
+  toggle off; `aggregate()` reads `input.careerLevels`; source `jobType`/`jobLevel` untouched;
+  a filter with no classifier, a throwing classifier or a short batch is a 503 (Q-106).
+  **Event-loop liveness:** a self-rescheduling `setImmediate` probe must tick while a 300-job batch
+  with a ≥ 1 ms/job classifier runs (≥ 5 ticks, worst stall < 250 ms, override
+  `CAREER_LEVEL_LOOP_MAX_STALL_MS`), and while 3,000 real jobs with 3 KB descriptions are
+  classified, with verdicts identical to a synchronous pass. A synchronous pass ticks 0 times.
+  **REST cache key:** `careerLevels` is not part of it; a cache hit is filtered per request.
+- **Shared helpers** (`packages/common/__tests__/cooperative.spec.ts`): `yieldToEventLoop`
+  resumes after a queued `setImmediate`; `YieldBudget` expires, renews and yields only when spent.
 - **DTO validation**: `careerLevels` with an unknown value fails `class-validator`.
 - **GraphQL resolver**: filter passed through; unknown value rejected.
 
@@ -296,6 +320,10 @@ Recorded in `docs/questions.md`:
   (including the NDJSON stream being added in parallel) inherits it.
 - D-08: With `EVER_JOBS_CLASSIFY_CAREER_LEVEL=false`, an explicit `careerLevels` filter is still
   honoured by classifying transiently; the field is not attached (Q-106).
+- D-09: A `careerLevels` filter that cannot be applied (no classifier bound, classifier failure)
+  is a 503, not an unfiltered 200 (Q-106, review 2026-09-25).
+- D-10: Classification yields to the event loop every 10 ms (shared `YieldBudget` in
+  `@ever-jobs/common`), so it can never block `/health` (review 2026-09-25).
 
 ## 11. References
 
@@ -397,6 +425,16 @@ implementation took 24 s under jest. The fixes were: no `String.prototype.matchA
 RegExp on every call), literal-needle gates before every rule, one alternation pass over the
 description instead of ~30 `includes` scans, and a whitespace pass that no longer rewrites every
 single space.
+
+The 2 s NFR concerns throughput; the event loop is protected separately. Since the review fixes,
+classification yields every 10 ms (§7.3), so even a 13 s pass under load no longer blocks
+`/health` — it only costs CPU. Measured on the slow-classifier test: a 300-job, ≥ 300 ms pass let
+the probe tick on every chunk. A remaining cost: every page of a cached `?paginate=true` search
+re-classifies the whole deduplicated set (the filter needs every verdict to count pages).
+Scoping classification to the output window when no filter is set needs the controller to resolve
+the page window before `aggregateRaw`; that controller block is being rewritten by the NDJSON lane,
+so it is left to the integration of the two branches (with the cache off by default, every page
+request already pays a full fan-out that dwarfs classification).
 
 ### 12.5 Review regressions (2026-09-25)
 

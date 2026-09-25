@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CareerLevelClassifierModule, CareerLevelClassifierService } from '@ever-jobs/career-level-classifier';
@@ -17,6 +18,7 @@ import configuration from '../../config/configuration';
 import { JobsAggregator } from '../jobs.aggregator';
 import { JobsController } from '../jobs.controller';
 import { JobsService } from '../jobs.service';
+import { SEARCH_CACHE_ENDPOINT } from '../search-cache';
 
 /**
  * Spec 1730 (contract C7) — the aggregator attaches `careerLevel` to every returned job after
@@ -168,24 +170,51 @@ describe('JobsAggregator — career level (Spec 1730)', () => {
     expect(out.jobs.map((j) => j.id)).toEqual(['5']);
   });
 
-  it('a throwing classifier degrades to unclassified, unfiltered jobs', async () => {
-    const broken: ICareerLevelClassifier = {
-      classify: () => {
-        throw new Error('boom');
-      },
-      classifyBatch: () => {
-        throw new Error('boom');
-      },
-    };
-    const out = await aggregator({ classifier: broken }).aggregateRaw(sampleJobs(), { careerLevels: ['senior'] });
+  const broken: ICareerLevelClassifier = {
+    classify: () => {
+      throw new Error('boom');
+    },
+    classifyBatch: () => {
+      throw new Error('boom');
+    },
+  };
+
+  it('a throwing classifier without a filter degrades to unclassified jobs', async () => {
+    const out = await aggregator({ classifier: broken }).aggregateRaw(sampleJobs());
     expect(out.jobs).toHaveLength(6);
     expect(out.jobs.every((j) => j.careerLevel === undefined)).toBe(true);
   });
 
-  it('with no classifier bound, jobs pass through unchanged', async () => {
-    const out = await aggregator({ classifier: null }).aggregateRaw(sampleJobs(), { careerLevels: ['senior'] });
+  it('a throwing classifier with a careerLevels filter fails closed with 503, never unfiltered (Q-106)', async () => {
+    const pending = aggregator({ classifier: broken }).aggregateRaw(sampleJobs(), { careerLevels: ['senior'] });
+    await expect(pending).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(pending).rejects.toThrow(/careerLevels filter could not be applied/);
+  });
+
+  it('a classifier that returns the wrong number of verdicts is a failure, not a silent partial', async () => {
+    const short: ICareerLevelClassifier = {
+      classify: (i) => classifier.classify(i),
+      classifyBatch: (inputs) => classifier.classifyBatch(inputs).slice(1),
+    };
+    const out = await aggregator({ classifier: short }).aggregateRaw(sampleJobs());
+    expect(out.jobs.every((j) => j.careerLevel === undefined)).toBe(true);
+    await expect(
+      aggregator({ classifier: short }).aggregateRaw(sampleJobs(), { careerLevels: ['senior'] }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('with no classifier bound and no filter, jobs pass through unchanged', async () => {
+    const out = await aggregator({ classifier: null }).aggregateRaw(sampleJobs());
     expect(out.jobs).toHaveLength(6);
     expect(out.jobs.every((j) => j.careerLevel === undefined)).toBe(true);
+  });
+
+  it('with no classifier bound, a careerLevels filter fails closed with 503 before dedup runs (Q-106)', async () => {
+    const engine = titleEngine();
+    await expect(
+      aggregator({ classifier: null, engine }).aggregateRaw(sampleJobs(), { careerLevels: ['senior'] }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(engine.dedup).not.toHaveBeenCalled();
   });
 
   it('works with the real dedup engine: duplicates collapse, the survivor is classified', async () => {
@@ -199,6 +228,92 @@ describe('JobsAggregator — career level (Spec 1730)', () => {
       ['a', 'internship'],
       ['c', 'staff'],
     ]);
+  });
+});
+
+/**
+ * Event-loop liveness (Spec 1730, NFR-2). Classification runs right after dedup on the same thread
+ * that answers `GET /health`; a synchronous pass over a keyword-less fan-out (~30,000 jobs, ~2–3 s,
+ * 13 s under load) would starve the liveness probe exactly as the pre-fix dedup did (see
+ * `dedup-hybrid/src/cooperative.ts`). The probe here is a self-rescheduling `setImmediate` chain —
+ * what an inbound request needs in order to be served. A synchronous pass lets it tick zero times.
+ */
+describe('JobsAggregator — career level keeps the event loop responsive (Spec 1730, NFR-2)', () => {
+  const MAX_STALL_MS = Number(process.env.CAREER_LEVEL_LOOP_MAX_STALL_MS ?? 250);
+
+  async function probeDuring<T>(work: () => Promise<T>): Promise<{ result: T; ticks: number; worstGapMs: number }> {
+    let ticks = 0;
+    let running = true;
+    let last = Date.now();
+    let worstGapMs = 0;
+    const tick = (): void => {
+      if (!running) return;
+      const now = Date.now();
+      worstGapMs = Math.max(worstGapMs, now - last);
+      last = now;
+      ticks += 1;
+      setImmediate(tick);
+    };
+    setImmediate(tick);
+    try {
+      const result = await work();
+      worstGapMs = Math.max(worstGapMs, Date.now() - last);
+      return { result, ticks, worstGapMs };
+    } finally {
+      running = false;
+    }
+  }
+
+  /** A deterministic slow classifier: ≥ 1 ms of synchronous CPU per job. */
+  const slow: ICareerLevelClassifier = {
+    classify: (input) => classifier.classify(input),
+    classifyBatch: (inputs) =>
+      inputs.map((input) => {
+        const until = Date.now() + 1;
+        while (Date.now() < until) {
+          // busy-wait: simulates a loaded machine
+        }
+        return classifier.classify(input);
+      }),
+  };
+
+  it('yields to the event loop while classifying a large batch (slow classifier)', async () => {
+    const jobs = Array.from({ length: 300 }, (_, i) => job(`s${i}`, i % 2 ? 'Software Engineer Intern' : 'Staff Engineer'));
+    const { result, ticks, worstGapMs } = await probeDuring(() =>
+      aggregator({ classifier: slow }).aggregateRaw(jobs, { dedup: false }),
+    );
+    expect(result.jobs.every((j) => j.careerLevel)).toBe(true);
+    expect(result.jobs.map((j) => j.careerLevel!.level)).toEqual(
+      jobs.map((_, i) => (i % 2 ? 'internship' : 'staff')),
+    );
+    // ≥ 300 ms of classification under a 10 ms budget: a synchronous pass ticks 0 times.
+    expect(ticks).toBeGreaterThanOrEqual(5);
+    expect(worstGapMs).toBeLessThan(MAX_STALL_MS);
+  });
+
+  it('yields with the real classifier on a realistic batch and returns the same verdicts as a sync pass', async () => {
+    const paragraph =
+      'We are looking for an engineer to join our team. You will design, build and operate services ' +
+      'used by millions of customers. Requirements: 3+ years of experience with TypeScript or Go. ';
+    const description = paragraph.repeat(Math.ceil(3200 / paragraph.length));
+    const titles = ['Software Engineer Intern', 'Senior Software Engineer', 'Director of Product', 'Barista', 'New Grad Analyst'];
+    const jobs = Array.from({ length: 3000 }, (_, i) => job(`r${i}`, titles[i % titles.length]!, { description }));
+    const expected = classifier.classifyBatch(jobs.map((j) => ({ title: j.title, description: j.description })));
+
+    const { result, ticks } = await probeDuring(() => aggregator().aggregateRaw(jobs, { dedup: false }));
+
+    expect(result.jobs.map((j) => j.careerLevel)).toEqual(expected);
+    expect(ticks).toBeGreaterThan(0);
+  });
+
+  it('the filter path yields too', async () => {
+    const jobs = Array.from({ length: 200 }, (_, i) => job(`f${i}`, i % 4 === 0 ? 'Marketing Intern' : 'Senior Accountant'));
+    const { result, ticks } = await probeDuring(() =>
+      aggregator({ classifier: slow }).aggregateRaw(jobs, { dedup: false, careerLevels: ['internship'] }),
+    );
+    expect(result.jobs).toHaveLength(50);
+    expect(result.careerLevelFilteredOut).toBe(150);
+    expect(ticks).toBeGreaterThanOrEqual(5);
   });
 });
 
@@ -231,15 +346,62 @@ describe('JobsAggregator — career level through Nest DI + env config (Spec 173
 });
 
 describe('JobsController → aggregator → classifier, end to end (Spec 1730)', () => {
-  function controller(jobs: JobPostDto[]) {
+  /** A cache stub; `hit` is what every `get` returns (`null` = a miss). */
+  const mockCache = (hit: unknown = null) => ({
+    get: jest.fn(async (_params: Record<string, unknown>) => hit),
+    set: jest.fn(async (_params: Record<string, unknown>, _value?: unknown) => undefined),
+  });
+
+  function controller(
+    jobs: JobPostDto[],
+    opts: { cache?: ReturnType<typeof mockCache>; classifier?: ICareerLevelClassifier | null } = {},
+  ) {
     const service = {
       searchJobsWithDiagnostics: jest.fn(async () => ({ jobs, perSource: [] })),
     } as unknown as JobsService;
-    const cache = { get: async () => null, set: async () => undefined };
+    const cache = opts.cache ?? mockCache();
     const passConfig = { get: (_k: string, def?: unknown) => def } as unknown as ConfigService;
-    const agg = new JobsAggregator(service, titleEngine(), undefined, undefined, classifier, passConfig);
+    const bound = opts.classifier === null ? undefined : (opts.classifier ?? classifier);
+    const agg = new JobsAggregator(service, titleEngine(), undefined, undefined, bound, passConfig);
     return new JobsController(service, agg, {} as never, cache as never, passConfig);
   }
+
+  it('keeps careerLevels out of the raw-fan-out cache key, so a filtered search reuses the cached fan-out', async () => {
+    const cache = mockCache();
+    await controller(sampleJobs(), { cache }).searchJobs(
+      new ScraperInputDto({ searchTerm: 'engineer', careerLevels: ['internship'] }),
+    );
+    await controller(sampleJobs(), { cache }).searchJobs(new ScraperInputDto({ searchTerm: 'engineer' }));
+    const filtered = cache.get.mock.calls[0]![0];
+    const unfiltered = cache.get.mock.calls[1]![0];
+    expect(filtered.careerLevels).toBeUndefined();
+    expect(filtered.endpoint).toBe(SEARCH_CACHE_ENDPOINT);
+    expect(filtered.searchTerm).toBe('engineer');
+    expect(filtered).toEqual(unfiltered);
+    expect(cache.set.mock.calls[0]![0]).toEqual(filtered);
+  });
+
+  it('a cache hit is filtered per request: the cached raw fan-out is never narrowed', async () => {
+    const cached = sampleJobs();
+    const cache = mockCache(cached);
+    const early = (await controller([], { cache }).searchJobs(
+      new ScraperInputDto({ careerLevels: ['internship'] }),
+    )) as { count: number; cached: boolean };
+    expect(early).toMatchObject({ count: 2, cached: true });
+    const all = (await controller([], { cache }).searchJobs(new ScraperInputDto({}))) as { count: number };
+    expect(all.count).toBe(6);
+    expect(cached).toHaveLength(6);
+  });
+
+  it('a careerLevels filter with no classifier bound is a 503, never an unfiltered 200 (Q-106)', async () => {
+    await expect(
+      controller(sampleJobs(), { classifier: null }).searchJobs(new ScraperInputDto({ careerLevels: ['internship'] })),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    const unfiltered = (await controller(sampleJobs(), { classifier: null }).searchJobs(
+      new ScraperInputDto({}),
+    )) as { count: number };
+    expect(unfiltered.count).toBe(6);
+  });
 
   it('JSON: every job carries careerLevel; careerLevels in the body filters', async () => {
     const all = (await controller(sampleJobs()).searchJobs(new ScraperInputDto({}))) as { count: number; jobs: JobPostDto[] };

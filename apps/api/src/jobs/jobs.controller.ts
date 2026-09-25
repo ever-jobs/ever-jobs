@@ -425,7 +425,9 @@ export class JobsController {
     // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
     // Spec 1721 / FR-19 — ONE entry holds the raw set and the completeness
     // record of the crawl that produced it (see ./search-cache).
-    const cacheParams = { ...input, endpoint: SEARCH_CACHE_ENDPOINT };
+    // `careerLevels` filters after the cache (Spec 1730), so it is not part of the key: the same
+    // search with a different (or no) filter reuses the cached fan-out instead of re-scraping.
+    const cacheParams = { ...input, endpoint: SEARCH_CACHE_ENDPOINT, careerLevels: undefined };
     const hit = readCachedSearch(await this.cacheService.get<unknown>(cacheParams));
     let cached: JobPostDto[] | null = hit?.jobs ?? null;
     let completeness: SearchCompleteness | undefined = hit?.completeness;

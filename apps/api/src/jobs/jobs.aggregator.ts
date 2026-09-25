@@ -1,5 +1,6 @@
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { YieldBudget } from '@ever-jobs/common';
 import {
   CAREER_LEVEL_CLASSIFIER_TOKEN,
   CanonicalJob,
@@ -59,9 +60,20 @@ export interface AggregateOptions {
    * dedup and classification; `undefined` or `[]` means no filter. Values outside
    * `CAREER_LEVELS` are ignored here — the REST DTO / GraphQL resolver reject them first.
    * Callers pass `careerLevels: input.careerLevels`; `aggregate()` reads it from the input.
+   *
+   * The filter fails closed (Q-106): when it cannot be applied — no classifier bound, or
+   * classification failed — the aggregator throws `ServiceUnavailableException` (503) rather
+   * than return the unfiltered set. A successful result therefore always means "filtered".
    */
   readonly careerLevels?: ReadonlyArray<string>;
 }
+
+/**
+ * Jobs handed to `classifyBatch` per call. Small enough that one chunk stays around the yield
+ * budget even on a loaded machine (~100 µs/job idle, ~450 µs/job under a parallel jest run), so
+ * the budget check between chunks bounds the event-loop stall (Spec 1730, NFR-2).
+ */
+const CAREER_LEVEL_CHUNK = 16;
 
 /**
  * Envelope returned by the aggregator. The shape is intentionally additive:
@@ -197,40 +209,56 @@ export class JobsAggregator {
     rawJobs: JobPostDto[],
     options: AggregateOptions = {},
   ): Promise<AggregateResult> {
+    // Fail fast (Q-106): a filter that cannot run must not cost a dedup + persist pass first.
+    if (wantedCareerLevels(options).size > 0 && !this.careerLevelClassifier) {
+      this.logger.warn('careerLevels filter requested but no ICareerLevelClassifier is bound — 503');
+      throw new ServiceUnavailableException(
+        'careerLevels filter could not be applied: no career-level classifier is available',
+      );
+    }
     const result = await this.dedupAndPersist(rawJobs, options);
     return this.applyCareerLevel(result, options);
   }
 
   /**
    * Spec 1730 — attach `careerLevel` (unless `EVER_JOBS_CLASSIFY_CAREER_LEVEL=false`) and apply
-   * the `careerLevels` filter. Never throws: a classifier failure logs and returns the jobs
-   * unclassified and unfiltered. Never mutates the input array (it may be the cached fan-out);
-   * a filter returns a new array. The source `jobType` / `jobLevel` fields are left untouched.
+   * the `careerLevels` filter. Never mutates the input array (it may be the cached fan-out); a
+   * filter returns a new array. The source `jobType` / `jobLevel` fields are left untouched.
+   *
+   * Classification is cooperative: it runs in small chunks and hands the event loop back every
+   * 10 ms (`DEFAULT_YIELD_BUDGET_MS`, `@ever-jobs/common`), so a 30,000-job keyword-less result
+   * cannot starve `/health` (Spec 1730, NFR-2; the incident class recorded in
+   * `dedup-hybrid/src/cooperative.ts`).
+   *
+   * Failure handling: with no filter, a classifier failure logs and returns the jobs
+   * unclassified (the field is additive). With a filter it throws `ServiceUnavailableException`
+   * (503): returning the unfiltered set would silently answer a different question (Q-106).
    */
-  private applyCareerLevel(
+  private async applyCareerLevel(
     result: AggregateResult,
     options: AggregateOptions,
-  ): AggregateResult {
+  ): Promise<AggregateResult> {
     const attach = this.configService?.get<boolean>('careerLevel.classify', true) ?? true;
-    const wanted = new Set<CareerLevel>((options.careerLevels ?? []).filter(isCareerLevel));
+    const wanted = wantedCareerLevels(options);
     const filter = wanted.size > 0;
     if (!attach && !filter) return result;
-    if (!this.careerLevelClassifier) {
-      if (filter) {
-        this.logger.warn(
-          'careerLevels filter requested but no ICareerLevelClassifier is bound — returning unfiltered results',
-        );
-      }
-      return result;
-    }
+    // Unreachable with a filter (aggregateRaw failed fast); without one, jobs stay unclassified.
+    if (!this.careerLevelClassifier) return result;
 
     let verdicts: CareerLevelVerdict[];
     try {
-      verdicts = this.careerLevelClassifier.classifyBatch(result.jobs.map(careerLevelInputOf));
+      verdicts = await this.classifyCooperatively(this.careerLevelClassifier, result.jobs);
     } catch (err) {
-      this.logger.warn(
-        `career-level classification failed; returning jobs unclassified: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      const message = err instanceof Error ? err.message : String(err);
+      if (filter) {
+        this.logger.warn(
+          `career-level classification failed; careerLevels filter cannot be applied — 503: ${message}`,
+        );
+        throw new ServiceUnavailableException(
+          'careerLevels filter could not be applied: career-level classification failed',
+        );
+      }
+      this.logger.warn(`career-level classification failed; returning jobs unclassified: ${message}`);
       return result;
     }
 
@@ -253,6 +281,38 @@ export class JobsAggregator {
       outputCount: kept.length,
       careerLevelFilteredOut: result.jobs.length - kept.length,
     };
+  }
+
+  /**
+   * `classifyBatch` over {@link CAREER_LEVEL_CHUNK}-job slices, yielding to the event loop
+   * whenever the current slice has held it for the yield budget. Returns one verdict per job, in
+   * order. Throws when the classifier throws or returns the wrong number of verdicts, so a
+   * broken classifier can never produce a partially classified (or wrongly filtered) result.
+   */
+  private async classifyCooperatively(
+    classifier: ICareerLevelClassifier,
+    jobs: ReadonlyArray<JobPostDto>,
+  ): Promise<CareerLevelVerdict[]> {
+    const verdicts: CareerLevelVerdict[] = new Array(jobs.length);
+    const budget = new YieldBudget();
+    for (let start = 0; start < jobs.length; start += CAREER_LEVEL_CHUNK) {
+      const chunk = jobs.slice(start, start + CAREER_LEVEL_CHUNK);
+      const out = classifier.classifyBatch(chunk.map(careerLevelInputOf));
+      if (!Array.isArray(out) || out.length !== chunk.length) {
+        throw new Error(
+          `classifyBatch returned ${Array.isArray(out) ? out.length : typeof out} verdicts for ${chunk.length} jobs`,
+        );
+      }
+      for (let i = 0; i < out.length; i++) {
+        const verdict = out[i];
+        if (!verdict || !isCareerLevel(verdict.level)) {
+          throw new Error(`classifyBatch returned an invalid verdict for job ${start + i}`);
+        }
+        verdicts[start + i] = verdict;
+      }
+      await budget.yieldIfExpired();
+    }
+    return verdicts;
   }
 
   /**
@@ -596,6 +656,11 @@ export async function stampDedupKeys(jobs: JobPostDto[]): Promise<void> {
     const key = dedupKeyForJob(job);
     if (key !== undefined) job.dedupKey = key;
   }
+}
+
+/** The requested career levels that are real levels; empty means "no filter" (Spec 1730, FR-8). */
+function wantedCareerLevels(options: AggregateOptions): Set<CareerLevel> {
+  return new Set<CareerLevel>((options.careerLevels ?? []).filter(isCareerLevel));
 }
 
 /** The classifier's view of a job — only the fields it reads (Spec 1730, FR-3). */

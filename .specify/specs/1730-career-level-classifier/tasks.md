@@ -48,3 +48,26 @@
 - The CLI (`apps/cli`) calls `JobsService.searchJobs` directly and is out of scope (spec §3).
 - NDJSON (contract C3) is implemented by another lane; it inherits `careerLevel` through
   `aggregateRaw` and must pass `careerLevels: input.careerLevels` for the filter.
+
+## Phase 6 — Review fixes (2026-09-25)
+
+- [x] T12 — Season + year is the weakest cue: any explicit level wins; academic / seasonal / start-date / admin guards (Q-105 item 10).
+  - **Files:** `packages/plugins/career-level-classifier/src/career-level.rules.ts`, `__tests__/**`
+- [x] T13 — "Someone else's title" guard on every executive / director / manager rule; founder's-office function; co-op business guard before the cue.
+  - **Files:** as T12
+- [x] T14 — Fixture: 32 review regressions; regression gate (`KNOWN_MISSES`), red-controlled.
+  - **Files:** `__tests__/fixtures/career-level.fixture.ts`, `__tests__/career-level.evaluation.spec.ts`
+- [x] T15 — Cooperative classification: 16-job chunks, yield every 10 ms; `YieldBudget` / `yieldToEventLoop` shared in `@ever-jobs/common`.
+  - **Files:** `packages/common/src/cooperative.ts`, `apps/api/src/jobs/jobs.aggregator.ts`, tests
+- [x] T16 — `careerLevels` filter fails closed (503) when it cannot be applied (Q-106 follow-up).
+  - **Files:** `apps/api/src/jobs/jobs.aggregator.ts`, tests
+- [x] T17 — REST cache key excludes `careerLevels` (the resolver already did).
+  - **Files:** `apps/api/src/jobs/jobs.controller.ts`, tests
+- [ ] T18 — At integration with the NDJSON / list-mode lane (`feat/list-mode-ndjson-store`): keep **one**
+  public `aggregateRaw` that runs `dedupAndPersist`, then stamps `dedupKey`, then applies career
+  level (that lane's `aggregateRawUnkeyed` becomes the body of `dedupAndPersist` + the stamp);
+  pass `careerLevels: input.careerLevels` from the single shared controller call for both JSON and
+  NDJSON; keep `careerLevels: undefined` in the REST cache key; re-run
+  `jobs.aggregator.career-level.spec.ts` together with that lane's tests on the merge.
+- [ ] T19 — Optional, at the same integration: when no `careerLevels` filter is set, classify only
+  the paginated output window (needs the controller to resolve the window before `aggregateRaw`).

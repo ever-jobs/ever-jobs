@@ -76,3 +76,5 @@ The request filter rides in `AggregateOptions.careerLevels`; the only caller cha
 | Merge conflicts with parallel lanes editing the same files (controller, aggregator, DTOs) | aggregator change isolated in a new wrapper + private method; controller/resolver change is one options field |
 | Mutating cached raw job objects | classification is deterministic, so a cached object always carries the same value; the filter never mutates the raw array |
 | NDJSON path (other lane) forgets to pass `careerLevels` | documented in the spec §7.3 and the final report; the field itself is attached regardless |
+| A merge with the NDJSON lane (which also wraps `aggregateRaw` to stamp `dedupKey`) drops one wrapper | integration recipe in tasks T18: one public `aggregateRaw` = dedupAndPersist → dedupKey stamp → career level; one shared controller call passes `careerLevels` |
+| A synchronous classification pass starves `/health` on a 30k-job result | cooperative chunks with a 10 ms yield budget (review fix T15), liveness test with a `setImmediate` probe |

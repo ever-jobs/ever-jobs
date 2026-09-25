@@ -178,9 +178,20 @@ re-measured idle (spec §12.4).
 - **Fixture:** 32 review regressions and controls (555 cases, all correct). A new regression gate
   fails CI on any misclassification outside a documented `KNOWN_MISSES` list; it caught a silent
   regression (*Front of House Manager*) that every threshold had let through.
+- **Event loop:** classification of the whole deduplicated set was one synchronous call (2–3 s for
+  30k jobs, 13 s under load) on the thread that answers `/health`, the incident class `dedup-hybrid`
+  already fixed. The aggregator now classifies in 16-job chunks and yields every 10 ms. The
+  `YieldBudget` / `yieldToEventLoop` helpers now live in `@ever-jobs/common`, so core code does not
+  import a plugin. `dedup-hybrid`'s own copy is untouched.
+- **Fail closed (Q-106 follow-up):** a `careerLevels` filter that cannot be applied (no classifier
+  bound, classifier failure) is now a 503, not a silent unfiltered 200.
+- **REST cache key** no longer includes `careerLevels` (the resolver already excluded it), so a
+  filtered search reuses the cached fan-out instead of re-scraping ~1,669 sources.
 
 **Review-fix files:** `packages/plugins/career-level-classifier/{src/career-level.rules.ts,__tests__/**}`,
-`.specify/specs/1730-career-level-classifier/spec.md` (§7.5, §12, §12.5), `docs/questions.md` (Q-105).
+`packages/common/{src/cooperative.ts,src/index.ts,__tests__/cooperative.spec.ts}`,
+`apps/api/src/jobs/{jobs.aggregator,jobs.controller}.ts`, `apps/api/src/jobs/__tests__/jobs.aggregator.career-level.spec.ts`,
+`.specify/specs/1730-career-level-classifier/spec.md` (FR-8, §7.3, §7.5, §7.6, §8, §10, §12), `docs/questions.md` (Q-105, Q-106), README.
 
 ---
 

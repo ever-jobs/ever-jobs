@@ -712,6 +712,9 @@ columns) and GraphQL (`careerLevel { level confidence reasons }`).
   and *Campus Recruiter* run early-career programmes; they are not early-career roles.
 - Filter server-side with `"careerLevels": ["internship", "new_grad"]` in the request body
   (GraphQL: `careerLevels: [...]`). Unknown values are rejected. `count` is post-filter.
+  The filter fails closed: if it cannot be applied (no classifier bound, or classification
+  failed) the request is a 503, never an unfiltered 200. It is applied after the cache, so it
+  does not change the cache key.
 - Operators can switch the field off with `EVER_JOBS_CLASSIFY_CAREER_LEVEL=false`; an explicit
   `careerLevels` filter is still honoured.
 - Rules, evaluation and decisions: [Spec 1730](.specify/specs/1730-career-level-classifier/spec.md).
