@@ -4,6 +4,7 @@ import * as path from 'path';
 import { Test } from '@nestjs/testing';
 import { Reflector } from '@nestjs/core';
 import {
+  CanonicalJob,
   ERR_STORE_INVALID_CURSOR,
   IStoreMetadata,
   STORE_PLUGIN_METADATA_KEY,
@@ -11,12 +12,15 @@ import {
 } from '@ever-jobs/models';
 import { runStoreConformance } from '../../../plugin/src/store/__tests__/conformance';
 import {
+  DEFAULT_POSTGRES_BATCH_SIZE,
   PostgresPrismaJobStore,
   PrismaJobsClient,
+  REPLACE_OBSERVATIONS_CHUNK_SQL,
   STORE_POSTGRES_PRISMA_CONFIG,
   STORE_POSTGRES_PRISMA_DESCRIPTION,
   STORE_POSTGRES_PRISMA_ID,
   StorePostgresPrismaModule,
+  UPSERT_CANONICAL_CHUNK_SQL,
 } from '../src';
 
 /**
@@ -157,6 +161,162 @@ describe('PostgresPrismaJobStore — always-on contract', () => {
 });
 
 // =====================================================================
+// Always-on: the batch write path's shape (Spec 1722 / FR-12, FR-13).
+// The SQL itself runs in the RUN_PG_TESTS layer below.
+// =====================================================================
+
+function canonical(id: string, extra: Partial<CanonicalJob> = {}): CanonicalJob {
+  return {
+    canonicalJobId: id,
+    title: `Title ${id}`,
+    company: 'Acme',
+    location: 'Berlin',
+    url: `https://example.com/${id}`,
+    mergedAt: '2026-09-25T00:00:00.000Z',
+    fields: {},
+    sources: [],
+    ...extra,
+  };
+}
+
+/** Fake whose `$queryRawUnsafe` records every call and reports every row as inserted. */
+function recordingRawClient(): { client: PrismaJobsClient; calls: Array<{ sql: string; params: unknown[] }> } {
+  const calls: Array<{ sql: string; params: unknown[] }> = [];
+  const client = makeFakePrismaClient();
+  client.$queryRawUnsafe = jest.fn(async (sql: string, ...params: unknown[]) => {
+    calls.push({ sql, params });
+    if (sql === UPSERT_CANONICAL_CHUNK_SQL) {
+      const rows = JSON.parse(params[0] as string) as unknown[];
+      return [{ inserted: rows.length, affected: rows.length }];
+    }
+    return [{ removed: 0, written: 0 }];
+  }) as never;
+  return { client, calls };
+}
+
+describe('PostgresPrismaJobStore — batch write path (always-on, Spec 1722)', () => {
+  it('upsertMany sends one set-based statement per chunk, never an interactive transaction', async () => {
+    const { client, calls } = recordingRawClient();
+    const store = new PostgresPrismaJobStore({ client, batchSize: 2 });
+
+    const result = await store.upsertMany(['e', 'c', 'a', 'd', 'b'].map((id) => canonical(id)));
+
+    expect(result).toEqual({ inserted: 5, updated: 0 });
+    expect(client.$transaction).not.toHaveBeenCalled();
+    expect(client.canonicalJob.upsert).not.toHaveBeenCalled();
+    expect(calls.map((c) => c.sql)).toEqual([
+      UPSERT_CANONICAL_CHUNK_SQL,
+      UPSERT_CANONICAL_CHUNK_SQL,
+      UPSERT_CANONICAL_CHUNK_SQL,
+    ]);
+    // One jsonb parameter per chunk, rows sorted by id (stable lock order).
+    const chunks = calls.map((c) => {
+      expect(c.params).toHaveLength(1);
+      return (JSON.parse(c.params[0] as string) as Array<{ canonical_job_id: string }>).map(
+        (r) => r.canonical_job_id,
+      );
+    });
+    expect(chunks).toEqual([['a', 'b'], ['c', 'd'], ['e']]);
+  });
+
+  it('a repeated id is sent once (last value) and counted as an update', async () => {
+    const { client, calls } = recordingRawClient();
+    const store = new PostgresPrismaJobStore({ client });
+
+    const result = await store.upsertMany([
+      canonical('a', { title: 'first' }),
+      canonical('b'),
+      canonical('a', { title: 'last' }),
+    ]);
+
+    expect(result).toEqual({ inserted: 2, updated: 1 });
+    const rows = JSON.parse(calls[0]!.params[0] as string) as Array<{ canonical_job_id: string; title: string }>;
+    expect(rows.map((r) => [r.canonical_job_id, r.title])).toEqual([
+      ['a', 'last'],
+      ['b', 'Title b'],
+    ]);
+  });
+
+  it('maps rows to the table columns, normalises merged_at and strips U+0000', async () => {
+    const { client, calls } = recordingRawClient();
+    const store = new PostgresPrismaJobStore({ client });
+
+    await store.upsertMany([
+      canonical('a', {
+        description: 'before\u0000after',
+        mergedAt: '2026-09-25T02:00:00+02:00',
+        fields: { title: { value: 'x\u0000y' } } as never,
+      }),
+    ]);
+
+    const param = calls[0]!.params[0] as string;
+    expect(param).not.toContain('\\u0000');
+    const [row] = JSON.parse(param) as Array<Record<string, unknown>>;
+    expect(row).toEqual({
+      canonical_job_id: 'a',
+      title: 'Title a',
+      company: 'Acme',
+      location: 'Berlin',
+      description: 'beforeafter',
+      url: 'https://example.com/a',
+      merged_at: '2026-09-25T00:00:00.000Z',
+      fields_json: { title: { value: 'xy' } },
+      sources_json: [],
+    });
+  });
+
+  it('uses 500-row chunks by default, so 1 200 rows are 3 statements', async () => {
+    const { client, calls } = recordingRawClient();
+    const store = new PostgresPrismaJobStore({ client });
+    await store.upsertMany(Array.from({ length: 1_200 }, (_, i) => canonical(`k${i}`)));
+    expect(DEFAULT_POSTGRES_BATCH_SIZE).toBe(500);
+    expect(calls).toHaveLength(3);
+  });
+
+  it('putAllMany chunks by canonical id, keeps the last duplicate and drops unparsable dates', async () => {
+    const { client, calls } = recordingRawClient();
+    const store = new PostgresPrismaJobStore({ client, batchSize: 2 });
+    const obs = (sourceJobId: string, url = `https://x/${sourceJobId}`, observedAt = '2026-09-24') => ({
+      site: Site.LINKEDIN,
+      sourceJobId,
+      url,
+      observedAt,
+    });
+
+    await store.putAllMany([
+      { canonicalJobId: 'c', observations: [obs('c1')] },
+      { canonicalJobId: 'a', observations: [obs('a1', 'https://x/old'), obs('a1', 'https://x/new')] },
+      { canonicalJobId: 'b', observations: [] },
+      { canonicalJobId: 'a', observations: [obs('a1', 'https://x/final'), obs('a2', 'u', 'not a date')] },
+    ]);
+
+    expect(client.$transaction).not.toHaveBeenCalled();
+    expect(calls.map((c) => c.sql)).toEqual([REPLACE_OBSERVATIONS_CHUNK_SQL, REPLACE_OBSERVATIONS_CHUNK_SQL]);
+    expect(JSON.parse(calls[0]!.params[0] as string)).toEqual(['a', 'b']);
+    expect(JSON.parse(calls[0]!.params[1] as string)).toEqual([
+      {
+        canonical_job_id: 'a',
+        site: 'linkedin',
+        source_job_id: 'a1',
+        url: 'https://x/final',
+        observed_at: '2026-09-24T00:00:00.000Z',
+        raw_title: null,
+      },
+    ]);
+    expect(JSON.parse(calls[1]!.params[0] as string)).toEqual(['c']);
+    expect((JSON.parse(calls[1]!.params[1] as string) as unknown[]).length).toBe(1);
+  });
+
+  it('empty batches make no round-trip', async () => {
+    const { client, calls } = recordingRawClient();
+    const store = new PostgresPrismaJobStore({ client });
+    expect(await store.upsertMany([])).toEqual({ inserted: 0, updated: 0 });
+    await store.putAllMany([]);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+// =====================================================================
 // Postgres-gated tests (Testcontainers-backed).
 // =====================================================================
 
@@ -285,7 +445,110 @@ describeIfPg('PostgresPrismaJobStore — Testcontainers-backed (RUN_PG_TESTS=1)'
   runStoreConformance(
     'store-postgres-prisma',
     () => new PostgresPrismaJobStore({ client: prismaClient }),
+    { batch: true },
   );
+  // Spec 1722 / FR-12 — the same contract when every batch spans many chunks.
+  runStoreConformance(
+    'store-postgres-prisma (batchSize 2)',
+    () => new PostgresPrismaJobStore({ client: prismaClient, batchSize: 2 }),
+    { batch: true },
+  );
+
+  // ----------------------------------------------------------------------
+  // 1b. List-mode scale (Spec 1722 / FR-12, FR-13, NFR-3). The client in
+  //     this suite is built with Prisma's DEFAULT transaction options
+  //     (5 s timeout, 2 s maxWait) — the setting under which 10 000 rows
+  //     failed with P2028 before the fix.
+  // ----------------------------------------------------------------------
+  describe('list-mode scale', () => {
+    const N = 10_000;
+    const rows = (suffix: string): CanonicalJob[] =>
+      Array.from({ length: N }, (_, i) => ({
+        canonicalJobId: `scale-${i.toString().padStart(5, '0')}`,
+        title: `Engineer ${i} ${suffix}`,
+        company: 'Acme',
+        location: 'Berlin',
+        url: `https://example.com/${i}`,
+        description: 'd'.repeat(500),
+        mergedAt: new Date().toISOString(),
+        fields: {},
+        sources: [],
+      }));
+    const entries = (sourceSuffix: string) =>
+      rows('').map((r) => ({
+        canonicalJobId: r.canonicalJobId,
+        observations: [
+          {
+            site: Site.LINKEDIN,
+            sourceJobId: `${r.canonicalJobId}-li`,
+            url: `${r.url}/li`,
+            observedAt: '2026-09-24T00:00:00.000Z',
+          },
+          {
+            site: Site.GREENHOUSE,
+            sourceJobId: `${r.canonicalJobId}-${sourceSuffix}`,
+            url: `${r.url}/gh`,
+            observedAt: '2026-09-24T00:00:00.000Z',
+          },
+        ],
+      }));
+    const countObservations = async (): Promise<number> =>
+      Number(
+        ((await prisma.$queryRawUnsafe(
+          'SELECT COUNT(*)::int AS n FROM "source_observation"',
+        )) as Array<{ n: number }>)[0]!.n,
+      );
+    // `xmin` changes whenever Postgres rewrites a row.
+    const xminOf = async (id: string, site: string): Promise<string> =>
+      ((await prisma.$queryRawUnsafe(
+        'SELECT xmin::text AS x FROM "source_observation" WHERE canonical_job_id = $1 AND site = $2',
+        id,
+        site,
+      )) as Array<{ x: string }>)[0]!.x;
+
+    it(`upserts ${N} canonical jobs + observations, then re-persists without rewriting unchanged observations`, async () => {
+      const store = new PostgresPrismaJobStore({ client: prismaClient });
+
+      expect(await store.upsertMany(rows('v1'))).toEqual({ inserted: N, updated: 0 });
+      await store.putAllMany(entries('gh'));
+      expect(await store.size()).toBe(N);
+      expect(await countObservations()).toBe(2 * N);
+
+      const liBefore = await xminOf('scale-00042', 'linkedin');
+      const ghBefore = await xminOf('scale-00042', 'greenhouse');
+
+      // Second run: every canonical row updated; the LinkedIn observations
+      // are identical (must NOT be rewritten); the Greenhouse ones replaced.
+      expect(await store.upsertMany(rows('v2'))).toEqual({ inserted: 0, updated: N });
+      await store.putAllMany(entries('gh2'));
+
+      expect(await countObservations()).toBe(2 * N);
+      expect(await xminOf('scale-00042', 'linkedin')).toBe(liBefore);
+      expect(await xminOf('scale-00042', 'greenhouse')).not.toBe(ghBefore);
+      expect((await store.getById('scale-09999'))?.title).toBe('Engineer 9999 v2');
+      const obs = await store.listByCanonicalId('scale-09999');
+      expect(obs.map((o) => o.sourceJobId).sort()).toEqual(['scale-09999-gh2', 'scale-09999-li']);
+    }, 120_000);
+
+    it('a U+0000 inside a description does not fail its chunk', async () => {
+      const store = new PostgresPrismaJobStore({ client: prismaClient });
+      await store.upsertMany([
+        {
+          canonicalJobId: 'nul-1',
+          title: 'T',
+          company: 'C',
+          location: 'L',
+          url: 'u',
+          description: 'a\u0000b',
+          mergedAt: '2026-01-01T00:00:00.000Z',
+          fields: {},
+          sources: [],
+        },
+      ]);
+      expect((await store.getById('nul-1'))?.description).toBe('ab');
+    });
+  });
+
 
   // ----------------------------------------------------------------------
   // 2. Cursor envelope round-trip + invalid-cursor rejection.
@@ -686,6 +949,7 @@ function makeFakePrismaClient(): PrismaJobsClient {
       // same mocks the caller would assert against.
       return fn(makeFakePrismaClient());
     }),
+    $queryRawUnsafe: jest.fn().mockResolvedValue([]) as never,
     $disconnect: jest.fn().mockResolvedValue(undefined),
   };
 }

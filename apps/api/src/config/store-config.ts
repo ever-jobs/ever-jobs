@@ -250,5 +250,63 @@ export function redactDatabaseUrl(url: string): string {
   }
 }
 
+/** Rows per batch statement / transaction for the durable backends (Spec 1722 / FR-12, FR-15). */
+export const STORE_BATCH_SIZE_ENV_VAR = 'EVER_JOBS_STORE_BATCH_SIZE';
+/** Prisma interactive-transaction timeout, ms (Spec 1722 / FR-14). */
+export const STORE_TX_TIMEOUT_ENV_VAR = 'EVER_JOBS_STORE_TX_TIMEOUT_MS';
+/** Prisma interactive-transaction wait for a pool connection, ms (Spec 1722 / FR-14). */
+export const STORE_TX_MAX_WAIT_ENV_VAR = 'EVER_JOBS_STORE_TX_MAX_WAIT_MS';
+
+export const DEFAULT_STORE_BATCH_SIZE = 500;
+export const MAX_STORE_BATCH_SIZE = 5_000;
+/** Prisma's own defaults are 5000 / 2000 ms, too tight under a busy pool. */
+export const DEFAULT_STORE_TX_TIMEOUT_MS = 30_000;
+export const DEFAULT_STORE_TX_MAX_WAIT_MS = 10_000;
+
+/** Write-path tuning shared by the `sqlite` and `postgres` backends. */
+export interface StoreWriteTuning {
+  /** Rows per statement (postgres) / per transaction (sqlite). */
+  readonly batchSize: number;
+  /** Prisma `transactionOptions.timeout`, ms. */
+  readonly txTimeoutMs: number;
+  /** Prisma `transactionOptions.maxWait`, ms. */
+  readonly txMaxWaitMs: number;
+}
+
+function parsePositiveInt(
+  env: Env,
+  variable: string,
+  fallback: number,
+  max: number,
+): number {
+  const raw = blankToUndefined(env[variable]);
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > max) {
+    throw new StoreConfigError(
+      `${variable}=${JSON.stringify(raw)} must be a whole number between 1 and ${max} ` +
+        `(unset it for the default, ${fallback}).`,
+      ERR_STORE_CONFIG_INVALID,
+    );
+  }
+  return n;
+}
+
+/**
+ * Write-path tuning for the durable backends (Spec 1722 / FR-12, FR-14,
+ * FR-15). Unset/blank → defaults; anything that is not a whole number in
+ * range fails the boot, like every other store variable, rather than being
+ * silently replaced.
+ *
+ * @throws {@link StoreConfigError} `ERR_STORE_CONFIG_INVALID`
+ */
+export function resolveStoreWriteTuning(env: Env): StoreWriteTuning {
+  return {
+    batchSize: parsePositiveInt(env, STORE_BATCH_SIZE_ENV_VAR, DEFAULT_STORE_BATCH_SIZE, MAX_STORE_BATCH_SIZE),
+    txTimeoutMs: parsePositiveInt(env, STORE_TX_TIMEOUT_ENV_VAR, DEFAULT_STORE_TX_TIMEOUT_MS, 3_600_000),
+    txMaxWaitMs: parsePositiveInt(env, STORE_TX_MAX_WAIT_ENV_VAR, DEFAULT_STORE_TX_MAX_WAIT_MS, 3_600_000),
+  };
+}
+
 /** Re-exported so the bootstrap factory raises the same code Spec 004 defines. */
 export { ERR_STORE_BACKEND_DOWN };

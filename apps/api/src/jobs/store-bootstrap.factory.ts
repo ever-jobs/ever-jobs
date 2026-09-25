@@ -24,16 +24,20 @@ import {
 } from '@ever-jobs/store-postgres-prisma';
 import {
   DEFAULT_STORE_ID,
+  DEFAULT_STORE_TX_MAX_WAIT_MS,
+  DEFAULT_STORE_TX_TIMEOUT_MS,
   ERR_STORE_BACKEND_DOWN,
   EVER_JOBS_STORE_ENV_VAR,
   KNOWN_STORE_IDS,
   KnownStoreId,
   StoreConfigError,
+  StoreWriteTuning,
   redactDatabaseUrl,
   resolvePersistSearch,
   resolvePostgresUrl,
   resolveSqlitePath,
   resolveStoreSelection,
+  resolveStoreWriteTuning,
 } from '../config/store-config';
 
 /**
@@ -151,8 +155,19 @@ export type ConnectablePrismaClient = PrismaJobsClient & {
   $connect(): Promise<void>;
 };
 
+/** Options this bootstrap passes to a generated `PrismaClient` constructor. */
+export interface PrismaClientOptions {
+  datasourceUrl: string;
+  /**
+   * Client-wide defaults for interactive transactions (Spec 1722 / FR-14).
+   * Prisma's own defaults (`maxWait` 2 s, `timeout` 5 s) are what aborted
+   * list-mode persists with P2028.
+   */
+  transactionOptions?: { maxWait: number; timeout: number };
+}
+
 /** Constructor of a generated `PrismaClient`. */
-export type PrismaClientCtor = new (options: { datasourceUrl: string }) => ConnectablePrismaClient;
+export type PrismaClientCtor = new (options: PrismaClientOptions) => ConnectablePrismaClient;
 
 /** How to generate the client — repeated in every Prisma-related error. */
 const PRISMA_GENERATE_HINT =
@@ -215,11 +230,18 @@ function scrubSecrets(message: string, url: string): string {
 export async function connectPostgresStoreClient(
   url: string,
   loadCtor: () => PrismaClientCtor = loadPrismaClientCtor,
+  tuning: Pick<StoreWriteTuning, 'txTimeoutMs' | 'txMaxWaitMs'> = {
+    txTimeoutMs: DEFAULT_STORE_TX_TIMEOUT_MS,
+    txMaxWaitMs: DEFAULT_STORE_TX_MAX_WAIT_MS,
+  },
 ): Promise<ConnectablePrismaClient> {
   const Ctor = loadCtor();
   let client: ConnectablePrismaClient;
   try {
-    client = new Ctor({ datasourceUrl: url });
+    client = new Ctor({
+      datasourceUrl: url,
+      transactionOptions: { maxWait: tuning.txMaxWaitMs, timeout: tuning.txTimeoutMs },
+    });
   } catch (err) {
     throw new StoreConfigError(
       `Could not construct the Prisma client for the Postgres store: ${scrubSecrets(
@@ -273,11 +295,16 @@ export interface ResolveStoreProvidersOptions {
  * `StoreModule.forActive(id, { backends, providers })` (Spec 1722).
  *
  *   - `memory` → none.
- *   - `sqlite` → `STORE_SQLITE_DRIZZLE_CONFIG` = `{ databaseUrl: <path> }`;
+ *   - `sqlite` → `STORE_SQLITE_DRIZZLE_CONFIG` = `{ databaseUrl: <path>, batchSize }`;
  *     the parent directory is created on first use.
- *   - `postgres` → a connected Prisma client under {@link POSTGRES_STORE_CLIENT},
- *     `STORE_POSTGRES_PRISMA_CONFIG` = `{ client }`, and a lifecycle provider
- *     that disconnects on shutdown.
+ *   - `postgres` → a connected Prisma client under {@link POSTGRES_STORE_CLIENT}
+ *     (with explicit `transactionOptions`), `STORE_POSTGRES_PRISMA_CONFIG` =
+ *     `{ client, batchSize }`, and a lifecycle provider that disconnects on
+ *     shutdown.
+ *
+ * `batchSize` and the transaction options come from
+ * {@link resolveStoreWriteTuning} (`EVER_JOBS_STORE_BATCH_SIZE`,
+ * `EVER_JOBS_STORE_TX_TIMEOUT_MS`, `EVER_JOBS_STORE_TX_MAX_WAIT_MS`).
  *
  * Required variables are read **synchronously here**, so a missing one fails
  * at module evaluation, before Nest constructs anything.
@@ -294,6 +321,7 @@ export function resolveStoreProviders(
       return [];
     case 'sqlite': {
       const databaseUrl = resolveSqlitePath(env);
+      const { batchSize } = resolveStoreWriteTuning(env);
       return [
         {
           provide: STORE_SQLITE_DRIZZLE_CONFIG,
@@ -301,24 +329,26 @@ export function resolveStoreProviders(
             if (databaseUrl !== ':memory:') {
               fs.mkdirSync(path.dirname(path.resolve(databaseUrl)), { recursive: true });
             }
-            new Logger('StoreBootstrap').log(`SQLite store: ${databaseUrl}`);
-            return { databaseUrl };
+            new Logger('StoreBootstrap').log(`SQLite store: ${databaseUrl} (batch ${batchSize})`);
+            return { databaseUrl, batchSize };
           },
         },
       ];
     }
     case 'postgres': {
       const url = resolvePostgresUrl(env);
+      const tuning = resolveStoreWriteTuning(env);
       const loadCtor = options.loadPrismaClient ?? loadPrismaClientCtor;
       return [
         {
           provide: POSTGRES_STORE_CLIENT,
-          useFactory: () => connectPostgresStoreClient(url, loadCtor),
+          useFactory: () => connectPostgresStoreClient(url, loadCtor, tuning),
         },
         {
           provide: STORE_POSTGRES_PRISMA_CONFIG,
           useFactory: (client: ConnectablePrismaClient): StorePostgresPrismaConfig => ({
             client,
+            batchSize: tuning.batchSize,
           }),
           inject: [POSTGRES_STORE_CLIENT],
         },

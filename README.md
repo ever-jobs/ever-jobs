@@ -403,6 +403,18 @@ creates the extension once). The Docker image runs `prisma generate` during the 
 **SQLite:** `EVER_JOBS_STORE=sqlite` and `EVER_JOBS_STORE_SQLITE_PATH=/var/lib/ever-jobs/jobs.db`
 (the directory is created; the schema is created on first boot).
 
+**Write path at list-mode size.** A list-mode search persists 20–30 k canonical jobs. Both
+durable backends write in chunks of `EVER_JOBS_STORE_BATCH_SIZE` rows (default `500`): Postgres
+sends one `INSERT … ON CONFLICT DO UPDATE` statement per chunk (no long-running transaction) and
+replaces observations with one statement per chunk that rewrites only rows whose URL, date or
+title changed; SQLite writes one transaction per chunk and lets the event loop run between
+chunks, so requests and NDJSON heartbeats keep flowing. Writes are atomic per chunk — every
+write is an idempotent upsert, so a failure part-way is completed by the next persist. Postgres
+also accepts `EVER_JOBS_STORE_TX_TIMEOUT_MS` (default `30000`) and
+`EVER_JOBS_STORE_TX_MAX_WAIT_MS` (default `10000`) for its remaining interactive transactions;
+the pool size is Prisma's `?connection_limit=N` on the URL. An invalid value fails the boot
+with `ERR_STORE_CONFIG_INVALID`.
+
 ---
 
 ## API Usage

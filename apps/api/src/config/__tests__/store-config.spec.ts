@@ -9,6 +9,7 @@ import {
   resolvePostgresUrl,
   resolveSqlitePath,
   resolveStoreSelection,
+  resolveStoreWriteTuning,
   storeIdFromValue,
 } from '../store-config';
 import configuration from '../configuration';
@@ -205,5 +206,40 @@ describe('redactDatabaseUrl', () => {
 
   it('never echoes an unparsable value', () => {
     expect(redactDatabaseUrl('not a url with password=abc')).toBe('<unparsable database url>');
+  });
+});
+
+describe('resolveStoreWriteTuning (Spec 1722 / FR-12, FR-14, FR-15)', () => {
+  it('defaults: 500-row batches, 30 s transaction timeout, 10 s pool wait', () => {
+    expect(resolveStoreWriteTuning({})).toEqual({ batchSize: 500, txTimeoutMs: 30_000, txMaxWaitMs: 10_000 });
+    expect(
+      resolveStoreWriteTuning({
+        EVER_JOBS_STORE_BATCH_SIZE: '  ',
+        EVER_JOBS_STORE_TX_TIMEOUT_MS: '',
+      }),
+    ).toEqual({ batchSize: 500, txTimeoutMs: 30_000, txMaxWaitMs: 10_000 });
+  });
+
+  it('reads each variable', () => {
+    expect(
+      resolveStoreWriteTuning({
+        EVER_JOBS_STORE_BATCH_SIZE: '1000',
+        EVER_JOBS_STORE_TX_TIMEOUT_MS: '60000',
+        EVER_JOBS_STORE_TX_MAX_WAIT_MS: ' 20000 ',
+      }),
+    ).toEqual({ batchSize: 1000, txTimeoutMs: 60_000, txMaxWaitMs: 20_000 });
+  });
+
+  it.each([
+    ['EVER_JOBS_STORE_BATCH_SIZE', 'many'],
+    ['EVER_JOBS_STORE_BATCH_SIZE', '0'],
+    ['EVER_JOBS_STORE_BATCH_SIZE', '5001'],
+    ['EVER_JOBS_STORE_BATCH_SIZE', '2.5'],
+    ['EVER_JOBS_STORE_TX_TIMEOUT_MS', '-5'],
+    ['EVER_JOBS_STORE_TX_MAX_WAIT_MS', 'soon'],
+  ])('%s=%s is rejected with ERR_STORE_CONFIG_INVALID naming the variable', (variable, value) => {
+    const fn = () => resolveStoreWriteTuning({ [variable]: value });
+    expect(codeOf(fn)).toBe(ERR_STORE_CONFIG_INVALID);
+    expect(messageOf(fn)).toContain(variable);
   });
 });

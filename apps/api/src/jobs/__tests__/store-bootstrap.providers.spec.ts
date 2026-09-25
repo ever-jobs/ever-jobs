@@ -10,6 +10,7 @@ import { InMemoryJobStore } from '@ever-jobs/store-memory';
 import { SqliteDrizzleJobStore } from '@ever-jobs/store-sqlite-drizzle';
 import { PostgresPrismaJobStore } from '@ever-jobs/store-postgres-prisma';
 import {
+  ERR_STORE_CONFIG_INVALID,
   ERR_STORE_CONFIG_MISSING,
   ERR_STORE_CONFLICT,
   StoreConfigError,
@@ -118,6 +119,28 @@ describe('resolveStoreProviders — sqlite (Spec 1722)', () => {
     expect(codeOf(fn)).toBe(ERR_STORE_CONFIG_MISSING);
   });
 
+  it('an invalid EVER_JOBS_STORE_BATCH_SIZE fails fast (FR-15)', () => {
+    const fn = () =>
+      resolveStoreProviders('sqlite', { EVER_JOBS_STORE_SQLITE_PATH: ':memory:', EVER_JOBS_STORE_BATCH_SIZE: 'x' });
+    expect(codeOf(fn)).toBe(ERR_STORE_CONFIG_INVALID);
+  });
+
+  it('binds EVER_JOBS_STORE_BATCH_SIZE into the SQLite store (FR-15)', async () => {
+    const env = { EVER_JOBS_STORE_SQLITE_PATH: ':memory:', EVER_JOBS_STORE_BATCH_SIZE: '123' };
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        StoreModule.forActive('sqlite', {
+          backends: [SqliteDrizzleJobStore],
+          providers: resolveStoreProviders('sqlite', env),
+        }),
+      ],
+    }).compile();
+    const store = moduleRef.get<IJobStore>(JOB_STORE_TOKEN);
+    expect((store as unknown as { batchSize: number }).batchSize).toBe(123);
+    (store as unknown as { close(): void }).close();
+    await moduleRef.close();
+  });
+
   it('boots a file-backed SQLite store from env alone, creating the directory', async () => {
     const dir = fs.mkdtempSync(path.join(process.env.TMP ?? os.tmpdir(), 'ej-sqlite-'));
     const dbPath = path.join(dir, 'nested', 'jobs.db');
@@ -179,7 +202,11 @@ describe('resolveStoreProviders — postgres (Spec 1722)', () => {
 
     expect(moduleRef.get(JOB_STORE_TOKEN)).toBeInstanceOf(PostgresPrismaJobStore);
     expect(instances).toHaveLength(1);
-    expect(instances[0]!.options).toEqual({ datasourceUrl: url });
+    // Spec 1722 / FR-14 — explicit transaction options, not Prisma's 5 s / 2 s.
+    expect(instances[0]!.options).toEqual({
+      datasourceUrl: url,
+      transactionOptions: { maxWait: 10_000, timeout: 30_000 },
+    });
     expect(instances[0]!.connected).toBe(true);
     expect(moduleRef.get(POSTGRES_STORE_CLIENT)).toBeDefined();
 
@@ -201,8 +228,48 @@ describe('resolveStoreProviders — postgres (Spec 1722)', () => {
         }),
       ],
     }).compile();
-    expect(instances[0]!.options).toEqual({ datasourceUrl: 'postgresql://u@h/db' });
+    expect(instances[0]!.options).toMatchObject({ datasourceUrl: 'postgresql://u@h/db' });
     await moduleRef.close();
+  });
+
+  it('binds EVER_JOBS_STORE_TX_* into the client and EVER_JOBS_STORE_BATCH_SIZE into the store (FR-12, FR-14)', async () => {
+    const { ctor, instances } = fakePrismaCtor();
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        StoreModule.forActive('postgres', {
+          backends: [PostgresPrismaJobStore],
+          providers: resolveStoreProviders(
+            'postgres',
+            {
+              DATABASE_URL: 'postgresql://u@h/db',
+              EVER_JOBS_STORE_TX_TIMEOUT_MS: '45000',
+              EVER_JOBS_STORE_TX_MAX_WAIT_MS: '15000',
+              EVER_JOBS_STORE_BATCH_SIZE: '250',
+            },
+            { loadPrismaClient: () => ctor },
+          ),
+        }),
+      ],
+    }).compile();
+    expect(instances[0]!.options).toEqual({
+      datasourceUrl: 'postgresql://u@h/db',
+      transactionOptions: { maxWait: 15_000, timeout: 45_000 },
+    });
+    const store = moduleRef.get<IJobStore>(JOB_STORE_TOKEN);
+    expect((store as unknown as { batchSize: number }).batchSize).toBe(250);
+    await moduleRef.close();
+  });
+
+  it.each([
+    ['EVER_JOBS_STORE_BATCH_SIZE', 'lots'],
+    ['EVER_JOBS_STORE_BATCH_SIZE', '0'],
+    ['EVER_JOBS_STORE_BATCH_SIZE', '5001'],
+    ['EVER_JOBS_STORE_TX_TIMEOUT_MS', '-1'],
+    ['EVER_JOBS_STORE_TX_MAX_WAIT_MS', '1.5'],
+  ])('%s=%s fails the boot with ERR_STORE_CONFIG_INVALID', (variable, value) => {
+    const env = { DATABASE_URL: 'postgresql://u@h/db', [variable]: value };
+    expect(codeOf(() => resolveStoreProviders('postgres', env))).toBe(ERR_STORE_CONFIG_INVALID);
+    expect(() => resolveStoreProviders('postgres', env)).toThrow(new RegExp(variable));
   });
 
   it('an unreachable database fails the boot with ERR_STORE_BACKEND_DOWN and no password', async () => {

@@ -113,6 +113,19 @@ export interface IJobObservationStore {
   ): Promise<void>;
 
   /**
+   * Batch variant of {@link IJobObservationStore.putAll} (Spec 1722 / FR-13):
+   * the same replace-not-merge result as calling `putAll` once per entry.
+   *
+   * Optional — callers MUST fall back to `putAll` when a backend does not
+   * implement it. Backends that do SHOULD write in bounded chunks (one
+   * round-trip per chunk, not per entry) so a 25 k-job persist neither
+   * exhausts a connection pool nor holds one transaction open for the whole
+   * batch. Atomic per chunk, not per call. An entry whose canonical row does
+   * not exist MAY be skipped rather than failing its chunk.
+   */
+  putAllMany?(entries: ReadonlyArray<ObservationBatchEntry>): Promise<void>;
+
+  /**
    * All observations for one canonical job, in stable order. Callers
    * MUST treat the order as backend-defined; it is NOT guaranteed to
    * match insertion order.
@@ -126,6 +139,15 @@ export interface IJobObservationStore {
    * second call after the first returns the same `count` value of `0`.
    */
   deleteByCanonicalId(canonicalJobId: string): Promise<number>;
+}
+
+/**
+ * One entry of {@link IJobObservationStore.putAllMany}: the complete
+ * observation set for one canonical job.
+ */
+export interface ObservationBatchEntry {
+  readonly canonicalJobId: string;
+  readonly observations: ReadonlyArray<SourceObservation>;
 }
 
 /**

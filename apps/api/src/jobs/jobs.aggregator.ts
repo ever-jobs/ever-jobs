@@ -284,17 +284,11 @@ export class JobsAggregator {
     try {
       const counts = await this.jobStore.upsertMany(canonical);
       // Observations are best-effort within best-effort: a successful
-      // canonical upsert is the load-bearing write; observation putAll
-      // failures degrade to "canonical persisted, observations stale"
-      // rather than nuking the persisted flag. We capture per-record
-      // failures via `Promise.allSettled` so one bad row doesn't drop
-      // the rest.
+      // canonical upsert is the load-bearing write; observation failures
+      // degrade to "canonical persisted, observations stale" rather than
+      // nuking the persisted flag.
       if (this.observationStore) {
-        await Promise.allSettled(
-          canonical.map((c) =>
-            this.observationStore!.putAll(c.canonicalJobId, c.sources ?? []),
-          ),
-        );
+        await this.persistObservations(this.observationStore, canonical);
       }
       this.logger.log(
         `persisted: ${canonical.length} canonical records ` +
@@ -316,7 +310,72 @@ export class JobsAggregator {
       };
     }
   }
+
+  /**
+   * Write every canonical record's observation set (Spec 1722 / FR-13).
+   *
+   * A backend with `putAllMany` gets the whole set in one call and batches
+   * it itself. Otherwise `putAll` runs per record with at most
+   * {@link OBSERVATION_WRITE_CONCURRENCY} in flight: the previous
+   * `Promise.allSettled(canonical.map(putAll))` started one transaction per
+   * job at once — 25 k of them for a list-mode search — which drained the
+   * Postgres pool and failed most of them. Never throws; failures are
+   * logged with a count.
+   */
+  private async persistObservations(
+    store: IJobObservationStore,
+    canonical: ReadonlyArray<CanonicalJob>,
+  ): Promise<void> {
+    if (typeof store.putAllMany === 'function') {
+      try {
+        await store.putAllMany(
+          canonical.map((c) => ({ canonicalJobId: c.canonicalJobId, observations: c.sources ?? [] })),
+        );
+      } catch (err) {
+        this.logger.warn(
+          `persist observations failed for a batch of ${canonical.length}: ${readErrorCode(err)} — ` +
+            `${err instanceof Error ? err.message : String(err)}. Canonical records stay persisted.`,
+        );
+      }
+      return;
+    }
+
+    let cursor = 0;
+    let failed = 0;
+    let firstError: unknown;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const index = cursor++;
+        if (index >= canonical.length) return;
+        const c = canonical[index]!;
+        try {
+          await store.putAll(c.canonicalJobId, c.sources ?? []);
+        } catch (err) {
+          failed++;
+          firstError ??= err;
+        }
+      }
+    };
+    await Promise.allSettled(
+      Array.from({ length: Math.min(OBSERVATION_WRITE_CONCURRENCY, canonical.length) }, () =>
+        worker(),
+      ),
+    );
+    if (failed > 0) {
+      this.logger.warn(
+        `persist observations: ${failed} of ${canonical.length} putAll calls failed ` +
+          `(first: ${firstError instanceof Error ? firstError.message : String(firstError)}). ` +
+          'Canonical records stay persisted.',
+      );
+    }
+  }
 }
+
+/**
+ * Most `putAll` calls in flight at once when the observation store has no
+ * `putAllMany` (Spec 1722 / FR-13) — below any sane connection-pool size.
+ */
+export const OBSERVATION_WRITE_CONCURRENCY = 8;
 
 /**
  * Jobs keyed between event-loop yields in {@link stampDedupKeys}. One key is
