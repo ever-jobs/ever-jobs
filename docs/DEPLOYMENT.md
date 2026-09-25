@@ -125,7 +125,7 @@ apart), so every Workday scrape is bounded:
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `WORKDAY_MAX_DETAIL_FETCHES` | `50` | Detail requests per scrape (per board). Postings past it are returned at list level: no description, compensation or hiring organisation. `0` = none. |
+| `WORKDAY_MAX_DETAIL_FETCHES` | `50` | Detail requests per scrape (per board). Postings past it are returned at list level: no description or compensation. `0` = none. |
 | `WORKDAY_SCRAPE_TIME_BUDGET_MS` | `90000` | Budget per scrape over listing and enrichment. Once spent, no new page or detail request starts; a listing cut short is reported as `partial` in the per-source diagnostics. `0` = none. |
 
 Keep `WORKDAY_SCRAPE_TIME_BUDGET_MS` below the fan-out deadline

@@ -245,7 +245,8 @@ describe('WorkdayService — Spec 720 / T05', () => {
       );
       expect(result.jobs).toHaveLength(1);
       const job = result.jobs[0];
-      expect(job.companyName).toBe('X-Energy, LLC');
+      // The tenant, not the detail-only hiring organisation (Spec 1736 T13).
+      expect(job.companyName).toBe('xenergy');
       expect(job.description).toBe('Build the future with X-energy.\nEmail jobs@x-energy.com.');
       expect(job.emails).toEqual(['jobs@x-energy.com']);
       expect(job.location?.city).toBe('Rockville, MD; Oak Ridge, TN');
@@ -267,18 +268,21 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(markdown.jobs[0].description).not.toContain('<strong>');
     });
 
-    it('falls back to the tenant slug when hiringOrganization.name is blank', async () => {
-      const detail = clone(DETAIL);
-      detail.hiringOrganization.name = '   ';
-      mockPost.mockResolvedValueOnce({ data: clone(DETAIL_PAGE) });
-      mockGet.mockResolvedValueOnce({ data: detail });
+    it('names the posting by its tenant whatever hiringOrganization says (Spec 1736 T13)', async () => {
+      for (const name of ['   ', 'Collins Aerospace', 'X-Energy, LLC']) {
+        const detail = clone(DETAIL);
+        detail.hiringOrganization.name = name;
+        mockPost.mockResolvedValueOnce({ data: clone(DETAIL_PAGE) });
+        mockGet.mockResolvedValueOnce({ data: detail });
 
-      const result = await new WorkdayService().scrape({
-        siteType: [Site.WORKDAY],
-        companySlug: 'xenergy:5:X-energyUS',
-      } as ScraperInputDto);
+        const result = await new WorkdayService().scrape({
+          siteType: [Site.WORKDAY],
+          companySlug: 'xenergy:5:X-energyUS',
+        } as ScraperInputDto);
 
-      expect(result.jobs[0].companyName).toBe('xenergy');
+        expect(result.jobs[0].description).not.toBeNull();
+        expect(result.jobs[0].companyName).toBe('xenergy');
+      }
     });
 
     it('keeps sibling and summary jobs when one detail request fails', async () => {
@@ -305,7 +309,8 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(result.jobs[0].companyName).toBe('xenergy');
       // The bare "N Locations" count is not a real place, so it is dropped.
       expect(result.jobs[0].location).toBeNull();
-      expect(result.jobs[1].companyName).toBe('X-Energy, LLC');
+      // Enriched or not, the same name (Spec 1736 T13).
+      expect(result.jobs[1].companyName).toBe('xenergy');
       expect(result.jobs[1].description).toContain('Build the future');
     });
 
@@ -879,7 +884,8 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(result.jobs).toHaveLength(4);
       const [enriched, , listLevel] = result.jobs;
       expect(enriched.description).toBe('About JR1000.');
-      expect(enriched.companyName).toBe('Acme Corp');
+      // The detail says "Acme Corp"; both levels carry the tenant (Spec 1736 T13).
+      expect(enriched.companyName).toBe('acme');
       expect(enriched.jobUrl).toBe('https://acme.wd5.myworkdayjobs.com/Careers/job/Rockville-MD/Role-0_JR1000');
       expect(listLevel.description).toBeNull();
       expect(listLevel.compensation).toBeNull();

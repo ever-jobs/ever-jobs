@@ -32,7 +32,7 @@ export const WORKDAY_DETAIL_DELAY_MAX_MS = 500;
  * `resultsWanted = 1000` would spend ~10 minutes enriching, long past the
  * fan-out deadline. Only the first N postings that have a detail path are
  * enriched; the rest are returned at list level (title, URL, location, posted
- * date, requisition id — no description, compensation or hiring organisation).
+ * date, requisition id — no description or compensation; Spec 1736 §8.1).
  *
  * Unset, blank or not a non-negative integer → {@link DEFAULT_WORKDAY_MAX_DETAIL_FETCHES}.
  * `0` = no detail requests at all. There is no "unlimited" value: set a number

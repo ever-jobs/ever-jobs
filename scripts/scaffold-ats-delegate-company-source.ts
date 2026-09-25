@@ -137,11 +137,17 @@ interface BackendSpec {
    */
   countIsFirstPageOnly?: boolean;
   /**
-   * True when the adapter reports a per-posting organisation (Workday's
-   * `hiringOrganization.name`), which on a multi-business tenant names the
-   * business unit. The plugin then keeps it and re-stamps only empty,
-   * tenant-token and legal-form names (Spec 1735 §4.2.1); for every other
-   * backend the name is board-level and always re-stamped.
+   * True when the adapter reports a per-posting organisation that it reports
+   * for EVERY posting it returns, so a posting names the same organisation
+   * whichever path built it. The plugin then keeps a business-unit name and
+   * re-stamps only empty, tenant-token and legal-form names (Spec 1735
+   * §4.2.1); otherwise the name is board-level and always re-stamped.
+   *
+   * No backend sets it since Spec 1736 T13: Workday's `hiringOrganization` is
+   * in the detail response only, and past the detail cap (§8) most postings
+   * of a large board are built without one, so the same posting would switch
+   * between a business unit and the display name. The Workday adapter now
+   * names every posting by its tenant and the plugins re-stamp it.
    */
   perPostingCompanyName?: boolean;
   /** Recorded HTTP responses (keyed by URL without query) + expected mapping. */
@@ -199,7 +205,9 @@ export const BACKENDS: Record<string, BackendSpec> = {
     atsIdPrefix: (slug) => `wd-${parseWorkdaySlug(slug).tenant}-`,
     boardUrl: (slug) => `${workdayHost(slug)}/${parseWorkdaySlug(slug).site}`,
     notFoundReason: 'bad_input',
-    perPostingCompanyName: true,
+    // Board-level since Spec 1736 T13: the adapter names every posting by its
+    // tenant, enriched or not, and the plugin always re-stamps the display name.
+    perPostingCompanyName: false,
     fixture(d, board) {
       const { tenant, site } = parseWorkdaySlug(board.slug);
       const host = workdayHost(board.slug);
@@ -578,8 +586,9 @@ export const LEGAL_FORM_WORDS: readonly string[] = [
 
 /**
  * Generated helpers for a backend with per-posting organisation names
- * (Workday), emitted verbatim after `COMPANY_NAME` is declared. Exported so the
- * generator suite can evaluate exactly the code the plugins carry.
+ * (`perPostingCompanyName`), emitted verbatim after `COMPANY_NAME` is declared.
+ * Exported so the generator suite can evaluate exactly the code a plugin would
+ * carry. No backend emits them since Spec 1736 T13 (Workday went board-level).
  */
 export function companyNameHelpers(): string {
   const words = LEGAL_FORM_WORDS.map((w) => `  '${w}',`).join('\n');
@@ -606,8 +615,8 @@ function coreCompanyName(name: string): string {
 }
 
 /**
- * Company name for a delegated posting (Spec 1735 §4.2.1). Workday reports each
- * posting's hiring organisation; on a multi-business tenant that names the
+ * Company name for a delegated posting (Spec 1735 §4.2.1). The adapter reports
+ * each posting's own organisation; on a multi-business tenant that names the
  * business unit, which is kept. Only what is not a real organisation name is
  * re-stamped: empty, the tenant token the adapter falls back to, or
  * COMPANY_NAME in legal form (e.g. "<name>, Inc.").
@@ -981,6 +990,48 @@ export function testFile(d: AtsDelegateDescriptor): string {
   });
 `
     : '';
+  // Workday returns postings past its detail cap at list level (Spec 1736 §8):
+  // the same posting must carry the same company name either way (T13).
+  const listLevelBlock =
+    spec.siteKey === 'WORKDAY'
+      ? `
+  describe('enriched and list-level postings (Spec 1736 §8, T13)', () => {
+    const saved = process.env.WORKDAY_MAX_DETAIL_FETCHES;
+
+    afterEach(() => {
+      if (saved === undefined) delete process.env.WORKDAY_MAX_DETAIL_FETCHES;
+      else process.env.WORKDAY_MAX_DETAIL_FETCHES = saved;
+    });
+
+    it('names both alike, whatever organisation a detail response names', async () => {
+      // One detail request per board: its first posting is enriched, the rest are list level.
+      process.env.WORKDAY_MAX_DETAIL_FETCHES = '1';
+      const responses = clone(FIXTURE.responses) as Record<string, any>;
+      for (const url of Object.keys(responses)) {
+        if (responses[url]?.jobPostingInfo) {
+          responses[url].hiringOrganization = { name: 'Example Business Unit LLC' };
+        }
+      }
+      const serveEdited = (url: string): Promise<{ data: unknown }> => {
+        const key = String(url).split('?')[0];
+        return Object.prototype.hasOwnProperty.call(responses, key)
+          ? Promise.resolve({ data: clone(responses[key]) })
+          : notFound(url);
+      };
+      mockGet.mockImplementation(serveEdited);
+      mockPost.mockImplementation(serveEdited);
+
+      const service = new ${d.serviceName}(registryWith());
+      const result = await service.scrape({ siteType: [Site.${d.enumKey}], resultsWanted: 100 } as ScraperInputDto);
+
+      expect(result.jobs.map((j) => j.id)).toEqual(FIXTURE.expected.map((e) => e.id));
+      expect(result.jobs.filter((j) => j.description)).toHaveLength(FIXTURE.boards.length);
+      expect(result.jobs.some((j) => !j.description)).toBe(true);
+      expect(result.jobs.map((j) => j.companyName)).toEqual(result.jobs.map(() => COMPANY_NAME));
+    });
+  });
+`
+      : '';
   const credentialBlock =
     spec.siteKey === 'GREENHOUSE'
       ? `
@@ -1324,7 +1375,7 @@ ${reasonAssert}    });
       expect(result.diagnostics?.reason).not.toBe('ok');
     });
   });
-${companyNameBlock}${credentialBlock}${explicitBlock}${multiBlock}});
+${companyNameBlock}${listLevelBlock}${credentialBlock}${explicitBlock}${multiBlock}});
 `;
 }
 

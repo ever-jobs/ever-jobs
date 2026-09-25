@@ -233,20 +233,32 @@ describe('serviceFile — credentials, company name, explicit-only', () => {
     }
   });
 
-  it('keeps a Workday business-unit name, but re-stamps board-level names', () => {
-    expect(BACKENDS.workday.perPostingCompanyName).toBe(true);
-    const wdSrc = serviceFile(wd);
-    expect(wdSrc).toContain("job.companyName = companyNameFor(job.companyName, board.companySlug.split(':')[0]);");
-    expect(wdSrc).toContain(companyNameHelpers());
-    // The helpers read COMPANY_NAME, so they must come after it.
-    expect(wdSrc.indexOf('function companyNameFor(')).toBeGreaterThan(wdSrc.indexOf('const COMPANY_NAME = '));
-
-    for (const backend of ['greenhouse', 'lever', 'ashby', 'smartrecruiters', 'icims']) {
+  it('re-stamps the company name for every backend, Workday included (Spec 1736 T13)', () => {
+    // Workday's hiring organisation is in the detail response only, so past the
+    // detail cap a posting would switch between a business unit and the
+    // display name. Every backend is board-level.
+    for (const backend of ['workday', 'greenhouse', 'lever', 'ashby', 'smartrecruiters', 'icims']) {
       expect(BACKENDS[backend].perPostingCompanyName).toBeFalsy();
     }
-    const ghSrc = serviceFile(gh);
-    expect(ghSrc).toContain('job.companyName = COMPANY_NAME;');
-    expect(ghSrc).not.toContain('companyNameFor');
+    for (const d of [wd, gh]) {
+      const src = serviceFile(d);
+      expect(src).toContain('job.companyName = COMPANY_NAME;');
+      expect(src).not.toContain('companyNameFor');
+    }
+  });
+
+  it('still emits the per-posting helpers for a backend that opts in', () => {
+    const saved = BACKENDS.workday.perPostingCompanyName;
+    BACKENDS.workday.perPostingCompanyName = true;
+    try {
+      const wdSrc = serviceFile(wd);
+      expect(wdSrc).toContain("job.companyName = companyNameFor(job.companyName, board.companySlug.split(':')[0]);");
+      expect(wdSrc).toContain(companyNameHelpers());
+      // The helpers read COMPANY_NAME, so they must come after it.
+      expect(wdSrc.indexOf('function companyNameFor(')).toBeGreaterThan(wdSrc.indexOf('const COMPANY_NAME = '));
+    } finally {
+      BACKENDS.workday.perPostingCompanyName = saved;
+    }
   });
 
   it('emits the explicit-only gate only for a flagged seed', () => {
@@ -419,10 +431,15 @@ describe('testFile', () => {
     for (const t of [wdTest, ghTest, icTest]) {
       expect(t).toContain("it('never forwards the caller\\'s credentials to the board (Spec 1735 §4.5)'");
     }
-    // Workday only: business-unit names, incl. through the real adapter.
-    expect(wdTest).toContain("describe('company name (Spec 1735 §4.2.1)'");
-    expect(wdTest).toContain("it('keeps a business unit through the real Workday adapter'");
-    expect(ghTest).not.toContain("describe('company name");
+    // Company names are board-level everywhere (Spec 1736 T13): no business-unit block.
+    for (const t of [wdTest, ghTest, icTest]) {
+      expect(t).not.toContain("describe('company name");
+    }
+    // Workday only: enriched and list-level postings named alike through the real adapter.
+    expect(wdTest).toContain("describe('enriched and list-level postings (Spec 1736 §8, T13)'");
+    expect(wdTest).toContain("process.env.WORKDAY_MAX_DETAIL_FETCHES = '1';");
+    expect(ghTest).not.toContain('WORKDAY_MAX_DETAIL_FETCHES');
+    expect(icTest).not.toContain('WORKDAY_MAX_DETAIL_FETCHES');
     // Greenhouse only: GREENHOUSE_API_KEY must not reach Harvest.
     expect(ghTest).toContain("it('requests only its own public board with GREENHOUSE_API_KEY set'");
     expect(wdTest).not.toContain('GREENHOUSE_API_KEY');

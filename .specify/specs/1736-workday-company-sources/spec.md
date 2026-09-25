@@ -7,7 +7,7 @@
 | Status | implemented |
 | Owner | agent (lane ej-sources) |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-25 (§8: detail cap and time budget, T11) |
+| Last updated | 2026-09-25 (§8: detail cap and time budget, T11; §8.1: one identity per posting, T13) |
 | Related specs | 1735 (pipeline), 5004 (Workday detail enrichment), 5084 (Workday pagination guard), 5025 (Workday remote locations), 1737 (quant firms) |
 
 ## 1. Problem statement
@@ -63,10 +63,12 @@ plugin (Visa) delegates to two boards, early careers first.
 - Every caller input except `auth` passes through (Spec 1735 §4.5), so list
   mode (no keyword) returns the board's newest postings and keyword mode
   returns Workday's own keyword matches, up to `resultsWanted` per plugin.
-- `companyName`: a posting's own Workday hiring organisation is kept when it
-  names a business unit (RTX → Collins Aerospace, Pratt & Whitney, Raytheon);
-  empty, tenant-token and legal-form names are re-stamped to the display name
-  (Spec 1735 §4.2.1).
+- `companyName`: always the plugin's display name (T13, Spec 1735 §4.2.1).
+  The adapter names every posting by its tenant, enriched or not, because the
+  Workday hiring organisation (which on RTX's tenant names Collins Aerospace,
+  Pratt & Whitney or Raytheon) is in the detail response only and past the
+  detail cap most postings have none (§8.1). The first review round (T9) kept
+  a business-unit name; T13 supersedes it.
 
 ## 5. Verified boards
 
@@ -161,9 +163,9 @@ Workday adapter** with mocked HTTP serving the recorded listings:
 - Visa only: boards in order with the remaining budget, stop once filled,
   cross-board de-duplication, partial outage keeps the healthy board's jobs.
 - review follow-ups (Spec 1735 §4.2.1, §4.5): a caller's `auth` is never
-  forwarded; a posting whose Workday hiring organisation names a business
-  unit keeps that name through the real adapter; empty, tenant-token and
-  legal-form names read as the display name.
+  forwarded; with `WORKDAY_MAX_DETAIL_FETCHES=1` and a detail response naming
+  a business unit, every posting — the enriched first one per board and the
+  list-level rest — reads as the display name through the real adapter (T13).
 
 The adapter suite (`source-ats-workday`) pins the politeness contract: never
 more than one detail request in flight, a paced sleep before each detail
@@ -239,9 +241,9 @@ the detail's `externalUrl`), location from `locationsText` (a bare
 "N Locations" count dropped), `datePosted` from `postedOn`, `department`
 from the subtitles, `isRemote` / `workFromHomeType` from the row's
 `remoteType` and location, and the requisition id. It has no description,
-compensation, emails, employment type or hiring organisation; its
-`companyName` is the tenant token, which the company plugins re-stamp to the
-display name (Spec 1735 §4.2.1).
+compensation, emails or employment type. Its `companyName` is the tenant
+token, the same as an enriched posting's (§8.1), which the company plugins
+re-stamp to the display name (Spec 1735 §4.2.1).
 
 **Ids.** Without a detail response, `atsId` falls back to the search row's
 requisition id (`workdayListingRequisitionId`: the first `bulletFields`
@@ -285,3 +287,32 @@ already filled `resultsWanted`.
 **Rollback.** Revert the T11 commit, or set `WORKDAY_MAX_DETAIL_FETCHES` to at
 least `resultsWanted` and `WORKDAY_SCRAPE_TIME_BUDGET_MS=0` for the pre-T11
 request pattern (the id and URL fallbacks stay).
+
+### 8.1 One posting, one identity — enriched or list level (review round 2, T13)
+
+**Problem.** Past the detail cap a posting is built from its search row;
+inside it, from the detail response. Which one a posting gets changes from
+one search to the next (a posting is enriched while it is among a board's
+newest 50 and returned at list level once newer postings push it down), so
+every field the dedup key reads — title, company, location (`canonicalKey`,
+Spec 003) — must come out the same either way, or crossing the cap mints a
+second record.
+
+**Company.** `companyName` is the tenant token for every posting. The
+detail's `hiringOrganization.name` is no longer used: it is absent at list
+level, and it made the same posting read `ModernaTX, Inc.` (enriched) and
+`Moderna` (list level, after the plugin's re-stamp), or `Collins Aerospace`
+and `RTX`. The company plugins re-stamp the tenant to their display name
+(Spec 1735 §4.2.1). Nothing else carries the business unit.
+
+**Consumers key Workday postings on `id`.** `id` (`wd-{tenant}-{reqId}`, and
+`<key>-{reqId}` after a company plugin's rewrite) and `atsId` are the stable
+identity: the detail's `jobReqId` and the search row's requisition id are the
+same value (§8, "Ids"). The fields above are aligned so dedup by content
+agrees, but a list-level posting has less to go on than an enriched one and
+can still differ where the list row cannot know what the detail says — a
+multi-location posting ("2 Locations" at list level), a requisition country
+the label does not name, or a `datePosted` from the relative `postedOn`
+label versus the detail's absolute `startDate`. A consumer that stores
+Workday postings should upsert on `id` and let a later enriched copy fill in
+description and compensation.

@@ -373,10 +373,14 @@ export class WorkdayService implements IScraper {
     const title = listing.title;
     if (!title) return null;
     const info = detail?.jobPostingInfo;
-    const hiringOrganizationName = detail?.hiringOrganization?.name;
-    const companyName = hiringOrganizationName?.trim()
-      ? hiringOrganizationName
-      : company;
+    // Board-level on purpose (Spec 1736 T13): `hiringOrganization.name` is in
+    // the detail response only, and past the detail cap most postings of a
+    // large board are built without one. Naming a posting after it made the
+    // same posting switch between a business unit ("Collins Aerospace",
+    // "ModernaTX, Inc.") and the tenant as it crossed the cap, and
+    // `companyName` is part of the dedup key. The company plugins re-stamp the
+    // tenant to their display name.
+    const companyName = company;
 
     // Extract job path for URL construction. The public posting URL is
     // `/{site}{externalPath}` — the shape of the detail response's `externalUrl`.

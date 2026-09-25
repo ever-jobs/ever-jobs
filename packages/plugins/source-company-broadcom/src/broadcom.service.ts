@@ -38,56 +38,6 @@ const BOARDS: ReadonlyArray<{ readonly companySlug: string; readonly atsIdPrefix
   { companySlug: 'broadcom:1:External_Career', atsIdPrefix: 'wd-broadcom-' },
 ];
 
-/** Trailing legal-form words ignored when comparing an organisation name with COMPANY_NAME. */
-const LEGAL_FORM_WORDS: ReadonlySet<string> = new Set([
-  'inc',
-  'incorporated',
-  'llc',
-  'corp',
-  'corporation',
-  'co',
-  'company',
-  'ltd',
-  'limited',
-  'lp',
-  'llp',
-  'plc',
-  'gmbh',
-  'ag',
-  'sa',
-  'nv',
-  'bv',
-]);
-
-/**
- * A company name reduced to its core: lower case, '&' read as 'and',
- * punctuation dropped, no leading 'The', no trailing legal form.
- */
-function coreCompanyName(name: string): string {
-  const words = name
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/[.'\u2019]/g, '')
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
-  while (words.length > 1 && LEGAL_FORM_WORDS.has(words[words.length - 1])) words.pop();
-  while (words.length > 1 && words[0] === 'the') words.shift();
-  return words.join(' ');
-}
-
-/**
- * Company name for a delegated posting (Spec 1735 §4.2.1). Workday reports each
- * posting's hiring organisation; on a multi-business tenant that names the
- * business unit, which is kept. Only what is not a real organisation name is
- * re-stamped: empty, the tenant token the adapter falls back to, or
- * COMPANY_NAME in legal form (e.g. "<name>, Inc.").
- */
-function companyNameFor(sourceName: string | null | undefined, tenant: string): string {
-  const name = sourceName?.trim();
-  if (!name || name.toLowerCase() === tenant.toLowerCase()) return COMPANY_NAME;
-  return coreCompanyName(name) === coreCompanyName(COMPANY_NAME) ? COMPANY_NAME : name;
-}
-
 @SourcePlugin({
   site: Site.BROADCOM,
   name: COMPANY_NAME,
@@ -153,7 +103,7 @@ export class BroadcomService implements IScraper {
 
       for (const job of result.jobs ?? []) {
         job.site = Site.BROADCOM;
-        job.companyName = companyNameFor(job.companyName, board.companySlug.split(':')[0]);
+        job.companyName = COMPANY_NAME;
         if (job.id?.startsWith(board.atsIdPrefix)) {
           job.id = ID_PREFIX + job.id.slice(board.atsIdPrefix.length);
         }

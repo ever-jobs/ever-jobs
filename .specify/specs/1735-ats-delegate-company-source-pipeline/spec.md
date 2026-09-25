@@ -7,7 +7,7 @@
 | Status | implemented |
 | Owner | agent (lane ej-sources) |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-25 (review follow-ups: §3.1, §4.2, §4.5–§4.7; §4.6 per-scrape bound, Spec 1736 T11) |
+| Last updated | 2026-09-25 (review follow-ups: §3.1, §4.2, §4.5–§4.7; §4.6 per-scrape bound, Spec 1736 T11; §4.2.1 Workday company name board-level, Spec 1736 T13) |
 | Related specs | 1736 (Workday company sources), 1737 (quant/trading-firm company sources), 5004 (Workday detail enrichment), 5084 (Workday pagination guard), 1375 / 1677 (older per-backend pipelines), 1681 / 1682 (not_registered diagnostics), 1690 / 1691 (crawl policy: per-host limits, robots.txt, User-Agent) |
 
 ## 1. Problem statement
@@ -149,21 +149,35 @@ reaches the intern / new-grad board before the (much larger) main board.
 
 #### 4.2.1 Company name
 
-- **Greenhouse, Lever, Ashby, SmartRecruiters, iCIMS**: the adapter's
-  company name is a board-level label (or the slug), one value per plugin, so
-  `companyName` is always re-stamped to the plugin's display name.
-- **Workday**: the adapter reads each posting's own
-  `hiringOrganization.name`, which on a shared multi-business tenant names the
-  business unit (RTX's `globalhr` tenant carries Collins Aerospace, Pratt &
-  Whitney and Raytheon; J&J, Cox, Warner Bros. Discovery and GE Aerospace are
-  similar). That name is **kept**. The plugin re-stamps its display name only
-  when the adapter's name is empty, is the tenant token the adapter falls back
-  to, or is the display name in legal form — equal after lower-casing,
-  `&` → `and`, dropping punctuation, a leading `The` and trailing legal-form
-  words (`Inc`, `Incorporated`, `LLC`, `Corp`, `Corporation`, `Co`, `Company`,
-  `Ltd`, `Limited`, `LP`, `LLP`, `PLC`, `GmbH`, `AG`, `SA`, `NV`, `BV`). So
-  `Salesforce, Inc.` reads `Salesforce`, while `Collins Aerospace` and
-  `Johnson & Johnson Innovative Medicine` stay as the source names them.
+**Every backend, Workday included (since Spec 1736 T13):** `companyName` is
+always re-stamped to the plugin's display name. Greenhouse, Lever, Ashby,
+SmartRecruiters and iCIMS report a board-level label (or the slug), one value
+per plugin.
+
+**Workday — why the business unit is no longer kept.** The first review
+round kept a posting's own `hiringOrganization.name`, which on a shared
+multi-business tenant names the business unit (RTX's `globalhr` tenant
+carries Collins Aerospace, Pratt & Whitney and Raytheon; J&J, Cox, Warner
+Bros. Discovery and GE Aerospace are similar), and re-stamped only empty,
+tenant-token and legal-form names. That name exists in the Workday **detail**
+response only. Since the per-scrape detail cap (Spec 1736 §8, default 50),
+most postings of a large board are returned at list level, without one — so
+the same posting was named `Collins Aerospace` when it was among the first 50
+and `RTX` once newer postings pushed it past the cap, and even single-business
+tenants flipped (Moderna's detail names `ModernaTX, Inc.`, which is not
+`Moderna` in legal form). `companyName` feeds the dedup key, so each flip
+minted a second record. The Workday adapter now names every posting by its
+tenant, enriched or not (Spec 1736 §8.1), and the plugins re-stamp it like
+every other backend. The business unit is not carried in another field.
+
+The generator keeps the per-posting rule behind
+`BackendSpec.perPostingCompanyName` for a backend whose adapter reports the
+organisation for every posting it returns; no backend sets it. Under that
+rule the plugin re-stamps only empty, tenant-token and legal-form names
+(equal to the display name after lower-casing, `&` → `and`, dropping
+punctuation, a leading `The` and trailing legal-form words `Inc`,
+`Incorporated`, `LLC`, `Corp`, `Corporation`, `Co`, `Company`, `Ltd`,
+`Limited`, `LP`, `LLP`, `PLC`, `GmbH`, `AG`, `SA`, `NV`, `BV`).
 
 ### 4.3 Tags (company-tier hook)
 
@@ -247,10 +261,10 @@ iCIMS host disallows all crawlers (§3.1).
 | `scripts/__tests__/probe-ats-delegate-company-source.spec.ts` | request shapes per backend (listing only, no Greenhouse `content`), extraction and totals per backend, gate, variant planning (dedupe, cap 3), pacer spacing, serial execution, stop-at-first-verified, attempt outcomes, honest UA |
 | `scripts/__tests__/scaffold-ats-delegate-company-source.spec.ts` | refusal of unverified boards, mixed backends, bad names/domains; emitted files (none under `.specify/`); registry delegation (no peer import); board order and id prefixes; tags; fixture URLs and derived ids per backend; multi-board test block; verification table |
 | `scripts/__tests__/wire-company-source-tail.spec.ts` | tail placement in all four files, BOM preserved, `$'` preserved, pure-addition property, idempotency, collision failure |
-| `scripts/__tests__/scaffold-ats-delegate-company-source.spec.ts` (review follow-ups) | `auth: undefined` in every backend's delegation; the Workday company-name rule (emitted for Workday only, evaluated on legal-form, tenant, empty and business-unit names); the explicit-only gate emitted only for flagged seeds; the Greenhouse env-key regression block emitted only for Greenhouse plugins |
+| `scripts/__tests__/scaffold-ats-delegate-company-source.spec.ts` (review follow-ups) | `auth: undefined` in every backend's delegation; the company name re-stamped for every backend, Workday included (Spec 1736 T13), and the dormant per-posting rule still emitted for a backend that opts in (evaluated on legal-form, tenant, empty and business-unit names); the Workday-only enriched/list-level block; the explicit-only gate emitted only for flagged seeds; the Greenhouse env-key regression block emitted only for Greenhouse plugins |
 | `packages/plugins/source-ats-workday/__tests__/workday.service.spec.ts` | never more than 1 detail request in flight, a paced sleep before each detail request, `searchText` = trimmed `searchTerm`, `''` for absent / null / whitespace; the per-scrape detail cap and time budget (Spec 1736 §6, §8) |
 | `packages/plugins/source-ats-greenhouse/__tests__/greenhouse.service.spec.ts` | env Harvest key ignored unless `GREENHOUSE_HARVEST_BOARD` names the board (public board URL only), used when it does, per-request key still honoured |
-| each generated `source-company-<key>` suite | see Specs 1736 / 1737; plus: a caller's `auth` is never forwarded; Workday plugins keep a posting's business-unit name through the real adapter; Greenhouse plugins request only their own public board with `GREENHOUSE_API_KEY` set; SIG makes no request in the default fan-out |
+| each generated `source-company-<key>` suite | see Specs 1736 / 1737; plus: a caller's `auth` is never forwarded; Workday plugins name enriched and list-level postings alike (`WORKDAY_MAX_DETAIL_FETCHES=1`, a detail naming a business unit, real adapter); Greenhouse plugins request only their own public board with `GREENHOUSE_API_KEY` set; SIG makes no request in the default fan-out |
 
 ## 6. Rollback
 
