@@ -22,6 +22,10 @@ import { WorkdayModule } from '../src/workday.module';
 import { WorkdayService } from '../src/workday.service';
 import {
   ATS_COUNTRY_OVERLAY_ENV_VAR,
+  DEFAULT_WORKDAY_MAX_DETAIL_FETCHES,
+  DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS,
+  WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR,
+  WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR,
   readAtsCountryOverlay,
 } from '../src/workday.constants';
 
@@ -144,8 +148,10 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(job?.title).toBe('Software Engineer');
       expect(job?.companyName).toBe('tesla');
       expect(job?.site).toBe(Site.WORKDAY);
+      // No detail response here, so this is the list-level URL. It carries the
+      // career-site segment, like the detail's `externalUrl` (Spec 1736 T11).
       expect(job?.jobUrl).toBe(
-        'https://tesla.wd5.myworkdayjobs.com/job/Austin-TX/Software-Engineer_R-101/12345',
+        'https://tesla.wd5.myworkdayjobs.com/Tesla/job/Austin-TX/Software-Engineer_R-101/12345',
       );
       expect(job?.location?.city).toBe('Austin');
       expect(job?.location?.state).toBe('TX');
@@ -772,6 +778,265 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(result.jobs).toEqual([]);
       expect(result.diagnostics?.reason).toBeDefined();
       expect(mockGet).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Spec 1736 T11 (review finding F8) — one board must not cost minutes. Detail
+   * enrichment is sequential and paced, so it is capped per scrape
+   * (WORKDAY_MAX_DETAIL_FETCHES, default 50) and bounded in time together with
+   * the listing (WORKDAY_SCRAPE_TIME_BUDGET_MS, default 90 s). Postings past
+   * either limit are still returned, at list level.
+   */
+  describe('detail cap and time budget — Spec 1736 T11', () => {
+    const T0 = 1_750_000_000_000;
+    let clock = T0;
+
+    /** `count` distinct postings with detail paths, requisition id in bulletFields. */
+    function rolesPage(count: number, startIndex = 0, total: number = count) {
+      return {
+        total,
+        jobPostings: Array.from({ length: count }, (_, i) => ({
+          title: `Role ${startIndex + i}`,
+          externalPath: `/job/Rockville-MD/Role-${startIndex + i}_JR${1000 + startIndex + i}`,
+          locationsText: 'Rockville, MD',
+          postedOn: 'Posted Today',
+          bulletFields: ['Spotlight Job', `JR${1000 + startIndex + i}`],
+        })),
+      };
+    }
+
+    /** A detail response for the posting at `path`, with the matching jobReqId. */
+    function detailFor(path: string) {
+      const reqId = path.split('_').pop() as string;
+      return {
+        data: {
+          hiringOrganization: { name: 'Acme Corp' },
+          jobPostingInfo: {
+            jobDescription: `<p>About ${reqId}.</p>`,
+            jobReqId: reqId,
+            externalUrl: `https://acme.wd5.myworkdayjobs.com/Careers${path}`,
+          },
+        },
+      };
+    }
+
+    function servePathDetails(advanceMs = 0) {
+      mockGet.mockImplementation(async (url: string) => {
+        clock += advanceMs;
+        return detailFor(url.slice(url.indexOf('/job/')));
+      });
+    }
+
+    function scrape(extra: Partial<ScraperInputDto> = {}) {
+      return new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'acme:5:Careers',
+        ...extra,
+      } as ScraperInputDto);
+    }
+
+    beforeEach(() => {
+      clock = T0;
+      jest.spyOn(Date, 'now').mockImplementation(() => clock);
+      delete process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR];
+      delete process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR];
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+      delete process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR];
+      delete process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR];
+    });
+
+    it('enriches at most 50 postings by default and returns the rest at list level', async () => {
+      mockPost
+        .mockResolvedValueOnce({ data: rolesPage(20, 0, 55) })
+        .mockResolvedValueOnce({ data: rolesPage(20, 20, 55) })
+        .mockResolvedValueOnce({ data: rolesPage(15, 40, 55) });
+      servePathDetails();
+
+      const result = await scrape({ resultsWanted: 100 });
+
+      expect(DEFAULT_WORKDAY_MAX_DETAIL_FETCHES).toBe(50);
+      expect(result.jobs).toHaveLength(55);
+      expect(mockGet).toHaveBeenCalledTimes(50);
+      // The first 50 in list order are the enriched ones.
+      expect(result.jobs.slice(0, 50).every((job) => job.description?.startsWith('About JR'))).toBe(true);
+      expect(result.jobs.slice(50).map((job) => job.description)).toEqual([null, null, null, null, null]);
+      // The cap is by design, not a failure: no diagnostic.
+      expect(result.diagnostics).toBeUndefined();
+    });
+
+    it('honours WORKDAY_MAX_DETAIL_FETCHES and maps list-level postings fully', async () => {
+      process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR] = '2';
+      mockPost.mockResolvedValueOnce({ data: rolesPage(4) });
+      servePathDetails();
+
+      const result = await scrape();
+
+      expect(mockGet).toHaveBeenCalledTimes(2);
+      expect(result.jobs).toHaveLength(4);
+      const [enriched, , listLevel] = result.jobs;
+      expect(enriched.description).toBe('About JR1000.');
+      expect(enriched.companyName).toBe('Acme Corp');
+      expect(enriched.jobUrl).toBe('https://acme.wd5.myworkdayjobs.com/Careers/job/Rockville-MD/Role-0_JR1000');
+      expect(listLevel.description).toBeNull();
+      expect(listLevel.compensation).toBeNull();
+      expect(listLevel.companyName).toBe('acme');
+      expect(listLevel.title).toBe('Role 2');
+      expect(listLevel.id).toBe('wd-acme-JR1002');
+      expect(listLevel.atsId).toBe('JR1002');
+      // The same URL shape as an enriched posting's externalUrl.
+      expect(listLevel.jobUrl).toBe('https://acme.wd5.myworkdayjobs.com/Careers/job/Rockville-MD/Role-2_JR1002');
+      expect(listLevel.location?.city).toBe('Rockville');
+      expect(listLevel.location?.state).toBe('MD');
+      expect(listLevel.datePosted).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('gives a posting the same id whether or not it was enriched', async () => {
+      mockPost.mockResolvedValueOnce({ data: rolesPage(3) });
+      servePathDetails();
+      const enriched = await scrape();
+
+      process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR] = '0';
+      mockPost.mockResolvedValueOnce({ data: rolesPage(3) });
+      const listLevel = await scrape();
+
+      expect(enriched.jobs.map((job) => job.description)).not.toContain(null);
+      expect(listLevel.jobs.map((job) => job.description)).toEqual([null, null, null]);
+      expect(listLevel.jobs.map((job) => job.id)).toEqual(enriched.jobs.map((job) => job.id));
+      expect(listLevel.jobs.map((job) => job.id)).toEqual(['wd-acme-JR1000', 'wd-acme-JR1001', 'wd-acme-JR1002']);
+    });
+
+    it('makes no detail request and no detail pause with WORKDAY_MAX_DETAIL_FETCHES=0', async () => {
+      process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR] = '0';
+      mockPost.mockResolvedValueOnce({ data: rolesPage(5) });
+      const { randomSleep } = jest.requireMock('@ever-jobs/common') as { randomSleep: jest.Mock };
+      randomSleep.mockClear();
+
+      const result = await scrape();
+
+      expect(result.jobs).toHaveLength(5);
+      expect(mockGet).not.toHaveBeenCalled();
+      expect(randomSleep).not.toHaveBeenCalled();
+    });
+
+    it('does not spend the cap on listings without a detail path', async () => {
+      process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR] = '2';
+      const page = rolesPage(3);
+      page.jobPostings.splice(0, 0, { title: 'No Path A', locationsText: 'Rockville, MD' } as never);
+      page.jobPostings.splice(2, 0, { title: 'No Path B', locationsText: 'Rockville, MD' } as never);
+      page.total = page.jobPostings.length;
+      mockPost.mockResolvedValueOnce({ data: page });
+      servePathDetails();
+
+      const result = await scrape();
+
+      expect(result.jobs.map((job) => job.title)).toEqual(['No Path A', 'Role 0', 'No Path B', 'Role 1', 'Role 2']);
+      expect(mockGet.mock.calls.map(([url]) => String(url).split('/').pop())).toEqual([
+        'Role-0_JR1000',
+        'Role-1_JR1001',
+      ]);
+      expect(result.jobs.map((job) => job.description !== null)).toEqual([false, true, false, true, false]);
+    });
+
+    it('stops enriching once the time budget is spent, keeping every posting', async () => {
+      process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR] = '2500';
+      mockPost.mockResolvedValueOnce({ data: rolesPage(6) });
+      // Each detail request takes 1 s: requests start at +0, +1 s and +2 s; the
+      // fourth would start at +3 s, past the 2.5 s budget.
+      servePathDetails(1000);
+
+      const result = await scrape();
+
+      expect(mockGet).toHaveBeenCalledTimes(3);
+      expect(result.jobs).toHaveLength(6);
+      expect(result.jobs.map((job) => job.description !== null)).toEqual([true, true, true, false, false, false]);
+      // Every posting is returned: no diagnostic.
+      expect(result.diagnostics).toBeUndefined();
+    });
+
+    it('stops paging once the time budget is spent and reports a partial result', async () => {
+      process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR] = '1500';
+      let served = 0;
+      mockPost.mockImplementation(async () => {
+        clock += 1000;
+        return { data: rolesPage(20, 20 * served++, 100) };
+      });
+      servePathDetails();
+
+      const result = await scrape({ resultsWanted: 100 });
+
+      // Page 1 ends at +1 s (within budget), page 2 at +2 s (spent): no page 3.
+      expect(mockPost).toHaveBeenCalledTimes(2);
+      expect(result.jobs).toHaveLength(40);
+      // Nothing is enriched after the budget is gone.
+      expect(mockGet).not.toHaveBeenCalled();
+      expect(result.jobs.every((job) => job.description === null)).toBe(true);
+      expect(result.diagnostics?.reason).toBe('partial');
+      expect(result.diagnostics?.detail).toContain(`${WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}=1500`);
+      expect(result.diagnostics?.detail).toContain('40 of 100 wanted postings');
+      expect(result.diagnostics?.detail).toContain('board total 100');
+    });
+
+    it('always requests the first listing page, however small the budget', async () => {
+      process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR] = '1';
+      mockPost.mockImplementation(async () => {
+        clock += 1000;
+        return { data: rolesPage(3) };
+      });
+
+      const result = await scrape();
+
+      expect(mockPost).toHaveBeenCalledTimes(1);
+      expect(result.jobs).toHaveLength(3);
+      expect(mockGet).not.toHaveBeenCalled();
+      // The board was listed completely (one short page): not partial.
+      expect(result.diagnostics).toBeUndefined();
+    });
+
+    it('applies no time budget with WORKDAY_SCRAPE_TIME_BUDGET_MS=0', async () => {
+      process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR] = '0';
+      let served = 0;
+      mockPost.mockImplementation(async () => {
+        clock += 10 * 60_000;
+        return { data: rolesPage(20, 20 * served++, 40) };
+      });
+      servePathDetails(10 * 60_000);
+
+      const result = await scrape({ resultsWanted: 40 });
+
+      expect(mockPost).toHaveBeenCalledTimes(2);
+      expect(result.jobs).toHaveLength(40);
+      // Still bounded by the count cap (50), which 40 postings do not reach.
+      expect(mockGet).toHaveBeenCalledTimes(40);
+      expect(result.diagnostics).toBeUndefined();
+    });
+
+    it('defaults the time budget to 90 s', async () => {
+      expect(DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS).toBe(90_000);
+      mockPost.mockResolvedValueOnce({ data: rolesPage(4) });
+      // 30 s per detail request: +0, +30 s and +60 s start; +90 s does not.
+      servePathDetails(30_000);
+
+      const result = await scrape();
+
+      expect(mockGet).toHaveBeenCalledTimes(3);
+      expect(result.jobs).toHaveLength(4);
+    });
+
+    it('does not pause before a listing page that will never be requested', async () => {
+      process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR] = '0';
+      mockPost.mockResolvedValueOnce({ data: rolesPage(20, 0, 100) });
+      const { randomSleep } = jest.requireMock('@ever-jobs/common') as { randomSleep: jest.Mock };
+      randomSleep.mockClear();
+
+      const result = await scrape({ resultsWanted: 20 });
+
+      expect(result.jobs).toHaveLength(20);
+      expect(mockPost).toHaveBeenCalledTimes(1);
+      expect(randomSleep).not.toHaveBeenCalled();
     });
   });
 

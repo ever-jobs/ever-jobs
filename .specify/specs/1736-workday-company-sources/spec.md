@@ -7,7 +7,7 @@
 | Status | implemented |
 | Owner | agent (lane ej-sources) |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-25 |
+| Last updated | 2026-09-25 (§8: detail cap and time budget, T11) |
 | Related specs | 1735 (pipeline), 5004 (Workday detail enrichment), 5084 (Workday pagination guard), 5025 (Workday remote locations), 1737 (quant firms) |
 
 ## 1. Problem statement
@@ -31,11 +31,12 @@ plugin (Visa) delegates to two boards, early careers first.
 
 ## 3. Non-goals
 
-- No Workday adapter change beyond the review follow-ups (T6, T8; Spec 1735
-  §4.6): the keyword now reaches Workday as `searchText` (`''` in list mode)
-  and detail enrichment is sequential (1 in flight, 250–500 ms apart).
-  Pagination (20 per page, 1–2 s between pages) and one detail request per
-  enriched posting are inherited unchanged — see Q-107 for the cost.
+- No Workday adapter change beyond the review follow-ups (T6, T8, T11; Spec
+  1735 §4.6): the keyword now reaches Workday as `searchText` (`''` in list
+  mode), detail enrichment is sequential (1 in flight, 250–500 ms apart), and
+  each scrape is bounded by a detail cap and a time budget (§8). Pagination
+  (20 per page, 1–2 s between pages) and one detail request per enriched
+  posting are inherited — see Q-107 for the cost.
 - Companies whose careers are not on Workday are out of scope here (Q-109):
   Dell (Workday site answers HTTP 422; careers appear to have moved to
   Oracle HCM), Qualcomm (left Workday; its old site answers 0
@@ -167,6 +168,18 @@ Workday adapter** with mocked HTTP serving the recorded listings:
 The adapter suite (`source-ats-workday`) pins the politeness contract: never
 more than one detail request in flight, a paced sleep before each detail
 request, and `searchText` = the trimmed `searchTerm` (`''` in list mode).
+It also pins the per-scrape bounds of §8 (T11): at most 50 detail requests by
+default and `WORKDAY_MAX_DETAIL_FETCHES` honoured (`0` = none, no pause),
+listings without a detail path never spending the cap, enrichment stopping
+once `WORKDAY_SCRAPE_TIME_BUDGET_MS` is spent (every posting still returned,
+no diagnostic), paging stopping on a spent budget with a `partial`
+diagnostic, the first page always requested, `0` disabling the budget, the
+90 s default, no pause before a page that is never requested, full list-level
+mapping (URL with the career site, location, date, requisition id) and the
+same id for a posting whether or not it was enriched. A fake clock
+(`Date.now`) drives the budget cases; each case except "`0` disables the
+budget" fails against the pre-T11 adapter. The env readers and the list-row
+requisition id have their own cases in `workday.constants.spec.ts`.
 
 ## 7. Release and deploy ordering (merge gate)
 
@@ -197,5 +210,78 @@ Fan-out order already matters: the fan-out deadline applies today (120 s by
 default, `EVER_JOBS_SEARCH_DEADLINE_MS`; contract C4 renames it), and these
 plugins are registered at the tail, so in a default fan-out that overruns it
 they are the first sources skipped or abandoned mid-flight. Sequential detail
-enrichment (T8) makes each Workday board slower, so a full sync that needs
-them should select them explicitly or raise the deadline (Q-107 follow-up 2).
+enrichment (T8) makes each Workday board slower (bounded per board since T11,
+§8), so a full sync that needs them should select them explicitly or raise the
+deadline (Q-107 follow-up 2).
+
+## 8. Detail cap and time budget (review follow-up F8, 2026-09-25 — T11)
+
+**Problem.** Detail enrichment is sequential (T8): one request in flight after
+a 250–500 ms pause, so about 0.5–1 s per posting. One board at
+`resultsWanted = 1000` (the per-source ceiling the list-mode lane proposes)
+spent ~10 minutes enriching, on
+top of ~50 listing pages at 1–2 s apart. The plugin contract carries no
+fan-out deadline (no `AbortSignal`; Spec 5026 T11), so when the fan-out
+deadline (120 s) abandoned such a board, its scrape kept running, detached,
+until it had fetched every detail.
+
+**Contract (`source-ats-workday`).** Both settings are read on every scrape.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `WORKDAY_MAX_DETAIL_FETCHES` | `50` | Detail requests per scrape (per board). The first N postings that have a detail path, in list order (newest first in list mode, Workday's best matches for a keyword), are enriched. `0` = no detail request. Unset, blank or not a non-negative integer → `50`. There is no "unlimited" value: set it at least as large as `resultsWanted`. |
+| `WORKDAY_SCRAPE_TIME_BUDGET_MS` | `90000` | Wall-clock budget per scrape, from the start of `scrape()`, covering listing and enrichment. Once spent, no further listing page and no further detail request starts (overrun: at most one pause and the request in flight). The first listing page is always requested. `0` or negative = no budget (the `EVER_JOBS_SEARCH_DEADLINE_MS` convention); not an integer → `90000`. |
+
+**List-level postings.** A posting past either limit is still returned, built
+from its search row: title, `jobUrl` =
+`https://{tenant}.wd{n}.myworkdayjobs.com/{site}{externalPath}` (the shape of
+the detail's `externalUrl`), location from `locationsText` (a bare
+"N Locations" count dropped), `datePosted` from `postedOn`, `department`
+from the subtitles, `isRemote` / `workFromHomeType` from the row's
+`remoteType` and location, and the requisition id. It has no description,
+compensation, emails, employment type or hiring organisation; its
+`companyName` is the tenant token, which the company plugins re-stamp to the
+display name (Spec 1735 §4.2.1).
+
+**Ids.** Without a detail response, `atsId` falls back to the search row's
+requisition id (`workdayListingRequisitionId`: the first `bulletFields`
+entry that is a single token containing a digit, else the detail path's
+trailing `_<id>` when it contains a digit — the rule the Spec 1735 verifier
+recorded fixtures with) before the whole `externalPath`. Order: detail
+`jobReqId` → numeric path segment (unchanged) → list requisition id →
+`externalPath`. A posting therefore keeps one id — `wd-{tenant}-{reqId}`, and
+`<key>-{reqId}` after a company plugin's rewrite — whether or not it was
+enriched, so crossing the cap between two searches does not mint a second
+record. (Before, a posting without a detail response was keyed on its whole
+path, e.g. `wd-acme-/job/Austin-TX/Engineer_R123`.)
+
+**Diagnostics.** The cap, and a budget spent during enrichment, return every
+listed posting, so they set no diagnostic; they are logged (`log` for the
+cap, `warn` for the budget). A budget spent while **listing** returns fewer
+postings than `resultsWanted` while the board has more, so the scrape
+resolves with `ScrapeDiagnostics('partial', 'time budget
+WORKDAY_SCRAPE_TIME_BUDGET_MS=<ms> spent while listing: <n> of <wanted> wanted
+postings (board total <t>)')`. The fan-out reports it as `partial` and the
+company plugins pass it through as actionable.
+
+**Bound per board.** With the defaults a scrape stops starting work after
+90 s (listing 1,000 postings alone takes ~75–125 s), so a board abandoned by
+the fan-out stops within ~90 s of its start instead of running on for
+minutes. Multi-board plugins (Visa) scrape their boards one after another,
+each with its own budget.
+
+**Tuning.** A full sync that wants every description sets
+`WORKDAY_MAX_DETAIL_FETCHES` to at least `resultsWanted`, raises (or
+disables) `WORKDAY_SCRAPE_TIME_BUDGET_MS` and the fan-out deadline together,
+and selects the boards explicitly (§7). Keep the Workday budget below the
+fan-out deadline, or a board is abandoned before it returns.
+
+**Also in this change.** The list-level `jobUrl` now carries the career-site
+segment: before, it was `https://{tenant}.wd{n}.myworkdayjobs.com/job/…`,
+which names no site, and past the cap it would have been the link for most
+postings of a large board. Paging no longer pauses 1–2 s after a page that
+already filled `resultsWanted`.
+
+**Rollback.** Revert the T11 commit, or set `WORKDAY_MAX_DETAIL_FETCHES` to at
+least `resultsWanted` and `WORKDAY_SCRAPE_TIME_BUDGET_MS=0` for the pre-T11
+request pattern (the id and URL fallbacks stay).

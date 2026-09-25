@@ -10,6 +10,7 @@ import {
   CompensationDto,
   Site,
   DescriptionFormat,
+  ScrapeDiagnostics,
   classifyScrapeError,
 } from '@ever-jobs/models';
 import {
@@ -34,13 +35,40 @@ import {
   buildWorkdayDetailUrl,
   parseWorkdayPostedOn,
   workdayListingKey,
+  workdayListingRequisitionId,
   readAtsCountryOverlay,
+  readWorkdayMaxDetailFetches,
+  readWorkdayScrapeTimeBudgetMs,
+  WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR,
+  WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR,
 } from './workday.constants';
 import {
   WorkdayJobDetail,
   WorkdayJobListItem,
   WorkdaySearchResponse,
 } from './workday.types';
+
+/** Per-scrape enrichment and time limits (Spec 1736 T11). */
+interface WorkdayScrapeBudget {
+  /** Detail requests this scrape may make ({@link WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR}). */
+  readonly maxDetailFetches: number;
+  /** Configured time budget, ms; 0 = none ({@link WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}). */
+  readonly timeBudgetMs: number;
+  /** Epoch ms after which no listing page or detail request is started. */
+  readonly deadlineAt: number;
+}
+
+/** What detail enrichment did for one scrape. */
+interface WorkdayDetailOutcome {
+  /** One entry per listing, in order; null = returned at list level. */
+  readonly details: Array<WorkdayJobDetail | null>;
+  /** Detail requests made (fulfilled or failed). */
+  readonly requested: number;
+  /** Postings with a detail path left un-enriched by the detail cap. */
+  readonly skippedByCap: number;
+  /** Postings with a detail path left un-enriched because the time budget ran out. */
+  readonly skippedByTime: number;
+}
 
 @SourcePlugin({
   site: Site.WORKDAY,
@@ -73,13 +101,26 @@ export class WorkdayService implements IScraper {
     const listingsToEnrich: WorkdayJobListItem[] = [];
     const seenKeys = new Set<string>();
     let offset = 0;
+    let boardTotal: number | undefined;
     // Spec 1736 T6: Workday filters by keyword server-side; list mode sends ''.
     const searchText = workdaySearchText(input.searchTerm);
+
+    // Spec 1736 T11: bound what one board can cost. Read per scrape so an env
+    // change needs no restart of the adapter's singleton.
+    const timeBudgetMs = readWorkdayScrapeTimeBudgetMs();
+    const budget: WorkdayScrapeBudget = {
+      maxDetailFetches: readWorkdayMaxDetailFetches(),
+      timeBudgetMs,
+      deadlineAt: timeBudgetMs > 0 ? Date.now() + timeBudgetMs : Number.POSITIVE_INFINITY,
+    };
+    let listingCutShort = false;
 
     try {
       this.logger.log(
         `Fetching Workday jobs for ${company} (wd${wdNumber}/${site}), ` +
-        `term=${searchText ? JSON.stringify(searchText) : '<none>'}`,
+        `term=${searchText ? JSON.stringify(searchText) : '<none>'}, ` +
+        `details<=${budget.maxDetailFetches}, ` +
+        `budget=${timeBudgetMs > 0 ? `${timeBudgetMs}ms` : 'none'}`,
       );
 
       while (listingsToEnrich.length < resultsWanted) {
@@ -95,6 +136,7 @@ export class WorkdayService implements IScraper {
         const listings = data.jobPostings ?? [];
 
         if (listings.length === 0) break;
+        if (typeof data.total === 'number' && data.total > 0) boardTotal = data.total;
 
         this.logger.log(
           `Workday: fetched ${listings.length} jobs at offset ${offset} for ${company}` +
@@ -133,6 +175,21 @@ export class WorkdayService implements IScraper {
         // absent is not a count: a real page can report total 0 on some tenants.
         if (typeof data.total === 'number' && data.total > 0 && offset >= data.total) break;
 
+        // Filled: no pause before a page that will never be requested.
+        if (listingsToEnrich.length >= resultsWanted) break;
+
+        // Spec 1736 T11: the time budget covers listing as well as enrichment.
+        // Stop before paging on; what is listed so far is returned.
+        if (Date.now() >= budget.deadlineAt) {
+          listingCutShort = true;
+          this.logger.warn(
+            `Workday: time budget (${WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}=${timeBudgetMs}) spent while listing ` +
+            `${company} (wd${wdNumber}/${site}); stopping at ${listingsToEnrich.length} of ` +
+            `${resultsWanted} wanted postings`,
+          );
+          break;
+        }
+
         // Respect rate limiting
         await randomSleep(1000, 2000);
       }
@@ -145,13 +202,27 @@ export class WorkdayService implements IScraper {
       return new JobResponseDto([], classifyScrapeError(err));
     }
 
+    // A listing cut short by the time budget returned fewer postings than asked
+    // for while the board had more: that is a partial result, and the caller
+    // should be able to tell it apart from a small board.
+    const diagnostics = listingCutShort
+      ? new ScrapeDiagnostics(
+          'partial',
+          `time budget ${WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}=${timeBudgetMs} spent while listing: ` +
+          `${listingsToEnrich.length} of ${resultsWanted} wanted postings` +
+          `${boardTotal !== undefined ? ` (board total ${boardTotal})` : ''}`,
+        )
+      : undefined;
+
     return this.buildResponse(
       client,
       listingsToEnrich,
       company,
       wdNumber,
       site,
+      budget,
       input.descriptionFormat,
+      diagnostics,
     );
   }
 
@@ -161,7 +232,9 @@ export class WorkdayService implements IScraper {
     company: string,
     wdNumber: string,
     site: string,
+    budget: WorkdayScrapeBudget,
     format?: DescriptionFormat,
+    diagnostics?: ScrapeDiagnostics,
   ): Promise<JobResponseDto> {
     // Second de-dup pass: enrichment must cost one request per distinct posting even
     // if pagination ever hands over repeats again.
@@ -179,7 +252,8 @@ export class WorkdayService implements IScraper {
       );
     }
 
-    const details = await this.fetchDetails(client, distinct, company, wdNumber, site);
+    const outcome = await this.fetchDetails(client, distinct, company, wdNumber, site, budget);
+    const { details } = outcome;
     const jobPosts = distinct
       .map((listing, index) => {
         try {
@@ -198,59 +272,94 @@ export class WorkdayService implements IScraper {
       })
       .filter((post): post is JobPostDto => post !== null);
 
+    // Un-enriched postings are by design (Spec 1736 T11), not a failure: the
+    // job count is complete, only descriptions are missing, so no diagnostic.
+    if (outcome.skippedByCap > 0) {
+      this.logger.log(
+        `Workday: enriched ${outcome.requested} postings for ${company} (wd${wdNumber}/${site}); ` +
+        `${outcome.skippedByCap} more returned at list level without description ` +
+        `(${WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR}=${budget.maxDetailFetches})`,
+      );
+    }
+    if (outcome.skippedByTime > 0) {
+      this.logger.warn(
+        `Workday: time budget (${WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}=${budget.timeBudgetMs}) spent after ` +
+        `${outcome.requested} detail requests for ${company} (wd${wdNumber}/${site}); ` +
+        `${outcome.skippedByTime} postings returned at list level without description`,
+      );
+    }
+
     this.logger.log(`Workday total: ${jobPosts.length} jobs for ${company}`);
-    return new JobResponseDto(jobPosts);
+    return new JobResponseDto(jobPosts, diagnostics);
   }
 
+  /**
+   * Enrich listings with their CXS detail, within the scrape's budget
+   * (Spec 1736 T11): at most `maxDetailFetches` requests, the first postings
+   * in list order (newest first in list mode, best match for a keyword), and
+   * none started once `deadlineAt` has passed. Every other listing gets a null
+   * detail and is returned at list level.
+   */
   private async fetchDetails(
     client: ReturnType<typeof createHttpClient>,
     listings: WorkdayJobListItem[],
     company: string,
     wdNumber: string,
     site: string,
-  ): Promise<Array<WorkdayJobDetail | null>> {
-    const details: Array<WorkdayJobDetail | null> = [];
+    budget: WorkdayScrapeBudget,
+  ): Promise<WorkdayDetailOutcome> {
+    const details: Array<WorkdayJobDetail | null> = listings.map(() => null);
+    // A listing without a detail path makes no request, so it neither spends
+    // the cap nor needs a pause.
+    const withPath = listings.flatMap((listing, index) => (listing.externalPath ? [index] : []));
+    const allowed = withPath.slice(0, budget.maxDetailFetches);
+    const skippedByCap = withPath.length - allowed.length;
+    let skippedByTime = 0;
+    let requested = 0;
     let failed = 0;
 
-    for (let index = 0; index < listings.length; index += WORKDAY_DETAIL_CONCURRENCY) {
-      const batch = listings.slice(index, index + WORKDAY_DETAIL_CONCURRENCY);
-      // Pace every detail request (Spec 1735 §4.6): a listing request or the
-      // previous detail request always precedes it on the same host. A listing
-      // without a detail path makes no request, so it needs no pause.
-      if (batch.some((listing) => listing.externalPath)) {
-        await randomSleep(WORKDAY_DETAIL_DELAY_MIN_MS, WORKDAY_DETAIL_DELAY_MAX_MS);
+    for (let position = 0; position < allowed.length; position += WORKDAY_DETAIL_CONCURRENCY) {
+      // Checked before the pause, so a spent budget costs neither the pause
+      // nor the request (at most one pause and one request run past it).
+      if (Date.now() >= budget.deadlineAt) {
+        skippedByTime = allowed.length - position;
+        break;
       }
+      const batch = allowed.slice(position, position + WORKDAY_DETAIL_CONCURRENCY);
+      // Pace every detail request (Spec 1735 §4.6): a listing request or the
+      // previous detail request always precedes it on the same host.
+      await randomSleep(WORKDAY_DETAIL_DELAY_MIN_MS, WORKDAY_DETAIL_DELAY_MAX_MS);
+      requested += batch.length;
       const settled = await Promise.allSettled(
-        batch.map(async (listing): Promise<WorkdayJobDetail | null> => {
-          if (!listing.externalPath) return null;
-          const url = buildWorkdayDetailUrl(company, wdNumber, site, listing.externalPath);
+        batch.map(async (index): Promise<WorkdayJobDetail | null> => {
+          const url = buildWorkdayDetailUrl(company, wdNumber, site, listings[index].externalPath as string);
           const response = await client.get(url);
           return (response.data as WorkdayJobDetail | undefined) ?? null;
         }),
       );
 
       settled.forEach((result, batchIndex) => {
+        const index = batch[batchIndex];
         if (result.status === 'fulfilled') {
-          details.push(result.value);
+          details[index] = result.value;
           return;
         }
-        const listing = batch[batchIndex];
+        const listing = listings[index];
         failed++;
         this.logger.warn(
           `Workday detail failed for ${company} (wd${wdNumber}/${site}) ` +
           `${listing.externalPath ?? listing.title ?? 'unknown job'}: ${result.reason?.message ?? result.reason}`,
         );
-        details.push(null);
       });
     }
 
     if (failed > 0) {
       this.logger.warn(
-        `Workday: ${failed} of ${listings.length} detail requests failed for ${company} (wd${wdNumber}/${site})`,
+        `Workday: ${failed} of ${requested} detail requests failed for ${company} (wd${wdNumber}/${site})`,
       );
     }
 
-    return details;
+    return { details, requested, skippedByCap, skippedByTime };
   }
 
   private processListing(
@@ -269,10 +378,14 @@ export class WorkdayService implements IScraper {
       ? hiringOrganizationName
       : company;
 
-    // Extract job path for URL construction
+    // Extract job path for URL construction. The public posting URL is
+    // `/{site}{externalPath}` — the shape of the detail response's `externalUrl`.
+    // A list-level posting (Spec 1736 T11: past the detail cap or time budget)
+    // is linked through this URL, so it must carry the career-site segment:
+    // `https://{tenant}.wd{n}.myworkdayjobs.com/job/…` names no site at all.
     const externalPath = listing.externalPath ?? '';
     const summaryJobUrl = externalPath
-      ? `https://${company}.wd${wdNumber}.myworkdayjobs.com${externalPath.startsWith('/') ? '' : '/'}${externalPath}`
+      ? `https://${company}.wd${wdNumber}.myworkdayjobs.com/${site}${externalPath.startsWith('/') ? '' : '/'}${externalPath}`
       : `https://${company}.wd${wdNumber}.myworkdayjobs.com/en-US/${site}/details/${encodeURIComponent(title)}`;
     const jobUrl = info?.externalUrl ?? summaryJobUrl;
 
@@ -333,8 +446,15 @@ export class WorkdayService implements IScraper {
       .filter(Boolean) ?? [];
 
     // Extract job ID from externalPath (e.g., "/job/123456")
+    // Without a detail response (Spec 1736 T11: past the detail cap or time
+    // budget, or a failed request) the list row's requisition id keeps the
+    // posting on the id an enriched copy would get; the whole path is last.
     const jobIdMatch = externalPath.match(/\/(\d+)(?:\/|$)/);
-    const atsId = info?.jobReqId ?? jobIdMatch?.[1] ?? (externalPath || null);
+    const atsId =
+      info?.jobReqId ??
+      jobIdMatch?.[1] ??
+      workdayListingRequisitionId(listing) ??
+      (externalPath || null);
 
     return new JobPostDto({
       id: `wd-${company}-${atsId ?? title.replace(/\s+/g, '-').toLowerCase()}`,

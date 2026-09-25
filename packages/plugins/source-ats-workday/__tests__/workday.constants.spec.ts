@@ -7,6 +7,13 @@ import {
   WORKDAY_DETAIL_DELAY_MIN_MS,
   WORKDAY_DETAIL_DELAY_MAX_MS,
   workdaySearchText,
+  workdayListingRequisitionId,
+  readWorkdayMaxDetailFetches,
+  readWorkdayScrapeTimeBudgetMs,
+  DEFAULT_WORKDAY_MAX_DETAIL_FETCHES,
+  DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS,
+  WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR,
+  WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR,
 } from '../src/workday.constants';
 
 /**
@@ -182,5 +189,105 @@ describe('workdaySearchText', () => {
   it('never serialises a non-string term as undefined or null text', () => {
     expect(workdaySearchText(42 as unknown as string)).toBe('');
     expect(workdaySearchText({} as unknown as string)).toBe('');
+  });
+});
+
+/** Spec 1736 T11 — per-scrape detail cap and time budget, read from the env. */
+describe('readWorkdayMaxDetailFetches', () => {
+  const read = (value?: string) =>
+    readWorkdayMaxDetailFetches(value === undefined ? {} : { [WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR]: value });
+
+  it('names the variable and defaults to 50', () => {
+    expect(WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR).toBe('WORKDAY_MAX_DETAIL_FETCHES');
+    expect(DEFAULT_WORKDAY_MAX_DETAIL_FETCHES).toBe(50);
+    expect(read()).toBe(50);
+    expect(read('')).toBe(50);
+    expect(read('   ')).toBe(50);
+  });
+
+  it('accepts a non-negative integer, 0 meaning no detail requests', () => {
+    expect(read('0')).toBe(0);
+    expect(read(' 7 ')).toBe(7);
+    expect(read('+12')).toBe(12);
+    expect(read('100000')).toBe(100000);
+  });
+
+  it('falls back to the default for anything else', () => {
+    for (const value of ['-1', '1.5', 'abc', '1e3', '0x10', '50 jobs', '99999999999999999999']) {
+      expect(read(value)).toBe(50);
+    }
+  });
+
+  it('reads process.env by default', () => {
+    const saved = process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR];
+    try {
+      process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR] = '3';
+      expect(readWorkdayMaxDetailFetches()).toBe(3);
+    } finally {
+      if (saved === undefined) delete process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR];
+      else process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR] = saved;
+    }
+  });
+});
+
+describe('readWorkdayScrapeTimeBudgetMs', () => {
+  const read = (value?: string) =>
+    readWorkdayScrapeTimeBudgetMs(value === undefined ? {} : { [WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR]: value });
+
+  it('names the variable and defaults to 90 s, below the 120 s fan-out deadline', () => {
+    expect(WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR).toBe('WORKDAY_SCRAPE_TIME_BUDGET_MS');
+    expect(DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS).toBe(90_000);
+    expect(DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS).toBeLessThan(120_000);
+    expect(read()).toBe(90_000);
+    expect(read('')).toBe(90_000);
+  });
+
+  it('accepts a positive integer number of milliseconds', () => {
+    expect(read('30000')).toBe(30_000);
+    expect(read(' 1 ')).toBe(1);
+  });
+
+  it('treats 0 or a negative value as no budget (returns 0)', () => {
+    expect(read('0')).toBe(0);
+    expect(read('-1')).toBe(0);
+    expect(read('-60000')).toBe(0);
+  });
+
+  it('falls back to the default for anything that is not an integer', () => {
+    for (const value of ['abc', '1.5', '90s', '1e5', '99999999999999999999']) {
+      expect(read(value)).toBe(90_000);
+    }
+  });
+});
+
+describe('workdayListingRequisitionId', () => {
+  it('takes the first bullet that is a single token containing a digit', () => {
+    expect(
+      workdayListingRequisitionId({
+        bulletFields: ['Spotlight Job', 'Posting End Date: 09/30/2026', 'JR0271234', 'R999'],
+        externalPath: '/job/Santa-Clara/Engineer_JR0271234',
+      }),
+    ).toBe('JR0271234');
+    expect(workdayListingRequisitionId({ bulletFields: ['  R-2012345  '] })).toBe('R-2012345');
+  });
+
+  it('skips non-string bullets', () => {
+    expect(workdayListingRequisitionId({ bulletFields: [42, null, 'R1'] as unknown[] })).toBe('R1');
+  });
+
+  it("falls back to the detail path's trailing _<id> suffix", () => {
+    expect(workdayListingRequisitionId({ externalPath: '/job/Santa-Clara/Software-Engineer_JR0271234' })).toBe(
+      'JR0271234',
+    );
+    expect(workdayListingRequisitionId({ bulletFields: ['Exempt'], externalPath: '/job/X/Role_R-1234-1' })).toBe(
+      'R-1234-1',
+    );
+    expect(workdayListingRequisitionId({ externalPath: '/job/X/Role_R123?source=feed' })).toBe('R123');
+  });
+
+  it('returns null when neither carries an id', () => {
+    expect(workdayListingRequisitionId({})).toBeNull();
+    expect(workdayListingRequisitionId({ bulletFields: ['Remote'], externalPath: '/job/X/Some_Title' })).toBeNull();
+    expect(workdayListingRequisitionId({ externalPath: '/job/X/No-Suffix-123' })).toBeNull();
   });
 });

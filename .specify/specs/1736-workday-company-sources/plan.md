@@ -46,3 +46,12 @@
    Until that consumer is live in production, the deployment must carry the
    batch in `EVER_JOBS_DISABLED_SOURCES` (list in spec §7), otherwise the
    consumer's page 1 of a site-sorted response leads with `3m`.
+4. **Per-scrape bound (T11, spec §8; review finding F8):** in
+   `source-ats-workday`, cap detail requests per scrape
+   (`WORKDAY_MAX_DETAIL_FETCHES`, 50) and bound the whole scrape in time
+   (`WORKDAY_SCRAPE_TIME_BUDGET_MS`, 90 s), returning the rest at list level;
+   derive a list-level posting's id from the row's requisition id so it matches
+   the enriched id; build the list-level URL with the career site. Env readers
+   in `workday.constants.ts`; budget cases driven by a fake `Date.now`.
+   Documented for operators in `.env.example` and `docs/DEPLOYMENT.md`
+   (with the T10 kill-switch list).

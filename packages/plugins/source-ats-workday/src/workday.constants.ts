@@ -25,6 +25,66 @@ export const WORKDAY_DETAIL_DELAY_MIN_MS = 250;
 export const WORKDAY_DETAIL_DELAY_MAX_MS = 500;
 
 /**
+ * Env var capping detail requests per scrape (Spec 1736 T11).
+ *
+ * Detail enrichment is sequential and paced (one request in flight, 250–500 ms
+ * apart), so it costs roughly 0.5–1 s per posting: one board at
+ * `resultsWanted = 1000` would spend ~10 minutes enriching, long past the
+ * fan-out deadline. Only the first N postings that have a detail path are
+ * enriched; the rest are returned at list level (title, URL, location, posted
+ * date, requisition id — no description, compensation or hiring organisation).
+ *
+ * Unset, blank or not a non-negative integer → {@link DEFAULT_WORKDAY_MAX_DETAIL_FETCHES}.
+ * `0` = no detail requests at all. There is no "unlimited" value: set a number
+ * at least as large as `resultsWanted` to enrich every posting.
+ */
+export const WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR = 'WORKDAY_MAX_DETAIL_FETCHES';
+export const DEFAULT_WORKDAY_MAX_DETAIL_FETCHES = 50;
+
+/**
+ * Env var: wall-clock budget for one Workday scrape, milliseconds (Spec 1736 T11).
+ *
+ * Measured from the start of `scrape()` and covering both phases. Once spent,
+ * no further listing page and no further detail request is started (the one in
+ * flight finishes; at most one pause and one request past the budget). Postings
+ * already listed are returned; the ones not yet enriched at list level. The
+ * first listing page is always requested.
+ *
+ * The plugin contract carries no fan-out deadline (Spec 5026 T11), so this is
+ * the adapter's own bound: without it a board abandoned by the fan-out deadline
+ * (`EVER_JOBS_SEARCH_DEADLINE_MS`, 120 s) keeps paging and enriching, detached,
+ * until it has everything. Keep it below the fan-out deadline.
+ *
+ * Unset, blank or not an integer → {@link DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS};
+ * `0` or negative disables the budget (the same convention as
+ * `EVER_JOBS_SEARCH_DEADLINE_MS`).
+ */
+export const WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR = 'WORKDAY_SCRAPE_TIME_BUDGET_MS';
+export const DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS = 90_000;
+
+const INTEGER_RE = /^[+-]?\d+$/;
+
+/** Read {@link WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR}: a non-negative integer. */
+export function readWorkdayMaxDetailFetches(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR]?.trim();
+  if (!raw || !INTEGER_RE.test(raw)) return DEFAULT_WORKDAY_MAX_DETAIL_FETCHES;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value >= 0 ? value : DEFAULT_WORKDAY_MAX_DETAIL_FETCHES;
+}
+
+/**
+ * Read {@link WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}. Returns the budget in
+ * milliseconds; `0` means no budget (a `0` or negative setting).
+ */
+export function readWorkdayScrapeTimeBudgetMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR]?.trim();
+  if (!raw || !INTEGER_RE.test(raw)) return DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) return DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS;
+  return value > 0 ? value : 0;
+}
+
+/**
  * The `searchText` sent to Workday's job search (Spec 1736 T6): the trimmed
  * search term, or `''` in list mode (term absent, null, empty or whitespace —
  * contract C1). Workday filters server-side, so a keyword search only pages
@@ -89,6 +149,39 @@ export function workdayListingKey(listing: {
   title?: string | null;
 }): string | null {
   return listing.externalPath?.trim() || listing.title?.trim() || null;
+}
+
+/** A single token containing a digit: the shape of a Workday requisition id. */
+const REQUISITION_TOKEN_RE = /^[A-Za-z0-9_-]*\d[A-Za-z0-9_-]*$/;
+
+/**
+ * Requisition id of a search-result row, for postings returned without a detail
+ * response (Spec 1736 T11: past the detail cap or the time budget, or a failed
+ * detail request).
+ *
+ * The detail response's `jobReqId` is what an enriched posting's id is built
+ * from; this recovers the same value from the list row so a posting keeps one
+ * id whether or not it was enriched. `bulletFields` mixes the id with
+ * tenant-specific badges ("Spotlight Job", "Exempt", a location, "Posting End
+ * Date: 09/30/2026"), so the id is the first bullet that is a single token
+ * containing a digit; failing that, the detail path's trailing `_<id>` suffix
+ * when it contains a digit (`…/Software-Engineer_JR0271234` → `JR0271234`).
+ * The same rule the Spec 1735 verifier recorded fixtures with.
+ */
+export function workdayListingRequisitionId(listing: {
+  bulletFields?: ReadonlyArray<unknown> | null;
+  externalPath?: string | null;
+}): string | null {
+  for (const bullet of listing.bulletFields ?? []) {
+    if (typeof bullet !== 'string') continue;
+    const token = bullet.trim();
+    if (REQUISITION_TOKEN_RE.test(token)) return token;
+  }
+  const lastSegment = (listing.externalPath ?? '').split(/[?#]/)[0].split('/').pop() ?? '';
+  const underscore = lastSegment.lastIndexOf('_');
+  if (underscore < 0) return null;
+  const tail = lastSegment.slice(underscore + 1);
+  return REQUISITION_TOKEN_RE.test(tail) ? tail : null;
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;

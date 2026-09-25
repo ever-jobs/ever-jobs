@@ -165,6 +165,21 @@ Follow-ups and constraints recorded here:
    Behaviour change for forks that set `GREENHOUSE_API_KEY`: set
    `GREENHOUSE_HARVEST_BOARD` to your own board token to keep using Harvest
    for it (a per-request `auth.greenhouse.apiKey` is still honoured).
+5. **Per-scrape bound (integration review F8, Spec 1736 §8 / T11).** Sequential
+   enrichment made one board at `resultsWanted = 1000` cost ~10 minutes, and
+   the scrape ran on, detached, after the fan-out deadline abandoned it (the
+   plugin contract has no deadline or `AbortSignal`). The adapter now makes at
+   most `WORKDAY_MAX_DETAIL_FETCHES` (default 50) detail requests per scrape
+   and stops starting work once `WORKDAY_SCRAPE_TIME_BUDGET_MS` (default
+   90 000; `0` = off) is spent, over listing and enrichment; the rest is
+   returned at list level (no description), and a listing cut short is a
+   `partial` diagnostic. Defaults chosen here (no owner decision needed): 50
+   detail requests cost ~13–25 s of pauses plus request time and cover a
+   board's newest postings (the Tesla plugin's `detail-25` budget is the
+   precedent); 90 s stays under the 120 s fan-out deadline. A full sync that wants every
+   description raises both limits together with the fan-out deadline and
+   selects the boards explicitly. A list-level posting keeps the id an
+   enriched one gets (the list row's requisition id).
 
 ---
 

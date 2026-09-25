@@ -7,7 +7,7 @@
 | Status | implemented |
 | Owner | agent (lane ej-sources) |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-25 (review follow-ups: §3.1, §4.2, §4.5–§4.7) |
+| Last updated | 2026-09-25 (review follow-ups: §3.1, §4.2, §4.5–§4.7; §4.6 per-scrape bound, Spec 1736 T11) |
 | Related specs | 1736 (Workday company sources), 1737 (quant/trading-firm company sources), 5004 (Workday detail enrichment), 5084 (Workday pagination guard), 1375 / 1677 (older per-backend pipelines), 1681 / 1682 (not_registered diagnostics), 1690 / 1691 (crawl policy: per-host limits, robots.txt, User-Agent) |
 
 ## 1. Problem statement
@@ -216,16 +216,19 @@ jobs; they are unchanged here.
 ### 4.6 Workday politeness and keyword (review follow-up, 2026-09-25)
 
 The 55 Workday-delegating plugins (56 boards) put Workday into every default
-search, so `source-ats-workday` changes (Spec 1736 T6/T8):
+search, so `source-ats-workday` changes (Spec 1736 T6/T8/T11):
 
 | Before | After |
 | --- | --- |
 | `searchText: ''` always — every board returned its newest postings whatever the keyword | `searchText` = the trimmed `searchTerm`; `''` in list mode (term absent, null, empty or whitespace — contract C1). A keyword search is filtered by Workday and only matching postings are enriched. |
 | Detail enrichment 5 requests in flight per board, no pause | **1 in flight** (`WORKDAY_DETAIL_CONCURRENCY = 1`), 250–500 ms (`WORKDAY_DETAIL_DELAY_{MIN,MAX}_MS`) before each detail request |
+| One detail request per listed posting, no time bound (`resultsWanted = 1000` ≈ 10 min per board, running on after the fan-out deadline abandoned it) | At most `WORKDAY_MAX_DETAIL_FETCHES` (50) detail requests per scrape and a `WORKDAY_SCRAPE_TIME_BUDGET_MS` (90 s) budget over listing and enrichment; the rest returned at list level (Spec 1736 §8, T11) |
 
-Listing pagination is unchanged (20 per page, 1–2 s between pages). Worst
-case per default search is now about 56 concurrent Workday requests (one per
-board) instead of about 280. Per-host / per-cluster limits remain Spec 1690's.
+Listing pagination is unchanged (20 per page, 1–2 s between pages) except that
+the time budget above also stops it. Worst case per default search is now
+about 56 concurrent Workday requests (one per board) instead of about 280, and
+each board stops starting requests after 90 s. Per-host / per-cluster limits
+remain Spec 1690's.
 
 ### 4.7 Explicit-only plugins (review follow-up, 2026-09-25)
 
@@ -245,7 +248,7 @@ iCIMS host disallows all crawlers (§3.1).
 | `scripts/__tests__/scaffold-ats-delegate-company-source.spec.ts` | refusal of unverified boards, mixed backends, bad names/domains; emitted files (none under `.specify/`); registry delegation (no peer import); board order and id prefixes; tags; fixture URLs and derived ids per backend; multi-board test block; verification table |
 | `scripts/__tests__/wire-company-source-tail.spec.ts` | tail placement in all four files, BOM preserved, `$'` preserved, pure-addition property, idempotency, collision failure |
 | `scripts/__tests__/scaffold-ats-delegate-company-source.spec.ts` (review follow-ups) | `auth: undefined` in every backend's delegation; the Workday company-name rule (emitted for Workday only, evaluated on legal-form, tenant, empty and business-unit names); the explicit-only gate emitted only for flagged seeds; the Greenhouse env-key regression block emitted only for Greenhouse plugins |
-| `packages/plugins/source-ats-workday/__tests__/workday.service.spec.ts` | never more than 1 detail request in flight, a paced sleep before each detail request, `searchText` = trimmed `searchTerm`, `''` for absent / null / whitespace |
+| `packages/plugins/source-ats-workday/__tests__/workday.service.spec.ts` | never more than 1 detail request in flight, a paced sleep before each detail request, `searchText` = trimmed `searchTerm`, `''` for absent / null / whitespace; the per-scrape detail cap and time budget (Spec 1736 §6, §8) |
 | `packages/plugins/source-ats-greenhouse/__tests__/greenhouse.service.spec.ts` | env Harvest key ignored unless `GREENHOUSE_HARVEST_BOARD` names the board (public board URL only), used when it does, per-request key still honoured |
 | each generated `source-company-<key>` suite | see Specs 1736 / 1737; plus: a caller's `auth` is never forwarded; Workday plugins keep a posting's business-unit name through the real adapter; Greenhouse plugins request only their own public board with `GREENHOUSE_API_KEY` set; SIG makes no request in the default fan-out |
 
@@ -255,4 +258,7 @@ Every generated plugin is a self-contained package plus four tail lines; the
 batch can be disabled at runtime with `EVER_JOBS_DISABLED_SOURCES` or removed
 by reverting the batch commit. The adapter follow-ups (§4.5, §4.6) are
 separate commits and revert independently; reverting §4.6 restores 5 detail
-requests in flight and keyword-blind Workday listings.
+requests in flight and keyword-blind Workday listings. The per-scrape bound
+(Spec 1736 T11) is its own commit too; without a revert,
+`WORKDAY_MAX_DETAIL_FETCHES` >= `resultsWanted` plus
+`WORKDAY_SCRAPE_TIME_BUDGET_MS=0` restores the unbounded request pattern.
