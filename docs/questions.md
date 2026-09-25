@@ -10,6 +10,88 @@
 
 ---
 
+## Q-099 — Boards whose robots.txt disallows generic crawlers (Specs 1692-1713)
+
+**Context:** The board fixes in Specs 1701-1713 made each plugin honest about what it fetches:
+bounded pages, sequential requests, an identifying User-Agent where the plugin controls it, and a
+`blocked` / `fetch_error` diagnostic instead of a silent empty result. Most of them now make
+fewer requests than before (the old loops ran until `resultsWanted` with no page cap), but four
+can make more:
+
+| Plugin | Before | Now (per scrape, defaults) |
+|---|---|---|
+| `source-solidjobs` (Spec 1709) | 1 request (the `it` division) | up to 8 divisions × 20 pages, 2 divisions in flight, pages sequential with no pause, inside a wall-clock budget; `SOLIDJOBS_DIVISIONS=it` restores one division |
+| `source-internshala` (Spec 1706) | 1 listing stream, pages until `resultsWanted` | 2 streams × up to 10 pages (`INTERNSHALA_MAX_PAGES`, ceiling 50), plus up to 25 detail pages (`detail-all`: 100), 2-5 s apart; a refusal stops the detail pages |
+| `source-remoteok` (Spec 1707) | 1 request | up to 2 (a tag feed, then the global feed), 1-1.5 s apart |
+| `source-ats-wttj` (Spec 1705) | company boards only | an optional whole-index board search, **off by default** (`WTTJ_BOARD_MODE=on`), paced 0.5-1.0 s and capped at the index's 1,000-hit window |
+
+Page caps elsewhere: LinkedIn stops after 2 pages with no new id and at the board's `start`
+cap; Indeed 10 pages (`EVER_JOBS_INDEED_MAX_PAGES`); Glassdoor 30 (hard 100); Google 10 (hard
+30); Bayt 10 (ceiling 50); BDJobs 20; Wellfound 10; Naukri 50; ZipRecruiter 10. A
+multi-location search (Spec 1700) calls each source once per location; its response memo
+answers a repeated identical request from the first answer, so a whole-board source costs one
+fetch for N locations, while a source that sends the location to its host makes one request per
+location, paced by the larger of `EVER_JOBS_SEARCH_LOCATION_INTERVAL_MS` and the plugin's own gap.
+
+Five of the fixed plugins still request paths that the host's robots.txt disallows for
+`User-agent: *` (checked 2026-09-24/25):
+
+| Plugin | Path it requests | robots.txt for `User-agent: *` |
+|---|---|---|
+| `source-linkedin` (Spec 1701) | `www.linkedin.com/jobs-guest/…` | `Disallow: /` (and `/jobs-guest/` is disallowed for the named crawlers too) |
+| `source-indeed` (Spec 1702) | `apis.indeed.com/graphql` | `Disallow: /` on `apis.indeed.com`; `www.indeed.com` also disallows `/graphql` |
+| `source-glassdoor` (Spec 1703) | `/graph` (the homepage it reads first is allowed) | `/graph` disallowed |
+| `source-google` (Spec 1704) | `www.google.com/search` | `/search` disallowed |
+| `source-ziprecruiter` (Spec 1713) | `api.ziprecruiter.com` search | `Disallow: /` on both `api.` and `www.`; `/jobs/` is denied even to the allow-listed crawlers, so no detail page is fetched |
+
+Two more rows need the owner's eye even though robots.txt does not govern the host they call:
+
+| Plugin | What it does | Why it matters |
+|---|---|---|
+| `source-ats-wttj` board mode (Spec 1705) | Queries the site's search provider for the whole job index, sending the site's own `Referer` / `Origin` (the header predates this branch; the provider checks it), and re-reads the provider key from a public detail page when the site rotates it (`WTTJ_CREDENTIAL_REFRESH`) | The site's robots.txt disallows its own search pages (`*/jobs?query=*`, `/*?`), which reads as not wanting its search crawled. **Off by default** until ruled on; `WTTJ_BOARD_MODE=on` enables it. Company mode (a named company's board) is unchanged. |
+| `source-ziprecruiter` app identity (Spec 1713) | Sends the mobile app's Basic credential, a desktop User-Agent and `x-zr-zva-override` (all pre-existing) | Spec 1713's form-encoded session event on a cookie jar is what makes the app handshake succeed, so it makes that identity more convincing. It is **opt-in** until ruled on (`ZIPRECRUITER_SESSION_EVENT=form`); the default is the pre-1713 JSON event with no cookie jar. The geo-block diagnostic now states the North-America-only rule without suggesting a way around it. |
+
+The other fixed boards read allowed paths: Internshala and Bayt now build only robots-allowed
+URLs (both enforced by tests), RemoteOK's `/api` and Solid.Jobs' API are allowed, BDJobs' API host
+has no robots.txt, and Wellfound reads robots-allowed landing pages (the Welcome to the Jungle
+board search is its own row above). The three new sources (Specs 1692-1694)
+read only allowed paths; Level's documented REST API sits under a disallowed `/api/`, so that
+plugin reads the operator's published MCP server instead and never calls `/api/`.
+
+**Options:**
+
+- **A. Keep as is.** The five plugins stay in the default site list. Operators who want
+  robots.txt compliance for every request set the crawl policy's
+  `EVER_JOBS_CRAWL_ROBOTS_TXT=respect` (Spec 1690), which refuses a disallowed path before the
+  request is sent. **That switch is not on this branch:** Spec 1690 lives on
+  `feat/http-politeness`, which has not merged, and the variable is not in `.env.example` here.
+  If this branch merges first, setting it does nothing, so A depends on Spec 1690 merging first
+  (or on keeping the five gated, option B, until it does).
+- **B. Disable them by default.** Remove the five from the default site list behind a switch;
+  callers who name them in `siteType` still get them. Nothing is deleted.
+- **C. Remove the five plugins.**
+
+**Default:** **A**, proceeding, on the condition that Spec 1690 (`feat/http-politeness`) merges
+before or with this branch; the WTTJ board search and the app-shaped ZipRecruiter session stay
+opt-in either way. B is a one-switch change if the owner prefers it; C would contradict the
+no-removal rule and is not planned.
+
+**Sources evaluated and declined (2026-09-24), so nobody re-researches them.** No plugin was
+built for any of these; the probes made at most three requests each, with our honest
+User-Agent, and never requested a disallowed path.
+
+| Domain | Why not |
+|---|---|
+| `hellowork.com` | robots.txt disallows the keyword search for `User-agent: *`; the terms of use restated in every page forbid automated extraction; the firewall answered our User-Agent with 403 on the sitemap robots.txt advertises. |
+| `seek.com.au` / `jobstreet.com` / `jobsdb.com` (one platform) | robots.txt disallows every search and detail endpoint a plugin would need; the one allowed HTML search route answered with a managed challenge (403). The existing `jobstreet` plugin should report that as a diagnostic (follow-up). |
+| `xing.com` | robots.txt disallows the keyword search; the logged-out search redirects to login. A route through the sitemap-listed pages is possible but unverified. |
+| `wanted.co.kr` | the listings are only reachable through the site's internal `/api/`, which robots.txt disallows for every user agent and which is not a documented public API. A sitemap-based route is possible but unbuilt. |
+| `goozali.com` | the listings live on a hosted-spreadsheet service whose robots.txt disallows the shared-view endpoints; goozali.com itself has no crawlable copy of the data. |
+
+**Resolution:** _open — awaiting the owner._
+
+---
+
 ## Q-096 — Shared location parser: known mis-splits carried in from the fork (Spec 1689)
 
 **Context:** The fork-sync review (Spec 1689, lane A4) found shared-parser outputs that no

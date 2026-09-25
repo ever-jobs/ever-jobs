@@ -81,9 +81,13 @@ ever-jobs search -s linkedin -s indeed -q "Backend" --analyze
 | `--search-term`                | `-q`  | `<term>`     | —        | Job search keywords                              |
 | `--google-search-term`         | —     | `<term>`     | —        | Google-specific search query override            |
 | `--location`                   | `-l`  | `<location>` | —        | Location to search near                          |
+| `--locations` | — | `<locations...>` | — | Several locations in one search; each source runs once per location, one after another, same-source duplicates removed (Spec 1700; the server caps the list at `EVER_JOBS_SEARCH_MAX_LOCATIONS`, 10) |
+| `--exclude-title` | — | `<terms...>` | — | Drop jobs whose title contains any of these words/phrases (whole-word, case/accent-insensitive, trailing `*` = prefix, never a regex) |
+| `--exclude-keyword` | — | `<terms...>` | — | Drop jobs whose title or description contains any of these words/phrases (same rules) |
+| `--exclude-preset` | — | `<presets...>` | — | Curated exclusion lists matched against title + description: `security_clearance` |
 | `--distance`                   | `-d`  | `<miles>`    | 50       | Search radius in miles                           |
 | `--remote`                     | `-r`  | —            | false    | Filter for remote jobs only                      |
-| `--job-type`                   | —     | `<type>`     | —        | `fulltime`, `parttime`, `internship`, `contract` |
+| `--job-type`                   | —     | `<type>`     | —        | One value; see the list below the table          |
 | `--easy-apply`                 | —     | —            | false    | Filter for easy-apply / hosted jobs              |
 | `--results`                    | `-n`  | `<count>`    | 15       | Results wanted per site                          |
 | `--offset`                     | —     | `<n>`        | 0        | Skip first N results                             |
@@ -91,6 +95,7 @@ ever-jobs search -s linkedin -s indeed -q "Backend" --analyze
 | `--country`                    | `-c`  | `<code>`     | USA      | Country for Indeed/Glassdoor domain              |
 | `--description-format`         | —     | `<fmt>`      | markdown | `markdown`, `html`, `plain`                      |
 | `--linkedin-fetch-description` | —     | —            | false    | Fetch full LinkedIn descriptions (slower)        |
+| `--linkedin-fetch-company-details` | — | — | off (env) | Fetch each LinkedIn company page once to fill website, size, HQ and industry (Spec 1701; unset = `EVER_JOBS_LINKEDIN_FETCH_COMPANY_DETAILS`) |
 | `--linkedin-company-ids`       | —     | `[ids...]`   | —        | Filter LinkedIn by company IDs                   |
 | `--enforce-annual-salary`      | —     | —            | false    | Convert all wages to annual equivalent           |
 | `--timeout`                    | —     | `<seconds>`  | 60       | Request timeout per source                       |
@@ -108,6 +113,13 @@ ever-jobs search -s linkedin -s indeed -q "Backend" --analyze
 | `--stdin`                      | —     | —            | false    | Read JSON input from stdin                       |
 | `--company-slug`               | —     | `<slug>`     | —        | Company slug for ATS board scraping              |
 | `--upwork-auth-json`           | —     | `<json>`     | —        | Upwork auth as JSON string                       |
+
+`--job-type` (here and on `compare`) takes one of: `fulltime`, `parttime`, `contract`, `temporary`,
+`internship`, `permanent`, `apprenticeship`, `perdiem`, `nights`, `summer`, `volunteer`, `other`.
+`permanent` (open-ended employment, e.g. a French CDI) and `apprenticeship` (work-study contracts)
+came with Spec 1697. `permanent` describes duration, not hours, so a `fulltime` filter does not match
+a job tagged only `permanent`. A board whose search API has no filter for a value (for example
+LinkedIn for `permanent` or `apprenticeship`) searches unfiltered.
 
 ---
 
@@ -145,6 +157,8 @@ The compare command outputs:
 | ------------------ | ----- | ------------ | ----------------- | -------------------- |
 | `--search-term`    | `-q`  | `<term>`     | software engineer | Search keywords      |
 | `--location`       | `-l`  | `<location>` | —                 | Location filter      |
+| `--locations` | — | `<locations...>` | — | Several locations, searched one after another per source (Spec 1700) |
+| `--exclude-title` / `--exclude-keyword` / `--exclude-preset` | — | `<terms...>` | — | Same exclusion filters as `search` |
 | `--results`        | `-n`  | `<count>`    | 15                | Results per site     |
 | `--country`        | `-c`  | `<code>`     | USA               | Country domain       |
 | `--hours-old`      | —     | `<hours>`    | —                 | Max job age          |

@@ -1,5 +1,46 @@
 # API Changelog
 
+### [Unreleased] - 2026-09-25 (Specs 1692-1713)
+
+#### Added
+
+- **Multi-location search** (`POST /api/jobs/search`, `/analyze`, GraphQL `searchJobs`, CLI `--locations`, MCP `locations`): `locations: string[]` (up to 25; the first `EVER_JOBS_SEARCH_MAX_LOCATIONS`, default 10, are searched and the rest come back as `bad_input` rows in `perSource`). Each source runs once per location, one after another, with its own `resultsWanted` / `offset`; same-source duplicates are removed. Each source's location loop runs in a scoped response memo, so a source that fetches its whole board costs one fetch for N locations (`EVER_JOBS_SEARCH_LOCATION_MEMO=off` / `get`), and consecutive location calls wait the larger of `EVER_JOBS_SEARCH_LOCATION_INTERVAL_MS` and the plugin's own request gap. Without `locations` the request behaves exactly as before (Spec 1700).
+- **Exclusion filters**: `excludeTitleTerms`, `excludeKeywords` and `excludePresets` (`security_clearance`). Whole-word, case- and accent-insensitive, negation-aware literal matching (trailing `*` = prefix, never a regex), applied after dedup; the cache and stored corpus are unaffected (Spec 1700).
+- **`linkedinFetchCompanyDetails`** input flag (CLI `--linkedin-fetch-company-details`): opt-in LinkedIn company enrichment; unset = `EVER_JOBS_LINKEDIN_FETCH_COMPANY_DETAILS` (Spec 1701).
+- **Job fields** (REST JSON; GraphQL selection is a follow-up): `datePostedAt`, `datePostedPrecision`, `datePostedBasis` (Spec 1696), `companySourceId`, `applicantsCount`, `applicantsCountBound` (Spec 1701), `aiLevel` (Spec 1693). Absent unless a source provides them.
+- **Sources**: `inhire` (ATS, Spec 1692), `jobsbylevel` (Spec 1693), `simplifyjobs` (Spec 1694).
+- **Job types**: `permanent` and `apprenticeship` (Spec 1697).
+
+#### Changed
+
+- Same-site results are ordered by the posting instant when a source gives one (`datePostedAt`), else by `datePosted`; an unparseable date sorts last (Spec 1696).
+- Salary post-processing: a single direct bound counts as direct data, a compensation without an amount no longer blocks the USA description fallback, and `enforceAnnualSalary` annualises single bounds. The description fallback reads an upper-only figure only when a salary word precedes it in its clause and no benefit word does (`relocation up to $10,000` is not a salary). The salary parser also reads pay-period tokens and `to` ranges, but a benefit range (`Sign-on bonus of $2,000 to $5,000`) never shadows the salary after it. `EVER_JOBS_SALARY_GRAMMAR=legacy` restores the earlier rules (Spec 1695).
+- Board plugins (LinkedIn, Indeed, Glassdoor, Google, Welcome to the Jungle, Internshala, RemoteOK, Wellfound, Solid.Jobs, Bayt, BDJobs, Naukri, ZipRecruiter) report a block, challenge or unsupported region as a `perSource` diagnostic instead of an empty result. The new sources and the rewritten detail walks (InHire, Level, Internshala) stop at the first refusal (429, 401/403/407, a challenge page) and return what they have with that diagnostic.
+- **Job ids change once** for several boards. Postings already in a stored corpus, the search cache or a client's saved references reappear under the new id once after deploy, so expect a one-time spike of apparent new postings (the cross-source dedup still merges them by title, company and location). The switches restore the old ids:
+
+  | Board | Old id | New id | Restore |
+  |---|---|---|---|
+  | LinkedIn (1701) | `li-<url slug with id>` | `li-<digits>` | `EVER_JOBS_LINKEDIN_LEGACY=ids` |
+  | Glassdoor (1703) | `gd-<adOrderId>` (shared by several listings) | `gd-<listingId>` | `EVER_JOBS_GLASSDOOR_LEGACY=ids` |
+  | Google (1704) | `go-<url hash>` | `go-<record id>` (url hash when the record has none) | `EVER_JOBS_GOOGLE_LEGACY_PARSER=true` |
+  | Internshala (1706) | `is-<url hash>` | `is-<posting id>` | `INTERNSHALA_ID_SCHEME=url-hash` |
+  | Bayt (1710) | `bayt-<url hash>` (changed with the query string) | `bayt-<job id>` | `EVER_JOBS_BAYT_LEGACY_MAPPING=true` |
+  | BDJobs (1711) | the `jobid=` URL parameter, else `bdjobs-<url hash>` | the API `Jobid` (same id space) | `BDJOBS_MODE=html` |
+  | ZipRecruiter (1713) | `zr-<job_id>` | `zr-<listing_key>` | none: the API no longer sends `job_id`, so the old ids yielded zero rows |
+
+- **Legacy switches, exactly.** Each spec's switch in `.env.example` restores the earlier behaviour, with these exceptions, each because the old behaviour was the defect:
+  - Glassdoor (1703): the old pagination loop (it never ended on a board that ignores the cursor) cannot come back; every other change has an `EVER_JOBS_GLASSDOOR_LEGACY` name.
+  - ZipRecruiter (1713): `ZIPRECRUITER_LEGACY_PARAMS=true` restores the old query and session event, but not the old ids (above), `jobUrl = job.job_url`, or rows with an empty `jobUrl` (dropped, spec D-08).
+  - Internshala (1706): `INTERNSHALA_DEFAULT_STREAMS=job` and `INTERNSHALA_ID_SCHEME=url-hash` restore the streams and ids; the old search URLs (not site routes), card selectors (a card was emitted twice) and whole-card remote detection (read `WFH` in a snippet as remote) are not kept. The `Apply by:` line is still added when a card shows a deadline.
+  - BDJobs (1711): `BDJOBS_MODE=html` runs the legacy HTML path patched for politeness (honest User-Agent, page cap, seen-id check before the detail fetch, date parsing), not the pre-1711 code verbatim.
+- **Country names** (Spec 1699): with `EVER_JOBS_LOCATION_ISO_COUNTRY_NAMES` on (the default), an upper-case alpha-3 code emits the same CLDR name as the country's name and alpha-2 code already did, so `HKG` reads `Hong Kong SAR China` (was `Hong Kong`), `TUR` reads `Türkiye` (was `Turkey`) and `CZE` reads `Czechia` (was `Czech Republic`). Filters or saved searches that match the old alpha-3 spellings should match the CLDR ones; the names come from the runtime's ICU data. `EVER_JOBS_LOCATION_ISO_COUNTRY_NAMES=false` restores the old spellings.
+- **Welcome to the Jungle** (1705): the whole-index board search in `scrape()` is opt-in (`WTTJ_BOARD_MODE=on`) until the owner rules on Q-099; company boards work as before.
+- **ZipRecruiter** (1713): the session event stays the pre-1713 JSON body without a cookie jar; the app-shaped form-encoded event is opt-in (`ZIPRECRUITER_SESSION_EVENT=form`), and `off` sends none.
+- **RemoteOK** (1707): sends our identifying User-Agent; `EVER_JOBS_REMOTEOK_LEGACY=ua` restores the browser one.
+- **Google** (1704): `EVER_JOBS_GOOGLE_MAX_PAGES` is clamped to 30.
+
+---
+
 ### [v0.7.0-alpha] - 2026-07-27
 
 #### Added

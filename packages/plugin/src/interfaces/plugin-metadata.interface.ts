@@ -40,6 +40,15 @@ export interface IPluginMetadata {
   companyDomains?: string[];
 
   /**
+   * Smallest gap, milliseconds, the plugin keeps between two requests to its
+   * host (Spec 1700). A plugin paces requests only inside one `scrape()` call,
+   * so the first request of the next call is unpaced; a multi-location search
+   * calls a source once per location and waits at least this long between
+   * those calls. Unset means only the operator's location interval applies.
+   */
+  minRequestIntervalMs?: number;
+
+  /**
    * Optional description of the plugin's capabilities or limitations.
    */
   description?: string;
