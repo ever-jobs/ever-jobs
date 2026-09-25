@@ -9,7 +9,7 @@
 
 **Change:** The entry below, Q-107 follow-up 2 and Spec 1736 §7 repeated a review claim that `configuration.ts` parses `EVER_JOBS_SEARCH_DEADLINE_MS` / `EVER_JOBS_SEARCH_CONCURRENCY` with a radix (`parseInt(env, 120_000)`), so the deadline is always `NaN` and never applies. That is wrong: `configuration.ts` shadows `parseInt` with a local `(value, fallback)` helper, so the defaults are 120 000 ms / 64 and both variables (and `CACHE_EXPIRY` / `CACHE_MAX_ITEMS`) take effect. Consequence corrected in Q-107 and Spec 1736 §7: the tail-registered company plugins are the first sources the 120 s deadline skips or abandons **today**, and sequential Workday enrichment makes each Workday board slower; a full sync that needs them should select them or raise the deadline. Nothing is handed to the C4 lane. Spec 1736 §7 now also records that the 55-token `EVER_JOBS_DISABLED_SOURCES` list was checked against the source (exactly the plugins delegating to `Site.WORKDAY`).
 
-**Files:** `apps/api/__tests__/config/fanout-config.spec.ts` (new), `docs/questions.md`, `.specify/specs/1736-workday-company-sources/spec.md`, `docs/log.md`.
+**Files:** `apps/api/__tests__/jobs/fanout-config.spec.ts` (new), `docs/questions.md`, `.specify/specs/1736-workday-company-sources/spec.md`, `docs/log.md`.
 
 **Validation:** new suite 4/4 green; red control: renaming the local helper so the calls reach the global `parseInt` turns all 4 red with `NaN`, which is exactly the reviewer's hypothesis, so the suite would catch that bug and shows it is not present.
 

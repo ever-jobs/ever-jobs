@@ -151,7 +151,7 @@ Follow-ups and constraints recorded here:
    That is wrong: `configuration.ts` shadows `parseInt` with a local
    `(value, fallback)` helper, so both variables (and `CACHE_EXPIRY` /
    `CACHE_MAX_ITEMS`) take effect. Pinned by
-   `apps/api/__tests__/config/fanout-config.spec.ts`; nothing to hand to the
+   `apps/api/__tests__/jobs/fanout-config.spec.ts`; nothing to hand to the
    C4 lane.
 3. **Per-host limits** for the shared Workday clusters and Lever's
    `Crawl-delay: 1`, and whether the adapters keep a desktop-Chrome
