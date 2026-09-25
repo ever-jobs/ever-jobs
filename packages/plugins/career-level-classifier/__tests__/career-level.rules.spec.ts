@@ -5,6 +5,7 @@ import {
   capAtWord,
   classifyCareerLevel,
   DESCRIPTION_NEEDLES,
+  MAX_DESCRIPTION_SCAN_CHARS,
   MAX_FIELD_CHARS,
   MAX_REASONS,
   MAX_TITLE_CHARS,
@@ -590,6 +591,42 @@ describe('classifyCareerLevel — rules (Spec 1730)', () => {
       const late = `${'Lorem ipsum dolor sit amet. '.repeat(200)} This is a 10-week internship.`;
       expect(late.length).toBeGreaterThan(3000);
       expect(level('Engineer', { description: late })).toBe('unknown');
+    });
+
+    /** Markup with no visible text: inline-styled wrappers as ATS pages emit them. */
+    const noise = (bytes: number): string => {
+      const tag = '<div style="margin:0;padding:0;font-family:Arial,sans-serif;color:#333"><span class="x">';
+      return tag.repeat(Math.ceil(bytes / tag.length));
+    };
+    const entry = '<p>This is an entry-level role. 0-1 years of experience required.</p>';
+
+    it('reads the first 3,000 VISIBLE characters of tag-heavy HTML, not the first 4,500 raw ones', () => {
+      expect(level('Engineer', { description: `${entry}${noise(5_000)}` })).toBe('entry');
+      expect(level('Engineer', { description: `${noise(5_000)}${entry}` })).toBe('entry');
+      expect(level('Engineer', { description: `${noise(40_000)}${entry}` })).toBe('entry');
+    });
+
+    it('bounds the raw scan: visible text past MAX_DESCRIPTION_SCAN_CHARS is not read', () => {
+      expect(level('Engineer', { description: `${noise(MAX_DESCRIPTION_SCAN_CHARS + 1_000)}${entry}` })).toBe('unknown');
+    });
+
+    it('a scan window that ends inside a tag never leaks the tag text as description', () => {
+      const leaky = `<img alt="This is a 10-week internship." data-tracking="${'t'.repeat(120)}">`;
+      // Whole tags up to just short of the first raw window (4,500 characters), so the next tag
+      // straddles the window edge and a naive cut leaves it open.
+      let filler = noise(4_400);
+      while (filler.length > 4_400) filler = filler.slice(0, filler.lastIndexOf('<div'));
+      while (filler.length + 4 <= 4_440) filler += '<br>';
+      // The cue itself ends before the window edge; only the tag's closing ">" lies beyond it.
+      expect(filler.length + leaky.indexOf('internship.') + 11).toBeLessThan(4_500);
+      const description = `${filler}${leaky}<p>Great team.</p>`;
+      expect(filler.length).toBeLessThan(4_500);
+      expect(filler.length + leaky.length).toBeGreaterThan(4_500);
+      expect(level('Engineer', { description })).toBe('unknown');
+    });
+
+    it('keeps a plain-text "<" (less-than), which is not a tag', () => {
+      expect(level('Engineer', { description: `Experience: 0-1 years (< 2). ${'Lorem ipsum. '.repeat(400)}` })).toBe('entry');
     });
 
     it('the single-pass needle scan is exact: no needle occurs inside another except as a prefix', () => {

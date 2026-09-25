@@ -125,6 +125,11 @@ describe('career-level classifier — cost tripwires (Spec 1730, NFR-2)', () => 
       { title: 'Engineer I/II/III/IV/V '.repeat(200), description: 'this is a '.repeat(600) },
       { title: 'co-op '.repeat(700), description: `${'as a '.repeat(1500)}intern` },
       { title: '- , ( ) / | : ; '.repeat(400), description: '<b>'.repeat(2000) },
+      // Descriptions are scanned up to MAX_DESCRIPTION_SCAN_CHARS (64 KB) when markup hides the
+      // text: "<" with no ">" must not make the tag strip quadratic over that window.
+      { title: 'Engineer', description: '<b'.repeat(40_000) },
+      { title: 'Engineer', description: `${'<div style="color:#333"><span>'.repeat(8_000)}0-1 years of experience` },
+      { title: 'Engineer', description: '&amp'.repeat(20_000) },
     ];
     for (const input of adversarial) {
       const started = process.hrtime.bigint();

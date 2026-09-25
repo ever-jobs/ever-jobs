@@ -18,8 +18,13 @@ import type {
  * the confidence (agreeing structured fields raise it, conflicting evidence lowers it).
  */
 
-/** Only this much of the description is read (NFR-1). */
+/** Only this much of the description is read (NFR-1): the first 3,000 *visible* characters. */
 export const MAX_DESCRIPTION_CHARS = 3000;
+/**
+ * Upper bound on the raw description characters scanned to find those visible characters.
+ * Tag-heavy HTML (inline-styled wrappers from ATS pages) can carry far more markup than text.
+ */
+export const MAX_DESCRIPTION_SCAN_CHARS = 64 * 1024;
 /** Upper bound on `reasons.length`. */
 export const MAX_REASONS = 5;
 /**
@@ -1267,15 +1272,57 @@ function numberOf(tok: string | undefined): number | undefined {
   return NUM_WORDS[tok];
 }
 
-/** Strip tags/markdown, normalise, and keep the first {@link MAX_DESCRIPTION_CHARS} characters. */
+/**
+ * Raw windows tried in turn until one yields {@link MAX_DESCRIPTION_CHARS} visible characters.
+ * Plain text and light markup finish in the first (1.5x the budget); only tag-heavy HTML pays for
+ * a larger one. Each window is re-stripped from the start, so the waste is bounded by the
+ * geometric growth, and the last window is the hard cap.
+ */
+const DESCRIPTION_WINDOWS: readonly number[] = [MAX_DESCRIPTION_CHARS * 1.5, 16 * 1024, MAX_DESCRIPTION_SCAN_CHARS];
+/**
+ * An HTML tag. `[^<>]` (not `[^>]`) keeps the scan linear: on "<b<b<b…" with no ">" a `[^>]*`
+ * attempt from every "<" would run to the end of the window.
+ */
+const TAG_RE = /<[^<>]*>/g;
+const ENTITY_RE = /&nbsp;|&amp;|&#?\w+;/g;
+const MARKDOWN_RE = /[*_#`>|~]+/g;
+/** What follows "<" when it opens a tag, as opposed to a plain-text less-than ("< 2 years"). */
+const TAG_START_RE = /[a-z/!?]/i;
+
+/**
+ * Strip tags / entities / markdown from the first `window` raw characters and normalise.
+ * `cut` says the window ended before the text did: a tag left open at the edge is then dropped,
+ * never read as text (the rest of it lies outside the window).
+ */
+function visibleText(desc: string, window: number): { text: string; cut: boolean } {
+  const cut = desc.length > window;
+  let text = cut ? desc.slice(0, window) : desc;
+  if (cut) {
+    const open = text.lastIndexOf('<');
+    if (open >= 0 && text.indexOf('>', open) < 0 && TAG_START_RE.test(text.charAt(open + 1))) {
+      text = text.slice(0, open);
+    }
+  }
+  if (text.includes('<')) text = text.replace(TAG_RE, ' ');
+  if (text.includes('&')) text = text.replace(ENTITY_RE, ' ');
+  text = text.replace(MARKDOWN_RE, ' ');
+  return { text: normalizeCareerText(text), cut };
+}
+
+/**
+ * The first {@link MAX_DESCRIPTION_CHARS} *visible* characters of a description: tags, entities
+ * and markdown stripped, normalised. At most {@link MAX_DESCRIPTION_SCAN_CHARS} raw characters are
+ * scanned (NFR-1), so a markup-heavy page is read past its first few kilobytes of wrappers but
+ * cost stays bounded.
+ */
 function prepareDescription(desc: string): string {
-  // Tags and entities only shrink the text, so 1.5x the budget of raw input is always enough.
-  const budget = MAX_DESCRIPTION_CHARS * 1.5;
-  let text = desc.length > budget ? desc.slice(0, budget) : desc;
-  if (text.includes('<')) text = text.replace(/<[^>]*>/g, ' ');
-  if (text.includes('&')) text = text.replace(/&nbsp;|&amp;|&#?\w+;/g, ' ');
-  text = text.replace(/[*_#`>|~]+/g, ' ');
-  return normalizeCareerText(text).slice(0, MAX_DESCRIPTION_CHARS);
+  let text = '';
+  for (const window of DESCRIPTION_WINDOWS) {
+    const pass = visibleText(desc, window);
+    text = pass.text;
+    if (!pass.cut || text.length >= MAX_DESCRIPTION_CHARS) break;
+  }
+  return text.slice(0, MAX_DESCRIPTION_CHARS);
 }
 
 /** Lower bounds of every "N years of experience" mention in `text`. */
