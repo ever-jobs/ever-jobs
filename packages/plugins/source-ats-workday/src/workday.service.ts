@@ -26,6 +26,9 @@ import {
   WORKDAY_HEADERS,
   WORKDAY_PAGE_SIZE,
   WORKDAY_DETAIL_CONCURRENCY,
+  WORKDAY_DETAIL_DELAY_MIN_MS,
+  WORKDAY_DETAIL_DELAY_MAX_MS,
+  workdaySearchText,
   parseWorkdaySlug,
   buildWorkdayUrl,
   buildWorkdayDetailUrl,
@@ -70,16 +73,21 @@ export class WorkdayService implements IScraper {
     const listingsToEnrich: WorkdayJobListItem[] = [];
     const seenKeys = new Set<string>();
     let offset = 0;
+    // Spec 1736 T6: Workday filters by keyword server-side; list mode sends ''.
+    const searchText = workdaySearchText(input.searchTerm);
 
     try {
-      this.logger.log(`Fetching Workday jobs for ${company} (wd${wdNumber}/${site})`);
+      this.logger.log(
+        `Fetching Workday jobs for ${company} (wd${wdNumber}/${site}), ` +
+        `term=${searchText ? JSON.stringify(searchText) : '<none>'}`,
+      );
 
       while (listingsToEnrich.length < resultsWanted) {
         const payload = {
           appliedFacets: {},
           limit: WORKDAY_PAGE_SIZE,
           offset,
-          searchText: '',
+          searchText,
         };
 
         const response = await client.post(apiUrl, payload);
@@ -206,6 +214,12 @@ export class WorkdayService implements IScraper {
 
     for (let index = 0; index < listings.length; index += WORKDAY_DETAIL_CONCURRENCY) {
       const batch = listings.slice(index, index + WORKDAY_DETAIL_CONCURRENCY);
+      // Pace every detail request (Spec 1735 §4.6): a listing request or the
+      // previous detail request always precedes it on the same host. A listing
+      // without a detail path makes no request, so it needs no pause.
+      if (batch.some((listing) => listing.externalPath)) {
+        await randomSleep(WORKDAY_DETAIL_DELAY_MIN_MS, WORKDAY_DETAIL_DELAY_MAX_MS);
+      }
       const settled = await Promise.allSettled(
         batch.map(async (listing): Promise<WorkdayJobDetail | null> => {
           if (!listing.externalPath) return null;

@@ -323,8 +323,13 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(result.jobs[0].companyName).toBe('xenergy');
     });
 
-    it('starts no more than five detail requests before the first batch settles', async () => {
-      const page = {
+    /**
+     * Spec 1736 T8 / Spec 1735 §4.6 — 55 company plugins bring Workday into every
+     * default search, so a board may never have more than one detail request in
+     * flight, and each detail request is preceded by a paced sleep.
+     */
+    function sixRolePage() {
+      return {
         total: 6,
         jobPostings: Array.from({ length: 6 }, (_, index) => ({
           title: `Role ${index}`,
@@ -332,28 +337,118 @@ describe('WorkdayService — Spec 720 / T05', () => {
           locationsText: 'Rockville, MD',
         })),
       };
-      mockPost.mockResolvedValueOnce({ data: page });
+    }
 
+    it('never has more than one detail request in flight', async () => {
+      mockPost.mockResolvedValueOnce({ data: sixRolePage() });
+
+      let inFlight = 0;
+      let maxInFlight = 0;
       const resolvers: Array<() => void> = [];
-      mockGet.mockImplementation(
-        () => new Promise((resolve) => resolvers.push(() => resolve({ data: {} }))),
-      );
+      mockGet.mockImplementation(() => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        return new Promise((resolve) =>
+          resolvers.push(() => {
+            inFlight--;
+            resolve({ data: {} });
+          }),
+        );
+      });
 
       const scrapePromise = new WorkdayService().scrape({
         siteType: [Site.WORKDAY],
         companySlug: 'xenergy:5:X-energyUS',
       } as ScraperInputDto);
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(mockGet).toHaveBeenCalledTimes(5);
 
-      resolvers.splice(0).forEach((resolve) => resolve());
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(mockGet).toHaveBeenCalledTimes(6);
-      resolvers.splice(0).forEach((resolve) => resolve());
+      // Settle the requests one at a time; each step must reveal exactly one
+      // new request, never two.
+      for (let step = 1; step <= 6; step++) {
+        for (let tick = 0; tick < 10 && resolvers.length === 0; tick++) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        expect(mockGet).toHaveBeenCalledTimes(step);
+        expect(resolvers).toHaveLength(1);
+        resolvers.splice(0).forEach((resolve) => resolve());
+      }
 
       const result = await scrapePromise;
       expect(result.jobs).toHaveLength(6);
+      expect(maxInFlight).toBe(1);
+      expect(mockGet).toHaveBeenCalledTimes(6);
+    });
+
+    it('sleeps 250-500 ms before each detail request, and not for a listing without a path', async () => {
+      const page = sixRolePage();
+      page.jobPostings.push({ title: 'No Path Role', locationsText: 'Rockville, MD' } as never);
+      mockPost.mockResolvedValueOnce({ data: page });
+      const { randomSleep } = jest.requireMock('@ever-jobs/common') as {
+        randomSleep: jest.Mock;
+      };
+      randomSleep.mockClear();
+
+      const result = await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'xenergy:5:X-energyUS',
+      } as ScraperInputDto);
+
+      expect(result.jobs).toHaveLength(7);
+      expect(mockGet).toHaveBeenCalledTimes(6);
+      // One short page, so no inter-page sleep: every call is a detail pause.
+      expect(randomSleep.mock.calls).toEqual(Array.from({ length: 6 }, () => [250, 500]));
+    });
+  });
+
+  /**
+   * Spec 1736 T6 — the keyword reaches Workday as `searchText`, so a keyword
+   * search is filtered server-side and only matching postings are enriched.
+   * List mode (contract C1: term absent, null, empty or whitespace) sends ''.
+   */
+  describe('keyword — Spec 1736 T6', () => {
+    async function searchTextFor(searchTerm: unknown): Promise<unknown> {
+      mockPost.mockResolvedValueOnce({ data: { total: 0, jobPostings: [] } });
+      await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'tesla:5:Tesla',
+        searchTerm,
+      } as unknown as ScraperInputDto);
+      expect(mockPost).toHaveBeenCalledTimes(1);
+      const body = mockPost.mock.calls[0][1] as Record<string, unknown>;
+      mockPost.mockReset();
+      return body.searchText;
+    }
+
+    it('sends the trimmed searchTerm as searchText on every listing page', async () => {
+      const page = (offset: number, count: number) => ({
+        total: 25,
+        jobPostings: Array.from({ length: count }, (_, i) => ({
+          title: `Intern ${offset + i}`,
+          externalPath: `/job/Austin/Intern_R-${offset + i}`,
+        })),
+      });
+      mockPost
+        .mockResolvedValueOnce({ data: page(0, 20) })
+        .mockResolvedValueOnce({ data: page(20, 5) });
+
+      await new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: 'tesla:5:Tesla',
+        searchTerm: '  software engineer intern  ',
+        resultsWanted: 100,
+      } as ScraperInputDto);
+
+      expect(mockPost).toHaveBeenCalledTimes(2);
+      expect(mockPost.mock.calls.map((c) => c[1])).toEqual([
+        { appliedFacets: {}, limit: 20, offset: 0, searchText: 'software engineer intern' },
+        { appliedFacets: {}, limit: 20, offset: 20, searchText: 'software engineer intern' },
+      ]);
+    });
+
+    it('sends an empty search in list mode', async () => {
+      expect(await searchTextFor(undefined)).toBe('');
+      expect(await searchTextFor(null)).toBe('');
+      expect(await searchTextFor('')).toBe('');
+      expect(await searchTextFor('   ')).toBe('');
     });
   });
 

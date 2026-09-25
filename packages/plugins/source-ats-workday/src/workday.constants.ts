@@ -10,8 +10,30 @@ import { toDateOnly } from '@ever-jobs/common';
 /** Default page size for Workday pagination */
 export const WORKDAY_PAGE_SIZE = 20;
 
-/** Maximum number of public CXS detail requests in flight at once. */
-export const WORKDAY_DETAIL_CONCURRENCY = 5;
+/**
+ * Maximum number of public CXS detail requests in flight at once, per board.
+ *
+ * One (Spec 1736 T8 / Spec 1735 §4.6): ~55 company plugins delegate to this
+ * adapter in the default fan-out, and their tenants share a handful of Workday
+ * clusters (wd1/wd5/wd12), so five per board meant ~280 concurrent requests to
+ * `*.myworkdayjobs.com` per search from one egress IP.
+ */
+export const WORKDAY_DETAIL_CONCURRENCY = 1;
+
+/** Pause before each detail request, milliseconds (random in [min, max]). */
+export const WORKDAY_DETAIL_DELAY_MIN_MS = 250;
+export const WORKDAY_DETAIL_DELAY_MAX_MS = 500;
+
+/**
+ * The `searchText` sent to Workday's job search (Spec 1736 T6): the trimmed
+ * search term, or `''` in list mode (term absent, null, empty or whitespace —
+ * contract C1). Workday filters server-side, so a keyword search only pages
+ * and enriches matching postings. A non-string never becomes `"undefined"` /
+ * `"null"` / `"[object Object]"` text.
+ */
+export function workdaySearchText(searchTerm: string | null | undefined): string {
+  return typeof searchTerm === 'string' ? searchTerm.trim() : '';
+}
 
 /** Default headers for Workday API requests */
 export const WORKDAY_HEADERS: Record<string, string> = {

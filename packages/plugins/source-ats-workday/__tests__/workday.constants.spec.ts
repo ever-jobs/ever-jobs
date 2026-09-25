@@ -4,6 +4,9 @@ import {
   buildWorkdayUrl,
   buildWorkdayDetailUrl,
   WORKDAY_DETAIL_CONCURRENCY,
+  WORKDAY_DETAIL_DELAY_MIN_MS,
+  WORKDAY_DETAIL_DELAY_MAX_MS,
+  workdaySearchText,
 } from '../src/workday.constants';
 
 /**
@@ -152,7 +155,32 @@ describe('existing pure helpers — regression', () => {
     );
   });
 
-  it('bounds detail enrichment to five requests', () => {
-    expect(WORKDAY_DETAIL_CONCURRENCY).toBe(5);
+  // Spec 1736 T8 / Spec 1735 §4.6: 55 company plugins bring Workday into every
+  // default search, so detail enrichment is one request at a time, paced.
+  it('enriches details one request at a time, with a small pause', () => {
+    expect(WORKDAY_DETAIL_CONCURRENCY).toBe(1);
+    expect(WORKDAY_DETAIL_DELAY_MIN_MS).toBe(250);
+    expect(WORKDAY_DETAIL_DELAY_MAX_MS).toBe(500);
+    expect(WORKDAY_DETAIL_DELAY_MAX_MS).toBeGreaterThanOrEqual(WORKDAY_DETAIL_DELAY_MIN_MS);
+  });
+});
+
+/** Spec 1736 T6 — the keyword reaches Workday; list mode sends an empty search. */
+describe('workdaySearchText', () => {
+  it('sends the trimmed search term', () => {
+    expect(workdaySearchText('  software engineer intern ')).toBe('software engineer intern');
+    expect(workdaySearchText('C++')).toBe('C++');
+  });
+
+  it('sends an empty search in list mode (absent, null, empty or whitespace)', () => {
+    expect(workdaySearchText(undefined)).toBe('');
+    expect(workdaySearchText(null)).toBe('');
+    expect(workdaySearchText('')).toBe('');
+    expect(workdaySearchText(' \t\n ')).toBe('');
+  });
+
+  it('never serialises a non-string term as undefined or null text', () => {
+    expect(workdaySearchText(42 as unknown as string)).toBe('');
+    expect(workdaySearchText({} as unknown as string)).toBe('');
   });
 });
