@@ -5,12 +5,14 @@
 
 ---
 
-## 2026-09-25 — Spec 1724 (with 1720–1722) — second review: dedup keeps per-office postings, one key input, CI and log fixes
+## 2026-09-25 — Spec 1724 (with 1720–1722) — second review: dedup keeps per-office postings, one key input, one cache entry, list-mode memory, per-source expiry detail
 
 **Why:** a second review of the list-mode branch, and a live crawl through it, found that the
 default dedup engine dropped real postings (Jane Street: 30 in, 20 out — a New York
 "Full-Time: New Grad" posting was folded into a Hong Kong "Summer Internship"), that `dedupKey`
-and the engine's cluster id were built from different fields, that the durable store suites ran in
+and the engine's cluster id were built from different fields, that with `CACHE_MAX_ITEMS=1` page 2
+of a search re-ran the fan-out, that list mode could exhaust memory through the cache, that the
+`end` line gave no per-source basis for expiring postings, that the durable store suites ran in
 no CI job, and that one log heading broke `lint:docs` once merged with another lane.
 
 **Spec 1724 — merge gate (new).** Every merge the hash or MinHash stage proposes now passes a gate:
@@ -75,7 +77,8 @@ another lane's date-only entry of the same day.
 `.specify/specs/1720-list-mode-site-categories/{spec,tasks}.md`, `.env.example`,
 `apps/api/src/jobs/__tests__/{search-cache.spec.ts,jobs.controller.cache-lru.spec.ts}` (new),
 `apps/api/src/jobs/__tests__/{jobs.controller.spec.ts,jobs.controller.ndjson.spec.ts,search-completeness.spec.ts}`,
-`.specify/specs/1721-ndjson-search-stream/{spec,plan,tasks}.md`, `README.md`, `docs/index.md`, this log.
+`.specify/specs/1721-ndjson-search-stream/{spec,plan,tasks}.md`, `README.md`, `docs/index.md`,
+`docs/questions.md` (Q-103 addendum), this log.
 
 ---
 

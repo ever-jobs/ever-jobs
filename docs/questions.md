@@ -55,6 +55,15 @@ MinHash stage, names each cluster after its *head* (first member in input order)
 extra word) keep *different* keys under A; a consumer that wants them merged must dedup fuzzily
 itself. Exact-after-normalisation duplicates — the common cross-source case — always share a key.
 
+**Addendum (second review, 2026-09-25):** A still holds, with two corrections. (1) The per-job key
+now reads exactly the fields the engine reads — `canonicalKeyInputForJob` passes `locations[]`
+and `isRemote` as well (Spec 1721 FR-10); before, multi-location and remote country-only postings
+got a key that differed from their cluster id. (2) Spec 1724's merge gate can keep two postings
+apart whose company, title and location coincide (an internship and a new-grad posting of the
+same title in one city). On the default `dedup=true` path those representatives carry their
+(distinct, discriminated) cluster ids instead of the shared per-job key, so distinct postings
+never share a `dedupKey`; with `dedup=false` they still share one (Spec 1724 D-05).
+
 **Resolution:** _pending review._
 
 ---
