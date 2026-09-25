@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { EventEmitter } from 'events';
 import { ServiceUnavailableException, StreamableFile } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -16,7 +17,7 @@ import {
 
 import configuration from '../../config/configuration';
 import { JobsAggregator } from '../jobs.aggregator';
-import { JobsController } from '../jobs.controller';
+import { JobsController, NDJSON_CAREER_LEVEL_CHUNK } from '../jobs.controller';
 import { JobsService } from '../jobs.service';
 import { SEARCH_CACHE_ENDPOINT } from '../search-cache';
 import { COMPLETE_SEARCH } from '../search-completeness';
@@ -52,6 +53,25 @@ const jobsService = { searchJobs: jest.fn() } as unknown as JobsService;
 const classifier = new CareerLevelClassifierService();
 const config = (classify: boolean) =>
   ({ get: (key: string, def?: unknown) => (key === 'careerLevel.classify' ? classify : def) }) as unknown as ConfigService;
+
+/** The real classifier, counting how many jobs it was asked to classify (Spec 1730, FR-12). */
+function countingClassifier(): ICareerLevelClassifier & { classified: number } {
+  const counter = {
+    classified: 0,
+    classify: (input: Parameters<ICareerLevelClassifier['classify']>[0]) => classifier.classify(input),
+    classifyBatch: (inputs: Parameters<ICareerLevelClassifier['classifyBatch']>[0]) => {
+      counter.classified += inputs.length;
+      return classifier.classifyBatch(inputs);
+    },
+  };
+  return counter;
+}
+
+/** `n` postings with distinct titles, so a title-keyed dedup keeps every one. */
+function manyJobs(n: number): JobPostDto[] {
+  const titles = ['Software Engineer Intern', 'Senior Software Engineer', 'Engineering Manager', 'Barista'];
+  return Array.from({ length: n }, (_, i) => job(`m${i}`, `${titles[i % titles.length]} ${i}`));
+}
 
 /** Engine stub collapsing every job with the same title into one cluster. */
 function titleEngine(): IDedupEngine {
@@ -229,6 +249,75 @@ describe('JobsAggregator — career level (Spec 1730)', () => {
       ['a', 'internship'],
       ['c', 'staff'],
     ]);
+  });
+});
+
+describe('JobsAggregator — career level for the returned jobs only (Spec 1730, FR-12)', () => {
+  it('deferCareerLevel without a filter classifies nothing and says so; attachCareerLevel classifies exactly the jobs passed', async () => {
+    const counting = countingClassifier();
+    const agg = aggregator({ engine: titleEngine(), classifier: counting });
+    const out = await agg.aggregateRaw(sampleJobs(), { careerLevels: undefined, deferCareerLevel: true });
+
+    expect(out.careerLevelDeferred).toBe(true);
+    expect(counting.classified).toBe(0);
+    expect(out.jobs.every((j) => j.careerLevel === undefined)).toBe(true);
+
+    await expect(agg.attachCareerLevel(out.jobs.slice(0, 2))).resolves.toBe(true);
+    expect(counting.classified).toBe(2);
+    expect(out.jobs.map((j) => j.careerLevel?.level)).toEqual([
+      'internship',
+      'new_grad',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+
+    // The verdicts are the ones an undeferred aggregateRaw attaches.
+    await agg.attachCareerLevel(out.jobs);
+    const eager = await aggregator({ engine: titleEngine() }).aggregateRaw(sampleJobs());
+    expect(out.jobs.map((j) => j.careerLevel)).toEqual(eager.jobs.map((j) => j.careerLevel));
+    expect(eager.careerLevelDeferred).toBeUndefined();
+  });
+
+  it('a filter ignores deferCareerLevel: every job is classified once, attached and filtered, nothing is deferred', async () => {
+    const counting = countingClassifier();
+    const out = await aggregator({ engine: titleEngine(), classifier: counting }).aggregateRaw(sampleJobs(), {
+      careerLevels: ['internship', 'new_grad'],
+      deferCareerLevel: true,
+    });
+    expect(out.careerLevelDeferred).toBeUndefined();
+    expect(counting.classified).toBe(6);
+    expect(out.jobs.map((j) => j.careerLevel?.level)).toEqual(['internship', 'new_grad', 'internship']);
+    expect(out.careerLevelFilteredOut).toBe(3);
+  });
+
+  it('nothing is deferred when attachment is off or no classifier is bound, and attachCareerLevel is a no-op', async () => {
+    for (const agg of [
+      aggregator({ engine: titleEngine(), classify: false }),
+      aggregator({ engine: titleEngine(), classifier: null }),
+    ]) {
+      const out = await agg.aggregateRaw(sampleJobs(), { careerLevels: undefined, deferCareerLevel: true });
+      expect(out.careerLevelDeferred).toBeUndefined();
+      await expect(agg.attachCareerLevel(out.jobs)).resolves.toBe(true);
+      expect(out.jobs.every((j) => j.careerLevel === undefined)).toBe(true);
+    }
+  });
+
+  it('attachCareerLevel never throws: a failing classifier leaves those jobs unclassified and resolves false', async () => {
+    const failing: ICareerLevelClassifier = {
+      classify: () => {
+        throw new Error('boom');
+      },
+      classifyBatch: () => {
+        throw new Error('boom');
+      },
+    };
+    const agg = aggregator({ engine: titleEngine(), classifier: failing });
+    const out = await agg.aggregateRaw(sampleJobs(), { careerLevels: undefined, deferCareerLevel: true });
+    expect(out.careerLevelDeferred).toBe(true);
+    await expect(agg.attachCareerLevel(out.jobs)).resolves.toBe(false);
+    expect(out.jobs.every((j) => j.careerLevel === undefined)).toBe(true);
   });
 });
 
@@ -511,5 +600,125 @@ describe('JobsController → aggregator → classifier, end to end (Spec 1730)',
     const unfiltered = await ndjson(controller(sampleJobs(), { classifier: null }), new ScraperInputDto({}));
     expect(unfiltered.filter((l) => l.type === 'job')).toHaveLength(6);
     expect(unfiltered[unfiltered.length - 1]).toMatchObject({ type: 'end', total: 6 });
+  });
+
+  // ── FR-12: without a filter, only the jobs actually returned are classified ──
+
+  type Paged = { count: number; jobs: JobPostDto[]; total_pages: number };
+  const paged = (ctl: JobsController, input: ScraperInputDto, page: string, size: string) =>
+    ctl.searchJobs(input, undefined, 'true', page, size) as Promise<Paged>;
+
+  it('paginated JSON classifies only the page; every job on it carries careerLevel (FR-12)', async () => {
+    const counting = countingClassifier();
+    const jobs = manyJobs(25);
+    const page = await paged(controller(jobs, { classifier: counting }), new ScraperInputDto({}), '2', '10');
+
+    expect(page).toMatchObject({ count: 25, total_pages: 3 });
+    expect(page.jobs.map((j) => j.id)).toEqual(jobs.slice(10, 20).map((j) => j.id));
+    expect(page.jobs.every((j) => j.careerLevel)).toBe(true);
+    // Jobs 10..13 cycle through manyJobs' four titles from the third.
+    expect(page.jobs.map((j) => j.careerLevel?.level).slice(0, 4)).toEqual([
+      'manager',
+      'unknown',
+      'internship',
+      'senior',
+    ]);
+    expect(counting.classified).toBe(10);
+    // The jobs off the page were never classified.
+    expect(jobs.filter((j) => j.careerLevel).map((j) => j.id)).toEqual(page.jobs.map((j) => j.id));
+
+    // Control: the same search unpaginated returns, and so classifies, all 25.
+    const all = countingClassifier();
+    const json = (await controller(manyJobs(25), { classifier: all }).searchJobs(new ScraperInputDto({}))) as Paged;
+    expect(json.jobs.every((j) => j.careerLevel)).toBe(true);
+    expect(all.classified).toBe(25);
+  });
+
+  it('paginated JSON with a filter classifies the whole set once, then pages the filtered set', async () => {
+    const counting = countingClassifier();
+    const page = await paged(
+      controller(sampleJobs(), { classifier: counting }),
+      new ScraperInputDto({ careerLevels: ['internship', 'new_grad'] }),
+      '1',
+      '2',
+    );
+    expect(page).toMatchObject({ count: 3, total_pages: 2 });
+    expect(page.jobs.map((j) => j.careerLevel?.level)).toEqual(['internship', 'new_grad']);
+    expect(counting.classified).toBe(6); // every job once for the filter; the page is not re-classified
+  });
+
+  it('CSV classifies and flattens every returned job (FR-12)', async () => {
+    const counting = countingClassifier();
+    const res = { setHeader: jest.fn() };
+    const file = (await controller(manyJobs(12), { classifier: counting }).searchJobs(
+      new ScraperInputDto({}),
+      'csv',
+      'true', // ignored for CSV: the whole set is returned
+      '1',
+      '5',
+      undefined,
+      undefined,
+      undefined,
+      res as never,
+    )) as { getStream: () => NodeJS.ReadableStream };
+    const chunks: Buffer[] = [];
+    for await (const c of file.getStream() as AsyncIterable<Buffer>) chunks.push(Buffer.from(c));
+    const rows = Buffer.concat(chunks).toString('utf-8').trim().split('\n');
+    const header = rows[0]!.split(',');
+    const levelColumn = header.indexOf('careerLevel.level');
+    expect(levelColumn).toBeGreaterThanOrEqual(0);
+    expect(rows).toHaveLength(13);
+    expect(counting.classified).toBe(12);
+  });
+
+  it('NDJSON classifies chunk by chunk as it writes; every job line carries careerLevel (FR-12)', async () => {
+    const total = 2 * NDJSON_CAREER_LEVEL_CHUNK + 7;
+    const counting = countingClassifier();
+    const attach = jest.spyOn(JobsAggregator.prototype, 'attachCareerLevel');
+    try {
+      const lines = await ndjson(controller(manyJobs(total), { classifier: counting }), new ScraperInputDto({}));
+      const jobLines = lines.filter((l) => l.type === 'job').map((l) => l.data as JobPostDto);
+      expect(jobLines).toHaveLength(total);
+      expect(jobLines.every((j) => j.careerLevel)).toBe(true);
+      expect(counting.classified).toBe(total);
+      expect(attach.mock.calls.map(([chunk]) => chunk.length)).toEqual([
+        NDJSON_CAREER_LEVEL_CHUNK,
+        NDJSON_CAREER_LEVEL_CHUNK,
+        7,
+      ]);
+      expect(lines[lines.length - 1]).toMatchObject({ type: 'end', total });
+    } finally {
+      attach.mockRestore();
+    }
+  });
+
+  it('NDJSON: a consumer that leaves early stops the classification with the stream (FR-12)', async () => {
+    const total = 4 * NDJSON_CAREER_LEVEL_CHUNK;
+    const counting = countingClassifier();
+    const res = Object.assign(new EventEmitter(), { setHeader: jest.fn() });
+    const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+    // Nobody reads the stream: the producer fills the stream buffer and parks on `drain`.
+    await controller(manyJobs(total), { classifier: counting }).searchJobs(
+      new ScraperInputDto({}),
+      'ndjson',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      res as never,
+    );
+    for (let i = 0; i < 500 && counting.classified === 0; i++) await tick();
+    for (let i = 0; i < 50; i++) await tick();
+    const beforeClose = counting.classified;
+    expect(beforeClose).toBeGreaterThan(0);
+
+    res.emit('close'); // the client went away
+    for (let i = 0; i < 50; i++) await tick();
+
+    expect(counting.classified).toBe(beforeClose);
+    expect(counting.classified).toBeLessThan(total);
+    expect(counting.classified % NDJSON_CAREER_LEVEL_CHUNK).toBe(0);
   });
 });

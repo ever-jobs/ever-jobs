@@ -68,6 +68,15 @@ export class SearchCancelledError extends Error {
   }
 }
 
+/**
+ * Jobs classified per step of an NDJSON stream (Spec 1730 / FR-12): each step
+ * attaches `careerLevel` to this many jobs, then writes their lines. Around
+ * 15–25 ms of classification on an idle core, so the first job line is not held
+ * back by the rest of the set; the classification itself yields to the event
+ * loop inside the aggregator (NFR-2).
+ */
+export const NDJSON_CAREER_LEVEL_CHUNK = 256;
+
 @ApiTags('Jobs')
 @Controller('api/jobs')
 export class JobsController {
@@ -320,6 +329,12 @@ export class JobsController {
       outputJobs = jobs.slice(start, start + pageSize);
     }
 
+    // ── Career level (Spec 1730 / FR-12) — the returned window only ──
+    // A page of a 30 000-job list-mode search classifies page_size jobs; JSON
+    // and CSV return every job, so they classify every job. With a filter the
+    // aggregator already classified the whole set and nothing is deferred.
+    if (aggregated.careerLevelDeferred) await this.aggregator.attachCareerLevel(outputJobs);
+
     // ── Corpus signals (Spec 740; scoped by Spec 5025) — opt-in ──
     await this.applyCorpusSignals(outputJobs, parseBool(livenessRaw), parseBool(legitimacyRaw));
 
@@ -486,13 +501,16 @@ export class JobsController {
     // off by default, on by default for an explicitly selected durable store).
     // The fallback below only applies when no configuration is loaded at all.
     const persist = this.configService.get<boolean>('store.persistSearch', true);
-    // Spec 1730 — careerLevel is attached inside the aggregator; only the
-    // filter is passed. JSON and NDJSON both come through here, so the filter
-    // applies identically to both.
+    // Spec 1730 — the careerLevels filter runs inside the aggregator. JSON and
+    // NDJSON both come through here, so it applies identically to both.
+    // FR-12 — without a filter, careerLevel is attached by the caller to the
+    // jobs it actually returns (the page, the streamed chunks), not here to
+    // the whole deduplicated set: see `aggregated.careerLevelDeferred`.
     const aggregated = await this.aggregator.aggregateRaw(rawJobs, {
       dedup,
       persist,
       careerLevels: input.careerLevels,
+      deferCareerLevel: true,
     });
 
     this.logger.log(
@@ -605,8 +623,18 @@ export class JobsController {
       await this.applyCorpusSignals(jobs, flags.liveness, flags.legitimacy);
 
       hooks.onStreamStart();
-      for (const job of jobs) {
-        if (!(await writer.writeJob(job))) return; // consumer went away
+      // Spec 1730 / FR-12 — careerLevel is attached chunk by chunk as the
+      // lines are written, so the first job line does not wait for the whole
+      // set and a consumer that leaves early stops the classification too.
+      let classify = aggregated.careerLevelDeferred === true;
+      for (let start = 0; start < jobs.length; start += NDJSON_CAREER_LEVEL_CHUNK) {
+        const chunk = jobs.slice(start, start + NDJSON_CAREER_LEVEL_CHUNK);
+        // A classifier that failed once is not retried per chunk (one warning,
+        // not one per 256 jobs); the rest of the stream stays unclassified.
+        if (classify) classify = await this.aggregator.attachCareerLevel(chunk);
+        for (const job of chunk) {
+          if (!(await writer.writeJob(job))) return; // consumer went away
+        }
       }
       // Spec 1721 / FR-15 — the crawl-completeness fields are additive; they
       // are omitted (never guessed) only if the service reported none.

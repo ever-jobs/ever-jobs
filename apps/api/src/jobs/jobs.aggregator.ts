@@ -67,6 +67,19 @@ export interface AggregateOptions {
    * than return the unfiltered set. A successful result therefore always means "filtered".
    */
   readonly careerLevels?: ReadonlyArray<string>;
+
+  /**
+   * Leave `careerLevel` for the caller to attach to the jobs it actually returns (Spec 1730,
+   * FR-12): a page of a paginated search, or each chunk of a stream, via
+   * {@link JobsAggregator.attachCareerLevel}. Without it the whole deduplicated set is classified
+   * here, which for a 30,000-job list-mode search means 30,000 classifications to serve a
+   * 10-job page. {@link AggregateResult.careerLevelDeferred} says whether the caller now owes
+   * that call.
+   *
+   * Ignored when a `careerLevels` filter is set: the filter needs a verdict for every job, so
+   * all of them are classified (and attached) here, and nothing is deferred. Default `false`.
+   */
+  readonly deferCareerLevel?: boolean;
 }
 
 /**
@@ -134,6 +147,13 @@ export interface AggregateResult {
    * ran; `jobs` / `outputCount` are then post-filter.
    */
   readonly careerLevelFilteredOut?: number;
+  /**
+   * `true` when classification was deferred to the caller (Spec 1730, FR-12): it asked for it
+   * (`deferCareerLevel`), no filter needed the verdicts, attachment is on and a classifier is
+   * bound. The jobs carry no `careerLevel` yet; the caller must pass every job it returns to
+   * {@link JobsAggregator.attachCareerLevel}. Absent otherwise — the jobs are then final.
+   */
+  readonly careerLevelDeferred?: boolean;
 }
 
 /**
@@ -215,10 +235,11 @@ export class JobsAggregator {
    * Dedup (and persist) an already-fanned-out list, then attach `careerLevel` to every returned
    * job and apply the optional `careerLevels` filter (Spec 1730).
    *
-   * Classification runs here — once, after dedup, on the jobs that are actually returned — so
-   * every response shape built from this result (JSON, pagination, CSV, NDJSON, GraphQL)
-   * carries the field without format-specific code. See {@link dedupAndPersist} for the
-   * dedup / persistence contract, which is unchanged.
+   * Classification runs here — once, after dedup — so every response shape built from this
+   * result carries the field without format-specific code. A caller that returns only part of
+   * the result (a page, a stream written chunk by chunk) passes `deferCareerLevel` and classifies
+   * just that part with {@link attachCareerLevel} (FR-12); a filter always classifies everything
+   * here. See {@link dedupAndPersist} for the dedup / persistence contract, which is unchanged.
    */
   async aggregateRaw(
     rawJobs: JobPostDto[],
@@ -248,17 +269,22 @@ export class JobsAggregator {
    * Failure handling: with no filter, a classifier failure logs and returns the jobs
    * unclassified (the field is additive). With a filter it throws `ServiceUnavailableException`
    * (503): returning the unfiltered set would silently answer a different question (Q-106).
+   *
+   * With `deferCareerLevel` and no filter nothing is classified here: the result says
+   * `careerLevelDeferred: true` and the caller classifies what it returns (FR-12).
    */
   private async applyCareerLevel(
     result: AggregateResult,
     options: AggregateOptions,
   ): Promise<AggregateResult> {
-    const attach = this.configService?.get<boolean>('careerLevel.classify', true) ?? true;
+    const attach = this.careerLevelAttachEnabled();
     const wanted = wantedCareerLevels(options);
     const filter = wanted.size > 0;
     if (!attach && !filter) return result;
     // Unreachable with a filter (aggregateRaw failed fast); without one, jobs stay unclassified.
     if (!this.careerLevelClassifier) return result;
+    // FR-12 — no filter needs the verdicts, so only the jobs the caller returns are classified.
+    if (!filter && options.deferCareerLevel) return { ...result, careerLevelDeferred: true };
 
     let verdicts: CareerLevelVerdict[];
     try {
@@ -296,6 +322,43 @@ export class JobsAggregator {
       outputCount: kept.length,
       careerLevelFilteredOut: result.jobs.length - kept.length,
     };
+  }
+
+  /**
+   * Attach `careerLevel` to exactly these jobs, in place (Spec 1730, FR-12). For a caller whose
+   * {@link aggregateRaw} result says `careerLevelDeferred`: it passes the jobs it returns — the
+   * page, or each chunk of a stream as it is written — so a 10-job page of a 30,000-job search
+   * classifies 10 jobs. The verdicts equal what `aggregateRaw` would have attached (the
+   * classifier is pure), and classification is as cooperative (NFR-2).
+   *
+   * No filter depends on these verdicts, so a failure never fails the request: it logs, leaves
+   * these jobs unclassified and resolves `false` (as `aggregateRaw` degrades without a filter).
+   * A no-op resolving `true` when attachment is off (`EVER_JOBS_CLASSIFY_CAREER_LEVEL=false`),
+   * no classifier is bound, or `jobs` is empty.
+   */
+  async attachCareerLevel(jobs: ReadonlyArray<JobPostDto>): Promise<boolean> {
+    if (jobs.length === 0 || !this.careerLevelClassifier || !this.careerLevelAttachEnabled()) {
+      return true;
+    }
+    let verdicts: CareerLevelVerdict[];
+    try {
+      verdicts = await this.classifyCooperatively(this.careerLevelClassifier, jobs);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `career-level classification failed; returning ${jobs.length} jobs unclassified: ${message}`,
+      );
+      return false;
+    }
+    jobs.forEach((job, i) => {
+      job.careerLevel = verdicts[i];
+    });
+    return true;
+  }
+
+  /** `careerLevel.classify` (`EVER_JOBS_CLASSIFY_CAREER_LEVEL`, FR-7); absent → enabled. */
+  private careerLevelAttachEnabled(): boolean {
+    return this.configService?.get<boolean>('careerLevel.classify', true) ?? true;
   }
 
   /**

@@ -250,7 +250,11 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
     const lines = parseLines(
       await readAll((await callNdjson(controller, new ScraperInputDto({}), { dedup: 'false' })).file),
     );
-    expect(aggregator.aggregateRaw).toHaveBeenCalledWith(expect.any(Array), { dedup: false, persist: true });
+    expect(aggregator.aggregateRaw).toHaveBeenCalledWith(expect.any(Array), {
+      dedup: false,
+      persist: true,
+      deferCareerLevel: true,
+    });
     expect(lines[lines.length - 1]).toMatchObject({ type: 'end', deduped: false });
   });
 
@@ -266,6 +270,7 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
       dedup: true,
       persist: true,
       careerLevels: ['internship', 'new_grad'],
+      deferCareerLevel: true,
     });
   });
 
@@ -307,6 +312,7 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
       dedup: true,
       persist: true,
       careerLevels: ['executive'],
+      deferCareerLevel: true,
     });
     expect(lines[lines.length - 1]).toMatchObject({ type: 'end', complete: true });
   });

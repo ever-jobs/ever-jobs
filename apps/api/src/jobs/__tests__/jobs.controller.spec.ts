@@ -266,6 +266,7 @@ describe('JobsController', () => {
       expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, {
         dedup: true,
         persist: true,
+        deferCareerLevel: true,
       });
     });
 
@@ -278,6 +279,7 @@ describe('JobsController', () => {
       expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, {
         dedup: true,
         persist: false,
+        deferCareerLevel: true,
       });
     });
 
@@ -297,6 +299,7 @@ describe('JobsController', () => {
       expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, {
         dedup: false,
         persist: false,
+        deferCareerLevel: true,
       });
     });
   });
@@ -310,7 +313,7 @@ describe('JobsController', () => {
         new ScraperInputDto({ searchTerm: 'node' }),
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true, deferCareerLevel: true });
     });
 
     it('honours dedup=false explicitly', async () => {
@@ -326,7 +329,7 @@ describe('JobsController', () => {
         'false',      // dedup
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false, persist: true, deferCareerLevel: true });
     });
 
     it('honours dedup=0 explicitly', async () => {
@@ -342,7 +345,7 @@ describe('JobsController', () => {
         '0',
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false, persist: true, deferCareerLevel: true });
     });
 
     it('honours dedup=true explicitly', async () => {
@@ -358,7 +361,7 @@ describe('JobsController', () => {
         'true',
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true, deferCareerLevel: true });
     });
 
     it('falls back to dedup=true on garbage values', async () => {
@@ -374,7 +377,7 @@ describe('JobsController', () => {
         'not-a-bool',
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true, deferCareerLevel: true });
     });
 
     it('runs dedup on cached responses too', async () => {
@@ -386,7 +389,7 @@ describe('JobsController', () => {
       );
 
       expect(jobsService.searchJobs).not.toHaveBeenCalled();
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(cachedJobs, { dedup: true, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(cachedJobs, { dedup: true, persist: true, deferCareerLevel: true });
     });
 
     it('caches RAW jobs (pre-dedup) so cache invalidation is independent of engine version', async () => {
