@@ -42,7 +42,7 @@ import {
   workdayImpliedCountryCode,
   readAtsCountryOverlay,
   readWorkdayMaxDetailFetches,
-  readWorkdayScrapeTimeBudgetMs,
+  resolveWorkdayScrapeTimeBudget,
   WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR,
   WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR,
 } from './workday.constants';
@@ -56,8 +56,10 @@ import {
 interface WorkdayScrapeBudget {
   /** Detail requests this scrape may make ({@link WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR}). */
   readonly maxDetailFetches: number;
-  /** Configured time budget, ms; 0 = none ({@link WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}). */
+  /** Time budget, ms; 0 = none ({@link WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}, capped by the deadline hint). */
   readonly timeBudgetMs: number;
+  /** How the budget was set, for logs and diagnostics. */
+  readonly timeBudgetLabel: string;
   /** Epoch ms after which no listing page or detail request is started. */
   readonly deadlineAt: number;
 }
@@ -110,11 +112,18 @@ export class WorkdayService implements IScraper {
     const searchText = workdaySearchText(input.searchTerm);
 
     // Spec 1736 T11: bound what one board can cost. Read per scrape so an env
-    // change needs no restart of the adapter's singleton.
-    const timeBudgetMs = readWorkdayScrapeTimeBudgetMs();
+    // change needs no restart of the adapter's singleton. T15: measured from
+    // now, capped at 3/4 of the fan-out deadline read from the same env.
+    const timeBudget = resolveWorkdayScrapeTimeBudget();
+    const timeBudgetMs = timeBudget.budgetMs;
     const budget: WorkdayScrapeBudget = {
       maxDetailFetches: readWorkdayMaxDetailFetches(),
       timeBudgetMs,
+      timeBudgetLabel:
+        `${WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}=${timeBudget.configuredMs}` +
+        (timeBudget.cappedByDeadlineMs !== null
+          ? ` capped to ${timeBudgetMs} by the fan-out deadline ${timeBudget.cappedByDeadlineMs}`
+          : ''),
       deadlineAt: timeBudgetMs > 0 ? Date.now() + timeBudgetMs : Number.POSITIVE_INFINITY,
     };
     let listingCutShort = false;
@@ -187,7 +196,7 @@ export class WorkdayService implements IScraper {
         if (Date.now() >= budget.deadlineAt) {
           listingCutShort = true;
           this.logger.warn(
-            `Workday: time budget (${WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}=${timeBudgetMs}) spent while listing ` +
+            `Workday: time budget (${budget.timeBudgetLabel}) spent while listing ` +
             `${company} (wd${wdNumber}/${site}); stopping at ${listingsToEnrich.length} of ` +
             `${resultsWanted} wanted postings`,
           );
@@ -212,7 +221,7 @@ export class WorkdayService implements IScraper {
     const diagnostics = listingCutShort
       ? new ScrapeDiagnostics(
           'partial',
-          `time budget ${WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}=${timeBudgetMs} spent while listing: ` +
+          `time budget ${budget.timeBudgetLabel} spent while listing: ` +
           `${listingsToEnrich.length} of ${resultsWanted} wanted postings` +
           `${boardTotal !== undefined ? ` (board total ${boardTotal})` : ''}`,
         )
@@ -287,7 +296,7 @@ export class WorkdayService implements IScraper {
     }
     if (outcome.skippedByTime > 0) {
       this.logger.warn(
-        `Workday: time budget (${WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}=${budget.timeBudgetMs}) spent after ` +
+        `Workday: time budget (${budget.timeBudgetLabel}) spent after ` +
         `${outcome.requested} detail requests for ${company} (wd${wdNumber}/${site}); ` +
         `${outcome.skippedByTime} postings returned at list level without description`,
       );

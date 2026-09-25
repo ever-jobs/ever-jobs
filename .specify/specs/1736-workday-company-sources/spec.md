@@ -209,7 +209,8 @@ append to any existing value). The list was checked against the source on
 registered.
 
 Fan-out order already matters: the fan-out deadline applies today (120 s by
-default, `EVER_JOBS_SEARCH_DEADLINE_MS`; contract C4 renames it), and these
+default; `EVER_JOBS_FANOUT_DEADLINE_MS`, the contract-C4 name, preferred, with
+`EVER_JOBS_SEARCH_DEADLINE_MS` as the fallback name — §8.2), and these
 plugins are registered at the tail, so in a default fan-out that overruns it
 they are the first sources skipped or abandoned mid-flight. Sequential detail
 enrichment (T8) makes each Workday board slower (bounded per board since T11,
@@ -232,7 +233,7 @@ until it had fetched every detail.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `WORKDAY_MAX_DETAIL_FETCHES` | `50` | Detail requests per scrape (per board). The first N postings that have a detail path, in list order (newest first in list mode, Workday's best matches for a keyword), are enriched. `0` = no detail request. Unset, blank or not a non-negative integer → `50`. There is no "unlimited" value: set it at least as large as `resultsWanted`. |
-| `WORKDAY_SCRAPE_TIME_BUDGET_MS` | `90000` | Wall-clock budget per scrape, from the start of `scrape()`, covering listing and enrichment. Once spent, no further listing page and no further detail request starts (overrun: at most one pause and the request in flight). The first listing page is always requested. `0` or negative = no budget (the `EVER_JOBS_SEARCH_DEADLINE_MS` convention); not an integer → `90000`. |
+| `WORKDAY_SCRAPE_TIME_BUDGET_MS` | `90000` | Wall-clock budget per scrape, from the start of `scrape()`, covering listing and enrichment. Once spent, no further listing page and no further detail request starts (overrun: at most one pause and the request in flight). The first listing page is always requested. `0` or negative = no budget (the fan-out deadline's convention); not an integer → `90000`. Capped at 3/4 of the fan-out deadline (T15, §8.2). |
 
 **List-level postings.** A posting past either limit is still returned, built
 from its search row: title, `jobUrl` =
@@ -279,7 +280,7 @@ each with its own budget.
 `WORKDAY_MAX_DETAIL_FETCHES` to at least `resultsWanted`, raises (or
 disables) `WORKDAY_SCRAPE_TIME_BUDGET_MS` and the fan-out deadline together,
 and selects the boards explicitly (§7). Keep the Workday budget below the
-fan-out deadline, or a board is abandoned before it returns.
+fan-out deadline, or a board is abandoned before it returns (§8.2).
 
 **Also in this change.** The list-level `jobUrl` now carries the career-site
 segment: before, it was `https://{tenant}.wd{n}.myworkdayjobs.com/job/…`,
@@ -374,3 +375,36 @@ the label does not name, or a `datePosted` from the relative `postedOn`
 label versus the detail's absolute `startDate`. A consumer that stores
 Workday postings should upsert on `id` and let a later enriched copy fill in
 description and compensation.
+
+### 8.2 Time budget and fan-out deadline (review round 2, S3/S4 — T15)
+
+**Two clocks.** `WORKDAY_SCRAPE_TIME_BUDGET_MS` is measured from the start of
+each board's own `scrape()`, independent of the fan-out deadline, which runs
+from the start of the search. A board can start well after the search did (it
+waits for one of the `EVER_JOBS_SEARCH_CONCURRENCY` slots, or it is the
+second board of a multi-board plugin), so a budget below the deadline does
+not guarantee that the board returns before the deadline: it bounds how long a
+board runs, and so how long an abandoned board keeps running detached. Keep
+the budget below the deadline the deployment sets.
+
+**Names.** The fan-out deadline is `EVER_JOBS_FANOUT_DEADLINE_MS` (preferred;
+contract C4, Spec 1721), with `EVER_JOBS_SEARCH_DEADLINE_MS` (Spec 5026) read
+when the preferred name is unset, blank or not a number; 120 000 ms when
+neither is set; `0` or negative disables it. The docs name them in that
+order (`docs/DEPLOYMENT.md`, `.env.example`, `workday.constants.ts`). Builds
+from before Spec 1721 read only the fallback name.
+
+**Deadline hint (cheap cap).** The plugin contract still carries no deadline,
+so the adapter reads the fan-out deadline from the same variables, with the
+same precedence and parsing (`readFanoutDeadlineHintMs`), and caps its budget
+at 3/4 of it (`resolveWorkdayScrapeTimeBudget`; 90 s of the default 120 s,
+so the defaults are unchanged). The last quarter covers the request in flight
+when the budget runs out and a board that starts a little after the search.
+A deployment that lowers the deadline (say to 60 s) without lowering the
+Workday budget now gets a 45 s budget instead of a board that outlives every
+search. A budget of `0` stays off (the cap too); a disabled deadline applies no
+cap; a cap never rounds down to `0`. A listing cut short by a capped budget
+says so in its `partial` detail
+(`WORKDAY_SCRAPE_TIME_BUDGET_MS=90000 capped to 45000 by the fan-out deadline
+60000`). It is a hint: the adapter cannot know when the search started, and
+the CLI or a direct caller may use no fan-out deadline at all.

@@ -14,6 +14,12 @@ import {
   workdayImpliedCountryCode,
   readWorkdayMaxDetailFetches,
   readWorkdayScrapeTimeBudgetMs,
+  readFanoutDeadlineHintMs,
+  resolveWorkdayScrapeTimeBudget,
+  FANOUT_DEADLINE_ENV_VAR,
+  LEGACY_FANOUT_DEADLINE_ENV_VAR,
+  DEFAULT_FANOUT_DEADLINE_MS,
+  WORKDAY_BUDGET_SHARE_OF_FANOUT_DEADLINE,
   DEFAULT_WORKDAY_MAX_DETAIL_FETCHES,
   DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS,
   WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR,
@@ -481,5 +487,75 @@ describe('workdayImpliedCountryCode', () => {
     expect(workdayImpliedCountryCode({ state: 'MH' })).toBeNull();
     expect(workdayImpliedCountryCode({ state: 'ON' })).toBeNull();
     expect(workdayImpliedCountryCode(null)).toBeNull();
+  });
+});
+
+/** Spec 1736 T15 — the fan-out deadline as a hint that caps the Workday budget. */
+describe('readFanoutDeadlineHintMs', () => {
+  it('reads the preferred name, then the fallback name, then 120 s', () => {
+    expect(DEFAULT_FANOUT_DEADLINE_MS).toBe(120_000);
+    expect(readFanoutDeadlineHintMs({})).toBe(120_000);
+    expect(readFanoutDeadlineHintMs({ [LEGACY_FANOUT_DEADLINE_ENV_VAR]: '90000' })).toBe(90_000);
+    expect(
+      readFanoutDeadlineHintMs({ [FANOUT_DEADLINE_ENV_VAR]: '600000', [LEGACY_FANOUT_DEADLINE_ENV_VAR]: '90000' }),
+    ).toBe(600_000);
+  });
+
+  it('falls through a blank or non-numeric value, as the API does', () => {
+    expect(
+      readFanoutDeadlineHintMs({ [FANOUT_DEADLINE_ENV_VAR]: ' ', [LEGACY_FANOUT_DEADLINE_ENV_VAR]: '90000' }),
+    ).toBe(90_000);
+    expect(readFanoutDeadlineHintMs({ [FANOUT_DEADLINE_ENV_VAR]: 'soon' })).toBe(120_000);
+  });
+
+  it('returns 0 for a disabled deadline (0 or negative) and floors the rest', () => {
+    expect(readFanoutDeadlineHintMs({ [FANOUT_DEADLINE_ENV_VAR]: '0', [LEGACY_FANOUT_DEADLINE_ENV_VAR]: '90000' })).toBe(0);
+    expect(readFanoutDeadlineHintMs({ [LEGACY_FANOUT_DEADLINE_ENV_VAR]: '-1' })).toBe(0);
+    expect(readFanoutDeadlineHintMs({ [FANOUT_DEADLINE_ENV_VAR]: ' 150000.9 ' })).toBe(150_000);
+  });
+});
+
+describe('resolveWorkdayScrapeTimeBudget', () => {
+  it('keeps the 90 s default under the default 120 s deadline (3/4 of it, not lowered)', () => {
+    expect(WORKDAY_BUDGET_SHARE_OF_FANOUT_DEADLINE).toBe(0.75);
+    expect(resolveWorkdayScrapeTimeBudget({})).toEqual({
+      budgetMs: 90_000,
+      configuredMs: 90_000,
+      cappedByDeadlineMs: null,
+    });
+  });
+
+  it('caps the budget at 3/4 of a lower fan-out deadline, from either name', () => {
+    expect(resolveWorkdayScrapeTimeBudget({ [FANOUT_DEADLINE_ENV_VAR]: '60000' })).toEqual({
+      budgetMs: 45_000,
+      configuredMs: 90_000,
+      cappedByDeadlineMs: 60_000,
+    });
+    expect(resolveWorkdayScrapeTimeBudget({ [LEGACY_FANOUT_DEADLINE_ENV_VAR]: '60000' }).budgetMs).toBe(45_000);
+    expect(
+      resolveWorkdayScrapeTimeBudget({ [WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR]: '300000' }).budgetMs,
+    ).toBe(90_000);
+  });
+
+  it('leaves a budget already below the cap, or a raised deadline, alone', () => {
+    expect(
+      resolveWorkdayScrapeTimeBudget({ [WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR]: '30000', [FANOUT_DEADLINE_ENV_VAR]: '60000' }),
+    ).toEqual({ budgetMs: 30_000, configuredMs: 30_000, cappedByDeadlineMs: null });
+    expect(
+      resolveWorkdayScrapeTimeBudget({ [WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR]: '300000', [FANOUT_DEADLINE_ENV_VAR]: '600000' }),
+    ).toEqual({ budgetMs: 300_000, configuredMs: 300_000, cappedByDeadlineMs: null });
+  });
+
+  it('applies no cap when the fan-out deadline is off, and none to a budget that is off', () => {
+    expect(
+      resolveWorkdayScrapeTimeBudget({ [WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR]: '300000', [FANOUT_DEADLINE_ENV_VAR]: '0' }),
+    ).toEqual({ budgetMs: 300_000, configuredMs: 300_000, cappedByDeadlineMs: null });
+    expect(
+      resolveWorkdayScrapeTimeBudget({ [WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR]: '0', [FANOUT_DEADLINE_ENV_VAR]: '60000' }),
+    ).toEqual({ budgetMs: 0, configuredMs: 0, cappedByDeadlineMs: null });
+  });
+
+  it('never caps to 0, which would mean "no budget"', () => {
+    expect(resolveWorkdayScrapeTimeBudget({ [FANOUT_DEADLINE_ENV_VAR]: '1' }).budgetMs).toBe(1);
   });
 });

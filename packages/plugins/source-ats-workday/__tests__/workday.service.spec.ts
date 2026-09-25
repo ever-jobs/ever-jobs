@@ -29,6 +29,8 @@ import {
   DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS,
   WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR,
   WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR,
+  FANOUT_DEADLINE_ENV_VAR,
+  LEGACY_FANOUT_DEADLINE_ENV_VAR,
   readAtsCountryOverlay,
 } from '../src/workday.constants';
 
@@ -855,17 +857,31 @@ describe('WorkdayService — Spec 720 / T05', () => {
       } as ScraperInputDto);
     }
 
+    // The budget is capped by the fan-out deadline hint (T15): every case starts
+    // from the API default (neither variable set) and the caller's env is restored.
+    const DEADLINE_VARS = [FANOUT_DEADLINE_ENV_VAR, LEGACY_FANOUT_DEADLINE_ENV_VAR] as const;
+    const savedDeadlineEnv = new Map<string, string | undefined>();
+
     beforeEach(() => {
       clock = T0;
       jest.spyOn(Date, 'now').mockImplementation(() => clock);
       delete process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR];
       delete process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR];
+      for (const name of DEADLINE_VARS) {
+        savedDeadlineEnv.set(name, process.env[name]);
+        delete process.env[name];
+      }
     });
 
     afterEach(() => {
       jest.restoreAllMocks();
       delete process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR];
       delete process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR];
+      for (const name of DEADLINE_VARS) {
+        const saved = savedDeadlineEnv.get(name);
+        if (saved === undefined) delete process.env[name];
+        else process.env[name] = saved;
+      }
     });
 
     it('enriches at most 50 postings by default and returns the rest at list level', async () => {
@@ -1044,6 +1060,43 @@ describe('WorkdayService — Spec 720 / T05', () => {
 
       expect(mockGet).toHaveBeenCalledTimes(3);
       expect(result.jobs).toHaveLength(4);
+    });
+
+    it('caps the budget at 3/4 of the fan-out deadline hint (T15), from either name', async () => {
+      for (const name of DEADLINE_VARS) {
+        mockGet.mockReset();
+        process.env[name] = '40000';
+        mockPost.mockResolvedValueOnce({ data: rolesPage(6) });
+        // 10 s per detail request: +0, +10 s and +20 s start; +30 s (the capped
+        // 30 s budget) does not, where the uncapped 90 s would allow all six.
+        servePathDetails(10_000);
+        clock = T0;
+
+        const result = await scrape();
+
+        expect([name, mockGet.mock.calls.length]).toEqual([name, 3]);
+        expect(result.jobs).toHaveLength(6);
+        delete process.env[name];
+      }
+    });
+
+    it('names the cap in a listing cut short by it', async () => {
+      process.env[FANOUT_DEADLINE_ENV_VAR] = '2000';
+      let served = 0;
+      mockPost.mockImplementation(async () => {
+        clock += 1000;
+        return { data: rolesPage(20, 20 * served++, 100) };
+      });
+      servePathDetails();
+
+      const result = await scrape({ resultsWanted: 100 });
+
+      // Budget 1.5 s (3/4 of 2 s): page 1 ends at +1 s, page 2 at +2 s (spent).
+      expect(mockPost).toHaveBeenCalledTimes(2);
+      expect(result.diagnostics?.reason).toBe('partial');
+      expect(result.diagnostics?.detail).toContain(
+        `${WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}=90000 capped to 1500 by the fan-out deadline 2000`,
+      );
     });
 
     it('does not pause before a listing page that will never be requested', async () => {

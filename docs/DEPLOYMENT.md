@@ -126,12 +126,31 @@ apart), so every Workday scrape is bounded:
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `WORKDAY_MAX_DETAIL_FETCHES` | `50` | Detail requests per scrape (per board). Postings past it are returned at list level: no description or compensation. `0` = none. |
-| `WORKDAY_SCRAPE_TIME_BUDGET_MS` | `90000` | Budget per scrape over listing and enrichment. Once spent, no new page or detail request starts; a listing cut short is reported as `partial` in the per-source diagnostics. `0` = none. |
+| `WORKDAY_SCRAPE_TIME_BUDGET_MS` | `90000` | Budget per scrape over listing and enrichment, measured from the start of that board's scrape. Once spent, no new page or detail request starts; a listing cut short is reported as `partial` in the per-source diagnostics. Capped at 3/4 of the fan-out deadline (below). `0` = none, cap included. |
 
-Keep `WORKDAY_SCRAPE_TIME_BUDGET_MS` below the fan-out deadline
-(`EVER_JOBS_SEARCH_DEADLINE_MS`, 120 000 by default). A full sync that needs
-every description raises all three together and selects the boards
-explicitly (`siteType`).
+**The fan-out deadline** is `EVER_JOBS_FANOUT_DEADLINE_MS` (preferred, Spec
+1721), with `EVER_JOBS_SEARCH_DEADLINE_MS` (Spec 5026) read when the
+preferred name is unset, blank or not a number; 120 000 ms when neither is
+set; `0` or negative disables it. Builds from before the list-mode change
+(Spec 1721) read only the fallback name, so a deployment that must work on
+both sets the preferred one and, if it differs from the default, the
+fallback to the same value.
+
+**The Workday budget and the fan-out deadline are separate clocks.** The
+deadline runs from the start of the search; the budget runs from the start
+of each board's own scrape, which can be well after the search started (the
+board waits for a concurrency slot, or is the second board of a multi-board
+plugin such as Visa). Keep `WORKDAY_SCRAPE_TIME_BUDGET_MS` below the
+deadline the deployment sets; the adapter also caps it at 3/4 of the
+fan-out deadline it reads from the same variables (90 s of the default
+120 s), so lowering the deadline alone cannot leave a board running for
+longer than the search waits. A board that starts late can still be
+abandoned by the deadline; the budget then bounds how long it runs on,
+detached, not when it ends.
+
+A full sync that needs every description raises all three together
+(`WORKDAY_MAX_DETAIL_FETCHES`, `WORKDAY_SCRAPE_TIME_BUDGET_MS` and the
+fan-out deadline) and selects the boards explicitly (`siteType`).
 
 **Key Workday postings on `id`.** A posting is enriched while it is among a
 board's first `WORKDAY_MAX_DETAIL_FETCHES` and returned at list level once newer

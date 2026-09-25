@@ -44,23 +44,50 @@ export const DEFAULT_WORKDAY_MAX_DETAIL_FETCHES = 50;
 /**
  * Env var: wall-clock budget for one Workday scrape, milliseconds (Spec 1736 T11).
  *
- * Measured from the start of `scrape()` and covering both phases. Once spent,
- * no further listing page and no further detail request is started (the one in
- * flight finishes; at most one pause and one request past the budget). Postings
- * already listed are returned; the ones not yet enriched at list level. The
- * first listing page is always requested.
+ * Measured from the start of THIS `scrape()` and covering both phases — not
+ * from the start of the fan-out, and independent of the fan-out deadline. Once
+ * spent, no further listing page and no further detail request is started (the
+ * one in flight finishes; at most one pause and one request past the budget).
+ * Postings already listed are returned; the ones not yet enriched at list
+ * level. The first listing page is always requested.
  *
  * The plugin contract carries no fan-out deadline (Spec 5026 T11), so this is
  * the adapter's own bound: without it a board abandoned by the fan-out deadline
- * (`EVER_JOBS_SEARCH_DEADLINE_MS`, 120 s) keeps paging and enriching, detached,
- * until it has everything. Keep it below the fan-out deadline.
+ * keeps paging and enriching, detached, until it has everything. The fan-out
+ * deadline is `EVER_JOBS_FANOUT_DEADLINE_MS` (preferred, Spec 1721), with
+ * `EVER_JOBS_SEARCH_DEADLINE_MS` (Spec 5026) as the fallback name; 120 s by
+ * default. Keep this budget below the deadline the deployment sets. Because the
+ * two clocks start at different times, a board the fan-out starts late (behind
+ * other sources, or the second board of a multi-board plugin) can still run
+ * past the deadline; the budget bounds how long it runs on, not when it ends.
+ *
+ * Deadline hint (Spec 1736 T15): the adapter reads the fan-out deadline from
+ * the same env vars and caps its budget at
+ * {@link WORKDAY_BUDGET_SHARE_OF_FANOUT_DEADLINE} of it (90 s of the default
+ * 120 s), so a deployment that lowers the deadline without lowering this budget
+ * still stops a board that starts with the fan-out before the fan-out gives up
+ * on it. See {@link resolveWorkdayScrapeTimeBudget}.
  *
  * Unset, blank or not an integer → {@link DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS};
- * `0` or negative disables the budget (the same convention as
- * `EVER_JOBS_SEARCH_DEADLINE_MS`).
+ * `0` or negative disables the budget, the deadline cap included (the same
+ * convention as the fan-out deadline).
  */
 export const WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR = 'WORKDAY_SCRAPE_TIME_BUDGET_MS';
 export const DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS = 90_000;
+
+/** The fan-out deadline, preferred name (Spec 1721 contract C4). Read as a hint only. */
+export const FANOUT_DEADLINE_ENV_VAR = 'EVER_JOBS_FANOUT_DEADLINE_MS';
+/** The fan-out deadline, fallback name (Spec 5026). Read as a hint only. */
+export const LEGACY_FANOUT_DEADLINE_ENV_VAR = 'EVER_JOBS_SEARCH_DEADLINE_MS';
+/** The API's fan-out deadline when neither variable is set (Spec 5026). */
+export const DEFAULT_FANOUT_DEADLINE_MS = 120_000;
+/**
+ * Share of the fan-out deadline a Workday scrape may spend (Spec 1736 T15).
+ * The last quarter covers the request in flight when the budget runs out (one
+ * pause plus one request timeout) and a board that starts a little after the
+ * fan-out.
+ */
+export const WORKDAY_BUDGET_SHARE_OF_FANOUT_DEADLINE = 0.75;
 
 const INTEGER_RE = /^[+-]?\d+$/;
 
@@ -82,6 +109,56 @@ export function readWorkdayScrapeTimeBudgetMs(env: NodeJS.ProcessEnv = process.e
   const value = Number(raw);
   if (!Number.isSafeInteger(value)) return DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS;
   return value > 0 ? value : 0;
+}
+
+/** A finite number from a non-blank string, else undefined (the API's own parsing). */
+function finiteNumber(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const value = Number(raw.trim());
+  return Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * The fan-out deadline as the API resolves it (Spec 1721):
+ * {@link FANOUT_DEADLINE_ENV_VAR}, else {@link LEGACY_FANOUT_DEADLINE_ENV_VAR},
+ * else {@link DEFAULT_FANOUT_DEADLINE_MS}; a blank or non-numeric value falls
+ * through to the next. `0` or negative = no deadline (returned as `0`).
+ */
+export function readFanoutDeadlineHintMs(env: NodeJS.ProcessEnv = process.env): number {
+  const value =
+    finiteNumber(env[FANOUT_DEADLINE_ENV_VAR]) ??
+    finiteNumber(env[LEGACY_FANOUT_DEADLINE_ENV_VAR]) ??
+    DEFAULT_FANOUT_DEADLINE_MS;
+  return value > 0 ? Math.floor(value) : 0;
+}
+
+/** The time budget one scrape runs under, and where it came from. */
+export interface WorkdayScrapeTimeBudget {
+  /** Budget in ms; `0` = none. */
+  readonly budgetMs: number;
+  /** {@link WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR} as read; `0` = none. */
+  readonly configuredMs: number;
+  /** The fan-out deadline hint that lowered the budget, or null when it did not. */
+  readonly cappedByDeadlineMs: number | null;
+}
+
+/**
+ * The budget for one Workday scrape (Spec 1736 T11, T15): the configured
+ * {@link WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}, capped at
+ * {@link WORKDAY_BUDGET_SHARE_OF_FANOUT_DEADLINE} of the fan-out deadline hint
+ * ({@link readFanoutDeadlineHintMs}) when that deadline is on. A budget of `0`
+ * stays `0` (the operator turned it off); a cap never drops below 1 ms, since
+ * `0` would mean "no budget".
+ */
+export function resolveWorkdayScrapeTimeBudget(env: NodeJS.ProcessEnv = process.env): WorkdayScrapeTimeBudget {
+  const configuredMs = readWorkdayScrapeTimeBudgetMs(env);
+  if (configuredMs <= 0) return { budgetMs: 0, configuredMs: 0, cappedByDeadlineMs: null };
+  const deadlineMs = readFanoutDeadlineHintMs(env);
+  if (deadlineMs <= 0) return { budgetMs: configuredMs, configuredMs, cappedByDeadlineMs: null };
+  const capMs = Math.max(1, Math.floor(deadlineMs * WORKDAY_BUDGET_SHARE_OF_FANOUT_DEADLINE));
+  return capMs < configuredMs
+    ? { budgetMs: capMs, configuredMs, cappedByDeadlineMs: deadlineMs }
+    : { budgetMs: configuredMs, configuredMs, cappedByDeadlineMs: null };
 }
 
 /**

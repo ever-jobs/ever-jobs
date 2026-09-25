@@ -137,7 +137,8 @@ Follow-ups and constraints recorded here:
 2. **Fan-out deadline order — live today.** The plugins are registered at the
    tail of `Site` / `ALL_SOURCE_MODULES`, and the fan-out deadline already
    applies: `search.deadlineMs` is 120 000 ms by default
-   (`EVER_JOBS_SEARCH_DEADLINE_MS`; `0` disables) and `search.concurrency` is
+   (`EVER_JOBS_FANOUT_DEADLINE_MS`, preferred since Spec 1721, with
+   `EVER_JOBS_SEARCH_DEADLINE_MS` as the fallback name; `0` disables) and `search.concurrency` is
    64 (`EVER_JOBS_SEARCH_CONCURRENCY`). So in a default fan-out that overruns
    120 s these are the first sources `JobsService` skips (`deadline_skipped`)
    or abandons mid-flight. Sequential Workday enrichment (above) makes each
