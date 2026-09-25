@@ -8,7 +8,7 @@ import {
   Site,
 } from '@ever-jobs/models';
 import type { IPluginMetadata, PluginCategory } from '@ever-jobs/plugin';
-import { JobsService, LIST_MODE_SKIPPED_DETAIL } from '../jobs.service';
+import { JOB_CAP_SKIPPED_DETAIL, JobsService, LIST_MODE_SKIPPED_DETAIL } from '../jobs.service';
 import type { SearchProgress } from '../search-input';
 
 /**
@@ -485,5 +485,75 @@ describe('JobsService — isCancelled stops the fan-out (Spec 1721 / FR-14)', ()
     });
     expect(result.jobs).toHaveLength(2);
     expect('cancelled' in result).toBe(false);
+  });
+});
+
+describe('JobsService — result-size bounds (Spec 1720 / FR-12)', () => {
+  function withConfig(service: JobsService, overrides: Record<string, unknown>): JobsService {
+    const base = (service as any).configService.get;
+    (service as any).configService = {
+      get: (key: string, def?: unknown) => (key in overrides ? overrides[key] : base(key, def)),
+    };
+    return service;
+  }
+
+  it('clamps resultsWanted to EVER_JOBS_MAX_RESULTS_WANTED (default 1000) before dispatch', async () => {
+    const plugin = recording(Site.LINKEDIN, 'job-board');
+    const service = createService([plugin]);
+    await service.searchJobsWithDiagnostics(new ScraperInputDto({ resultsWanted: 50_000 }));
+    expect(plugin.scraper.calls[0]!.resultsWanted).toBe(1_000);
+    expect((service as any).logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('resultsWanted 50000 clamped to 1000'),
+    );
+  });
+
+  it('a configured cap of 0 leaves resultsWanted alone', async () => {
+    const plugin = recording(Site.LINKEDIN, 'job-board');
+    const service = withConfig(createService([plugin]), { 'search.maxResultsWanted': 0 });
+    await service.searchJobsWithDiagnostics(new ScraperInputDto({ resultsWanted: 50_000 }));
+    expect(plugin.scraper.calls[0]!.resultsWanted).toBe(50_000);
+  });
+
+  it('stops STARTING sources once EVER_JOBS_MAX_JOBS_PER_SEARCH raw jobs are in, and reports them', async () => {
+    const plugins = [
+      recording(Site.LINKEDIN, 'job-board', { count: 2 }),
+      recording(Site.INDEED, 'job-board', { count: 2 }),
+      recording(Site.REMOTEOK, 'remote', { count: 2 }),
+      recording(Site.GLASSDOOR, 'job-board', { count: 2 }),
+    ];
+    const service = withConfig(createService(plugins), {
+      'search.concurrency': 1,
+      'search.maxJobsPerSearch': 3,
+    });
+
+    const { jobs, perSource } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+
+    // 2 after the first source (< 3), 4 after the second (>= 3): stop there.
+    expect(jobs).toHaveLength(4);
+    expect(plugins[2]!.scraper.scrape).not.toHaveBeenCalled();
+    expect(plugins[3]!.scraper.scrape).not.toHaveBeenCalled();
+    const skippedRows = perSource.filter((r) => r.detail === JOB_CAP_SKIPPED_DETAIL);
+    expect(skippedRows.map((r) => r.site).sort()).toEqual([Site.GLASSDOOR, Site.REMOTEOK].sort());
+    expect(skippedRows.every((r) => r.reason === 'unknown' && r.count === 0)).toBe(true);
+    const statuses = ((service as any).metrics.scraperRequestsTotal.inc as jest.Mock).mock.calls.map(
+      (c: [{ status: string }]) => c[0].status,
+    );
+    expect(statuses.filter((s: string) => s === 'job_cap_skipped')).toHaveLength(2);
+    expect((service as any).logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('did not start 2 of 4 sources'),
+    );
+  });
+
+  it('a ceiling of 0 runs every source', async () => {
+    const plugins = [
+      recording(Site.LINKEDIN, 'job-board', { count: 5 }),
+      recording(Site.INDEED, 'job-board', { count: 5 }),
+    ];
+    const service = withConfig(createService(plugins), {
+      'search.concurrency': 1,
+      'search.maxJobsPerSearch': 0,
+    });
+    const { jobs } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+    expect(jobs).toHaveLength(10);
   });
 });

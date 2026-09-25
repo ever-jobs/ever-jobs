@@ -9,7 +9,7 @@ import { JobsController } from '../jobs.controller';
  * gains `dedupKey`, nested arrays are readable.
  */
 
-function createController(jobs: JobPostDto[] = []) {
+function createController(jobs: JobPostDto[] = [], config: Record<string, unknown> = {}) {
   const cacheService = {
     get: jest.fn(async (_params: unknown) => null),
     set: jest.fn(async (_params: unknown, _value: unknown) => undefined),
@@ -27,7 +27,7 @@ function createController(jobs: JobPostDto[] = []) {
     } as any,
     {} as any,
     cacheService as any,
-    { get: (_k: string, def?: unknown) => def } as any,
+    { get: (k: string, def?: unknown) => (k in config ? config[k] : def) } as any,
   );
   const log = jest.spyOn((controller as any).logger, 'log').mockImplementation(() => undefined);
   return { controller, cacheService, jobsService, log };
@@ -129,5 +129,26 @@ describe('JobsController — CSV carries dedupKey and extra fields (Spec 1721)',
     expect(col('dedupKey')).toBe('abc123');
     expect(col('careerLevel.level')).toBe('senior');
     expect(col('careerLevel.reasons')).toBe('title; years');
+  });
+});
+
+describe('JobsController — resultsWanted cap (Spec 1720 / FR-12)', () => {
+  it('clamps before the cache key, so an over-cap request shares the capped entry', async () => {
+    const over = createController();
+    const capped = createController();
+    const warn = jest.spyOn((over.controller as any).logger, 'warn').mockImplementation(() => undefined);
+    await over.controller.searchJobs(new ScraperInputDto({ resultsWanted: 50_000 }));
+    await capped.controller.searchJobs(new ScraperInputDto({ resultsWanted: 1_000 }));
+
+    const key = (h: ReturnType<typeof createController>) => h.cacheService.get.mock.calls[0]![0] as { resultsWanted: number };
+    expect(key(over).resultsWanted).toBe(1_000);
+    expect(JSON.stringify(key(over))).toBe(JSON.stringify(key(capped)));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('resultsWanted 50000 clamped to 1000'));
+  });
+
+  it('honours EVER_JOBS_MAX_RESULTS_WANTED=0 (no cap)', async () => {
+    const h = createController([], { 'search.maxResultsWanted': 0 });
+    await h.controller.searchJobs(new ScraperInputDto({ resultsWanted: 50_000 }));
+    expect((h.cacheService.get.mock.calls[0]![0] as { resultsWanted: number }).resultsWanted).toBe(50_000);
   });
 });

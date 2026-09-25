@@ -41,10 +41,11 @@ import {
 import {
   SearchProgress,
   SearchRunOptions,
+  clampResultsWanted,
   describeTerm,
   normalizeSearchInput,
 } from './search-input';
-import { DEFAULT_LIVENESS_MAX_URLS } from '../config/search-config';
+import { DEFAULT_LIVENESS_MAX_URLS, DEFAULT_MAX_RESULTS_WANTED } from '../config/search-config';
 import { AnalyticsService } from '@ever-jobs/analytics';
 import { CacheService } from '../cache/cache.service';
 
@@ -185,6 +186,18 @@ export class JobsController {
     // so "", "   ", null and an omitted term are one request and one cache
     // entry, and the log never prints term="undefined".
     normalizeSearchInput(input);
+    // Spec 1720 / FR-12 — clamp before the cache key, so an over-cap request
+    // shares the entry of the request the server will actually run.
+    const maxResultsWanted = this.configService.get<number>(
+      'search.maxResultsWanted',
+      DEFAULT_MAX_RESULTS_WANTED,
+    );
+    const askedResults = clampResultsWanted(input, maxResultsWanted);
+    if (askedResults !== undefined) {
+      this.logger.warn(
+        `resultsWanted ${askedResults} clamped to ${maxResultsWanted} per source (EVER_JOBS_MAX_RESULTS_WANTED)`,
+      );
+    }
     this.logger.log(
       `Search request: sites=${input.siteType?.join(',') ?? 'all'}` +
         `${input.siteCategories?.length ? `, categories=${input.siteCategories.join(',')}` : ''}` +

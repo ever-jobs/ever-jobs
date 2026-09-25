@@ -68,6 +68,26 @@ export function normalizeSearchInput<T extends { searchTerm?: unknown; googleSea
   return input;
 }
 
+/**
+ * Clamp `input.resultsWanted` to `max` in place (Spec 1720 / FR-12).
+ * `max <= 0` means no cap. Returns the value the caller asked for when it was
+ * clamped (for a log line), `undefined` otherwise. Idempotent, so the
+ * controller (before its cache key) and the service (for every other entry
+ * point) can both call it.
+ */
+export function clampResultsWanted(
+  input: { resultsWanted?: number },
+  max: number,
+): number | undefined {
+  if (!(max > 0)) return undefined;
+  const requested = input.resultsWanted;
+  if (typeof requested !== 'number' || Number.isNaN(requested) || requested <= max) {
+    return undefined;
+  }
+  input.resultsWanted = max;
+  return requested;
+}
+
 /** True when the request carries no usable keyword (Spec 1720 list mode). */
 export function isListMode(input: { searchTerm?: unknown }): boolean {
   return normalizeSearchTerm(input.searchTerm) === undefined;

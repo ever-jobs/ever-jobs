@@ -1,8 +1,11 @@
 import {
   DEFAULT_FANOUT_DEADLINE_MS,
   DEFAULT_LIVENESS_MAX_URLS,
+  DEFAULT_MAX_JOBS_PER_SEARCH,
+  DEFAULT_MAX_RESULTS_WANTED,
   resolveFanoutDeadlineMs,
   resolveLivenessConfig,
+  resolveResultCaps,
 } from '../search-config';
 import configuration from '../configuration';
 
@@ -115,5 +118,39 @@ describe('configuration() wiring', () => {
     const config = configuration();
     expect(config.search.deadlineMs).toBe(120_000);
     expect(config.liveness).toEqual({ enabled: true, maxUrls: 100 });
+  });
+});
+
+describe('resolveResultCaps (Spec 1720 / FR-12)', () => {
+  it('defaults: 1000 per source, 100000 per search', () => {
+    expect(DEFAULT_MAX_RESULTS_WANTED).toBe(1_000);
+    expect(DEFAULT_MAX_JOBS_PER_SEARCH).toBe(100_000);
+    expect(resolveResultCaps({})).toEqual({ maxResultsWanted: 1_000, maxJobsPerSearch: 100_000 });
+  });
+
+  it('reads both variables and floors them', () => {
+    expect(
+      resolveResultCaps({ EVER_JOBS_MAX_RESULTS_WANTED: '250.9', EVER_JOBS_MAX_JOBS_PER_SEARCH: ' 40000 ' }),
+    ).toEqual({ maxResultsWanted: 250, maxJobsPerSearch: 40_000 });
+  });
+
+  it('0 or negative disables a cap; blank or junk keeps the default', () => {
+    expect(
+      resolveResultCaps({ EVER_JOBS_MAX_RESULTS_WANTED: '0', EVER_JOBS_MAX_JOBS_PER_SEARCH: '-1' }),
+    ).toEqual({ maxResultsWanted: 0, maxJobsPerSearch: 0 });
+    expect(
+      resolveResultCaps({ EVER_JOBS_MAX_RESULTS_WANTED: '', EVER_JOBS_MAX_JOBS_PER_SEARCH: 'lots' }),
+    ).toEqual({ maxResultsWanted: 1_000, maxJobsPerSearch: 100_000 });
+  });
+
+  it('configuration() exposes them under search.*', () => {
+    const saved = process.env.EVER_JOBS_MAX_JOBS_PER_SEARCH;
+    try {
+      process.env.EVER_JOBS_MAX_JOBS_PER_SEARCH = '5000';
+      expect(configuration().search).toMatchObject({ maxResultsWanted: 1_000, maxJobsPerSearch: 5_000 });
+    } finally {
+      if (saved === undefined) delete process.env.EVER_JOBS_MAX_JOBS_PER_SEARCH;
+      else process.env.EVER_JOBS_MAX_JOBS_PER_SEARCH = saved;
+    }
   });
 });

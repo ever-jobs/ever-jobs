@@ -84,7 +84,12 @@ export class ScraperInputDto {
   @IsBoolean()
   easyApply?: boolean;
 
-  @ApiPropertyOptional({ description: 'Number of results wanted', default: 15 })
+  @ApiPropertyOptional({
+    description:
+      'Number of results wanted PER SOURCE (also in list mode). The server clamps it to ' +
+      'EVER_JOBS_MAX_RESULTS_WANTED (default 1000; 0 = no cap).',
+    default: 15,
+  })
   @IsOptional()
   @IsNumber()
   resultsWanted?: number;

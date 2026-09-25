@@ -4,6 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { SITE_CATEGORIES, ScraperInputDto } from '@ever-jobs/models';
 import {
+  clampResultsWanted,
   describeTerm,
   isListMode,
   normalizeSearchInput,
@@ -144,5 +145,34 @@ describe('search-input (Spec 1720)', () => {
       const dto = plainToInstance(ScraperInputDto, { siteCategories: ['remote'] });
       expect(dto.siteCategories).toEqual(['remote']);
     });
+  });
+});
+
+describe('clampResultsWanted (Spec 1720 / FR-12)', () => {
+  it('clamps an over-cap value in place and reports what was asked', () => {
+    const input = { resultsWanted: 5_000 };
+    expect(clampResultsWanted(input, 1_000)).toBe(5_000);
+    expect(input.resultsWanted).toBe(1_000);
+    // Idempotent: the second call (service after controller) changes nothing.
+    expect(clampResultsWanted(input, 1_000)).toBeUndefined();
+    expect(input.resultsWanted).toBe(1_000);
+  });
+
+  it('clamps Infinity from a caller that bypassed validation', () => {
+    const input = { resultsWanted: Number.POSITIVE_INFINITY };
+    expect(clampResultsWanted(input, 1_000)).toBe(Number.POSITIVE_INFINITY);
+    expect(input.resultsWanted).toBe(1_000);
+  });
+
+  it.each([
+    ['at the cap', { resultsWanted: 1_000 }, 1_000],
+    ['below the cap', { resultsWanted: 15 }, 1_000],
+    ['absent', {}, 1_000],
+    ['cap disabled (0)', { resultsWanted: 50_000 }, 0],
+    ['NaN', { resultsWanted: Number.NaN }, 1_000],
+  ])('leaves the input alone when %s', (_label, input: { resultsWanted?: number }, max) => {
+    const before = input.resultsWanted;
+    expect(clampResultsWanted(input, max)).toBeUndefined();
+    expect(input.resultsWanted).toBe(before);
   });
 });

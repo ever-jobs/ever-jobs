@@ -1,4 +1,4 @@
-import { resolveFanoutDeadlineMs, resolveLivenessConfig } from './search-config';
+import { resolveFanoutDeadlineMs, resolveLivenessConfig, resolveResultCaps } from './search-config';
 import { resolvePersistSearch } from './store-config';
 
 /**
@@ -80,6 +80,13 @@ export default () => {
        * `EVER_JOBS_SEARCH_DEADLINE_MS`.
        */
       deadlineMs: resolveFanoutDeadlineMs(process.env),
+      /**
+       * Spec 1720 / FR-12 — `EVER_JOBS_MAX_RESULTS_WANTED` (default 1000)
+       * clamps `resultsWanted` per source; `EVER_JOBS_MAX_JOBS_PER_SEARCH`
+       * (default 100000) stops starting sources once that many raw jobs are
+       * in. `0` disables either.
+       */
+      ...resolveResultCaps(process.env),
     },
     // Liveness server gate + per-request cap (Spec 1723)
     liveness: resolveLivenessConfig(process.env),

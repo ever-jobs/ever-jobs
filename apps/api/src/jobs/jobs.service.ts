@@ -13,11 +13,13 @@ import { PluginRegistry, CircuitBreakerInterceptor, IPluginMetadata } from '@eve
 import { MetricsService } from '../metrics/metrics.service';
 import {
   SearchRunOptions,
+  clampResultsWanted,
   describeTerm,
   isListMode,
   normalizeSearchInput,
   parseSiteCategories,
 } from './search-input';
+import { DEFAULT_MAX_JOBS_PER_SEARCH, DEFAULT_MAX_RESULTS_WANTED } from '../config/search-config';
 
 /**
  * Detail carried by the per-source row of a plugin that was not dispatched
@@ -25,6 +27,15 @@ import {
  */
 export const LIST_MODE_SKIPPED_DETAIL =
   'requires a searchTerm; not queried in list mode (Spec 1720)';
+
+/**
+ * Detail of a source not started because the fan-out already holds
+ * EVER_JOBS_MAX_JOBS_PER_SEARCH raw jobs (Spec 1720 / FR-12). Carries no
+ * number and no site name: `classifyScrapeError` would read e.g. "=500" as an
+ * HTTP 5xx, so the row is classified `unknown` (actionable) with this detail.
+ */
+export const JOB_CAP_SKIPPED_DETAIL =
+  'skipped: per-search job ceiling reached (EVER_JOBS_MAX_JOBS_PER_SEARCH)';
 
 /**
  * The 400 message for `companyDomain` values that map to no plugin. One
@@ -222,6 +233,23 @@ export class JobsService implements OnModuleInit {
     const listMode = isListMode(input);
     const categories = parseSiteCategories(input.siteCategories);
 
+    // Spec 1720 / FR-12 — server-side result-size bounds, for every entry
+    // point (the controller clamps too, before its cache key; idempotent).
+    const maxResultsWanted = this.configService.get<number>(
+      'search.maxResultsWanted',
+      DEFAULT_MAX_RESULTS_WANTED,
+    );
+    const maxJobsPerSearch = this.configService.get<number>(
+      'search.maxJobsPerSearch',
+      DEFAULT_MAX_JOBS_PER_SEARCH,
+    );
+    const asked = clampResultsWanted(input, maxResultsWanted);
+    if (asked !== undefined) {
+      this.logger.warn(
+        `resultsWanted ${asked} clamped to ${maxResultsWanted} per source (EVER_JOBS_MAX_RESULTS_WANTED)`,
+      );
+    }
+
     const atsSites = new Set<Site>(this.registry.listAtsSites());
     const { resolved: resolvedSites, unresolved: unresolvedDomains } =
       this.resolveCompanyDomains(input.companyDomain);
@@ -351,6 +379,10 @@ export class JobsService implements OnModuleInit {
     let skipped = 0;
     // Spec 1721 / FR-14 — sources not started because the caller went away.
     let cancelledSkipped = 0;
+    // Spec 1720 / FR-12 — raw jobs collected so far, and sources not started
+    // because that reached EVER_JOBS_MAX_JOBS_PER_SEARCH.
+    let collected = 0;
+    let capSkipped = 0;
     const isCancelled = (): boolean => {
       if (!options.isCancelled) return false;
       try {
@@ -421,19 +453,33 @@ export class JobsService implements OnModuleInit {
           reportProgress(results[index]);
           continue;
         }
+        // Spec 1720 / FR-12 — a memory bound, handled like the deadline: stop
+        // STARTING sources; in-flight ones finish, so the peak is at most the
+        // ceiling plus `concurrency × resultsWanted`. The detail deliberately
+        // carries no number or site name, so the error classifier cannot read
+        // it as an HTTP status.
+        if (maxJobsPerSearch > 0 && collected >= maxJobsPerSearch) {
+          capSkipped++;
+          this.metrics.scraperRequestsTotal.inc({ site, status: 'job_cap_skipped' });
+          results[index] = {
+            status: 'rejected',
+            reason: new Error(JOB_CAP_SKIPPED_DETAIL),
+          };
+          reportProgress(results[index]);
+          continue;
+        }
 
         try {
           // Race against the deadline as well as checking it before starting:
           // a source that never settles would otherwise keep this worker (and
           // therefore the whole handler) pending indefinitely.
-          results[index] = {
-            status: 'fulfilled',
-            value: await withDeadline(
-              this.scrapeOne(site, scraper, input),
-              deadlineAt,
-              site,
-            ),
-          };
+          const value = await withDeadline(
+            this.scrapeOne(site, scraper, input),
+            deadlineAt,
+            site,
+          );
+          results[index] = { status: 'fulfilled', value };
+          collected += value?.jobs?.length ?? 0;
         } catch (err) {
           results[index] = { status: 'rejected', reason: err };
         }
@@ -458,6 +504,13 @@ export class JobsService implements OnModuleInit {
       this.logger.warn(
         `Caller disconnected — did not start ${cancelledSkipped} of ${selectedScrapers.length} sources ` +
           `(in-flight sources were allowed to finish).`,
+      );
+    }
+    if (capSkipped > 0) {
+      this.logger.warn(
+        `Job ceiling reached (${collected} raw jobs >= EVER_JOBS_MAX_JOBS_PER_SEARCH=${maxJobsPerSearch}) — ` +
+          `did not start ${capSkipped} of ${selectedScrapers.length} sources. Raise the ceiling, lower ` +
+          `resultsWanted, or narrow siteType/siteCategories.`,
       );
     }
     // Aggregate results from fulfilled searches + derive a per-source outcome

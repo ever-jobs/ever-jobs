@@ -88,7 +88,7 @@
       "resultsWanted": {
         "type": "integer",
         "default": 15,
-        "description": "Number of results per site"
+        "description": "Number of results per site (also in list mode). The server clamps it to EVER_JOBS_MAX_RESULTS_WANTED (default 1000)."
       },
       "country": {
         "type": "string",
