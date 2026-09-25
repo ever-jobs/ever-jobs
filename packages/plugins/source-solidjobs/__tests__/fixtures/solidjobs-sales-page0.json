@@ -1,0 +1,56 @@
+{
+  "jobs": [
+    {
+      "jobOfferKey": "0b8f5d3e-1a11-4c7a-9e01-000000000004",
+      "title": "Specjalista ds. Sprzedaży B2B",
+      "division": "Sales",
+      "category": "B2BSales",
+      "subCategory": "B2BSales",
+      "company": "Przykład Logistyka",
+      "companyLogoUrl": "https://cdn.solid.jobs/companies/logos/00000000000000000000000000000004.jpeg",
+      "salary": null,
+      "secondarySalary": {
+        "from": 5200,
+        "to": 5500,
+        "currency": "PLN",
+        "period": "Month",
+        "employmentType": "UoD"
+      },
+      "contractTime": "full_time",
+      "locations": [
+        "Kraków"
+      ],
+      "benefits": [
+        "Kawa / Herbata"
+      ],
+      "isRemote": true,
+      "isHybrid": true,
+      "url": "https://solid.jobs/o/przyk004/api",
+      "experienceLevel": "Regular",
+      "skills": [
+        {
+          "level": "Expert",
+          "name": "Sprzedaż B2B"
+        },
+        {
+          "level": "Basic",
+          "name": "Negocjacje"
+        }
+      ],
+      "languages": [
+        {
+          "level": "Advanced",
+          "name": "Angielski"
+        }
+      ],
+      "description": "<div class=\"well job - description\"><p><strong>Czym będziesz się zajmować?</strong><br><br><ul><li>Pozyskiwanie klientów biznesowych</li><li>Współpraca z zespołem produktowym</li></ul></p><h3>Wymagania:</h3><ul><li>Komunikatywność</li></ul><p>Kontakt: rekrutacja@example.com</p></div>",
+      "validFrom": "2026-09-23T09:28:22.698787+02:00",
+      "validTo": "2026-10-24T09:28:22.698787+02:00",
+      "updatedAt": "2026-09-23T09:28:11.8256108+02:00"
+    }
+  ],
+  "pageIndex": 0,
+  "pageSize": 2,
+  "totalCount": 1,
+  "totalPages": 1
+}

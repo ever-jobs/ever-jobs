@@ -1,0 +1,59 @@
+{
+  "page": "/jobs",
+  "query": {},
+  "buildId": "synthetic-build",
+  "props": {
+    "pageProps": {
+      "apolloState": {
+        "data": {
+          "ROOT_QUERY": { "__typename": "Query" },
+          "Startup:920001": {
+            "__typename": "Startup",
+            "id": "920001",
+            "name": "Saltmarsh Energy",
+            "slug": "saltmarsh-energy",
+            "logoUrl": "https://example.invalid/logos/saltmarsh.png",
+            "highConcept": "Tidal batteries",
+            "companySize": "SIZE_51_200"
+          },
+          "JobListing:820011": {
+            "__typename": "JobListing",
+            "id": "820011",
+            "title": "Controls Engineer",
+            "slug": "controls-engineer",
+            "descriptionSnippet": "<p>Tune <strong>turbine</strong> controllers.</p>",
+            "jobType": "full-time",
+            "liveStartAt": 1789900000,
+            "locationNames": ["Boston"],
+            "remote": false,
+            "remoteConfig": { "__ref": "JobListingRemoteConfig:820011" },
+            "primaryRoleTitle": "Electrical Engineer",
+            "compensation": "€60k – €80k",
+            "startup": { "__ref": "Startup:920001" }
+          },
+          "JobListingRemoteConfig:820011": {
+            "__typename": "JobListingRemoteConfig",
+            "id": "820011",
+            "kind": "REMOTE",
+            "wfhFlexible": false
+          },
+          "JobListing:820012": {
+            "__typename": "JobListing",
+            "id": "820012",
+            "title": "Backend Developer",
+            "slug": "backend-developer",
+            "descriptionSnippet": "<p>Grid telemetry APIs in Rust.</p>",
+            "jobType": "contract",
+            "liveStartAt": 1789800000,
+            "locationNames": ["Lisbon"],
+            "remote": false,
+            "remoteConfig": null,
+            "primaryRoleTitle": "Backend Engineer",
+            "compensation": "$50 – $70 /hr",
+            "startup": { "__ref": "Startup:920001" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -2,13 +2,11 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  classifyScrapeError,
   ScrapeDiagnostics,
   IScraper,
   ScraperInputDto,
   JobResponseDto,
   JobPostDto,
-  LocationDto,
   CompensationDto,
   DescriptionFormat,
   Country,
@@ -22,10 +20,37 @@ import {
   plainConverter,
   extractEmails,
   randomSleep,
-  toDateOnly,
+  postedFromTimestamp,
+  postedTimeFields,
 } from '@ever-jobs/common';
-import { INDEED_HEADERS, JOB_SEARCH_QUERY } from './indeed.constants';
-import { getJobType, getCompensation, isJobRemote } from './indeed.utils';
+import {
+  INDEED_HEADERS,
+  JOB_SEARCH_QUERY,
+  IndeedMappingOptions,
+  readIndeedMappingOptions,
+  readIndeedMaxPages,
+} from './indeed.constants';
+import { buildLocation, detectWorkplace, getJobType, getCompensation } from './indeed.utils';
+import {
+  diagnoseGraphqlErrors,
+  diagnoseHttpError,
+  diagnoseMissingJobSearch,
+} from './indeed.diagnostics';
+
+const MAX_DIAGNOSTIC_DETAIL = 300;
+
+/**
+ * The job's posting value: `datePublished` (an epoch timestamp, so the instant
+ * is exact), else `dateOnSite`. An empty or zero value counts as absent, as it
+ * did when the value went through a truthiness check.
+ */
+function postedValue(job: { datePublished?: unknown; dateOnSite?: unknown }): unknown {
+  for (const value of [job.datePublished, job.dateOnSite]) {
+    if (value === null || value === undefined || value === '' || value === 0) continue;
+    return value;
+  }
+  return null;
+}
 
 @SourcePlugin({
   site: Site.INDEED,
@@ -49,14 +74,22 @@ export class IndeedService implements IScraper {
 
     const apiUrl = `https://apis.indeed.com/graphql`;
 
+    // Spec 1702 switches, read per scrape (see indeed.constants.ts).
+    const mapping = readIndeedMappingOptions();
+    const maxPages = readIndeedMaxPages();
+
     const jobList: JobPostDto[] = [];
     let diagnostics: ScrapeDiagnostics | undefined;
+    // GraphQL errors that arrived next to usable data: reported only when no job results.
+    let dataErrorDiagnostics: ScrapeDiagnostics | undefined;
     const resultsWanted = input.resultsWanted ?? 15;
     let cursor: string | null = null;
     const seenIds = new Set<string>();
+    let pages = 0;
 
     while (jobList.length < resultsWanted) {
-      this.logger.log(`Fetching Indeed jobs, cursor: ${cursor ?? 'initial'}`);
+      pages += 1;
+      this.logger.log(`Fetching Indeed jobs, page ${pages}, cursor: ${cursor ?? 'initial'}`);
 
       try {
         const variables: any = {
@@ -77,10 +110,23 @@ export class IndeedService implements IScraper {
           variables,
         });
 
-        const data = response.data?.data?.jobSearch;
+        const fetchedAt = Date.now();
+        const body = response.data;
+
+        const data = body?.data?.jobSearch;
         if (!data) {
-          this.logger.warn('No data in Indeed response');
+          // A block page, a GraphQL error envelope or an empty body: never a silent empty.
+          diagnostics = diagnoseMissingJobSearch(body);
+          this.logger.warn(
+            `No data in Indeed response: ${diagnostics.reason}${diagnostics.detail ? ` - ${diagnostics.detail}` : ''}`,
+          );
           break;
+        }
+
+        const dataErrors = diagnoseGraphqlErrors(body);
+        if (dataErrors) {
+          dataErrorDiagnostics = dataErrorDiagnostics ?? dataErrors;
+          this.logger.warn(`Indeed response carried GraphQL errors next to data: ${dataErrors.detail}`);
         }
 
         cursor = data.pageInfo?.nextCursor ?? null;
@@ -88,39 +134,70 @@ export class IndeedService implements IScraper {
 
         if (results.length === 0) break;
 
+        let attempted = 0;
+        let failed = 0;
+        let firstFailure: string | null = null;
         for (const result of results) {
           if (jobList.length >= resultsWanted) break;
 
-          const job = result.job;
+          const job = result?.job;
           if (!job) continue;
 
           const jobKey = job.key;
           if (seenIds.has(jobKey)) continue;
           seenIds.add(jobKey);
+          attempted += 1;
 
           try {
-            const jobPost = this.processJob(job, subdomain, input.descriptionFormat);
+            const jobPost = this.processJob(job, subdomain, input.descriptionFormat, mapping, fetchedAt);
             if (jobPost) {
               jobList.push(jobPost);
             }
           } catch (err: any) {
-            this.logger.warn(`Error processing Indeed job ${jobKey}: ${err.message}`);
+            failed += 1;
+            firstFailure = firstFailure ?? String(err?.message ?? err);
+            this.logger.warn(`Error processing Indeed job ${jobKey}: ${err?.message ?? err}`);
           }
         }
 
-        if (!cursor) break;
+        if (attempted > 0 && failed === attempted && !diagnostics) {
+          // Every job on the page failed to map: the response shape has changed.
+          diagnostics = new ScrapeDiagnostics(
+            'unknown',
+            `every job on page ${pages} failed to map: ${firstFailure}`.slice(0, MAX_DIAGNOSTIC_DETAIL),
+          );
+        }
+
+        // Sleep only when another page will actually be fetched.
+        if (!cursor || jobList.length >= resultsWanted) break;
+        if (maxPages > 0 && pages >= maxPages) {
+          this.logger.log(
+            `Indeed page cap reached (${maxPages} pages): returning ${jobList.length} of ${resultsWanted} wanted`,
+          );
+          break;
+        }
         await randomSleep(this.delay * 1000, (this.delay + this.bandDelay) * 1000);
       } catch (err: any) {
-        this.logger.error(`Indeed scrape error: ${err.message}`);
-        diagnostics = classifyScrapeError(err);
+        diagnostics = diagnoseHttpError(err);
+        this.logger.error(`Indeed scrape error: ${diagnostics.detail ?? err?.message ?? err}`);
         break;
       }
+    }
+
+    if (!diagnostics && jobList.length === 0 && dataErrorDiagnostics) {
+      diagnostics = dataErrorDiagnostics;
     }
 
     return new JobResponseDto(jobList, diagnostics);
   }
 
-  private processJob(job: any, subdomain: string, format?: DescriptionFormat): JobPostDto | null {
+  private processJob(
+    job: any,
+    subdomain: string,
+    format?: DescriptionFormat,
+    mapping: IndeedMappingOptions = {},
+    fetchedAt: number = Date.now(),
+  ): JobPostDto | null {
     const title = job.title;
     if (!title) return null;
 
@@ -138,12 +215,7 @@ export class IndeedService implements IScraper {
     const companyRevenue = overview.revenue ?? null;
     const companyAddresses = employer.companyProfile?.locations?.join(', ') ?? null;
 
-    const loc = job.location ?? {};
-    const location = new LocationDto({
-      city: loc.city ?? null,
-      state: loc.state ?? null,
-      country: loc.country ?? null,
-    });
+    const location = buildLocation(job.location, mapping);
 
     const rawDescription = job.description?.html ?? null;
     let description = rawDescription;
@@ -156,8 +228,8 @@ export class IndeedService implements IScraper {
     }
 
     const attributes = job.attributes ?? [];
-    const jobType = getJobType(attributes);
-    const remote = isJobRemote(attributes);
+    const jobType = getJobType(attributes, mapping);
+    const workplace = detectWorkplace(job, mapping);
     const comp = getCompensation(job.compensation);
     const compensation = comp
       ? new CompensationDto({
@@ -168,7 +240,9 @@ export class IndeedService implements IScraper {
         })
       : null;
 
-    const datePosted = job.datePublished ?? job.dateOnSite ?? null;
+    // Spec 1696: `datePublished` is an epoch timestamp, so keep the exact
+    // instant next to the date. A numeric string no longer becomes null.
+    const posted = postedFromTimestamp(postedValue(job), fetchedAt);
 
     return new JobPostDto({
       id: `in-${job.key}`,
@@ -179,9 +253,10 @@ export class IndeedService implements IScraper {
       location,
       description,
       compensation,
-      datePosted: datePosted ? toDateOnly(datePosted) : null,
+      ...postedTimeFields(posted),
       jobType,
-      isRemote: remote,
+      isRemote: workplace.isRemote,
+      ...(workplace.workFromHomeType ? { workFromHomeType: workplace.workFromHomeType } : {}),
       emails: extractEmails(description),
       companyIndustry,
       companyLogo,

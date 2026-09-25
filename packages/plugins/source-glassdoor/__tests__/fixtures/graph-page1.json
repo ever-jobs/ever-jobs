@@ -1,0 +1,74 @@
+{
+  "data": {
+    "jobListings": {
+      "paginationCursors": [{ "cursor": "cursor-page-1", "pageNumber": 1 }],
+      "jobListings": [
+        {
+          "jobview": {
+            "header": {
+              "adOrderId": 555,
+              "adOrderSponsorshipLevel": "SPONSORED",
+              "ageInDays": 0,
+              "employer": { "id": 12345, "name": "Acme Robotics", "shortName": "Acme" },
+              "employerNameFromSearch": "Acme Robotics",
+              "jobLink": "/partner/jobListing.htm?pos=101&ao=555&jl=1001",
+              "jobTitleText": "Software Engineer",
+              "locId": 1139761,
+              "locationName": "Austin, TX",
+              "locationType": "C",
+              "payCurrency": "USD",
+              "payPeriod": "ANNUAL",
+              "payPeriodAdjustedPay": { "p10": 110000, "p50": 130000, "p90": 150000 },
+              "rating": 4.2,
+              "seoJobLink": "/job-listing/software-engineer-acme-robotics-JV_IC1139761_KO0,17_KE18,31.htm?jl=1001",
+              "sponsored": true
+            },
+            "job": {
+              "descriptionFragments": ["<p>Build <b>robots</b>. Questions: jobs@acme.example</p>"],
+              "jobTitleText": "Software Engineer",
+              "listingId": 1001
+            },
+            "overview": { "shortName": "Acme", "squareLogoUrl": "https://media.example/acme.png" }
+          }
+        },
+        {
+          "jobview": {
+            "header": {
+              "adOrderId": 555,
+              "ageInDays": 5,
+              "employer": { "id": 12345, "name": "Acme Robotics", "shortName": "Acme" },
+              "employerNameFromSearch": "Acme Robotics",
+              "jobLink": "/partner/jobListing.htm?pos=102&ao=555&jl=1002",
+              "jobTitleText": "Senior Software Engineer",
+              "locId": 2280,
+              "locationName": "California",
+              "locationType": "S",
+              "rating": 0,
+              "sponsored": false
+            },
+            "job": { "descriptionFragments": ["<p>Lead the platform team.</p>"], "listingId": 1002 },
+            "overview": { "shortName": "Acme", "squareLogoUrl": null }
+          }
+        },
+        {
+          "jobview": {
+            "header": {
+              "adOrderId": 777,
+              "ageInDays": null,
+              "employer": { "id": 67890, "name": "Globex", "shortName": "Globex" },
+              "employerNameFromSearch": "Globex",
+              "jobLink": "/partner/jobListing.htm?pos=103&ao=777&jl=1003",
+              "jobTitleText": "Backend Engineer",
+              "locId": 11047,
+              "locationName": "Remote",
+              "locationType": "S",
+              "sponsored": false
+            },
+            "job": { "descriptionFragments": ["<p>Work from anywhere.</p>"], "listingId": 1003 },
+            "overview": { "shortName": "Globex" }
+          }
+        }
+      ]
+    }
+  }
+}
