@@ -534,7 +534,7 @@ before raising either.
 - The request log prints `term=<none>` in list mode (never `term="undefined"`), and `""`,
   whitespace, `null` and an omitted term share one cache entry.
 - A source that cannot list without a keyword (its plugin metadata sets
-  `requiresSearchTerm: true`; today `bayt` and `naukri`) is **not called** in list mode; its
+  `requiresSearchTerm: true`; today `bayt`, `naukri`, `stepstone`, `careeronestop`) is **not called** in list mode; its
   `per_source` row reads `empty` with the detail `requires a searchTerm; not queried in list mode`.
 - A source that fails without a keyword costs its own row, never the request.
 

@@ -129,6 +129,42 @@ malformed request without one: Bayt builds `/jobs/-jobs/`, Naukri a `-jobs` SEO 
 
 **Default (proceeding):** **A.**
 
+**Addendum 1 (review fix, 2026-09-25) — two more keyword-only plugins, and a wider guard.** The
+static guard only caught bare `${input.searchTerm}` interpolation. Two other shapes break list
+mode without ever printing "undefined":
+
+- `source-stepstone` builds `/jobs/<term>` and falls back to searching **"developer"** when no
+  term is given (`input.searchTerm ?? 'developer'`), so list mode silently became a keyword
+  search on this source;
+- `source-careeronestop` puts the keyword in a path segment of its v2 API
+  (`/{userId}/{keyword}/{location}/…`), so an absent term sends `//` — malformed, not a listing.
+
+Options: **A.** flag both `requiresSearchTerm` (not dispatched in list mode, `empty` row);
+**B.** make StepStone list without a keyword (e.g. `/jobs` with no segment). **Default
+(proceeding): A** — StepStone is a WIP Playwright scraper behind anti-bot protection, and no
+keyword-less listing URL can be verified from this lane without live traffic; un-flag it once one
+is verified live. CareerOneStop's API requires the keyword. The guard now also fails on a
+non-empty default keyword (`?? 'x'` / `|| "x"`, outside a log call) and on a term-derived value
+used as a whole path segment (`/${keyword}/`, `/${term}-jobs`) in any plugin **not** flagged
+`requiresSearchTerm`; the flagged plugins (`bayt`, `careeronestop`, `stepstone`) trip it and are
+excused only by the flag.
+
+**Addendum 2 (review fix, 2026-09-25) — result-size bounds (Spec 1720 FR-12).** A list-mode
+request holds the whole raw fan-out in memory before the first NDJSON job line, and
+`resultsWanted` had no upper bound. Options for the defaults:
+
+- **A. `EVER_JOBS_MAX_RESULTS_WANTED=1000`, `EVER_JOBS_MAX_JOBS_PER_SEARCH=100000`.** 1 000 is
+  where the big boards stop paginating anyway and caps in-flight memory at
+  `concurrency × 1 000`; 100 000 is ~4× today's 20–30 k catalogue-wide corpus.
+- **B. Both off by default (0).** Nothing changes for any caller, but one request can still
+  exhaust a 2.5 GB heap.
+- **C. Tighter (e.g. 500 / 50 000).** Safer for memory, but the job ceiling stops *starting*
+  sources in fan-out order, so hitting it routinely would again bias results toward sources that
+  sort first — the very defect list mode exists to fix.
+
+**Default (proceeding): A.** Clamping (with a warning) rather than a 400 keeps every existing
+request valid. `0` disables either bound.
+
 **Resolution:** _pending review._
 ## Q-096 — Shared location parser: known mis-splits carried in from the fork (Spec 1689)
 
