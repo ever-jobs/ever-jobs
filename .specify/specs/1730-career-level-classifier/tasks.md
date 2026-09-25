@@ -71,3 +71,23 @@
   `jobs.aggregator.career-level.spec.ts` together with that lane's tests on the merge.
 - [ ] T19 — Optional, at the same integration: when no `careerLevels` filter is set, classify only
   the paginated output window (needs the controller to resolve the window before `aggregateRaw`).
+
+## Phase 7 — Second review fixes (2026-09-25)
+
+- [x] T20 — Every `SearchJobsInput` field carries a class-validator decorator (the global pipe stripped all of them, so the GraphQL filter failed open and `searchTerm` never reached `JobsService`); shared `createGlobalValidationPipe()`; integration suite through the production pipe on GraphQL and REST.
+  - **Files:** `apps/api/src/jobs/gql-types.ts`, `apps/api/src/pipes/global-validation.pipe.ts`, `apps/api/src/main.ts`, `apps/api/__tests__/{helpers/create-app.ts,integration/search-input-pipe.integration.spec.ts}`
+- [x] T21 — Cap `employmentType` / `jobLevel` (inside `analyzeTitle`), `experienceRange` and quoted reasons.
+  - **Files:** `packages/plugins/career-level-classifier/src/career-level.rules.ts`, `__tests__/**`
+- [x] T22 — `senior partner` is executive only as a head noun; `partner marketing` is an IC-manager prefix (Q-105 item 8).
+  - **Files:** as T21, fixture
+- [x] T23 — Season + year alone → `low` confidence (Q-105 item 10).
+  - **Files:** as T21
+- [x] T24 — Description: first 3,000 visible characters, raw scan bounded at 64 KB; no tag leak at a window edge; linear tag regex.
+  - **Files:** as T21
+- [x] T25 — Throughput tripwire as a same-process ratio, red-controlled.
+  - **Files:** `__tests__/career-level.evaluation.spec.ts`
+- [x] T26 — `careerLevels` is a required key of `AggregateRawOptions`; `@ts-expect-error` guard, red-controlled.
+  - **Files:** `apps/api/src/jobs/jobs.aggregator.ts`, `apps/api/src/jobs/__tests__/*.spec.ts`
+- [x] T27 — CI runs the classifier suites and the career-level API tests in the gating Feature Plugins job.
+  - **Files:** `.github/workflows/ci.yml`
+- [ ] T28 — At the T18 integration, `runSearch()` must pass `careerLevels: input.careerLevels` (now a compile error if it does not) and an NDJSON test must send `careerLevels` and assert the filtered `job` line count.

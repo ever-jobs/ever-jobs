@@ -704,14 +704,20 @@ columns) and GraphQL (`careerLevel { level confidence reasons }`).
 - `level` is one of `internship`, `new_grad`, `entry`, `mid`, `senior`, `staff`, `principal`,
   `manager`, `director`, `executive` or `unknown`. `confidence` is `high`, `medium` or `low`.
 - Deterministic and in-process: no network, no LLM. The title decides; the source `jobType` /
-  `employmentType` / `jobLevel` / `experienceRange` fields, then the first 3,000 description
-  characters, fill in only when the title is silent, and otherwise just move the confidence. The
-  source fields themselves are never modified.
+  `employmentType` / `jobLevel` / `experienceRange` fields, then the first 3,000 visible
+  description characters (HTML stripped), fill in only when the title is silent, and otherwise
+  just move the confidence. The source fields themselves are never modified, and every one is
+  length-capped before it is read, so an oversized scraped value cannot make classification slow.
 - Guarded against the usual false friends: *Internal Audit Manager*, *International Sales*,
-  *Staff Nurse*, *Senior Living*, *Lead Generation*, *Associate Director*. *Intern Program Manager*
-  and *Campus Recruiter* run early-career programmes; they are not early-career roles.
+  *Staff Nurse*, *Senior Living*, *Lead Generation*, *Associate Director*, *Senior Partner
+  Manager*. *Intern Program Manager* and *Campus Recruiter* run early-career programmes; they are
+  not early-career roles.
+- A title whose only cue is a season + year (*Software Engineer - Fall 2026*) is `internship` at
+  `low` confidence: it may be a full-time start date. Threshold on `confidence` if you need
+  high-precision internships; the `careerLevels` filter itself ignores confidence.
 - Filter server-side with `"careerLevels": ["internship", "new_grad"]` in the request body
-  (GraphQL: `careerLevels: [...]`). Unknown values are rejected. `count` is post-filter.
+  (GraphQL: `careerLevels: [...]`). Unknown values are rejected (REST 400, GraphQL
+  `BAD_REQUEST`). `count` is post-filter.
   The filter fails closed: if it cannot be applied (no classifier bound, or classification
   failed) the request is a 503, never an unfiltered 200. It is applied after the cache, so it
   does not change the cache key.

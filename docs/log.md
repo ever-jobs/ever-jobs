@@ -193,6 +193,39 @@ re-measured idle (spec §12.4).
 `apps/api/src/jobs/{jobs.aggregator,jobs.controller}.ts`, `apps/api/src/jobs/__tests__/jobs.aggregator.career-level.spec.ts`,
 `.specify/specs/1730-career-level-classifier/spec.md` (FR-8, §7.3, §7.5, §7.6, §8, §10, §12), `docs/questions.md` (Q-105, Q-106), README.
 
+**Second review fixes (same day):**
+
+- **GraphQL filter failed open in production.** The global `ValidationPipe` (`whitelist: true`)
+  also runs on GraphQL `@Args`, and `SearchJobsInput` had no class-validator decorators, so it
+  stripped every field: `careerLevels` was ignored (200, unfiltered), an unknown level was not
+  rejected, and **`searchTerm`, `location`, `siteType` and the rest never reached `JobsService`
+  either** — every GraphQL search on the deployed API has been running keyword-less with default
+  settings. That part predates Spec 1730; it is fixed here because decorating every field fixes
+  both. `main.ts` and the e2e helper now share `createGlobalValidationPipe()`, and a new
+  integration suite sends real GraphQL and REST requests through that pipe.
+- **Oversized source fields.** `employmentType` / `jobLevel` went through the super-linear title
+  rules uncapped (~21 s for one 240 KB value, inside one synchronous call). The title analysis now
+  caps its own input; `experienceRange` and quoted reasons are capped too.
+- **Senior Partner Manager** and five similar senior IC titles were `executive`/high; the partner
+  rule now needs *partner* to be the head noun (Q-105 item 8).
+- **Season + year alone** is now `internship` at `low` confidence (Q-105 item 10).
+- **HTML-heavy descriptions** are read up to their first 3,000 visible characters (bounded at
+  64 KB of raw input) instead of the first 4,500 raw ones, and a window edge inside a tag no
+  longer leaks attribute text.
+- **Throughput tripwire** is now a same-process ratio (a 3x slowdown fails) instead of an
+  absolute bound 20-30x looser than the real cost.
+- **`careerLevels` is a required key of `aggregateRaw` options**, so a call site that drops the
+  filter (e.g. a merge with the NDJSON lane's shared `runSearch()`) no longer compiles.
+- **CI** now runs the classifier suites and the career-level API tests in the gating
+  *Feature Plugins* job; before this, nothing in CI ran them.
+- Fixture: 567 cases, all correct; held-out 174/174.
+
+**Second-review files:** `apps/api/src/{main.ts,pipes/global-validation.pipe.ts}`,
+`apps/api/src/jobs/{gql-types,jobs.resolver,jobs.aggregator}.ts`, `apps/api/__tests__/helpers/create-app.ts`,
+`apps/api/__tests__/integration/search-input-pipe.integration.spec.ts`, `apps/api/src/jobs/__tests__/jobs.aggregator{,.integration,.career-level}.spec.ts`,
+`packages/plugins/career-level-classifier/{src/career-level.rules.ts,__tests__/**}`, `.github/workflows/ci.yml`,
+`.specify/specs/1730-career-level-classifier/spec.md` (FR-3, FR-9, NFR-1, §7.3, §7.5, §7.6, §8, §12.4, §12.6), `docs/questions.md` (Q-105, Q-106), README.
+
 ---
 
 ## 2026-09-25 — Spec 1721 FR-15..FR-18 — the NDJSON end line says when the crawl was incomplete

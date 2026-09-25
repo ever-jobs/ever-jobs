@@ -50,6 +50,17 @@ afterwards. Without a filter nothing changes: a classifier failure only leaves `
 the jobs, because the field is additive. The shipped classifier is total (it catches internally), so
 in practice this fires only when a fork drops or replaces the plugin.
 
+**Second review (2026-09-25): the GraphQL path still failed open.** The global `ValidationPipe`
+(`whitelist: true`) also runs on GraphQL `@Args`, and `SearchJobsInput` had no class-validator
+decorators, so the pipe stripped `careerLevels` (and every other field) before the resolver saw
+it: a filtered GraphQL search returned the unfiltered set with 200, and an unknown level was not
+rejected. Every `SearchJobsInput` field is now decorated, the unknown-level check comes from the
+pipe (`BAD_REQUEST`) with the resolver's own check as a second line, and an integration suite
+sends real requests through the production pipe on GraphQL and REST. `aggregateRaw` also makes
+`careerLevels` a required key of its options, so a call site that drops the filter no longer
+compiles (Spec 1730 §7.3). "Identical in REST, GraphQL and NDJSON" now holds for REST and GraphQL;
+NDJSON is verified when that lane is integrated.
+
 ---
 
 ## Q-105 — Career-level taxonomy boundaries (Spec 1730)
@@ -82,6 +93,11 @@ implementation. Each choice below changes which jobs an "internship" or "new gra
    `Head of` → `director`. `Head/executive chef` → `manager`.
 8. **Partner:** bare `Partner` and `managing/general/founding/senior/equity partner` →
    `executive`. `Business/HR/talent/finance partner` and `Partner Engineer` are not levels.
+   *Second review (2026-09-25):* the ranked forms count only when *partner* is the head noun (end
+   of the segment, or followed by `at` / `of` / `in` / `and` / `or` / `&`). Before a role noun it is
+   the partner / channel function of an IC: *Senior Partner Manager*, *Senior Partner Solutions
+   Architect*, *Senior Partner Marketing Manager* → `senior`. *Alternative:* keep `executive`, which
+   put common senior IC titles into executive filters at high confidence.
 9. **Labelling policy for the fixture:** a label is what the posting explicitly states.
    Seniority implied only by the occupation (Barista, Warehouse Associate, Registered Nurse) is
    `unknown`.
@@ -96,6 +112,19 @@ implementation. Each choice below changes which jobs an "internship" or "new gra
     confidence, so they would still reach an "internships" list. *Cost:* a bank posting written as
     *Investment Banking Analyst - Summer 2026* (a summer internship) is now `unknown` unless it
     also says *intern* or *summer analyst*.
+
+    *Second review (2026-09-25):* what survives those guards is still ambiguous. *Software
+    Engineer, Fall 2026*, *Quantitative Trader - Fall 2026* and *Fall 2026 Software Engineer* are
+    as often full-time new-grad or quant start dates as work terms. **Default (proceeding):** keep
+    the level `internship` but always at **`low`** confidence, with the reason
+    `"fall 2026" (season + year only)`; independent evidence (an internship description, `jobType`
+    internship) lifts it to `medium`. A consumer that stores every job (Hust) can threshold it out.
+    *Alternatives:* (a) `unknown`, which loses real internships titled only by term (common on ATS
+    boards); (b) role-noun start-date handling for `trader` / `engineer` / `researcher`, which
+    would also drop genuine *Software Engineer - Summer 2026* internships. *Open point:* the
+    server-side `careerLevels` filter ignores confidence, so a low-confidence verdict still passes
+    `["internship"]`. A caller that needs high precision filters on `confidence` itself; a request
+    field such as `careerLevelMinConfidence` is left for the owner to decide.
 
 ---
 

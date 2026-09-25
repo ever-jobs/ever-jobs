@@ -76,13 +76,13 @@ tech company but a senior individual contributor at a bank.
 | ----- | ----------- | -------- |
 | FR-1  | `JobPostDto.careerLevel?: { level, confidence, reasons }` — `level` ∈ `internship \| new_grad \| entry \| mid \| senior \| staff \| principal \| manager \| director \| executive \| unknown`; `confidence` ∈ `high \| medium \| low`; `reasons` is a short `string[]` (≤ 5 entries). | must |
 | FR-2  | Classification is deterministic and pure: same input → same verdict; no I/O, no clock, never throws. | must |
-| FR-3  | Inputs: `title` (primary; first 300 characters, cut at a word boundary), `description` (first 3,000 characters after tag stripping, secondary), source `jobType`, `employmentType`, `jobLevel`, `experienceRange`. | must |
+| FR-3  | Inputs: `title` (primary; first 300 characters, cut at a word boundary), `description` (the first 3,000 *visible* characters after stripping tags / entities / markdown, found by scanning raw windows of 4.5 KB, 16 KB and at most 64 KB; secondary), source `jobType`, `employmentType` and `jobLevel` (capped like the title: 300 characters at a word boundary), `experienceRange` (first 120 characters). Every scraped string is capped before analysis, so no single field can make one `classify` call expensive. | must |
 | FR-4  | Title signals beat structured source fields, which beat description signals. A lower-priority signal that disagrees by ≥ 2 rungs lowers confidence one step; a structured field that agrees raises it one step. | must |
 | FR-5  | `unknown` (confidence `low`) when no signal is found anywhere. | must |
 | FR-6  | Applied in `JobsAggregator.aggregateRaw` after dedup (and on the no-dedup / no-engine paths), once per returned job, before the response is shaped — so JSON, pagination, CSV, NDJSON and GraphQL all see it. Not applied in the controller. | must |
 | FR-7  | `EVER_JOBS_CLASSIFY_CAREER_LEVEL` (default `true`); `false` → `careerLevel` is absent from every job. | must |
 | FR-8  | Optional `ScraperInputDto.careerLevels?: string[]`; unknown values are a 400 (class-validator `@IsIn`). When non-empty, only jobs whose level is in the set are returned. Applied after classification. The filter is honoured even when FR-7 disabled attachment (the level is computed transiently), and it fails closed: when it cannot be applied the request is a 503, never an unfiltered 200 — see Q-106. It is not part of the raw fan-out cache key. | must |
-| FR-9  | GraphQL: `JobPostGql.careerLevel` (`CareerLevelGql { level, confidence, reasons }`) and `SearchJobsInput.careerLevels: [String!]` with the same validation. | should |
+| FR-9  | GraphQL: `JobPostGql.careerLevel` (`CareerLevelGql { level, confidence, reasons }`) and `SearchJobsInput.careerLevels: [String!]` with the same validation. Every `SearchJobsInput` field carries a class-validator decorator, because the global `ValidationPipe` (`whitelist: true`) also runs on GraphQL `@Args` and strips undecorated fields. | should |
 | FR-10 | Source `jobType` / `jobLevel` / `experienceRange` are never mutated. | must |
 | FR-11 | A labelled fixture of ≥ 250 titles (+ description / structured-field cases) is evaluated in CI with per-class precision/recall thresholds. | must |
 
@@ -90,7 +90,7 @@ tech company but a senior individual contributor at a bank.
 
 | ID     | Requirement | Target |
 | ------ | ----------- | ------ |
-| NFR-1  | Cost per job | O(title + 3,000 description chars); no allocation proportional to the full description |
+| NFR-1  | Cost per job | O(capped fields + raw description scanned); the scan stops at 3,000 visible characters (4.5 KB of raw input for plain text) and never exceeds 64 KB, so no allocation is proportional to the full description |
 | NFR-2  | Throughput | 30,000 jobs (typical keyword-less fan-out) classified in < 2 s on one core (measured figure in §12.4); CI keeps load-robust tripwires only |
 | NFR-3  | Precision on `internship` and `new_grad` over the fixture | ≥ 0.95 |
 | NFR-4  | Default payload | unchanged except for the additive `careerLevel` field |
@@ -155,7 +155,11 @@ interface AggregateResult {
 
 `aggregate(input, options)` reads `input.careerLevels` when `options.careerLevels` is absent.
 `aggregateRaw` callers (REST controller, GraphQL resolver, future NDJSON path) pass
-`careerLevels: input.careerLevels`. The filter is applied after the raw fan-out cache, so both the
+`careerLevels: input.careerLevels`. `aggregateRaw` never sees the request DTO, so its options type
+(`AggregateRawOptions`) makes `careerLevels` a **required key** whenever options are passed
+(`careerLevels: undefined` means no filter): a call site rebuilt as `{ dedup, persist }`, by a
+refactor or by a merge resolved against a branch that predates the filter, does not compile
+instead of silently serving the unfiltered set. The filter is applied after the raw fan-out cache, so both the
 REST controller and the GraphQL resolver leave `careerLevels` out of the cache key: the same search
 with a different (or no) filter reuses the cached fan-out instead of re-scraping every source.
 
@@ -187,9 +191,9 @@ matching class wins; within a class the strongest confidence wins):
 | - | ----- | ------------------------- | -------------------- |
 | 1 | `internship` | `intern(s)`, `internship(s)`, `extern(ship)`, `co-op`/`coop`, `summer analyst/associate/intern/student/clerk`, *season + year* (`Summer 2026`, `Fall '26`), `working student`, `werkstudent`, `student worker/assistant/researcher/…`, `praktikant/praktikum`, `stagiaire`, `becario`, `pasante`, `prácticas`, `estagiário`, `tirocinante`, `thesis`, industrial/year/summer `placement`, `year in industry`, `spring week`, French `stage` (segment start + French preposition, or a whole segment), `research experience for undergraduates` / `REU`, `graduate research/teaching assistant`, `graduate assistant`, `undergraduate research/student`, 实习, インターン, 인턴 | never `internal`, `international`, `internet`, `interne`, `internist`, `cooperative`; co-op followed by retail nouns (`food`, `store`, `funeral`, `pharmacy`, `cashier`, `clerk`, `deli`, `produce`, …) or preceded by a co-operative business (`food`, `grocery`, `credit`, `housing`, `farm`, …); **season + year** (the weakest cue, see *Season + year* below); **program-admin context** (below) |
 | 2 | `new_grad` | `new grad(uate)`, `NCG`, `recent grad(uate)`, `university/college/campus grad/graduate/hire`, `early career(s)`, `early in career`, `early talent`, `class of 20xx`, `fresher(s)`, `graduate` + role/program noun (`Graduate Engineer`, `Graduate Programme`, `Graduate Nurse`), trailing `… Graduate`, `20xx graduate`, `nurse resident/residency`, `rotational program` | `post-graduate`; `graduate school/studies/admissions/medical`; program-admin context |
-| 3 | `executive` | `vice president`, `VP`, `SVP`, `EVP`, `AVP`, `president`, `chief … officer`, `CEO/CFO/CTO/COO/CIO/CMO/CISO/CHRO`, other `chief …`, `executive director`, `managing director`, `managing/general/founding/senior/equity partner`, bare `Partner`, `founder`/`co-founder` | **bank corporate title**: VP/AVP together with an IC role noun (`Vice President, Software Engineer`) → `senior`; `chief of staff` → `director`; `business/HR/talent/finance… partner`, `account/sales executive`, `executive assistant` never executive; **someone else's title** (rows 3–5, below); `founder's …` / `founders office|fund|…` (a function, not a founder) |
+| 3 | `executive` | `vice president`, `VP`, `SVP`, `EVP`, `AVP`, `president`, `chief … officer`, `CEO/CFO/CTO/COO/CIO/CMO/CISO/CHRO`, other `chief …`, `executive director`, `managing director`, `managing/general/founding/senior/equity partner` when *partner* is the head noun (end of the segment, or followed by `at` / `of` / `in` / `and` / `or` / `&`), bare `Partner`, `founder`/`co-founder` | **bank corporate title**: VP/AVP together with an IC role noun (`Vice President, Software Engineer`) → `senior`; `chief of staff` → `director`; `business/HR/talent/finance… partner`, `account/sales executive`, `executive assistant` never executive; `senior partner` before a role noun is the partner / channel function of an IC (*Senior Partner Manager*, *Senior Partner Solutions Architect* → `senior`); **someone else's title** (rows 3–5, below); `founder's …` / `founders office|fund|…` (a function, not a founder) |
 | 4 | `director` | `director`, `head of`, `chief of staff`, school `principal` / `assistant principal` | `funeral director` |
-| 5 | `manager` | `manager`/`mgr` (not an IC-manager compound), `supervisor`, `foreman`, `team/shift/crew lead(er)`, `head chef/coach`, `executive chef` | IC-manager compounds: `product`, `program`, `project`, `account`, `case`, `community`, `customer/client success`, `relationship`, `portfolio`, `partner`, `territory`, `category`, `campaign`, `content`, `engagement`, `product marketing` + manager |
+| 5 | `manager` | `manager`/`mgr` (not an IC-manager compound), `supervisor`, `foreman`, `team/shift/crew lead(er)`, `head chef/coach`, `executive chef` | IC-manager compounds: `product`, `program`, `project`, `account`, `case`, `community`, `customer/client success`, `relationship`, `portfolio`, `partner`, `territory`, `category`, `campaign`, `content`, `engagement`, `product marketing`, `partner marketing` + manager |
 | 6 | `principal` | `principal` + role, `distinguished …`, `technical fellow`, `associate principal` | school principal (→ director) |
 | 7 | `staff` | `staff` + tech role (`software`, `engineer`, `data`, `ML`, `research`, `designer`, `product`, `security`, `SRE`, …) | `staff nurse/RN/pharmacist/attorney/writer`, `member of technical staff`, `staff accountant/auditor` (→ entry), `chief of staff` |
 | 8 | `senior` | `senior`, `sr`, `snr`, `lead` + role / `tech lead` / `… lead`, numerals `III`/`3` (low), `IV`/`V`/`4`/`5` (medium) | `senior living/care/center/services/home/housing/community/citizen/high/secondary/school`; `lead generation`, `lead abatement/paint` |
@@ -204,7 +208,11 @@ stacked modifiers without a separator (`Senior Staff`, `Senior Principal`) are n
 take the higher level.
 
 **Season + year** (`Summer 2026`, `Fall '26`, `2027 Spring`) is the weakest title cue: it yields
-`internship` (medium) only when it is the title's *only* evidence. Any other title signal — an
+`internship` only when it is the title's *only* evidence, and always at **low** confidence with
+the reason `"fall 2026" (season + year only)`: what survives the guards below is still ambiguous
+(*Software Engineer, Fall 2026* or *Quantitative Trader - Fall 2026* is as often a new-grad or
+quant start date), so a consumer can threshold it out. Independent evidence (an internship
+description, `jobType` internship) lifts it to medium. Any other title signal — an
 intern / new-grad cue or an explicit ladder word at any level — drops it, so *Senior Software Engineer
 (Fall 2026)* is `senior` and *Director of Marketing - Summer 2026* is `director`. It is also
 ignored when it is a start date (`… Fall 2026 Start`, `intake`), a seasonal job or an academic /
@@ -257,7 +265,7 @@ Years are a *lower bound*: they conflict with the title only when the title is m
 
 | Case | Result |
 | ---- | ------ |
-| `careerLevels` contains a value outside `CAREER_LEVELS` | 400 (REST `ValidationPipe`) / `BadRequestException` (GraphQL) |
+| `careerLevels` contains a value outside `CAREER_LEVELS` | 400 (REST) / `BAD_REQUEST` error, `data: null` (GraphQL), both from the global `ValidationPipe` (`@IsIn(CAREER_LEVELS)`) before any scraping; the resolver re-checks for callers that bypass the pipe |
 | Classifier throws or returns a malformed batch (must not happen), no filter | aggregator logs a warning and returns the jobs unclassified |
 | Same, with a `careerLevels` filter | 503 `ServiceUnavailableException` ("careerLevels filter could not be applied …"), never an unfiltered result (Q-106) |
 | `careerLevels` filter with no classifier bound | 503, raised before dedup / persistence run (Q-106) |
@@ -272,10 +280,15 @@ Years are a *lower bound*: they conflict with the title only when the title is m
   ≥ 250 labelled titles + structured/description cases): per-class precision/recall and the
   confusion matrix; CI thresholds: precision ≥ 0.95 on `internship` and `new_grad`, recall
   ≥ 0.90 on both, overall accuracy ≥ 0.90.
-- **Performance** (tripwires, not the NFR measurement): average < 2 ms/job over 5,000 jobs with 3 KB
-  descriptions, and each of six adversarial inputs (repeated cue words, 5,000-char titles, 3,000
-  digits, nested separators, tag floods) classifies in < 250 ms, which rules out catastrophic regex
-  backtracking.
+- **Performance** (tripwires, not the NFR measurement): over 5,000 jobs with 3 KB descriptions the
+  classifier costs < 15x a reference workload timed in the same process on the same inputs (one
+  `normalizeCareerText` pass over title + description; best of three interleaved rounds; measured
+  5.5-5.7, and a control running the classifier 4x per job measured 22.4 and failed), with an
+  absolute < 2 ms/job backstop; each of nine adversarial inputs (repeated cue words, 5,000-char
+  titles, 3,000 digits, nested separators, tag floods, "<" with no ">", 64 KB of markup, entity
+  floods) classifies in < 250 ms, which rules out catastrophic regex backtracking; and ~60 KB
+  `employmentType` / `jobLevel` / `experienceRange` values classify in < 250 ms with every reason
+  ≤ 160 characters.
 - **Service / module**: `classifyBatch` preserves order; the module binds the token.
 - **Aggregator wiring** (`apps/api/src/jobs/__tests__/jobs.aggregator.career-level.spec.ts`):
   every returned job gets `careerLevel` on the dedup, no-dedup and no-engine paths; toggle off →
@@ -292,6 +305,17 @@ Years are a *lower bound*: they conflict with the title only when the title is m
   resumes after a queued `setImmediate`; `YieldBudget` expires, renews and yields only when spent.
 - **DTO validation**: `careerLevels` with an unknown value fails `class-validator`.
 - **GraphQL resolver**: filter passed through; unknown value rejected.
+- **Through the production pipe** (`apps/api/__tests__/integration/search-input-pipe.integration.spec.ts`):
+  boots Apollo, `JobsResolver` and `JobsController` with `createGlobalValidationPipe()` (the factory
+  `main.ts` uses) and the production exception filter, and sends real requests. GraphQL: the
+  filtered count, `BAD_REQUEST` for an unknown level before scraping, every search field reaching
+  `JobsService`, and every `SearchJobsInput` field (read from schema introspection) carrying a
+  class-validator decorator. REST: the same filter and a 400. Unit tests that call the resolver
+  directly cannot see a pipe that strips the input; only this suite can.
+- **Call-site guard**: a `@ts-expect-error` test fails the build if `careerLevels` ever becomes an
+  optional key of `AggregateRawOptions` again.
+- **CI**: the classifier's three suites run in the gating *Feature Plugins* job, and the pipe suite
+  plus the aggregator / resolver career-level specs in the same job's *career-level API* step.
 
 ## 9. Open Questions
 
@@ -420,7 +444,11 @@ Confusion matrix (rows = gold label, columns = prediction): the diagonal only �
 build workstation (Xeon E5-1660 v3, **89% CPU load from other agents' builds at the time**):
 **2.7–3.1 s** (about 90–100 µs/job; roughly 12 µs title + 60 µs description). That misses the 2 s
 target on a loaded machine and was not re-measured idle. CI does not assert the NFR itself. A wall-clock bound on shared runners flakes: the same 30,000 jobs
-took 13.4 s inside a fully parallel jest run. CI instead keeps two load-robust tripwires (§8). The first
+took 13.4 s inside a fully parallel jest run. CI instead keeps load-robust tripwires (§8). The
+throughput one was an absolute < 2 ms/job, 20-30x the real cost, so a 10x regression stayed green;
+since the second review it is a ratio against a same-process reference workload (§8), which a 3x
+slowdown fails. A reviewer's independent measurement: 30,000 jobs with ~3 KB descriptions in
+1.8-2.2 s at 44% machine load (0.06-0.07 ms/job), titles only 0.3 s. The first
 implementation took 24 s under jest. The fixes were: no `String.prototype.matchAll` (it clones the
 RegExp on every call), literal-needle gates before every rule, one alternation pass over the
 description instead of ~30 `includes` scans, and a whitespace pass that no longer rewrites every
@@ -457,3 +485,21 @@ misclassification not listed in its `KNOWN_MISSES` fails CI (the list is empty).
 Whole fixture after the fixes: **555 cases, 555 correct** (`internship` 90/90, `new_grad` 62/62,
 precision and recall 1.000 on every class). The held-out first-run figure in §12.1 remains the
 honest generalisation estimate; these numbers are by construction.
+
+### 12.6 Second review (2026-09-25)
+
+A second review booted the real app and probed the classifier with oversized and markup-heavy
+inputs. Findings and fixes:
+
+| Finding | Fix |
+| ------- | --- |
+| The GraphQL `careerLevels` filter failed **open** in production: the global `ValidationPipe` (`whitelist: true`) also runs on GraphQL `@Args`, and `SearchJobsInput` had no class-validator decorators, so the pipe stripped every field. `careerLevels: ["principal"]` returned the unfiltered set; `["intern"]` returned 200. `searchTerm`, `location`, `siteType`, … never reached `JobsService` either, so every GraphQL search ran keyword-less with defaults (this part predates Spec 1730). | Every `SearchJobsInput` field is decorated (FR-9); one `createGlobalValidationPipe()` factory for `main.ts` and the tests; an integration suite sends real requests through that pipe on GraphQL and REST (§8). |
+| `employmentType` / `jobLevel` went through the super-linear title analysis uncapped: ~1.1 s for a 60 KB value, ~21 s for 240 KB, inside one synchronous call that chunked classification cannot yield out of. | `analyzeTitle` caps its own input (300 characters, word boundary), so no caller can bypass it; `experienceRange` is capped at 120; reasons quote at most ~60 characters of a source field (FR-3). |
+| *Senior Partner Manager*, *Senior Partner Solutions Architect*, *Senior Partner Engineer, Google Cloud* and three more came out `executive`/high. | `senior partner` fires only when *partner* is the head noun; `partner marketing` is an IC-manager prefix (§7.5 rows 3 and 5). Six titles plus six controls added to the fixture. |
+| A bare season + year was `internship`/**medium**, though many such titles are new-grad / quant / banking start dates. | Always low confidence (§7.5 *Season + year*, Q-105 item 10). |
+| The description window was 4,500 **raw** characters, stripped afterwards: tag-heavy HTML lost all visible text, and a cut inside a tag leaked its attribute text. | Up to three raw windows (4.5 / 16 / 64 KB) until 3,000 visible characters are found; an open tag at the window edge is dropped; the tag regex is linear on `<` floods (FR-3). |
+| The throughput tripwire (< 2 ms/job) was 20-30x the real cost. | Ratio against a same-process reference workload (§8, §12.4). |
+| Merge hazard: a call rebuilt as `aggregateRaw(raw, { dedup, persist })` (the NDJSON lane's shared `runSearch()`) silently drops the filter for JSON and NDJSON. | `careerLevels` is a required key of `AggregateRawOptions` (§7.3). The integrator must still keep `careerLevels: input.careerLevels` in `runSearch()` and add an NDJSON test that sends `careerLevels` and counts the job lines. |
+
+Whole fixture after these fixes: **567 cases, 567 correct**; the held-out titles: 174/174 (the
+first-run figure in §12.1 remains the honest generalisation estimate).
