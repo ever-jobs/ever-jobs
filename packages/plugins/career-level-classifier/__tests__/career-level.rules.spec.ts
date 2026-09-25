@@ -76,9 +76,75 @@ describe('classifyCareerLevel — rules (Spec 1730)', () => {
       expect(level('Co-op Funeralcare Arranger')).not.toBe('internship');
     });
 
+    it('a retail co-operative named before "co-op", or a retail job after it, is not a work term', () => {
+      for (const title of ['Food Co-op Cashier', 'Co-op Cashier', 'Grocery Co-op Deli Clerk', 'Credit Co-op Teller', 'Co-op Produce Stocker']) {
+        const v = classifyCareerLevel({ title });
+        expect({ title, level: v.level }).toEqual({ title, level: 'unknown' });
+        expect(v.reasons.join(' ')).toMatch(/co-operative business/);
+      }
+      // A work-term co-op keeps its reading.
+      expect(level('Engineering Co-op - Fall 2026')).toBe('internship');
+      expect(level('Co-op Student, Finance')).toBe('internship');
+    });
+
     it('treats a seasonal job with a season + year as seasonal, not an internship', () => {
       expect(level('Lifeguard - Summer 2026')).toBe('unknown');
       expect(level('Summer Camp Counselor 2026')).toBe('unknown');
+    });
+
+    it('treats a season + year on a teaching / coaching / instructing job as a term, not an internship', () => {
+      for (const title of [
+        'Adjunct Faculty - Spring 2026',
+        'Assistant Professor of Biology - Fall 2026',
+        'Lecturer in Economics - Spring 2026',
+        'Part-Time Faculty, Nursing (Fall 2026)',
+        'Winter 2026 Ski Instructor',
+        'Swim Coach - Summer 2026',
+        'Math Tutor - Fall 2026',
+        'Substitute Teacher - Spring 2026',
+      ]) {
+        expect({ title, level: level(title) }).toEqual({ title, level: 'unknown' });
+      }
+    });
+
+    it('treats a season + year on an associate / staff / assistant / analyst hire as a start date (Q-105)', () => {
+      for (const title of [
+        'Audit Associate - Fall 2026',
+        'Tax Associate - Summer 2026',
+        'Assurance Staff - Fall 2026',
+        'Audit & Assurance Assistant - Fall 2026',
+        'Investment Banking Analyst - Summer 2026',
+      ]) {
+        const v = classifyCareerLevel({ title });
+        expect({ title, level: v.level }).toEqual({ title, level: 'unknown' });
+        expect(v.reasons.join(' ')).toMatch(/start date/);
+      }
+      // An explicit intern word is not a start date.
+      expect(level('Audit Intern - Summer 2026')).toBe('internship');
+      expect(level('Summer Associate 2026')).toBe('internship');
+    });
+
+    it('ignores a season + year in a title that runs an early-career programme', () => {
+      expect(level('Internship Coordinator - Summer 2026')).toBe('unknown');
+      expect(level('Campus Recruiter - Fall 2026')).toBe('unknown');
+    });
+
+    it('an explicit level word always beats a season + year, whatever the level', () => {
+      expect(level('Senior Software Engineer (Fall 2026)')).toBe('senior');
+      expect(level('Senior Manager, Summer 2026')).toBe('manager');
+      expect(level('Director of Marketing - Summer 2026')).toBe('director');
+      expect(level('Head Coach - Winter 2026')).toBe('manager');
+      expect(level('Software Engineer II - Summer 2026')).toBe('mid');
+      expect(level('Junior Developer - Spring 2027')).toBe('entry');
+      const v = classifyCareerLevel({ title: 'Senior Software Engineer (Fall 2026)' });
+      expect(v.reasons.join(' ')).toMatch(/ignored "fall 2026" \(an explicit level in the title\)/);
+    });
+
+    it('a season + year alone still reads as a work term (weak cue, medium confidence)', () => {
+      expect(classifyCareerLevel({ title: 'Software Engineer - Summer 2026' })).toMatchObject({
+        level: 'internship',
+        confidence: 'medium',
+      });
     });
 
     it('treats "<season> <year> start" as a start date, not a work term', () => {
@@ -223,6 +289,52 @@ describe('classifyCareerLevel — rules (Spec 1730)', () => {
     it('someone else is the executive in "… to the CEO" / "Assistant to the President"', () => {
       expect(level('Executive Assistant to the CEO')).toBe('unknown');
       expect(level('Assistant to the President')).toBe('unknown');
+    });
+
+    it('someone else is the VP / founder / director / head / managing director / partner (spec §7.5 row 3)', () => {
+      for (const title of [
+        'Executive Assistant to the VP of Sales',
+        'Executive Assistant to the Vice President',
+        'Executive Assistant to the SVP, Operations',
+        'Executive Assistant to the Founder',
+        'Business Associate, Office of the Founders',
+        'Executive Assistant to the Managing Director',
+        'Assistant to the Managing Partner',
+        'Assistant to the Director',
+        'Administrative Assistant to the Head of School',
+        'Executive Assistant for the Director of Operations',
+      ]) {
+        expect({ title, level: level(title) }).toEqual({ title, level: 'unknown' });
+      }
+      // Controls: the role itself is the VP / founder / director / head.
+      expect(level('VP of Sales')).toBe('executive');
+      expect(level('Founder & CEO')).toBe('executive');
+      expect(level('Assistant Director of Admissions')).toBe('director');
+      expect(level('Head of School')).toBe('director');
+    });
+
+    it('someone else is the manager: "to / for (the) <modifiers> manager"', () => {
+      expect(level('Executive Assistant to the General Manager')).toBe('unknown');
+      expect(level('Recruiter for Store Managers')).toBe('unknown');
+      expect(level('Management Trainee - Path to General Manager')).toBe('entry');
+      expect(level('Assistant to the Regional Director')).toBe('unknown');
+    });
+
+    it('a bare "of" inside a compound noun is not a holder ("Front of House Manager")', () => {
+      expect(level('Front of House Manager')).toBe('manager');
+      expect(level('Back of House Supervisor')).toBe('manager');
+      expect(level('Board of Directors')).toBe('unknown');
+      const v = classifyCareerLevel({ title: 'Assistant to the Director' });
+      expect(v.reasons.join(' ')).toMatch(/ignored "director" \(someone else's title\)/);
+    });
+
+    it("a founder's office / founders' programme is a function, not a founder role", () => {
+      expect(level("Founder's Associate")).toBe('unknown');
+      expect(level('Founders Office Associate')).toBe('unknown');
+      expect(level("Founder's Office - Business Operations")).toBe('unknown');
+      expect(level('Founders Fund Analyst')).toBe('unknown');
+      expect(level('Co-Founder')).toBe('executive');
+      expect(level('Founder')).toBe('executive');
     });
 
     it('does not treat IC "manager" titles, business partners or sales executives as management', () => {

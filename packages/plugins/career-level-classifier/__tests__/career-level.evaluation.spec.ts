@@ -3,6 +3,7 @@ import {
   CAREER_LEVEL_CONTEXT_CASES,
   CAREER_LEVEL_FIXTURE,
   CAREER_LEVEL_HOLDOUT_CASES,
+  CAREER_LEVEL_REVIEW_REGRESSION_CASES,
   CAREER_LEVEL_TITLE_CASES,
 } from './fixtures/career-level.fixture';
 import { evaluate, formatEvaluationMarkdown, type EvaluationResult } from './support/evaluate';
@@ -52,6 +53,27 @@ describe('career-level classifier — fixture evaluation (Spec 1730)', () => {
 
   it('meets the thresholds on the held-out titles alone', () => {
     expectThresholds(evaluate(CAREER_LEVEL_HOLDOUT_CASES, classifyCareerLevel));
+  });
+
+  /**
+   * The thresholds above are loose on purpose, so on their own they let a rule change silently
+   * break a case that used to pass (one did during the 2026-09-25 review fixes: "Front of House
+   * Manager" fell to `unknown` and every threshold stayed green). This gate pins the current
+   * result: a case the rules are *known* to miss goes in KNOWN_MISSES with its reason; anything
+   * else that is misclassified is a regression.
+   */
+  it('has no misclassification outside the documented known misses (regression gate)', () => {
+    const KNOWN_MISSES: ReadonlyMap<string, string> = new Map<string, string>([]);
+    const errors = evaluate(CAREER_LEVEL_FIXTURE, classifyCareerLevel).errors
+      .filter((e) => !KNOWN_MISSES.has(e.input.title ?? ''))
+      .map((e) => ({ title: e.input.title, expected: e.expected, actual: e.actual, reasons: e.reasons }));
+    expect(errors).toEqual([]);
+  });
+
+  it('the review regressions are classified exactly as labelled', () => {
+    const result = evaluate(CAREER_LEVEL_REVIEW_REGRESSION_CASES, classifyCareerLevel);
+    expect(result.total).toBeGreaterThanOrEqual(30);
+    expect(result.errors.map((e) => `${e.input.title}: gold ${e.expected}, got ${e.actual}`)).toEqual([]);
   });
 
   it('never labels a gold non-early-career title as internship or new_grad in the tricky-negative set', () => {

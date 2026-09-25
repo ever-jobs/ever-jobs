@@ -66,6 +66,17 @@ implementation. Each choice below changes which jobs an "internship" or "new gra
 9. **Labelling policy for the fixture:** a label is what the posting explicitly states.
    Seniority implied only by the occupation (Barista, Warehouse Associate, Registered Nurse) is
    `unknown`.
+10. **Season + year without an intern / student word** (added 2026-09-25 after review). It is the
+    weakest cue: `internship` (medium) only when it is the title's only evidence. Any explicit
+    level word outranks it (*Senior Software Engineer (Fall 2026)* → `senior`). It is ignored for
+    academic / seasonal / coaching work (*Adjunct Faculty - Spring 2026*, *Ski Instructor*), for
+    titles with an admin or leadership noun, and for `associate` / `staff` / `assistant` /
+    `analyst` hires, where it is usually a full-time start date (Big Four *Audit Associate - Fall
+    2026*, *Assurance Staff*; law-firm first-year associates) → `unknown`. *Alternative:* keep
+    those as `internship` at low confidence. Rejected because the `careerLevels` filter ignores
+    confidence, so they would still reach an "internships" list. *Cost:* a bank posting written as
+    *Investment Banking Analyst - Summer 2026* (a summer internship) is now `unknown` unless it
+    also says *intern* or *summer analyst*.
 
 ---
 

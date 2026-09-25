@@ -35,8 +35,13 @@ interface Signal {
   source: Source;
   /** A years-of-experience lower bound: compared with {@link yearsRelation}, not by distance. */
   years?: number;
-  /** A season+year title cue: dropped when an explicit new-grad cue is present. */
+  /**
+   * A season+year title cue: dropped whenever the title carries any other signal (an intern /
+   * new-grad cue or an explicit ladder word at any level) — see {@link resolve}.
+   */
   weak?: boolean;
+  /** The matched text of a weak cue, for the "ignored …" note when it is dropped. */
+  cue?: string;
 }
 
 interface Analysis {
@@ -194,13 +199,31 @@ const SENIOR_GUARD_NEXT = set(`
 const JUNIOR_GUARD_NEXT = set('high college school league');
 const LEAD_GUARD_NEXT = set('generation gen abatement paint poisoning based safe free qualification capture nurturing');
 const INTERMEDIATE_GUARD_NEXT = set('school care unit');
-/** `co-op <X>` retail/co-operative businesses, not a work term. */
+/** `co-op <X>` retail/co-operative businesses (and the retail jobs they hire for), not a work term. */
 const COOP_RETAIL_NEXT = set(`
   food store stores funeral funeralcare pharmacy insurance bank travel legal electrical energy academy
-  academies group retail grocery supermarket member members
+  academies group retail grocery supermarket member members cashier cashiers clerk clerks deli bakery
+  produce stocker stockers meat seafood
 `);
-/** Titles where a season + year is a seasonal job, not a student term. */
-const SEASONAL_GUARD = set('camp seasonal lifeguard lifeguards pool counselor counsellor');
+/** `<X> co-op` where X names a co-operative business (grocery, credit, housing …), not a work term. */
+const COOP_BUSINESS_PREV = set(`
+  food foods grocery groceries credit housing farm farmers consumer consumers dairy agricultural
+  natural organic retail
+`);
+/**
+ * Titles where a season + year is a seasonal job or an academic / coaching term, not a student
+ * work term ("Lifeguard - Summer 2026", "Adjunct Faculty - Spring 2026", "Winter 2026 Ski Instructor").
+ */
+const SEASONAL_GUARD = set(`
+  camp seasonal lifeguard lifeguards pool counselor counsellor adjunct faculty lecturer lecturers
+  instructor instructors professor professors teacher teachers coach coaches tutor tutors ski snowboard
+`);
+/**
+ * Hires whose season + year is a start date, not a work term: Big Four and law-firm new-grad
+ * classes ("Audit Associate - Fall 2026", "Assurance Staff - Fall 2026", "Audit Assistant") and
+ * bank analyst classes. Without an intern / student cue the weak season cue is ignored (Q-105).
+ */
+const SEASON_START_ROLE = set('associate associates staff assistant assistants analyst analysts');
 /** Tokens after a season + year that make it a start date / intake, not a term. */
 const SEASON_START_NEXT = set('start starts starting intake');
 /** `graduate <X>` contexts that are institutional, not a role. */
@@ -276,8 +299,11 @@ interface EarlyCue {
   weak?: boolean;
   /** Plural cue ("internships", "early careers") — programme-admin rule (c) applies. */
   plural?: (match: string) => boolean;
-  /** Cue-specific guard: return a note to ignore the match, `undefined` to keep it. */
-  guard?: (after: string[], ctx: TitleContext) => string | undefined;
+  /**
+   * Cue-specific guard over the tokens after / before the match in its segment: return a note to
+   * ignore the match, `undefined` to keep it.
+   */
+  guard?: (after: string[], ctx: TitleContext, before: string[]) => string | undefined;
 }
 
 const endsWithS = (m: string): boolean => /s$/.test(m.trim());
@@ -301,8 +327,13 @@ const EARLY_CUES: readonly EarlyCue[] = [
     level: 'internship',
     confidence: 'high',
     plural: endsWithS,
-    guard: (after) =>
-      after[0] && COOP_RETAIL_NEXT.has(after[0]) ? 'co-operative business, not a work term' : undefined,
+    // "Co-op Food", "Co-op Cashier", "Food Co-op Cashier", "Credit Co-op Teller".
+    guard: (after, _ctx, before) => {
+      const prev = before[before.length - 1];
+      return (after[0] && COOP_RETAIL_NEXT.has(after[0])) || (prev && COOP_BUSINESS_PREV.has(prev))
+        ? 'co-operative business, not a work term'
+        : undefined;
+    },
   },
   {
     re: /\bsummer (?:analyst|associate|intern|student|clerk|law clerk|scholar|researcher|research assistant|fellow)s?\b/g,
@@ -311,7 +342,10 @@ const EARLY_CUES: readonly EarlyCue[] = [
     confidence: 'high',
   },
   {
-    // Season + year ("Summer 2026", "Fall '26", "2027 Spring"): a student term unless seasonal.
+    // Season + year ("Summer 2026", "Fall '26", "2027 Spring"): a student term, but only when
+    // nothing else in the title explains it. It is the weakest cue: any other title signal
+    // outranks it (see resolve()), and the guards below drop it where the season is a start
+    // date, a seasonal job, an academic term or the term of a programme someone runs.
     re: /\b(?:summer|fall|autumn|winter|spring)(?: (?:term|semester|session|cohort))? ?(?:20\d{2}|'\d{2})\b|\b20\d{2} (?:summer|fall|autumn|winter|spring)\b/g,
     needles: SEASONS,
     level: 'internship',
@@ -319,7 +353,11 @@ const EARLY_CUES: readonly EarlyCue[] = [
     weak: true,
     guard: (after, ctx) => {
       if (after[0] && SEASON_START_NEXT.has(after[0])) return 'start date, not a term';
-      if (ctx.tokens.some((t) => SEASONAL_GUARD.has(t))) return 'seasonal job, not a student term';
+      if (ctx.tokens.some((t) => SEASONAL_GUARD.has(t))) return 'seasonal job or academic term, not a student term';
+      if (ctx.tokens.some((t) => SEASON_START_ROLE.has(t))) {
+        return 'start date of an associate / staff / assistant / analyst hire, not a student term';
+      }
+      if (ctx.hasAdminOrLeadership) return 'admin or leadership role, not a student term';
       return undefined;
     },
   },
@@ -677,7 +715,7 @@ function analyzeTitle(raw: string, origin: Source): Analysis {
         execAll(cue.re, seg, (m) => {
           const start = m.index;
           const { before, after } = around(seg, start, start + m[0].length);
-          const specific = cue.guard?.(after, ctx);
+          const specific = cue.guard?.(after, ctx, before);
           if (specific) {
             notes.push(`ignored ${quote(m[0])} (${specific})`);
             return;
@@ -687,7 +725,7 @@ function analyzeTitle(raw: string, origin: Source): Analysis {
             notes.push(`ignored ${quote(m[0])} (${why})`);
             return;
           }
-          add(cue.level, cue.confidence, quote(m[0]), cue.weak ? { weak: true } : undefined);
+          add(cue.level, cue.confidence, quote(m[0]), cue.weak ? { weak: true, cue: m[0] } : undefined);
         });
       }
       graduateSignals(seg, segIndex, ctx, add, notes);
@@ -733,40 +771,70 @@ function analyzeTitle(raw: string, origin: Source): Analysis {
     });
   };
 
+  /**
+   * Rules 3–5 name a title-holder. When that holder is someone else ("Executive Assistant to the
+   * VP", "Assistant to the Regional Director", "Recruiter for Store Managers") the rule is skipped
+   * and a note explains why. Returns `true` when the match at `start` is held by someone else.
+   */
+  const someoneElses = (m: RegExpExecArray, start: number): boolean => {
+    if (!heldBySomeoneElse(tokenize(norm.slice(0, start)))) return false;
+    notes.push(`ignored ${quote(m[0])} (someone else's title)`);
+    return true;
+  };
+
   // 3 — executive (and the bank corporate-title exception).
   each(['vice', 'vp'], VP_RE, (m, start) => {
+    if (someoneElses(m, start)) return;
     const { after } = around(norm, start, start + m[0].length);
     const bankStyle = after[0] !== 'of' && tokens.some((t) => BANK_IC.has(t));
     if (bankStyle) add('senior', 'medium', `${quote(m[0])} with an IC role (bank corporate title)`);
     else add('executive', 'high', quote(m[0]));
   });
   each('president', PRESIDENT_RE, (m, start) => {
-    const { before } = around(norm, start, start + m[0].length);
-    if (!cxoGuarded(before)) add('executive', 'high', quote(m[0]));
+    if (!someoneElses(m, start)) add('executive', 'high', quote(m[0]));
   });
-  each('chief', CHIEF_OF_STAFF_RE, (m) => add('director', 'medium', quote(m[0])));
+  each('chief', CHIEF_OF_STAFF_RE, (m, start) => {
+    if (!someoneElses(m, start)) add('director', 'medium', quote(m[0]));
+  });
   each('chief', CHIEF_RE, (m, start) => {
-    const { before, after } = around(norm, start, start + m[0].length);
-    if (cxoGuarded(before)) return;
+    if (someoneElses(m, start)) return;
+    const { after } = around(norm, start, start + m[0].length);
     const isOfficer = after.slice(0, 5).includes('officer');
     add('executive', isOfficer ? 'high' : 'medium', isOfficer ? '"chief ... officer"' : quote(m[0]));
   });
   each(['ceo', 'cfo', 'cto', 'coo', 'cio', 'cmo', 'ciso', 'chro'], CXO_RE, (m, start) => {
-    const { before } = around(norm, start, start + m[0].length);
-    if (!cxoGuarded(before)) add('executive', 'high', quote(m[0]));
+    if (!someoneElses(m, start)) add('executive', 'high', quote(m[0]));
   });
-  each(['director', 'c-'], EXEC_DIRECTOR_RE, (m) => add('executive', 'high', quote(m[0])));
-  each('partner', EXEC_PARTNER_RE, (m) => add('executive', 'high', quote(m[0])));
+  each(['director', 'c-'], EXEC_DIRECTOR_RE, (m, start) => {
+    if (!someoneElses(m, start)) add('executive', 'high', quote(m[0]));
+  });
+  each('partner', EXEC_PARTNER_RE, (m, start) => {
+    if (!someoneElses(m, start)) add('executive', 'high', quote(m[0]));
+  });
   if (ladder && norm.includes('partner')) {
     const firstSeg = tokenize(segments[0] ?? '');
     if (firstSeg.length === 1 && (firstSeg[0] === 'partner' || firstSeg[0] === 'partners')) {
       add('executive', 'medium', '"partner"');
     }
   }
-  each('founder', FOUNDER_RE, (m) => add('executive', 'high', quote(m[0])));
+  each('founder', FOUNDER_RE, (m, start) => {
+    if (someoneElses(m, start)) return;
+    // "Founder's Associate", "Founders' Office", "Founders Office Associate", "Founders Fund":
+    // a possessive, or a plural modifying a following noun, names a function, not a founder.
+    const rest = norm.slice(start + m[0].length);
+    const possessive = /^'s\b/.test(rest) || (m[0].endsWith('s') && rest.startsWith("'"));
+    const pluralModifier =
+      m[0].endsWith('s') && tokenize(rest.split(SEGMENT_BREAK_RE)[0] ?? '').length > 0;
+    if (possessive || pluralModifier) {
+      notes.push(`ignored ${quote(m[0])} (a founders' office or programme, not a founder)`);
+      return;
+    }
+    add('executive', 'high', quote(m[0]));
+  });
 
   // 4 — director.
   each('director', DIRECTOR_RE, (m, start) => {
+    if (someoneElses(m, start)) return;
     const { before } = around(norm, start, start + m[0].length);
     if (before[before.length - 1] === 'funeral') {
       notes.push('ignored "director" (funeral director)');
@@ -774,20 +842,31 @@ function analyzeTitle(raw: string, origin: Source): Analysis {
     }
     add('director', 'high', quote(m[0]));
   });
-  each('head of', HEAD_OF_RE, (m) => add('director', 'high', quote(m[0])));
+  each('head of', HEAD_OF_RE, (m, start) => {
+    if (!someoneElses(m, start)) add('director', 'high', quote(m[0]));
+  });
 
   // 5 — manager.
-  each('group', GROUP_PM_RE, (m) => add('manager', 'high', quote(m[0])));
+  each('group', GROUP_PM_RE, (m, start) => {
+    if (!someoneElses(m, start)) add('manager', 'high', quote(m[0]));
+  });
   each(['manager', 'mgr'], MANAGER_RE, (m, start) => {
     const { before } = around(norm, start, start + m[0].length);
     const p1 = before[before.length - 1];
     const p2 = before.length >= 2 ? `${before[before.length - 2]} ${p1}` : undefined;
     if ((p1 && IC_MANAGER_PREFIX.has(p1)) || (p2 && IC_MANAGER_PREFIX2.has(p2))) return; // IC title
+    if (someoneElses(m, start)) return;
     add('manager', !p1 || MANAGER_STRONG.has(p1) ? 'high' : 'medium', p1 ? quote(`${p1} ${m[0]}`) : quote(m[0]));
   });
-  each(['supervisor', 'forem', 'foreperson'], SUPERVISOR_RE, (m) => add('manager', 'medium', quote(m[0])));
-  each('lead', TEAM_LEAD_RE, (m) => add('manager', 'medium', quote(m[0])));
-  each(['chef', 'head '], HEAD_CHEF_RE, (m) => add('manager', 'medium', quote(m[0])));
+  each(['supervisor', 'forem', 'foreperson'], SUPERVISOR_RE, (m, start) => {
+    if (!someoneElses(m, start)) add('manager', 'medium', quote(m[0]));
+  });
+  each('lead', TEAM_LEAD_RE, (m, start) => {
+    if (!someoneElses(m, start)) add('manager', 'medium', quote(m[0]));
+  });
+  each(['chef', 'head '], HEAD_CHEF_RE, (m, start) => {
+    if (!someoneElses(m, start)) add('manager', 'medium', quote(m[0]));
+  });
 
   // 6 — principal / distinguished / fellow.
   each('principal', PRINCIPAL_RE, (m, start) => {
@@ -871,12 +950,28 @@ function analyzeTitle(raw: string, origin: Source): Analysis {
   return { signals, notes };
 }
 
-/** `Chief of Staff to the CEO`, `Assistant to the President`: the executive is someone else. */
-function cxoGuarded(before: string[]): boolean {
-  const last = before[before.length - 1];
-  const last2 = before[before.length - 2];
-  if (last && CXO_GUARD_PREV.has(last)) return true;
-  return (last === 'the' || last === 'our') && !!last2 && CXO_GUARD_PREV.has(last2);
+/** Modifier words allowed between `to/for/of [the]` and the title it governs ("to the Regional VP"). */
+const HELD_BY_MAX_MODIFIERS = 2;
+
+/**
+ * `Chief of Staff to the CEO`, `Assistant to the (Senior Regional) Director`, `Office of the
+ * Founders`, `Recruiter for Store Managers`: the title-holder is someone else. `before` is every
+ * token before the match. True when, at most {@link HELD_BY_MAX_MODIFIERS} words before it, comes
+ * `to` / `for`, or `to` / `for` / `of` + `the` / `our`. A bare `of` counts only right before the
+ * match (`Board of Directors`, `Office of CEO`): with a modifier in between it is part of a
+ * compound noun (`Front of House Manager`), not a holder.
+ */
+function heldBySomeoneElse(before: string[]): boolean {
+  for (let i = before.length - 1, skipped = 0; i >= 0 && skipped <= HELD_BY_MAX_MODIFIERS; i--, skipped++) {
+    const tok = before[i]!;
+    if (tok === 'to' || tok === 'for') return true;
+    if (tok === 'of') return skipped === 0;
+    if (tok === 'the' || tok === 'our') {
+      const prev = before[i - 1];
+      return prev !== undefined && CXO_GUARD_PREV.has(prev);
+    }
+  }
+  return false;
 }
 
 /** `graduate` (not `new graduate` etc., which EARLY_CUES cover): role, programme or appointment. */
@@ -910,17 +1005,24 @@ function graduateSignals(
   });
 }
 
-/** Resolve a title's signals to one, by precedence; `undefined` when there are none. */
-function resolve(signals: Signal[]): { signal: Signal; also: Signal[] } | undefined {
+/**
+ * Resolve a title's signals to one, by precedence; `undefined` when there are none.
+ *
+ * A weak cue (season + year) only counts when it is the title's *only* evidence: any other
+ * signal — an intern / new-grad cue or an explicit ladder word at any level — drops it, so
+ * "Senior Software Engineer (Fall 2026)" is `senior`, not an internship. `dropped` lists the weak
+ * cues that were discarded, for the reasons.
+ */
+function resolve(signals: Signal[]): { signal: Signal; also: Signal[]; dropped: Signal[] } | undefined {
   if (!signals.length) return undefined;
-  const hasStrongIntern = signals.some((s) => s.level === 'internship' && !s.weak);
-  const hasNewGrad = signals.some((s) => s.level === 'new_grad');
-  const usable = signals.filter((s) => !(s.weak && !hasStrongIntern && hasNewGrad));
+  const hasExplicit = signals.some((s) => !s.weak);
+  const usable = hasExplicit ? signals.filter((s) => !s.weak) : signals;
+  const dropped = hasExplicit ? signals.filter((s) => s.weak) : [];
   for (const level of PRECEDENCE) {
     const matching = usable.filter((s) => s.level === level);
     if (!matching.length) continue;
     const best = matching.reduce((a, b) => (stronger(b.confidence, a.confidence) ? b : a));
-    return { signal: best, also: usable.filter((s) => s !== best) };
+    return { signal: best, also: usable.filter((s) => s !== best), dropped };
   }
   return undefined;
 }
@@ -1244,6 +1346,9 @@ function classifyInternal(input: CareerLevelInput): CareerLevelVerdict {
   if (titleResolved) {
     primary = titleResolved.signal;
     secondary = [...structured, ...described];
+    for (const w of titleResolved.dropped) {
+      t.notes.push(`ignored ${quote(w.cue ?? '')} (an explicit level in the title)`);
+    }
     // An internship title that also says "new grad" ("Intern / New Grad") is genuinely mixed.
     if (primary.level === 'internship' && titleResolved.also.some((s) => s.level === 'new_grad')) {
       primary = { ...primary, confidence: down(primary.confidence) };

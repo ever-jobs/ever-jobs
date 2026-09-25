@@ -171,9 +171,9 @@ matching class wins; within a class the strongest confidence wins):
 
 | # | Level | Title cues (word-bounded) | Guards (cue ignored) |
 | - | ----- | ------------------------- | -------------------- |
-| 1 | `internship` | `intern(s)`, `internship(s)`, `extern(ship)`, `co-op`/`coop`, `summer analyst/associate/intern/student/clerk`, *season + year* (`Summer 2026`, `Fall '26`), `working student`, `werkstudent`, `student worker/assistant/researcher/…`, `praktikant/praktikum`, `stagiaire`, `becario`, `pasante`, `prácticas`, `estagiário`, `tirocinante`, `thesis`, industrial/year/summer `placement`, `year in industry`, `spring week`, French `stage` (segment start + French preposition, or a whole segment), `research experience for undergraduates` / `REU`, `graduate research/teaching assistant`, `graduate assistant`, `undergraduate research/student`, 实习, インターン, 인턴 | never `internal`, `international`, `internet`, `interne`, `internist`, `cooperative`; co-op followed by retail nouns (`food`, `store`, `funeral`, `pharmacy`, …); season+year with `camp`, `seasonal`, `lifeguard`, `pool`, `start`; **program-admin context** (below) |
+| 1 | `internship` | `intern(s)`, `internship(s)`, `extern(ship)`, `co-op`/`coop`, `summer analyst/associate/intern/student/clerk`, *season + year* (`Summer 2026`, `Fall '26`), `working student`, `werkstudent`, `student worker/assistant/researcher/…`, `praktikant/praktikum`, `stagiaire`, `becario`, `pasante`, `prácticas`, `estagiário`, `tirocinante`, `thesis`, industrial/year/summer `placement`, `year in industry`, `spring week`, French `stage` (segment start + French preposition, or a whole segment), `research experience for undergraduates` / `REU`, `graduate research/teaching assistant`, `graduate assistant`, `undergraduate research/student`, 实习, インターン, 인턴 | never `internal`, `international`, `internet`, `interne`, `internist`, `cooperative`; co-op followed by retail nouns (`food`, `store`, `funeral`, `pharmacy`, `cashier`, `clerk`, `deli`, `produce`, …) or preceded by a co-operative business (`food`, `grocery`, `credit`, `housing`, `farm`, …); **season + year** (the weakest cue, see *Season + year* below); **program-admin context** (below) |
 | 2 | `new_grad` | `new grad(uate)`, `NCG`, `recent grad(uate)`, `university/college/campus grad/graduate/hire`, `early career(s)`, `early in career`, `early talent`, `class of 20xx`, `fresher(s)`, `graduate` + role/program noun (`Graduate Engineer`, `Graduate Programme`, `Graduate Nurse`), trailing `… Graduate`, `20xx graduate`, `nurse resident/residency`, `rotational program` | `post-graduate`; `graduate school/studies/admissions/medical`; program-admin context |
-| 3 | `executive` | `vice president`, `VP`, `SVP`, `EVP`, `AVP`, `president`, `chief … officer`, `CEO/CFO/CTO/COO/CIO/CMO/CISO/CHRO`, other `chief …`, `executive director`, `managing director`, `managing/general/founding/senior/equity partner`, bare `Partner`, `founder`/`co-founder` | **bank corporate title**: VP/AVP together with an IC role noun (`Vice President, Software Engineer`) → `senior`; `chief of staff` → `director`; `business/HR/talent/finance… partner`, `account/sales executive`, `executive assistant` never executive |
+| 3 | `executive` | `vice president`, `VP`, `SVP`, `EVP`, `AVP`, `president`, `chief … officer`, `CEO/CFO/CTO/COO/CIO/CMO/CISO/CHRO`, other `chief …`, `executive director`, `managing director`, `managing/general/founding/senior/equity partner`, bare `Partner`, `founder`/`co-founder` | **bank corporate title**: VP/AVP together with an IC role noun (`Vice President, Software Engineer`) → `senior`; `chief of staff` → `director`; `business/HR/talent/finance… partner`, `account/sales executive`, `executive assistant` never executive; **someone else's title** (rows 3–5, below); `founder's …` / `founders office|fund|…` (a function, not a founder) |
 | 4 | `director` | `director`, `head of`, `chief of staff`, school `principal` / `assistant principal` | `funeral director` |
 | 5 | `manager` | `manager`/`mgr` (not an IC-manager compound), `supervisor`, `foreman`, `team/shift/crew lead(er)`, `head chef/coach`, `executive chef` | IC-manager compounds: `product`, `program`, `project`, `account`, `case`, `community`, `customer/client success`, `relationship`, `portfolio`, `partner`, `territory`, `category`, `campaign`, `content`, `engagement`, `product marketing` + manager |
 | 6 | `principal` | `principal` + role, `distinguished …`, `technical fellow`, `associate principal` | school principal (→ director) |
@@ -188,6 +188,25 @@ matching class wins; within a class the strongest confidence wins):
 (`Junior/Mid`, `Senior/Staff`, `Mid-Senior`) resolves to the lower level with `low` confidence;
 stacked modifiers without a separator (`Senior Staff`, `Senior Principal`) are not ranges and
 take the higher level.
+
+**Season + year** (`Summer 2026`, `Fall '26`, `2027 Spring`) is the weakest title cue: it yields
+`internship` (medium) only when it is the title's *only* evidence. Any other title signal — an
+intern / new-grad cue or an explicit ladder word at any level — drops it, so *Senior Software Engineer
+(Fall 2026)* is `senior` and *Director of Marketing - Summer 2026* is `director`. It is also
+ignored when it is a start date (`… Fall 2026 Start`, `intake`), a seasonal job or an academic /
+coaching term (`camp`, `seasonal`, `lifeguard`, `pool`, `counselor`, `adjunct`, `faculty`,
+`lecturer`, `instructor`, `professor`, `teacher`, `coach`, `tutor`, `ski`), the start date of an
+`associate` / `staff` / `assistant` / `analyst` hire (Big Four and law-firm new-grad classes: *Audit
+Associate - Fall 2026*, *Assurance Staff - Fall 2026*), or the term of a role that names an admin or
+leadership noun (*Internship Coordinator - Summer 2026*). Those titles are `unknown` unless another
+cue decides (Q-105 item 10).
+
+**Someone else's title.** Rules 3–5 name a title-holder. The rule is skipped, with an
+`ignored "…" (someone else's title)` reason, when `to` / `for` — or `to` / `for` / `of` followed by
+`the` / `our` — comes at most two modifier words before the match (*Executive Assistant to the VP of
+Sales*, *Assistant to the Regional Director*, *Office of the Founders*, *Recruiter for Store
+Managers*), or a bare `of` comes right before it (*Board of Directors*). A bare `of` further back is
+part of a compound noun and does not count (*Front of House Manager* is `manager`).
 
 **Program-admin context.** An intern / new-grad cue describes the *program the role administers*,
 not the role itself, when (a) an admin noun (`recruiter`, `coordinator`, `manager`,
@@ -296,6 +315,7 @@ has three parts:
 | Design titles | 332 | Written alongside the rules, including every tricky negative named in the task. |
 | Context cases | 17 | Title silent or conflicting; `jobType` / `employmentType` / `jobLevel` / `experienceRange` / description decide, plus incidental-mention negatives. |
 | Held-out titles | 174 | Labelled under the same policy **before the classifier was first run on them**. |
+| Review regressions | 32 | Added after the 2026-09-25 code review: reviewer probes that the rules got wrong, plus controls (§12.5). Not blind. |
 
 The design set scores 100% by construction, so it proves the guards work but says nothing about
 generalisation. **The held-out first run is the honest estimate:**
@@ -377,3 +397,25 @@ implementation took 24 s under jest. The fixes were: no `String.prototype.matchA
 RegExp on every call), literal-needle gates before every rule, one alternation pass over the
 description instead of ~30 `includes` scans, and a whitespace pass that no longer rewrites every
 single space.
+
+### 12.5 Review regressions (2026-09-25)
+
+A code review probed the rules with titles the fixture did not cover and found three defect
+classes, all of which put non-early-career jobs into the `internship` class Hust filters on (or
+an assistant into `executive`):
+
+| Defect | Examples (before → after) |
+| ------ | ------------------------- |
+| A season + year alone marked an internship and outranked every explicit level | *Audit Associate - Fall 2026*, *Assurance Staff - Fall 2026*, *Adjunct Faculty - Spring 2026*, *Winter 2026 Ski Instructor* `internship` → `unknown`; *Senior Software Engineer (Fall 2026)* `internship` → `senior`; *Director of Marketing - Summer 2026* `internship` → `director` |
+| The "someone else is the executive" guard covered only president / chief / CxO | *Executive Assistant to the VP of Sales*, *… to the Founder*, *Assistant to the Director*, *Administrative Assistant to the Head of School* `executive`/`director` → `unknown`; *Founder's Associate*, *Founders Office Associate* `executive` → `unknown` |
+| The co-op guard read only the word after the cue | *Food Co-op Cashier*, *Co-op Cashier* `internship` → `unknown` |
+
+The fixes are in §7.5 (*Season + year*, *Someone else's title*, row 1 co-op guards). The 32 probe
+titles and controls are the fixture's *review regressions* part. While fixing them one held-out case
+regressed silently (*Front of House Manager* fell to `unknown`, a bare `of` read as a holder) and
+every threshold stayed green, so the evaluation spec now also pins the current result: any
+misclassification not listed in its `KNOWN_MISSES` fails CI (the list is empty).
+
+Whole fixture after the fixes: **555 cases, 555 correct** (`internship` 90/90, `new_grad` 62/62,
+precision and recall 1.000 on every class). The held-out first-run figure in §12.1 remains the
+honest generalisation estimate; these numbers are by construction.

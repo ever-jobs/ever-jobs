@@ -163,6 +163,25 @@ re-measured idle (spec §12.4).
 `apps/api/src/config/configuration.ts`, `scripts/career-level-eval.ts`, `tsconfig.base.json`, `jest.config.js`,
 `.specify/specs/1730-career-level-classifier/*`, README, `.env.example`.
 
+**Review fixes (same day, after the code review of this lane):**
+
+- **Season + year** (*Fall 2026*) no longer beats an explicit level word and no longer marks
+  academic terms, seasonal work, Big Four / law-firm start dates or admin roles as internships
+  (*Audit Associate - Fall 2026*, *Adjunct Faculty - Spring 2026* → `unknown`;
+  *Senior Software Engineer (Fall 2026)* → `senior`). Decision recorded as **Q-105 item 10**.
+- **Someone else's title:** the guard that kept *Executive Assistant to the CEO* out of
+  `executive` now covers VP, founder, managing director, partner, director, head of and the
+  manager rules, and looks past up to two modifiers (*Assistant to the Regional Director*).
+  *Founder's Associate* / *Founders Office* are a function, not a founder.
+- **Co-op:** a co-operative business before the cue (*Food Co-op*, *Credit Co-op*) or a retail job
+  after it (*Co-op Cashier*) is not a work term.
+- **Fixture:** 32 review regressions and controls (555 cases, all correct). A new regression gate
+  fails CI on any misclassification outside a documented `KNOWN_MISSES` list; it caught a silent
+  regression (*Front of House Manager*) that every threshold had let through.
+
+**Review-fix files:** `packages/plugins/career-level-classifier/{src/career-level.rules.ts,__tests__/**}`,
+`.specify/specs/1730-career-level-classifier/spec.md` (§7.5, §12, §12.5), `docs/questions.md` (Q-105).
+
 ---
 
 ## 2026-09-25 — Spec 1721 FR-15..FR-18 — the NDJSON end line says when the crawl was incomplete

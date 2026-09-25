@@ -670,8 +670,54 @@ export const CAREER_LEVEL_HOLDOUT_CASES: readonly CareerLevelCase[] = [
   t('Software Engineer, Payments (2026)', 'unknown'),
 ];
 
+/**
+ * Regressions found by the code review of 2026-09-25 (reviewer probes against the rules, not a
+ * blind sample). Each one was misclassified before the fix; they are kept apart from the held-out
+ * set so its first-run score (spec §12.1) stays an honest estimate.
+ */
+export const CAREER_LEVEL_REVIEW_REGRESSION_CASES: readonly CareerLevelCase[] = [
+  // Season + year with no intern / student word: a start date or an academic / seasonal term.
+  t('Audit Associate - Fall 2026', 'unknown', 'Big Four full-time start date'),
+  t('Tax Associate - Summer 2026', 'unknown', 'Big Four full-time start date'),
+  t('Assurance Staff - Fall 2026', 'unknown', 'Big Four full-time start date'),
+  t('Audit & Assurance Assistant - Fall 2026', 'unknown', 'Big Four full-time start date'),
+  t('Adjunct Faculty - Spring 2026', 'unknown', 'academic term'),
+  t('Assistant Professor of Biology - Fall 2026', 'unknown', 'academic term'),
+  t('Lecturer in Economics - Spring 2026', 'unknown', 'academic term'),
+  t('Part-Time Faculty, Nursing (Fall 2026)', 'unknown', 'academic term'),
+  t('Winter 2026 Ski Instructor', 'unknown', 'seasonal job'),
+  t('Swim Coach - Summer 2026', 'unknown', 'seasonal job'),
+  t('Internship Coordinator - Summer 2026', 'unknown', 'runs the programme; season is its term'),
+  // An explicit level word always beats a season + year.
+  t('Head Coach - Winter 2026', 'manager', 'head coach rule; season is the term'),
+  t('Senior Software Engineer (Fall 2026)', 'senior'),
+  t('Senior Manager, Summer 2026', 'manager'),
+  t('Director of Marketing - Summer 2026', 'director'),
+  t('Software Engineer II - Summer 2026', 'mid'),
+  // Controls: an explicit intern / co-op cue still wins.
+  t('Audit Intern - Summer 2026', 'internship', 'control'),
+  t('Tax Intern - Fall 2026', 'internship', 'control'),
+  t('Engineering Co-op - Fall 2026', 'internship', 'control'),
+  // Someone else is the executive: "executive assistant" is never executive (spec §7.5 row 3).
+  t('Executive Assistant to the VP of Sales', 'unknown'),
+  t('Executive Assistant to the Vice President', 'unknown'),
+  t('Executive Assistant to the Founder', 'unknown'),
+  t('Executive Assistant to the Managing Director', 'unknown'),
+  t("Founder's Associate", 'unknown', "founder's office is a function"),
+  t('Founders Office Associate', 'unknown', "founder's office is a function"),
+  t('Assistant to the Director', 'unknown'),
+  t('Administrative Assistant to the Head of School', 'unknown'),
+  t('Founder & CEO', 'executive', 'control'),
+  t('Head of School', 'director', 'control'),
+  // Retail co-operatives, not a work term.
+  t('Food Co-op Cashier', 'unknown'),
+  t('Co-op Cashier', 'unknown'),
+  t('Grocery Co-op Deli Clerk', 'unknown'),
+];
+
 export const CAREER_LEVEL_FIXTURE: readonly CareerLevelCase[] = [
   ...CAREER_LEVEL_TITLE_CASES,
   ...CAREER_LEVEL_CONTEXT_CASES,
   ...CAREER_LEVEL_HOLDOUT_CASES,
+  ...CAREER_LEVEL_REVIEW_REGRESSION_CASES,
 ];
