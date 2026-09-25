@@ -60,6 +60,7 @@ export interface AggregateOptions {
    * dedup and classification; `undefined` or `[]` means no filter. Values outside
    * `CAREER_LEVELS` are ignored here — the REST DTO / GraphQL resolver reject them first.
    * Callers pass `careerLevels: input.careerLevels`; `aggregate()` reads it from the input.
+   * For `aggregateRaw()` the key is required, see {@link AggregateRawOptions}.
    *
    * The filter fails closed (Q-106): when it cannot be applied — no classifier bound, or
    * classification failed — the aggregator throws `ServiceUnavailableException` (503) rather
@@ -67,6 +68,20 @@ export interface AggregateOptions {
    */
   readonly careerLevels?: ReadonlyArray<string>;
 }
+
+/**
+ * Options for {@link JobsAggregator.aggregateRaw}: {@link AggregateOptions} with `careerLevels`
+ * as a REQUIRED key whenever options are passed (`careerLevels: undefined` means "no filter").
+ *
+ * `aggregateRaw` never sees the request DTO, so this argument is the only way the filter reaches
+ * it, for every response format (JSON, CSV, NDJSON, GraphQL). A call site rebuilt as
+ * `{ dedup, persist }` (a refactor, or a merge resolved against a branch that predates the
+ * filter) would otherwise compile and silently serve the unfiltered set: the filter would fail
+ * OPEN. With the key required it does not compile (Spec 1730 review).
+ */
+export type AggregateRawOptions = AggregateOptions & {
+  readonly careerLevels: AggregateOptions['careerLevels'];
+};
 
 /**
  * Jobs handed to `classifyBatch` per call. Small enough that one chunk stays around the yield
@@ -207,7 +222,7 @@ export class JobsAggregator {
    */
   async aggregateRaw(
     rawJobs: JobPostDto[],
-    options: AggregateOptions = {},
+    options: AggregateRawOptions = { careerLevels: undefined },
   ): Promise<AggregateResult> {
     // Fail fast (Q-106): a filter that cannot run must not cost a dedup + persist pass first.
     if (wantedCareerLevels(options).size > 0 && !this.careerLevelClassifier) {

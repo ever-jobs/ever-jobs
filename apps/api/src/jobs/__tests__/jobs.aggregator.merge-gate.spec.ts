@@ -46,7 +46,7 @@ describe('JobsAggregator — merge gate (Spec 1724)', () => {
     ];
 
     const engineResult = await engine.dedup(raw);
-    const result = await aggregator.aggregateRaw(raw, { dedup: true, persist: false });
+    const result = await aggregator.aggregateRaw(raw, { dedup: true, persist: false, careerLevels: undefined });
 
     expect(result.jobs.map((j) => j.id)).toEqual(['hk-intern', 'ny-intern', 'ny-grad', 'ldn']);
     // Every returned key is the engine's cluster id for that posting ...
@@ -62,7 +62,7 @@ describe('JobsAggregator — merge gate (Spec 1724)', () => {
       job('ny-intern', { location: NEW_YORK, employmentType: 'Summer Internship' }),
       job('ny-grad', { location: NEW_YORK, employmentType: 'Full-Time: New Grad' }),
     ];
-    const result = await aggregator.aggregateRaw(raw, { dedup: false });
+    const result = await aggregator.aggregateRaw(raw, { dedup: false, careerLevels: undefined });
     expect(result.jobs[0]!.dedupKey).toBe(result.jobs[1]!.dedupKey);
   });
 
@@ -77,7 +77,7 @@ describe('JobsAggregator — merge gate (Spec 1724)', () => {
     const boardKey = dedupKeyForJob(board);
 
     const engineResult = await engine.dedup(raw);
-    const result = await aggregator.aggregateRaw(raw, { dedup: true, persist: false });
+    const result = await aggregator.aggregateRaw(raw, { dedup: true, persist: false, careerLevels: undefined });
 
     expect(result.jobs).toHaveLength(1);
     const kept = result.jobs[0]!;
@@ -95,7 +95,7 @@ describe('JobsAggregator — merge gate (Spec 1724)', () => {
     const aggregator = new JobsAggregator(jobsService, new DedupHybridService());
     const a = job('a', { location: NEW_YORK, locations: [NEW_YORK] });
     const b = job('b', { site: Site.LINKEDIN, location: NEW_YORK });
-    const result = await aggregator.aggregateRaw([a, b], { dedup: true, persist: false });
+    const result = await aggregator.aggregateRaw([a, b], { dedup: true, persist: false, careerLevels: undefined });
     expect(result.jobs).toHaveLength(1);
     expect(result.jobs[0]).toBe(a);
     expect(a.dedupKey).toBe(dedupKeyForJob(a));

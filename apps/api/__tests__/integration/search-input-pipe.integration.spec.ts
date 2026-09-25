@@ -1,5 +1,6 @@
 /**
- * Spec 1730 review — GraphQL `searchJobs` input through a REAL booted app.
+ * Spec 1730 review — search input (GraphQL `searchJobs`, REST `POST /api/jobs/search`) through a
+ * REAL booted app.
  *
  * The resolver unit tests call `JobsResolver.searchJobs()` directly, so they bypass the global
  * `ValidationPipe`. In production that pipe runs with `whitelist: true`, which strips every
@@ -11,7 +12,8 @@
  * This suite boots Apollo + `JobsResolver` with the production pipe (`createGlobalValidationPipe`,
  * the same factory `main.ts` uses) and the production exception filter, and sends real GraphQL
  * requests over HTTP. Only the fan-out (`JobsService`) and the cache are stubbed; the aggregator
- * and the career-level classifier are real.
+ * and the career-level classifier are real. The REST controller is booted alongside, so the same
+ * filter is checked through the same pipe on both surfaces (Q-106: identical in REST and GraphQL).
  */
 import 'reflect-metadata';
 import { INestApplication } from '@nestjs/common';
@@ -21,6 +23,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { Test } from '@nestjs/testing';
 import { getMetadataStorage } from 'class-validator';
+import { AnalyticsService } from '@ever-jobs/analytics';
 import { CareerLevelClassifierService } from '@ever-jobs/career-level-classifier';
 import { JobPostDto, Site } from '@ever-jobs/models';
 
@@ -28,6 +31,7 @@ import { CacheService } from '../../src/cache/cache.service';
 import { HttpExceptionFilter } from '../../src/filters/http-exception.filter';
 import { SearchJobsInput } from '../../src/jobs/gql-types';
 import { JobsAggregator } from '../../src/jobs/jobs.aggregator';
+import { JobsController } from '../../src/jobs/jobs.controller';
 import { JobsResolver } from '../../src/jobs/jobs.resolver';
 import { JobsService } from '../../src/jobs/jobs.service';
 import { createGlobalValidationPipe } from '../../src/pipes/global-validation.pipe';
@@ -42,7 +46,7 @@ const fixtureJobs = (): JobPostDto[] => [
 
 describe('GraphQL searchJobs input through the production ValidationPipe (Spec 1730)', () => {
   let app: INestApplication;
-  const jobsService = { searchJobs: jest.fn() };
+  const jobsService = { searchJobs: jest.fn(), searchJobsWithDiagnostics: jest.fn() };
   const cacheService = { get: jest.fn(), set: jest.fn() };
   const config = { get: (_key: string, def?: unknown) => def };
 
@@ -55,8 +59,10 @@ describe('GraphQL searchJobs input through the production ValidationPipe (Spec 1
           sortSchema: true,
         }),
       ],
+      controllers: [JobsController],
       providers: [
         JobsResolver,
+        { provide: AnalyticsService, useValue: {} },
         { provide: JobsService, useValue: jobsService },
         { provide: CacheService, useValue: cacheService },
         { provide: ConfigService, useValue: config },
@@ -87,6 +93,9 @@ describe('GraphQL searchJobs input through the production ValidationPipe (Spec 1
 
   beforeEach(() => {
     jobsService.searchJobs.mockReset().mockImplementation(async () => fixtureJobs());
+    jobsService.searchJobsWithDiagnostics
+      .mockReset()
+      .mockImplementation(async () => ({ jobs: fixtureJobs(), perSource: [] }));
     cacheService.get.mockReset().mockResolvedValue(null);
     cacheService.set.mockReset().mockResolvedValue(undefined);
   });
@@ -167,5 +176,27 @@ describe('GraphQL searchJobs input through the production ValidationPipe (Spec 1
         .map((m) => m.propertyName),
     );
     expect(graphqlFields.filter((name) => !decorated.has(name))).toEqual([]);
+  });
+
+  describe('REST parity: POST /api/jobs/search', () => {
+    const search = (body: Record<string, unknown>) =>
+      request(app.getHttpServer()).post('/api/jobs/search').send(body).set('Content-Type', 'application/json');
+
+    it('applies the careerLevels filter', async () => {
+      const res = await search({ searchTerm: 'engineer', careerLevels: ['principal'] });
+      expect(res.status).toBe(201);
+      expect(res.body.count).toBe(1);
+      expect(res.body.jobs[0].careerLevel.level).toBe('principal');
+      expect(jobsService.searchJobsWithDiagnostics.mock.calls[0]![0]).toEqual(
+        expect.objectContaining({ searchTerm: 'engineer', careerLevels: ['principal'] }),
+      );
+    });
+
+    it('rejects an unknown career level with 400 before scraping', async () => {
+      const res = await search({ searchTerm: 'engineer', careerLevels: ['intern'] });
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body)).toMatch(/careerLevels/);
+      expect(jobsService.searchJobsWithDiagnostics).not.toHaveBeenCalled();
+    });
   });
 });

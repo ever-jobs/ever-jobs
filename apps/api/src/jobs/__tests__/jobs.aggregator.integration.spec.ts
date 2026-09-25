@@ -66,7 +66,7 @@ describe('JobsAggregator — integration with DedupHybridService', () => {
     const jobsService = { searchJobs: jest.fn().mockResolvedValue(rawJobs) } as any;
     const aggregator = new JobsAggregator(jobsService, engine);
 
-    const out = await aggregator.aggregateRaw(rawJobs, { dedup: false });
+    const out = await aggregator.aggregateRaw(rawJobs, { dedup: false, careerLevels: undefined });
 
     expect(out.deduped).toBe(false);
     expect(out.outputCount).toBe(3);

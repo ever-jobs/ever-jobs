@@ -106,7 +106,7 @@ describeIfPg('Postgres store — boot from env against a real database (Spec 172
       }),
     ];
 
-    const result = await aggregator.aggregateRaw(raw, { dedup: true, persist: true });
+    const result = await aggregator.aggregateRaw(raw, { dedup: true, persist: true, careerLevels: undefined });
 
     expect(result.persisted).toBe(true);
     expect(result.persistError).toBeUndefined();
@@ -123,7 +123,7 @@ describeIfPg('Postgres store — boot from env against a real database (Spec 172
     // A later run of the same posting upserts the same row (no duplicate).
     const again = await aggregator.aggregateRaw(
       [new JobPostDto({ ...raw[1]!, id: `gh-${run}-rerun` })],
-      { dedup: true, persist: true },
+      { dedup: true, persist: true, careerLevels: undefined },
     );
     expect(again.jobs[0]!.dedupKey).toBe(key);
     expect(again.persistCounts).toEqual({ inserted: 0, updated: 1 });

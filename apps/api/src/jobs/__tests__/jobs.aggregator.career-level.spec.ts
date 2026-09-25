@@ -105,7 +105,7 @@ describe('JobsAggregator — career level (Spec 1730)', () => {
 
   it('classifies on the dedup=false and no-engine paths too, keeping the pass-through array', async () => {
     const raw = sampleJobs();
-    const optedOut = await aggregator({ engine: titleEngine() }).aggregateRaw(raw, { dedup: false });
+    const optedOut = await aggregator({ engine: titleEngine() }).aggregateRaw(raw, { dedup: false, careerLevels: undefined });
     expect(optedOut.jobs).toBe(raw);
     expect(optedOut.jobs.every((j) => j.careerLevel)).toBe(true);
 
@@ -238,6 +238,22 @@ describe('JobsAggregator — career level (Spec 1730)', () => {
  * `dedup-hybrid/src/cooperative.ts`). The probe here is a self-rescheduling `setImmediate` chain —
  * what an inbound request needs in order to be served. A synchronous pass lets it tick zero times.
  */
+describe('JobsAggregator — careerLevels cannot be dropped at a call site (Spec 1730 review)', () => {
+  it('aggregateRaw options without a careerLevels key do not compile', async () => {
+    // A call rebuilt as `{ dedup, persist }` (refactor, or a merge resolved against a branch that
+    // predates the filter) would silently serve the unfiltered set. ts-jest and `tsc` both fail
+    // on an unused @ts-expect-error, so this test goes red if the key ever becomes optional.
+    // @ts-expect-error careerLevels is a required key of AggregateRawOptions
+    const dropped = await aggregator().aggregateRaw(sampleJobs(), { dedup: false, persist: false });
+    expect(dropped.jobs).toHaveLength(6);
+
+    // The explicit "no filter" spelling, and omitting the options entirely, both compile.
+    const none = await aggregator().aggregateRaw(sampleJobs(), { dedup: false, persist: false, careerLevels: undefined });
+    expect(none.jobs).toHaveLength(6);
+    expect((await aggregator().aggregateRaw(sampleJobs())).jobs).toHaveLength(6);
+  });
+});
+
 describe('JobsAggregator — career level keeps the event loop responsive (Spec 1730, NFR-2)', () => {
   const MAX_STALL_MS = Number(process.env.CAREER_LEVEL_LOOP_MAX_STALL_MS ?? 250);
 
@@ -280,7 +296,7 @@ describe('JobsAggregator — career level keeps the event loop responsive (Spec 
   it('yields to the event loop while classifying a large batch (slow classifier)', async () => {
     const jobs = Array.from({ length: 300 }, (_, i) => job(`s${i}`, i % 2 ? 'Software Engineer Intern' : 'Staff Engineer'));
     const { result, ticks, worstGapMs } = await probeDuring(() =>
-      aggregator({ classifier: slow }).aggregateRaw(jobs, { dedup: false }),
+      aggregator({ classifier: slow }).aggregateRaw(jobs, { dedup: false, careerLevels: undefined }),
     );
     expect(result.jobs.every((j) => j.careerLevel)).toBe(true);
     expect(result.jobs.map((j) => j.careerLevel!.level)).toEqual(
@@ -300,7 +316,7 @@ describe('JobsAggregator — career level keeps the event loop responsive (Spec 
     const jobs = Array.from({ length: 3000 }, (_, i) => job(`r${i}`, titles[i % titles.length]!, { description }));
     const expected = classifier.classifyBatch(jobs.map((j) => ({ title: j.title, description: j.description })));
 
-    const { result, ticks } = await probeDuring(() => aggregator().aggregateRaw(jobs, { dedup: false }));
+    const { result, ticks } = await probeDuring(() => aggregator().aggregateRaw(jobs, { dedup: false, careerLevels: undefined }));
 
     expect(result.jobs.map((j) => j.careerLevel)).toEqual(expected);
     expect(ticks).toBeGreaterThan(0);

@@ -23,7 +23,7 @@ registerEnumType(Site, {
  * schema accepts is rejected, except the two enumerated lists, whose values are
  * checked exactly like the REST DTO: `siteCategories` (`SITE_CATEGORIES`,
  * Spec 1720) and `careerLevels` (`CAREER_LEVELS`, Spec 1730).
- * `apps/api/__tests__/integration/graphql-search-input.integration.spec.ts`
+ * `apps/api/__tests__/integration/search-input-pipe.integration.spec.ts`
  * fails when a field is added without one.
  */
 @InputType()

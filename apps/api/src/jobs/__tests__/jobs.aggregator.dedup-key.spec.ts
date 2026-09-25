@@ -35,7 +35,7 @@ describe('JobsAggregator — dedupKey (Spec 1721)', () => {
     ];
 
     const engineResult = await engine.dedup(raw);
-    const result = await aggregator.aggregateRaw(raw, { dedup: true, persist: false });
+    const result = await aggregator.aggregateRaw(raw, { dedup: true, persist: false, careerLevels: undefined });
 
     expect(result.jobs).toHaveLength(2);
     for (const out of result.jobs) {
@@ -69,7 +69,7 @@ describe('JobsAggregator — dedupKey (Spec 1721)', () => {
     ];
 
     const engineResult = await engine.dedup(raw);
-    const result = await aggregator.aggregateRaw(raw, { dedup: true, persist: false });
+    const result = await aggregator.aggregateRaw(raw, { dedup: true, persist: false, careerLevels: undefined });
 
     expect(result.jobs).toHaveLength(2);
     result.jobs.forEach((out, i) => expect(out.dedupKey).toBe(engineResult.assignments[i]));
@@ -79,7 +79,7 @@ describe('JobsAggregator — dedupKey (Spec 1721)', () => {
     const aggregator = new JobsAggregator(jobsService, new DedupHybridService());
     const raw = [job('li-1', Site.LINKEDIN), job('in-1', Site.INDEED), job('li-2', Site.LINKEDIN, { title: 'PM' })];
 
-    const result = await aggregator.aggregateRaw(raw, { dedup: false });
+    const result = await aggregator.aggregateRaw(raw, { dedup: false, careerLevels: undefined });
 
     expect(result.deduped).toBe(false);
     expect(result.jobs.map((j) => j.dedupKey)).toEqual([
@@ -98,9 +98,12 @@ describe('JobsAggregator — dedupKey (Spec 1721)', () => {
 
   it('the same posting on a later run (cache round-trip, new ids) gets the same key', async () => {
     const aggregator = new JobsAggregator(jobsService, new DedupHybridService());
-    const first = await aggregator.aggregateRaw([job('run1', Site.LINKEDIN)], { persist: false });
+    const first = await aggregator.aggregateRaw([job('run1', Site.LINKEDIN)], {
+      persist: false,
+      careerLevels: undefined,
+    });
     const replay = JSON.parse(JSON.stringify([job('run2', Site.INDEED)])) as JobPostDto[];
-    const second = await aggregator.aggregateRaw(replay, { persist: false });
+    const second = await aggregator.aggregateRaw(replay, { persist: false, careerLevels: undefined });
     expect(second.jobs[0]!.dedupKey).toBe(first.jobs[0]!.dedupKey);
   });
 
