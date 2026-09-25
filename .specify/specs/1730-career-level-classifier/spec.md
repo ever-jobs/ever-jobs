@@ -283,8 +283,8 @@ Years are a *lower bound*: they conflict with the title only when the title is m
 - **Performance** (tripwires, not the NFR measurement): over 5,000 jobs with 3 KB descriptions the
   classifier costs < 15x a reference workload timed in the same process on the same inputs (one
   `normalizeCareerText` pass over title + description; best of three interleaved rounds; measured
-  5.5-5.7, and a control running the classifier 4x per job measured 22.4 and failed), with an
-  absolute < 2 ms/job backstop; each of nine adversarial inputs (repeated cue words, 5,000-char
+  4.8-5.7, so a 3x slowdown sits at the bound; controls running the classifier 4x per job
+  measured 19.1 and 22.4 and failed), with an absolute < 2 ms/job backstop; each of nine adversarial inputs (repeated cue words, 5,000-char
   titles, 3,000 digits, nested separators, tag floods, "<" with no ">", 64 KB of markup, entity
   floods) classifies in < 250 ms, which rules out catastrophic regex backtracking; and ~60 KB
   `employmentType` / `jobLevel` / `experienceRange` values classify in < 250 ms with every reason
@@ -446,8 +446,8 @@ build workstation (Xeon E5-1660 v3, **89% CPU load from other agents' builds at 
 target on a loaded machine and was not re-measured idle. CI does not assert the NFR itself. A wall-clock bound on shared runners flakes: the same 30,000 jobs
 took 13.4 s inside a fully parallel jest run. CI instead keeps load-robust tripwires (§8). The
 throughput one was an absolute < 2 ms/job, 20-30x the real cost, so a 10x regression stayed green;
-since the second review it is a ratio against a same-process reference workload (§8), which a 3x
-slowdown fails. A reviewer's independent measurement: 30,000 jobs with ~3 KB descriptions in
+since the second review it is a ratio against a same-process reference workload (§8), which a 4x
+slowdown fails (a 3x one sits at the bound). A reviewer's independent measurement: 30,000 jobs with ~3 KB descriptions in
 1.8-2.2 s at 44% machine load (0.06-0.07 ms/job), titles only 0.3 s. The first
 implementation took 24 s under jest. The fixes were: no `String.prototype.matchAll` (it clones the
 RegExp on every call), literal-needle gates before every rule, one alternation pass over the

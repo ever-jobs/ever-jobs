@@ -217,8 +217,8 @@ re-measured idle (spec §12.4).
 - **HTML-heavy descriptions** are read up to their first 3,000 visible characters (bounded at
   64 KB of raw input) instead of the first 4,500 raw ones, and a window edge inside a tag no
   longer leaks attribute text.
-- **Throughput tripwire** is now a same-process ratio (a 3x slowdown fails) instead of an
-  absolute bound 20-30x looser than the real cost.
+- **Throughput tripwire** is now a same-process ratio (a 4x slowdown fails; a 3x one sits at the
+  bound) instead of an absolute bound 20-30x looser than the real cost.
 - **`careerLevels` is a required key of `aggregateRaw` options**, so a call site that drops the
   filter (e.g. a merge with the NDJSON lane's shared `runSearch()`) no longer compiles.
 - **CI** now runs the classifier suites and the career-level API tests in the gating

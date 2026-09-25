@@ -101,10 +101,11 @@ describe('career-level classifier — cost tripwires (Spec 1730, NFR-2)', () => 
    * machine (the old < 2 ms) is 20-30x the real cost, so a 10x regression stayed green. Instead,
    * time the classifier against a reference workload over the SAME inputs in the same process:
    * one `normalizeCareerText` pass over title + description. Load slows both alike, so their ratio
-   * is stable where wall-clock is not: 5.5-5.7 under jest on the workstation (4.1-4.2 in plain
+   * is stable where wall-clock is not: 4.8-5.7 under jest on the workstation (4.1-4.2 in plain
    * ts-node; ~50 µs vs ~12 µs per job). Interleaved rounds, best of each: a load spike inflates one
-   * sample, rarely all of them. The bound (15) leaves ~2.7x headroom: a 3x slowdown fails, and a
-   * control that ran the classifier 4x per job measured 22.4 and failed.
+   * sample, rarely all of them. The bound (15) is 2.6-3.1x the measured ratio, so a 3x slowdown
+   * sits at the bound and a 4x one fails: controls that ran the classifier 4x per job measured
+   * 19.1 and 22.4 and failed. The old absolute gate let a 10x slowdown through.
    */
   it('costs at most ~15 normalisation passes over the same text (relative, load-robust)', () => {
     const titles = CAREER_LEVEL_TITLE_CASES.map((c) => c.input.title ?? '');
