@@ -31,7 +31,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { searchJobs, getJobDetails, listSources, searchRemoteJobs, getSalaryInsights, compareSources, JobSearchParams } from './tools';
+import { searchJobs, getJobDetails, listSources, searchRemoteJobs, getSalaryInsights, compareSources, JobSearchParams, CRAWL_POLICY_INPUT_SCHEMA, normalizeMcpCrawl } from './tools';
 
 const SERVER_NAME = 'ever-jobs';
 const SERVER_VERSION = '0.1.0';
@@ -89,6 +89,7 @@ function createServer(): Server {
               type: 'boolean',
               description: 'If true, filter to remote-friendly positions only',
             },
+            crawl: CRAWL_POLICY_INPUT_SCHEMA,
           },
           required: ['query'],
         },
@@ -206,6 +207,7 @@ function createServer(): Server {
             company: (args as any)?.company,
             limit: (args as any)?.limit ?? 20,
             remoteOnly: (args as any)?.remote_only ?? false,
+            crawl: normalizeMcpCrawl((args as any)?.crawl),
           };
           const result = await searchJobs(params);
           return {

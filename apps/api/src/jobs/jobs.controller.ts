@@ -31,10 +31,26 @@ import {
   type LegitimacyInput,
 } from '@ever-jobs/models';
 import { ConfigService } from '@nestjs/config';
+import { runWithScrapeContext } from '@ever-jobs/common';
+import { LIVENESS_CRAWL_SITE, livenessDeadlineMs } from './crawl-policy.mapping';
 import { JobsService } from './jobs.service';
 import { JobsAggregator } from './jobs.aggregator';
 import { AnalyticsService } from '@ever-jobs/analytics';
 import { CacheService } from '../cache/cache.service';
+
+/**
+ * Crawl-policy site key for liveness enrichment (Spec 1690) — defined in
+ * `crawl-policy.mapping.ts` (so the crawl-policy endpoint can accept it) and
+ * re-exported here. The probes run in a scrape context under this site, so they
+ * obey the global crawl policy (honest UA, per-host pacing, back-off, egress
+ * guard) and an operator can tune them on their own with
+ * `EVER_JOBS_CRAWL_POLICIES={"sites":{"liveness-http":{...}}}`. The search
+ * caller's `crawl` is deliberately not applied: liveness probes other hosts than
+ * the search did, and a caller's `retries` would override the checker's own
+ * `retries: 0` (one cheap verdict, not a retry storm). The batch is bounded by
+ * `EVER_JOBS_LIVENESS_DEADLINE_MS` (default 60 s).
+ */
+export { LIVENESS_CRAWL_SITE };
 
 @ApiTags('Jobs')
 @Controller('api/jobs')
@@ -317,8 +333,13 @@ export class JobsController {
    */
   private async enrichLiveness(jobs: JobPostDto[]): Promise<void> {
     try {
-      const verdicts = await this.livenessChecker!.checkBatch(
-        jobs.map((j) => j.jobUrl),
+      // Bounded (Spec 1690): probes queued behind a paced or cooling-down host are
+      // aborted at the deadline (the checker reports them `uncertain`) instead of
+      // holding the response for as long as a server's Retry-After.
+      const deadlineMs = livenessDeadlineMs();
+      const signal = deadlineMs > 0 ? AbortSignal.timeout(deadlineMs) : undefined;
+      const verdicts = await runWithScrapeContext({ site: LIVENESS_CRAWL_SITE, ...(signal ? { signal } : {}) }, () =>
+        this.livenessChecker!.checkBatch(jobs.map((j) => j.jobUrl)),
       );
       jobs.forEach((job, i) => {
         const v = verdicts[i];

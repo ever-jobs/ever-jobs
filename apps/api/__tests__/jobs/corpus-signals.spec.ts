@@ -21,7 +21,12 @@ function makeRawJobs(): JobPostDto[] {
 }
 
 function makeController(): JobsController {
-  const jobsService = { searchJobs: async () => makeRawJobs() } as never;
+  // The controller fans out through searchJobsWithDiagnostics (Spec 5082);
+  // searchJobs is kept for callers of the older surface.
+  const jobsService = {
+    searchJobs: async () => makeRawJobs(),
+    searchJobsWithDiagnostics: async () => ({ jobs: makeRawJobs(), perSource: [] }),
+  } as never;
   const aggregator = {
     aggregateRaw: async (jobs: JobPostDto[]) => ({
       jobs,
@@ -115,7 +120,10 @@ describe('JobsController — corpus signals (Spec 740)', () => {
           }) as unknown as JobPostDto,
       );
       const probed: string[] = [];
-      const jobsService = { searchJobs: async () => corpus } as never;
+      const jobsService = {
+        searchJobs: async () => corpus,
+        searchJobsWithDiagnostics: async () => ({ jobs: corpus, perSource: [] }),
+      } as never;
       const aggregator = {
         aggregateRaw: async (jobs: JobPostDto[]) => ({
           jobs,

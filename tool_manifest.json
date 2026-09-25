@@ -26,8 +26,10 @@
         "Company-specific career page scraping",
         "Salary extraction from descriptions",
         "Annual salary normalization",
-        "Proxy rotation (HTTP/HTTPS/SOCKS5)",
+        "Proxy rotation (HTTP/HTTPS/SOCKS5; per-host stable by default, per-scrape, per-request or off)",
         "Rate limiting",
+        "Polite crawling by default: honest configurable User-Agent, per-host pacing, Retry-After-respecting back-off, optional robots.txt, egress guard (crawl policy, configurable per request via `crawl`)",
+        "Softy sitemap discovery with sequential detail fetches",
         "Remote job filtering",
         "Job type filtering",
         "HTTP job-posting liveness verification (active/expired/uncertain verdicts)",
@@ -112,11 +114,11 @@
       },
       "rateDelayMin": {
         "type": "number",
-        "description": "Minimum delay between requests in seconds"
+        "description": "Minimum delay between requests in seconds (maps to crawl.minIntervalMs, enforced per host bucket)"
       },
       "rateDelayMax": {
         "type": "number",
-        "description": "Maximum delay between requests in seconds"
+        "description": "Maximum delay between requests in seconds (maps to crawl.jitterMs = (max - min) x 1000)"
       },
       "linkedinFetchDescription": {
         "type": "boolean",
@@ -131,7 +133,182 @@
       "proxies": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "Proxy URLs for rotation"
+        "description": "Proxy URLs for rotation. Which proxy a request uses follows crawl.proxyRotation (default: one stable proxy per host); the operator may refuse caller proxies (EVER_JOBS_CRAWL_CALLER_PROXIES=none)."
+      },
+      "userAgent": {
+        "type": "string",
+        "description": "Custom User-Agent. Maps to crawl.userAgent and, unless crawl.userAgentMode is set, crawl.userAgentMode=strict so this UA is what goes out."
+      },
+      "crawl": {
+        "type": "object",
+        "description": "Per-request crawl policy (Spec 1690): identity, pacing, proxy rotation, retries, robots.txt, egress guard and discovery. Every field optional; the highest-precedence layer, subject to the operator setting EVER_JOBS_CRAWL_CALLER_OVERRIDES (any | stricter | none). The preset (EVER_JOBS_CRAWL_PRESET) is process-wide. Defaults below are the polite preset; plugins and operators may set others. See docs/CRAWL_POLICY.md.",
+        "additionalProperties": false,
+        "properties": {
+          "userAgent": {
+            "type": "string",
+            "description": "User-Agent to send. Keywords: default/everjobs (honest Ever Jobs UA), browser/legacy (pre-1690 Chrome/120 UA)."
+          },
+          "userAgentMode": {
+            "type": "string",
+            "enum": [
+              "identify",
+              "strict",
+              "plugin"
+            ],
+            "description": "Which UA goes on the wire: identify (default; our UA unless a plugin states why it needs its own), strict (our UA always), plugin (the plugin's declared UA)."
+          },
+          "from": {
+            "type": "string",
+            "description": "Value of a From: request header (contact e-mail)."
+          },
+          "stripClientHints": {
+            "type": "boolean",
+            "default": true,
+            "description": "Drop sec-ch-ua* headers when our UA is sent."
+          },
+          "proxyRotation": {
+            "type": "string",
+            "enum": [
+              "per-host",
+              "per-scrape",
+              "per-request",
+              "off"
+            ],
+            "description": "per-host (default): one stable proxy per host bucket; per-scrape; per-request (round-robin, pre-1690); off."
+          },
+          "rateLimitScope": {
+            "type": "string",
+            "enum": [
+              "host",
+              "domain",
+              "site"
+            ],
+            "description": "Pacing bucket: host (default), domain (registrable domain), site."
+          },
+          "maxConcurrentPerHost": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Max requests in flight per bucket; 0 = unlimited.",
+            "default": 4
+          },
+          "minIntervalMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Minimum gap between request starts in a bucket, ms.",
+            "default": 100
+          },
+          "jitterMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Random extra 0..jitterMs per gap, ms.",
+            "default": 0
+          },
+          "maxQueueWaitMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Longest wait for a slot before failing fast, ms; 0 = no limit.",
+            "default": 0
+          },
+          "adaptiveThrottle": {
+            "type": "boolean",
+            "default": true,
+            "description": "Slow a bucket down after 429/503 and recover on success."
+          },
+          "retries": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Retries per request on a retryable status.",
+            "default": 2
+          },
+          "retryStatuses": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599
+            },
+            "default": [
+              429,
+              502,
+              503,
+              504
+            ],
+            "description": "HTTP statuses that are retried."
+          },
+          "retryBackoff": {
+            "type": "string",
+            "enum": [
+              "exponential",
+              "linear",
+              "constant"
+            ],
+            "description": "Back-off shape (default exponential)."
+          },
+          "retryBaseDelayMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Base retry delay, ms.",
+            "default": 1000
+          },
+          "retryMaxDelayMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Cap on one computed retry delay, ms.",
+            "default": 30000
+          },
+          "retryJitter": {
+            "type": "boolean",
+            "default": true,
+            "description": "Full jitter on the back-off."
+          },
+          "retryOnNetworkError": {
+            "type": "boolean",
+            "default": false,
+            "description": "Also retry connection resets / timeouts."
+          },
+          "respectRetryAfter": {
+            "type": "boolean",
+            "default": true,
+            "description": "Never retry earlier than the server's Retry-After."
+          },
+          "maxRetryAfterMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "A Retry-After longer than this triggers retryAfterOverMax, ms.",
+            "default": 60000
+          },
+          "retryAfterOverMax": {
+            "type": "string",
+            "enum": [
+              "give-up",
+              "cap"
+            ],
+            "description": "give-up (default): no retry, cool the whole host; cap: wait maxRetryAfterMs then retry (pre-1690)."
+          },
+          "robotsTxt": {
+            "type": "string",
+            "enum": [
+              "off",
+              "crawl-delay",
+              "respect"
+            ],
+            "description": "robots.txt handling (default off)."
+          },
+          "blockPrivateNetworks": {
+            "type": "boolean",
+            "default": true,
+            "description": "Egress guard; a request may turn it on, never off."
+          },
+          "discovery": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "sitemap",
+              "listing"
+            ],
+            "description": "Discovery strategy for plugins that have several (e.g. Softy); default auto."
+          }
+        }
       }
     },
     "required": []
@@ -210,6 +387,15 @@
         "resultsWanted": 50,
         "linkedinFetchDescription": true,
         "descriptionFormat": "plain"
+      }
+    },
+    {
+      "name": "Polite crawl of a fragile ATS (per-request crawl policy)",
+      "input": {
+        "siteType": ["softy"],
+        "companySlug": "acme",
+        "resultsWanted": 10,
+        "crawl": { "maxConcurrentPerHost": 1, "minIntervalMs": 2000, "discovery": "sitemap" }
       }
     }
   ]
