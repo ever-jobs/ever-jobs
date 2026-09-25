@@ -60,9 +60,10 @@ export class JobsResolver {
       `GraphQL searchJobs: term=${describeTerm(input)}, location="${input.location ?? ''}"`,
     );
 
-    // Spec 1730 — the REST DTO rejects unknown levels via class-validator. The GraphQL input
-    // types carry no class-validator metadata (and the global pipe runs with `whitelist: true`,
-    // so decorating one field would affect the undecorated ones), so validate explicitly.
+    // Spec 1730 — in the app, the global ValidationPipe already rejects unknown levels
+    // (`@IsIn(CAREER_LEVELS)` on `SearchJobsInput.careerLevels`). This check is the second line
+    // of defence for callers that reach the resolver without that pipe (direct calls, a
+    // bootstrap that forgot `createGlobalValidationPipe()`): the filter must never fail open.
     const unknownLevels = (input.careerLevels ?? []).filter((l) => !isCareerLevel(l));
     if (unknownLevels.length) {
       throw new BadRequestException(

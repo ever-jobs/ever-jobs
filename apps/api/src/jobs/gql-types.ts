@@ -1,6 +1,6 @@
 import { ObjectType, Field, InputType, Int, Float, ID, registerEnumType } from '@nestjs/graphql';
 import { IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString } from 'class-validator';
-import { COUNTRY_CONFIG, Country, SITE_CATEGORIES, Site, getIndeedDomain } from '@ever-jobs/models';
+import { CAREER_LEVELS, COUNTRY_CONFIG, Country, SITE_CATEGORIES, Site, getIndeedDomain } from '@ever-jobs/models';
 
 // ── Register the Site enum for GraphQL ───────────────────
 registerEnumType(Site, {
@@ -14,12 +14,17 @@ registerEnumType(Site, {
  * GraphQL search input.
  *
  * 🛑 Every field carries a class-validator decorator (Spec 1689). The API
- * installs a global `ValidationPipe({ whitelist: true })` (apps/api/src/main.ts),
- * and Nest runs global pipes on resolver `@Args` too. Whitelisting strips every
- * property that has no class-validator metadata, so without these decorators
- * the resolver received an EMPTY input — no search term, no source filter —
- * and every GraphQL search shared one cache key. The decorators mirror the
- * GraphQL types, so nothing the schema accepts is rejected.
+ * installs a global `ValidationPipe({ whitelist: true })` (apps/api/src/main.ts,
+ * built by `pipes/global-validation.pipe.ts`), and Nest runs global pipes on
+ * resolver `@Args` too. Whitelisting strips every property that has no
+ * class-validator metadata, so without these decorators the resolver received
+ * an EMPTY input — no search term, no source filter — and every GraphQL search
+ * shared one cache key. The decorators mirror the GraphQL types, so nothing the
+ * schema accepts is rejected, except the two enumerated lists, whose values are
+ * checked exactly like the REST DTO: `siteCategories` (`SITE_CATEGORIES`,
+ * Spec 1720) and `careerLevels` (`CAREER_LEVELS`, Spec 1730).
+ * `apps/api/__tests__/integration/graphql-search-input.integration.spec.ts`
+ * fails when a field is added without one.
  */
 @InputType()
 export class SearchJobsInput {
@@ -102,6 +107,9 @@ export class SearchJobsInput {
     description:
       'Keep only jobs whose careerLevel.level is in this list (Spec 1730): internship, new_grad, entry, mid, senior, staff, principal, manager, director, executive, unknown. Unknown values are rejected.',
   })
+  @IsOptional()
+  @IsArray()
+  @IsIn(CAREER_LEVELS, { each: true })
   careerLevels?: string[];
 }
 
