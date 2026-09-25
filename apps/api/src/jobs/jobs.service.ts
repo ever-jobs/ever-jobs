@@ -1,12 +1,13 @@
 import { OnModuleInit, Injectable, Logger, Optional, BadRequestException } from '@nestjs/common';
 import {
   Site, ScraperInputDto, JobPostDto, JobResponseDto, IScraper,
-  Country, SalarySource, CompensationDto,
+  Country,
   ERR_SOURCE_CIRCUIT_OPEN,
   SourceDiagnosticDto, ScrapeReason, ScrapeDiagnostics, classifyScrapeError,
 } from '@ever-jobs/models';
 import {
-  extractSalary, convertToAnnual, siteFromDomain, deriveSiteToken, resolveCompanyUrl,
+  postProcessCompensation, postedSortKey, siteFromDomain, deriveSiteToken, resolveCompanyUrl,
+  resolveSearchLocations, clampMaxLocations, runWithHttpMemo, httpMemoMethodsFromEnv,
 } from '@ever-jobs/common';
 import { ConfigService } from '@nestjs/config';
 import { PluginRegistry, CircuitBreakerInterceptor } from '@ever-jobs/plugin';
@@ -104,6 +105,189 @@ function withDeadline<T>(
   }) as Promise<T>;
 }
 
+// ── Multi-location search (Spec 1700) ────────────────────────────────
+
+/**
+ * Env var for the number of `locations` entries actually searched (Spec 1700).
+ * Clamped into `[1, HARD_MAX_SEARCH_LOCATIONS]` by `clampMaxLocations`; a bad
+ * value falls back to `DEFAULT_MAX_SEARCH_LOCATIONS` (10). Read through
+ * `search.maxLocations` first, so a config-file key wins when one is added.
+ */
+export const SEARCH_MAX_LOCATIONS_ENV = 'EVER_JOBS_SEARCH_MAX_LOCATIONS';
+
+/**
+ * Env var for the pause between two consecutive location calls to the SAME
+ * source in a multi-location search, milliseconds (Spec 1700). `0` disables.
+ */
+export const SEARCH_LOCATION_INTERVAL_ENV = 'EVER_JOBS_SEARCH_LOCATION_INTERVAL_MS';
+
+/**
+ * Default pause between one source's location calls (Spec 1700).
+ *
+ * Most company and ATS plugins fetch their whole board and filter by location
+ * locally, so N locations fetch the same board N times. The calls are already
+ * sequential per source; this spaces them so a board never sees a burst from
+ * one search. Sources still run in parallel with each other.
+ */
+export const DEFAULT_SEARCH_LOCATION_INTERVAL_MS = 500;
+
+/** Upper bound accepted for the location interval (Spec 1700). */
+export const MAX_SEARCH_LOCATION_INTERVAL_MS = 10_000;
+
+/**
+ * Upper bound honoured for a plugin's declared
+ * `IPluginMetadata.minRequestIntervalMs` (Spec 1700), so a typo in one
+ * plugin cannot stall a search.
+ */
+export const MAX_PLUGIN_REQUEST_INTERVAL_MS = 30_000;
+
+/**
+ * The pause between two location calls to one source: the operator's
+ * interval, raised to the gap the plugin itself keeps between requests
+ * (LinkedIn 3-7 s, Glassdoor 5 s, ...). A declared gap applies even when the
+ * operator set the interval to 0, because it is the plugin's own contract
+ * with its host.
+ */
+export function locationPauseMs(intervalMs: number, declaredMs: unknown): number {
+  const declared =
+    typeof declaredMs === 'number' && Number.isFinite(declaredMs) && declaredMs > 0
+      ? Math.min(Math.floor(declaredMs), MAX_PLUGIN_REQUEST_INTERVAL_MS)
+      : 0;
+  return Math.max(intervalMs, declared);
+}
+
+/** Minimal config seam shared by the service, the controller and the resolver. */
+export interface SearchConfigReader {
+  get(key: string): unknown;
+}
+
+/** The `locations` cap in force (Spec 1700). */
+export function readMaxSearchLocations(config: SearchConfigReader): number {
+  return clampMaxLocations(config.get('search.maxLocations') ?? config.get(SEARCH_MAX_LOCATIONS_ENV));
+}
+
+/**
+ * Normalise a configured location interval into
+ * `[0, MAX_SEARCH_LOCATION_INTERVAL_MS]`; anything unparsable or out of range
+ * resolves to {@link DEFAULT_SEARCH_LOCATION_INTERVAL_MS}.
+ */
+export function clampLocationInterval(raw: unknown): number {
+  if (raw === undefined || raw === null || raw === '') return DEFAULT_SEARCH_LOCATION_INTERVAL_MS;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > MAX_SEARCH_LOCATION_INTERVAL_MS) {
+    return DEFAULT_SEARCH_LOCATION_INTERVAL_MS;
+  }
+  return Math.floor(n);
+}
+
+/**
+ * A per-source diagnostic row for one (source, location) pair of a
+ * multi-location search (Spec 1700). `site` stays the bare site key, so
+ * consumers that group by `site` keep working.
+ */
+export class LocatedSourceDiagnosticDto extends SourceDiagnosticDto {
+  location: string;
+
+  constructor(site: string, count: number, reason: ScrapeReason, detail: string | undefined, location: string) {
+    super(site, count, reason, detail);
+    this.location = location;
+  }
+}
+
+/** Why the rest of a source's locations were not attempted. */
+interface LocationRefusal {
+  readonly reason: ScrapeReason;
+  /** The location whose call showed the refusal. */
+  readonly trigger: string;
+}
+
+/** What happened to one (source, location) call. */
+interface LocationOutcome {
+  readonly location: string;
+  readonly settled?: PromiseSettledResult<JobResponseDto>;
+  /** Set when the call was not made because the source already refused us. */
+  readonly notAttempted?: LocationRefusal;
+  /** Set when the call was not made because the search deadline had passed. */
+  readonly deadlineSkipped?: boolean;
+}
+
+const RATE_LIMIT_TEXT = /\b429\b|too many requests|rate[ -]?limit/i;
+
+/**
+ * Did this thrown error show the source refusing us (Spec 1700)? A 429, an
+ * open circuit breaker, or anything `classifyScrapeError` calls `blocked`
+ * (401/403/407, captcha, challenge). Timeouts, 5xx and 404s are not refusals:
+ * the next location may well succeed.
+ */
+function refusalFromError(err: unknown): ScrapeReason | undefined {
+  const e = err as { code?: unknown; response?: { status?: unknown } } | null | undefined;
+  if (e?.code === ERR_SOURCE_CIRCUIT_OPEN) return 'circuit_open';
+  if (e?.response?.status === 429) return 'fetch_error';
+  const diag = classifyScrapeError(err);
+  if (diag.reason === 'blocked') return 'blocked';
+  if (diag.reason === 'fetch_error' && RATE_LIMIT_TEXT.test(diag.detail ?? '')) return 'fetch_error';
+  return undefined;
+}
+
+/**
+ * The same test for a plugin that swallowed its error and resolved with a
+ * diagnostic instead.
+ */
+function refusalFromDiagnostics(diag: ScrapeDiagnostics | undefined): ScrapeReason | undefined {
+  if (!diag) return undefined;
+  if (diag.reason === 'blocked' || diag.reason === 'circuit_open') return diag.reason;
+  if (diag.reason === 'fetch_error' && RATE_LIMIT_TEXT.test(diag.detail ?? '')) return 'fetch_error';
+  return undefined;
+}
+
+/**
+ * Identity of a posting within one source, for removing the duplicates the
+ * location fan-out itself creates (the same posting returned for two
+ * locations). Scoped by site — the same id from two sources is the dedup
+ * engine's call, not ours — and built from BOTH `id` and `jobUrl`: some
+ * plugins derive `id` from the row index, so an id-only key would collapse
+ * two different postings that happen to share a position. A job with neither
+ * is kept, since we cannot prove it is a duplicate.
+ */
+function fanoutIdentity(site: string, job: JobPostDto): string | undefined {
+  const id = typeof job.id === 'string' && job.id ? job.id : '';
+  const url = typeof job.jobUrl === 'string' && job.jobUrl ? job.jobUrl : '';
+  if (!id && !url) return undefined;
+  return `${site}\u0000${id}\u0000${url}`;
+}
+
+/**
+ * Per-source outcome row for one settled scrape (Spec 5082). The reason comes
+ * from the plugin's own diagnostics when it set them (e.g.
+ * `browser_unavailable`, `blocked`); otherwise it is inferred from the settled
+ * outcome: jobs → `ok`, empty → `empty`, thrown → classify.
+ */
+function settledDiagnostic(
+  site: string,
+  result: PromiseSettledResult<JobResponseDto> | undefined,
+): { count: number; reason: ScrapeReason; detail?: string } {
+  if (result?.status === 'fulfilled') {
+    const jobs = result.value.jobs;
+    const diag = result.value.diagnostics;
+    // A source that returned jobs AND reported a diagnostic is `partial`:
+    // it got some of the board before something failed. Calling that `ok`
+    // hid a partial outage behind a non-zero count, and left an `ok` row
+    // carrying an error string in `detail`.
+    const reason: ScrapeReason =
+      jobs.length > 0 ? (diag ? 'partial' : 'ok') : (diag?.reason ?? 'empty');
+    return { count: jobs.length, reason, detail: diag?.detail };
+  }
+  // "We deliberately stopped calling this source" is its own operational
+  // state, not an unclassifiable error — the breaker is already tracked
+  // for metrics and logs, so don't collapse it to `unknown` here.
+  const err = result?.reason as { code?: unknown } | undefined;
+  const diag =
+    err?.code === ERR_SOURCE_CIRCUIT_OPEN
+      ? new ScrapeDiagnostics('circuit_open', `circuit open for ${site}`)
+      : classifyScrapeError(result?.reason);
+  return { count: 0, reason: diag.reason, detail: diag.detail };
+}
+
 /**
  * Central orchestration service for job searching.
  *
@@ -164,10 +348,22 @@ export class JobsService implements OnModuleInit {
    * (Spec 5082): one {@link SourceDiagnosticDto} per fanned-out source with its
    * count and a categorized `reason`, so a caller can tell an empty board apart
    * from a blocked/errored source. `searchJobs` is a thin wrapper over this.
+   *
+   * Multi-location (Spec 1700): when `input.locations` resolves to two or more
+   * locations, every selected source is called once per location, one location
+   * after another (sources still run in parallel), each call with the caller's
+   * own `offset` and `resultsWanted`. The rows become one
+   * {@link LocatedSourceDiagnosticDto} per (source, location). With `locations`
+   * absent nothing here changes.
    */
   async searchJobsWithDiagnostics(
     input: ScraperInputDto,
   ): Promise<{ jobs: JobPostDto[]; perSource: SourceDiagnosticDto[] }> {
+    const plan = this.planLocations(input);
+    input = plan.input;
+    const searchLocations = plan.locations;
+    const multi = searchLocations.length > 1;
+
     const atsSites = new Set<Site>(this.registry.listAtsSites());
     const { resolved: resolvedSites, unresolved: unresolvedDomains } =
       this.resolveCompanyDomains(input.companyDomain);
@@ -258,15 +454,28 @@ export class JobsService implements OnModuleInit {
     const deadlineAt =
       deadlineMs > 0 ? Date.now() + deadlineMs : Number.POSITIVE_INFINITY;
 
+    const intervalMs = multi
+      ? clampLocationInterval(
+          this.configService.get('search.locationIntervalMs') ??
+            this.configService.get(SEARCH_LOCATION_INTERVAL_ENV),
+        )
+      : 0;
+
     this.logger.log(
       `Running ${selectedScrapers.length} scrapers (concurrency ${concurrency}, ` +
-        `deadline ${deadlineMs > 0 ? `${deadlineMs}ms` : 'none'}): ` +
-        `${selectedScrapers.map((s) => s.site).join(', ')}`,
+        `deadline ${deadlineMs > 0 ? `${deadlineMs}ms` : 'none'}` +
+        (multi ? `, ${searchLocations.length} locations each, ${intervalMs}ms apart` : '') +
+        `): ${selectedScrapers.map((s) => s.site).join(', ')}`,
     );
 
     const results: PromiseSettledResult<JobResponseDto>[] = new Array(
       selectedScrapers.length,
     );
+    // Spec 1700 — multi-location mode: one entry per site, one outcome per
+    // location, in caller location order.
+    const locationOutcomes: LocationOutcome[][] = multi
+      ? new Array(selectedScrapers.length)
+      : [];
     let cursor = 0;
     let skipped = 0;
 
@@ -279,6 +488,24 @@ export class JobsService implements OnModuleInit {
         if (index >= selectedScrapers.length) return;
 
         const { site, scraper } = selectedScrapers[index];
+
+        // Spec 1700 — the unit of work is still one site; its locations run
+        // sequentially inside it, so one search never opens concurrent
+        // conversations with one source. The loop applies the same deadline
+        // rule per location and never throws.
+        if (multi) {
+          const outcomes = await this.scrapeSiteAcrossLocations(
+            site,
+            scraper,
+            input,
+            searchLocations,
+            deadlineAt,
+            intervalMs,
+          );
+          skipped += outcomes.filter((o) => o.deadlineSkipped).length;
+          locationOutcomes[index] = outcomes;
+          continue;
+        }
 
         // Past the deadline we stop STARTING work and drain the remaining
         // queue as skipped. Already-running scrapers are left to finish (they
@@ -321,58 +548,46 @@ export class JobsService implements OnModuleInit {
 
     if (skipped > 0) {
       this.logger.warn(
-        `Search deadline (${deadlineMs}ms) exceeded — skipped ${skipped} of ` +
-          `${selectedScrapers.length} sources. Raise EVER_JOBS_SEARCH_DEADLINE_MS ` +
-          `or narrow siteType to cover more of the catalogue.`,
+        multi
+          ? `Search deadline (${deadlineMs}ms) exceeded — skipped ${skipped} of ` +
+              `${selectedScrapers.length * searchLocations.length} (source, location) calls. ` +
+              `Raise EVER_JOBS_SEARCH_DEADLINE_MS, or narrow siteType or locations.`
+          : `Search deadline (${deadlineMs}ms) exceeded — skipped ${skipped} of ` +
+              `${selectedScrapers.length} sources. Raise EVER_JOBS_SEARCH_DEADLINE_MS ` +
+              `or narrow siteType to cover more of the catalogue.`,
       );
     }
     // Aggregate results from fulfilled searches + derive a per-source outcome
-    // (Spec 5082). The reason comes from the plugin's own diagnostics when it
-    // set them (e.g. `browser_unavailable`, `blocked`); otherwise it is inferred
-    // from the settled outcome: jobs → `ok`, empty → `empty`, thrown → classify.
+    // (Spec 5082) — see `settledDiagnostic` for how the reason is chosen.
     const allJobs: JobPostDto[] = [];
     const perSource: SourceDiagnosticDto[] = [];
-    results.forEach((result, index) => {
-      const site = selectedScrapers[index]?.site ?? 'unknown';
-      if (result?.status === 'fulfilled') {
-        const jobs = result.value.jobs;
-        allJobs.push(...jobs);
-        const diag = result.value.diagnostics;
-        // A source that returned jobs AND reported a diagnostic is `partial`:
-        // it got some of the board before something failed. Calling that `ok`
-        // hid a partial outage behind a non-zero count, and left an `ok` row
-        // carrying an error string in `detail`.
-        const reason: ScrapeReason =
-          jobs.length > 0 ? (diag ? 'partial' : 'ok') : (diag?.reason ?? 'empty');
-        perSource.push(
-          new SourceDiagnosticDto(site, jobs.length, reason, diag?.detail),
-        );
-      } else {
-        // "We deliberately stopped calling this source" is its own operational
-        // state, not an unclassifiable error — the breaker is already tracked
-        // for metrics and logs, so don't collapse it to `unknown` here.
-        const err = result?.reason as { code?: unknown } | undefined;
-        const diag =
-          err?.code === ERR_SOURCE_CIRCUIT_OPEN
-            ? new ScrapeDiagnostics('circuit_open', `circuit open for ${site}`)
-            : classifyScrapeError(result?.reason);
-        perSource.push(new SourceDiagnosticDto(site, 0, diag.reason, diag.detail));
-      }
-    });
+    if (multi) {
+      this.mergeLocationOutcomes(selectedScrapers, locationOutcomes, searchLocations.length, allJobs, perSource);
+    } else {
+      results.forEach((result, index) => {
+        const site = selectedScrapers[index]?.site ?? 'unknown';
+        if (result?.status === 'fulfilled') {
+          allJobs.push(...result.value.jobs);
+        }
+        const row = settledDiagnostic(site, result);
+        perSource.push(new SourceDiagnosticDto(site, row.count, row.reason, row.detail));
+      });
+    }
 
     // Post-processing: salary enrichment (mirrors Python __init__.py logic)
     for (const job of allJobs) {
       this.postProcessSalary(job, input);
     }
 
-    // Sort by site name then by date (most recent first)
+    // Sort by site name then by posted time (most recent first). Spec 1696:
+    // `postedSortKey` orders by `datePostedAt` when a source gives an instant,
+    // else by `datePosted` (start of its day); an unparseable date sorts last
+    // instead of making the comparator return NaN.
     allJobs.sort((a, b) => {
       const siteCompare = (a.site ?? '').localeCompare(b.site ?? '');
       if (siteCompare !== 0) return siteCompare;
 
-      const dateA = a.datePosted ? new Date(a.datePosted as string).getTime() : 0;
-      const dateB = b.datePosted ? new Date(b.datePosted as string).getTime() : 0;
-      return dateB - dateA;
+      return postedSortKey(b) - postedSortKey(a);
     });
 
     // Surface `companyDomain` values that did not map to a registered Site token as
@@ -388,8 +603,229 @@ export class JobsService implements OnModuleInit {
       );
     }
 
+    // Spec 1700 — locations dropped by the cap are reported, not silently
+    // ignored, in the same shape as the `companyDomain:` rows above.
+    for (const location of plan.overCap) {
+      perSource.push(
+        new SourceDiagnosticDto(
+          `location:${location}`,
+          0,
+          'bad_input',
+          `dropped: over the ${plan.maxLocations}-location cap`,
+        ),
+      );
+    }
+
     this.logger.log(`Total aggregated jobs: ${allJobs.length}`);
     return { jobs: allJobs, perSource };
+  }
+
+  /**
+   * Resolve the locations a search runs (Spec 1700).
+   *
+   * - `locations` absent → the input is returned untouched (the legacy path:
+   *   same object, same plugin input, same cache key).
+   * - `locations` present and resolving to 0 or 1 location → collapses to the
+   *   single-location path with `location` set to that entry (or left as the
+   *   caller sent it) and `locations` removed, so plugins never see a list.
+   * - 2 or more → multi-location mode; the per-location clones are built in
+   *   {@link scrapeSiteAcrossLocations}.
+   */
+  private planLocations(input: ScraperInputDto): {
+    input: ScraperInputDto;
+    locations: string[];
+    overCap: string[];
+    maxLocations: number;
+  } {
+    if (input.locations === undefined || input.locations === null) {
+      return { input, locations: [], overCap: [], maxLocations: 0 };
+    }
+    const maxLocations = readMaxSearchLocations(this.configService);
+    const { locations, overCap } = resolveSearchLocations(input, maxLocations);
+    if (locations.length > 1) {
+      return { input, locations, overCap, maxLocations };
+    }
+    return {
+      input: new ScraperInputDto({
+        ...input,
+        location: locations[0] ?? input.location,
+        locations: undefined,
+      }),
+      locations: [],
+      overCap,
+      maxLocations,
+    };
+  }
+
+  /**
+   * Run one site across every location, one after another (Spec 1700).
+   *
+   * - Each call gets a fresh clone of the caller's input with `location` set
+   *   and `locations` removed; `offset` and `resultsWanted` are the caller's,
+   *   never advanced by an earlier location.
+   * - A failing location does not affect the others.
+   * - Once a call shows the source refusing us (429, blocked, circuit open),
+   *   the remaining locations are NOT attempted — continuing would hammer a
+   *   host that has already said stop.
+   * - The search deadline is checked before every location and raced during
+   *   each call, exactly like the single-location pool.
+   * - Consecutive attempted calls are {@link locationPauseMs} apart: the
+   *   operator's `intervalMs`, raised to the plugin's declared
+   *   `minRequestIntervalMs`.
+   * - The whole loop runs in one scoped response memo (`runWithHttpMemo`,
+   *   T13): a plugin that fetches its whole board and filters locally sends
+   *   the same request for every location, and every repeat is answered from
+   *   the memo, so N locations cost one board fetch. A plugin that sends the
+   *   location to its host builds a different request per location and still
+   *   gets one real request each. `EVER_JOBS_SEARCH_LOCATION_MEMO=off` turns
+   *   the memo off (every location fetches again, as before).
+   *
+   * Never throws.
+   */
+  private async scrapeSiteAcrossLocations(
+    site: Site,
+    scraper: IScraper,
+    input: ScraperInputDto,
+    locations: readonly string[],
+    deadlineAt: number,
+    intervalMs: number,
+  ): Promise<LocationOutcome[]> {
+    // Optional call: test doubles of the registry often omit getMetadata.
+    const pauseMs = locationPauseMs(intervalMs, this.registry.getMetadata?.(site)?.minRequestIntervalMs);
+    const { result, stats } = await runWithHttpMemo(
+      () => this.runLocationLoop(site, scraper, input, locations, deadlineAt, pauseMs),
+      { methods: httpMemoMethodsFromEnv() },
+    );
+    if (stats.hits > 0) {
+      this.logger.log(
+        `${site}: ${locations.length} locations, ${stats.misses} requests sent, ` +
+          `${stats.hits} answered from the search's response memo`,
+      );
+    }
+    return result;
+  }
+
+  /** The body of {@link scrapeSiteAcrossLocations}, inside its memo scope. */
+  private async runLocationLoop(
+    site: Site,
+    scraper: IScraper,
+    input: ScraperInputDto,
+    locations: readonly string[],
+    deadlineAt: number,
+    intervalMs: number,
+  ): Promise<LocationOutcome[]> {
+    const out: LocationOutcome[] = [];
+    let refusal: LocationRefusal | undefined;
+    let attempted = false;
+    for (const location of locations) {
+      if (refusal) {
+        this.metrics.scraperRequestsTotal.inc({ site, status: 'location_skipped' });
+        out.push({ location, notAttempted: refusal });
+        continue;
+      }
+      if (attempted && intervalMs > 0 && Date.now() < deadlineAt) {
+        await this.pause(Math.min(intervalMs, deadlineAt - Date.now()));
+      }
+      if (Date.now() >= deadlineAt) {
+        this.metrics.scraperRequestsTotal.inc({ site, status: 'deadline_skipped' });
+        out.push({
+          location,
+          deadlineSkipped: true,
+          settled: {
+            status: 'rejected',
+            reason: new Error(`${site}: skipped (search deadline exceeded)`),
+          },
+        });
+        continue;
+      }
+      attempted = true;
+      const perLocation = new ScraperInputDto({ ...input, location, locations: undefined });
+      try {
+        const value = await withDeadline(
+          this.scrapeOne(site, scraper, perLocation),
+          deadlineAt,
+          site,
+        );
+        out.push({ location, settled: { status: 'fulfilled', value } });
+        const reason = refusalFromDiagnostics(value.diagnostics);
+        if (reason) refusal = { reason, trigger: location };
+      } catch (err) {
+        out.push({ location, settled: { status: 'rejected', reason: err } });
+        const reason = refusalFromError(err);
+        if (reason) refusal = { reason, trigger: location };
+      }
+      if (refusal) {
+        this.logger.warn(
+          `${site}: refused the search for "${location}" (${refusal.reason}); ` +
+            `not asking it for the remaining locations`,
+        );
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Merge multi-location outcomes (Spec 1700): one diagnostic row per
+   * (site, location), and the jobs with the duplicates the fan-out itself
+   * created removed — the same posting from the same source under two
+   * locations. The first occurrence wins, in caller location order. This runs
+   * before, and independently of, the cross-source dedup engine, so it also
+   * applies to `?dedup=false` callers.
+   */
+  private mergeLocationOutcomes(
+    selected: ReadonlyArray<{ site: Site }>,
+    outcomes: ReadonlyArray<LocationOutcome[] | undefined>,
+    locationCount: number,
+    allJobs: JobPostDto[],
+    perSource: SourceDiagnosticDto[],
+  ): void {
+    const seen = new Set<string>();
+    let raw = 0;
+    let duplicates = 0;
+    selected.forEach(({ site }, index) => {
+      for (const outcome of outcomes[index] ?? []) {
+        if (outcome.notAttempted) {
+          perSource.push(
+            new LocatedSourceDiagnosticDto(
+              site,
+              0,
+              outcome.notAttempted.reason,
+              `not attempted: ${site} refused the search for "${outcome.notAttempted.trigger}"`,
+              outcome.location,
+            ),
+          );
+          continue;
+        }
+        const settled = outcome.settled;
+        if (settled?.status === 'fulfilled') {
+          for (const job of settled.value.jobs) {
+            raw++;
+            const key = fanoutIdentity(site, job);
+            if (key !== undefined) {
+              if (seen.has(key)) {
+                duplicates++;
+                continue;
+              }
+              seen.add(key);
+            }
+            allJobs.push(job);
+          }
+        }
+        const row = settledDiagnostic(site, settled);
+        perSource.push(
+          new LocatedSourceDiagnosticDto(site, row.count, row.reason, row.detail, outcome.location),
+        );
+      }
+    });
+    this.logger.log(
+      `multi-location: ${selected.length} sites × ${locationCount} locations → ` +
+        `${raw} raw, ${duplicates} same-source duplicates removed`,
+    );
+  }
+
+  /** Politeness pause between one source's location calls. */
+  private pause(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
   }
 
   /**
@@ -520,52 +956,20 @@ export class JobsService implements OnModuleInit {
    * If the scraper provided direct compensation, optionally convert to annual.
    * If no compensation was returned and the country is USA, try to parse salary from the description.
    * This mirrors the orchestrator logic for salary post-processing.
+   *
+   * Spec 1695: the rule lives in `postProcessCompensation` (pure; the
+   * scraper's compensation object is never mutated). Setting
+   * `EVER_JOBS_SALARY_GRAMMAR=legacy` restores the pre-1695 rules exactly.
    */
   private postProcessSalary(job: JobPostDto, input: ScraperInputDto): void {
-    const enforceAnnual = input.enforceAnnualSalary ?? false;
-    const country = input.country ?? Country.USA;
-
-    if (job.compensation) {
-      // Direct compensation from scraper
-      job.salarySource = SalarySource.DIRECT_DATA;
-
-      if (
-        enforceAnnual &&
-        job.compensation.interval &&
-        job.compensation.interval !== 'yearly' &&
-        job.compensation.minAmount != null &&
-        job.compensation.maxAmount != null
-      ) {
-        const data = {
-          interval: job.compensation.interval,
-          minAmount: job.compensation.minAmount,
-          maxAmount: job.compensation.maxAmount,
-        };
-        convertToAnnual(data);
-        job.compensation.interval = data.interval as any;
-        job.compensation.minAmount = data.minAmount;
-        job.compensation.maxAmount = data.maxAmount;
-      }
-    } else if (country === Country.USA && job.description) {
-      // Fallback: extract salary from description text (USA only)
-      const extracted = extractSalary(job.description, {
-        enforceAnnualSalary: enforceAnnual,
-      });
-      if (extracted.minAmount != null) {
-        job.salarySource = SalarySource.DESCRIPTION;
-        job.compensation = new CompensationDto({
-          interval: extracted.interval as any,
-          minAmount: extracted.minAmount,
-          maxAmount: extracted.maxAmount,
-          currency: extracted.currency ?? 'USD',
-        });
-      }
-    }
-
-    // Clear salary source if no salary data
-    if (!job.compensation?.minAmount) {
-      job.salarySource = undefined;
-    }
+    const { compensation, salarySource } = postProcessCompensation({
+      compensation: job.compensation,
+      description: job.description,
+      country: input.country ?? Country.USA,
+      enforceAnnualSalary: input.enforceAnnualSalary ?? false,
+    });
+    job.compensation = compensation;
+    job.salarySource = salarySource;
   }
 
   /**

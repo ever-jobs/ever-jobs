@@ -50,6 +50,10 @@ Search for jobs across all sources.
 | `company`     | string  | ❌       | Company slug for ATS sources (e.g. "stripe")       |
 | `limit`       | number  | ❌       | Max results (default: 20, max: 100)                |
 | `remote_only` | boolean | ❌       | Filter to remote positions only                    |
+| `locations`   | string[] | ❌      | Several locations in one call (schema limit 10 items; the server searches the first `EVER_JOBS_SEARCH_MAX_LOCATIONS`, default 10). Each source runs once per location; same-source duplicates are removed; `location`, when also set, is searched first |
+| `exclude_title_terms` | string[] | ❌ | Drop jobs whose title contains any of these words or phrases (up to 50; literal, whole-word, trailing `*` = prefix, never a regex) |
+| `exclude_keywords` | string[] | ❌ | Drop jobs whose title or description contains any of these words or phrases (up to 50; same rules) |
+| `exclude_presets` | string[] | ❌ | Curated exclusion lists; `security_clearance` drops roles that require a security clearance or vetting |
 
 ### `get_job_details`
 

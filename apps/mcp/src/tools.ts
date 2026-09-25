@@ -77,11 +77,28 @@ function getClient(): AxiosInstance {
 export interface JobSearchParams {
   query: string;
   location?: string;
+  /** Spec 1700 — several locations; each source is searched once per location. */
+  locations?: string[];
   source?: string;
   company?: string;
   limit?: number;
   remoteOnly?: boolean;
+  /** Spec 1700 — drop jobs whose title contains any of these words/phrases. */
+  excludeTitleTerms?: string[];
+  /** Spec 1700 — drop jobs whose title or description contains any of these. */
+  excludeKeywords?: string[];
+  /** Spec 1700 — curated exclusion lists (e.g. `security_clearance`). */
+  excludePresets?: string[];
 }
+
+/** Largest `locations` list the API accepts (Spec 1700); longer lists are cut here instead of 400ing. */
+export const MCP_MAX_LOCATIONS = 25;
+/** Longest accepted `locations` entry (Spec 1700). */
+export const MCP_MAX_LOCATION_LENGTH = 200;
+/** Most terms per exclusion list the API accepts (Spec 1700). */
+export const MCP_MAX_EXCLUSION_TERMS = 50;
+/** Longest accepted exclusion term (Spec 1700). */
+export const MCP_MAX_EXCLUSION_TERM_LENGTH = 100;
 
 export interface JobResult {
   id: string;
@@ -102,6 +119,12 @@ export interface SearchResponse {
   jobs: JobResult[];
   sources_searched: string[];
   query: string;
+  /**
+   * Jobs the API removed with the exclusion filters (Spec 1700). Present only
+   * when the search carried an exclusion list, so an unfiltered response keeps
+   * its previous shape.
+   */
+  excluded?: number;
 }
 
 export interface JobDetailsResponse {
@@ -363,6 +386,9 @@ export async function searchJobs(params: JobSearchParams): Promise<SearchRespons
       jobs: filteredJobs,
       sources_searched: params.source ? [params.source] : ['all'],
       query: params.query,
+      ...(hasExclusions(params)
+        ? { excluded: Number(data.exclusion_metrics?.excluded_count ?? 0) || 0 }
+        : {}),
     };
   } catch (err: any) {
     // If the API is unavailable, return a helpful error
@@ -592,14 +618,14 @@ export function buildSearchRequestBody(
   const resultsWanted = Math.min(params.limit ?? 20, 100);
   const location = params.location ?? '';
 
-  const camel = {
+  const camel: Record<string, unknown> = {
     searchTerm: params.query,
     location,
     siteType,
     companySlug: params.company,
     resultsWanted,
   };
-  const snake = {
+  const snake: Record<string, unknown> = {
     search_term: params.query,
     location,
     site_type: siteType,
@@ -607,9 +633,67 @@ export function buildSearchRequestBody(
     results_wanted: resultsWanted,
   };
 
+  // Spec 1700 — added only when non-empty, so a plain search body stays
+  // byte-identical. `locations` is one word, so both spellings agree.
+  const locations = cleanList(params.locations, MCP_MAX_LOCATIONS, MCP_MAX_LOCATION_LENGTH);
+  if (locations) {
+    camel.locations = locations;
+    snake.locations = locations;
+  }
+  const exclusions: [string, string, string[] | undefined][] = [
+    ['excludeTitleTerms', 'exclude_title_terms', cleanList(params.excludeTitleTerms, MCP_MAX_EXCLUSION_TERMS, MCP_MAX_EXCLUSION_TERM_LENGTH)],
+    ['excludeKeywords', 'exclude_keywords', cleanList(params.excludeKeywords, MCP_MAX_EXCLUSION_TERMS, MCP_MAX_EXCLUSION_TERM_LENGTH)],
+    ['excludePresets', 'exclude_presets', knownPresets(params.excludePresets)],
+  ];
+  for (const [camelKey, snakeKey, list] of exclusions) {
+    if (!list) continue;
+    camel[camelKey] = list;
+    snake[snakeKey] = list;
+  }
+
   if (style === 'snake') return snake;
   if (style === 'both') return { ...snake, ...camel };
   return camel;
+}
+
+/**
+ * Normalise a list argument from a tool call (Spec 1700): a bare string
+ * becomes a one-item list, non-strings and blanks are dropped, entries over
+ * `maxLength` are dropped (truncating would change their meaning), and the
+ * list is cut to `maxItems` so the API's validator never 400s the search.
+ * Returns `undefined` for an empty result.
+ */
+export function cleanList(value: unknown, maxItems: number, maxLength: number): string[] | undefined {
+  const raw = typeof value === 'string' ? [value] : Array.isArray(value) ? value : [];
+  const out = raw
+    .filter((v): v is string => typeof v === 'string')
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0 && v.length <= maxLength)
+    .slice(0, maxItems);
+  return out.length > 0 ? out : undefined;
+}
+
+/**
+ * The presets the API knows (`ExclusionPreset` in `@ever-jobs/models`; the MCP
+ * server does not import the monorepo packages). An unknown preset would 400
+ * the whole search, so it is dropped here instead.
+ */
+export const MCP_EXCLUSION_PRESETS: readonly string[] = ['security_clearance'];
+
+function knownPresets(value: unknown): string[] | undefined {
+  const list = cleanList(value, MCP_MAX_EXCLUSION_TERMS, MCP_MAX_EXCLUSION_TERM_LENGTH)
+    ?.map((p) => p.toLowerCase())
+    .filter((p) => MCP_EXCLUSION_PRESETS.includes(p));
+  return list && list.length > 0 ? [...new Set(list)] : undefined;
+}
+
+/** Did the search send any exclusion filter? */
+function hasExclusions(params: JobSearchParams): boolean {
+  return (
+    cleanList(params.excludeTitleTerms, MCP_MAX_EXCLUSION_TERMS, MCP_MAX_EXCLUSION_TERM_LENGTH) !== undefined ||
+    cleanList(params.excludeKeywords, MCP_MAX_EXCLUSION_TERMS, MCP_MAX_EXCLUSION_TERM_LENGTH) !== undefined ||
+    knownPresets(params.excludePresets) !== undefined
+  );
 }
 
 /**
