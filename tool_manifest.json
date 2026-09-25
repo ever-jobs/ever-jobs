@@ -37,6 +37,7 @@
         "List mode: omit searchTerm to get every job each selected source can list (Spec 1720)",
         "Source selection by plugin category via siteCategories (Spec 1720)",
         "NDJSON streaming of the full result set via ?format=ndjson (Spec 1721)",
+        "NDJSON end line reports crawl completeness: complete, stopReason (deadline | job_ceiling), sourcesSkipped, sourcesFailed (Spec 1721 / FR-15)",
         "Stable cross-source dedupKey on every job (Spec 1721)",
         "Optional persistence to memory, SQLite or Postgres selected by EVER_JOBS_STORE (Spec 1722)"
       ]

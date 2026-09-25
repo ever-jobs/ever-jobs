@@ -4,7 +4,7 @@
 | ------------ | ---------- |
 | Spec ID      | 1721       |
 | Status       | done       |
-| Last updated | 2026-09-24 |
+| Last updated | 2026-09-25 |
 
 ## Approach
 
@@ -23,6 +23,14 @@
 6. **Config**: `resolveFanoutDeadlineMs(env)` in `apps/api/src/config/search-config.ts`, used by
    `configuration.ts`; the service's deadline log names the new variable.
 7. **GraphQL / CSV**: `dedupKey` field; CSV flattener joins nested arrays.
+8. **Crawl completeness (FR-15..FR-18, 2026-09-25)**: `apps/api/src/jobs/search-completeness.ts`
+   holds the record type, `buildSearchCompleteness` and the cache read-back guard. The fan-out
+   (`JobsService`) records the first bound that stops it and the indices of every source a bound
+   skipped or abandoned (`withDeadline` now rejects with `FanoutDeadlineError`, same message), and
+   counts failures only over the sources that ran. `runSearch` writes the record under
+   `endpoint: "search-completeness"` next to the raw set and returns it; the NDJSON producer asks
+   for `requireCompleteness` (a hit without a valid record becomes a miss) and spreads the record
+   into the `end` line.
 
 ## Files
 
@@ -36,6 +44,8 @@
 | `apps/api/src/jobs/jobs.controller.ts` | NDJSON branch, shared pipeline, CSV nested arrays, OpenAPI |
 | `apps/api/src/jobs/gql-types.ts` | `dedupKey` |
 | `apps/api/src/config/search-config.ts`, `configuration.ts` | deadline alias |
+| `apps/api/src/jobs/search-completeness.ts` | new — FR-15 record, cache endpoint, guard |
+| `apps/api/src/jobs/jobs.service.ts` | FR-15 — `FanoutDeadlineError`, completeness tracking |
 
 ## Risks
 

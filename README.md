@@ -549,18 +549,35 @@ before raising either.
 {"type":"progress","sourcesDone":412,"sourcesTotal":1669,"jobs":6120}
 {"type":"job","data":{"id":"li-3693012711","title":"…","dedupKey":"4f1c…", …}}
 {"type":"job","data":{…}}
-{"type":"end","total":21873,"deduped":true,"durationMs":151234}
+{"type":"end","total":21873,"deduped":true,"durationMs":151234,"complete":true,"stopReason":null,"sourcesSkipped":0,"sourcesFailed":38}
 ```
 
 | Line | When |
 | ---- | ---- |
 | `progress` | first, immediately (`0/0/0` — this is what flushes the headers, also on a cache hit), again when the fan-out starts (real `sourcesTotal`), then at most every ~10 s while scraping, dedup, persistence and liveness run — doubles as a keep-alive for idle-timeout proxies |
 | `job` | one per job, **same order and same per-job JSON as the JSON response** (including `dedupKey` and any field another feature adds) |
-| `end` | exactly once, last; `total` equals the number of `job` lines |
+| `end` | exactly once, last; `total` equals the number of `job` lines; `complete`, `stopReason`, `sourcesSkipped`, `sourcesFailed` say whether the crawl covered every selected source (below) |
 | `error` | `{"type":"error","message":"…"}` if anything fails after the headers were sent — the stream then closes **without** an `end` line |
 
-Consumer rules: **treat a missing `end` line as a truncated, failed result**, and ignore line
-types you do not know (new ones may be added). Input the search rejects before scraping (an
+**Was the crawl complete?** (Spec 1721 / FR-15) The `end` line says so:
+
+| Field | Meaning |
+| ----- | ------- |
+| `complete` | `true` when every selected source was started and allowed to finish. `false` when the fan-out deadline (`EVER_JOBS_FANOUT_DEADLINE_MS`) or the job ceiling (`EVER_JOBS_MAX_JOBS_PER_SEARCH`) left sources unscraped — then a posting missing from this result may simply belong to a source that never ran |
+| `stopReason` | `"deadline"`, `"job_ceiling"` (the first bound that tripped), or `null` when `complete` is `true` |
+| `sourcesSkipped` | sources that contributed nothing because the fan-out stopped: not started, or abandoned mid-flight at the deadline. Keyword-only sources that list mode does not call are not counted |
+| `sourcesFailed` | sources that ran and failed (`blocked`, `fetch_error`, `timeout`, `bad_input`, …). Failures do **not** make a crawl incomplete — a catalogue-wide crawl always has some |
+
+A cache hit reports the completeness of the crawl that produced the cached set.
+
+```text
+{"type":"end","total":14022,"deduped":true,"durationMs":120412,"complete":false,"stopReason":"deadline","sourcesSkipped":611,"sourcesFailed":35}
+```
+
+Consumer rules: **treat a missing `end` line as a truncated, failed result**; **only treat a crawl
+as complete when `complete` is `true`** — never infer "this posting is gone" from a crawl whose
+`end` line says `false` or has no `complete` field (servers before FR-15 do not send it); and
+ignore line types and fields you do not know (new ones may be added). Input the search rejects before scraping (an
 unknown `siteCategories` value, a `companyDomain` that maps to no plugin) is answered with a
 plain **400** before any line is sent. If the client disconnects, the server stops starting
 new sources (in-flight ones finish) and discards the partial result — it is not cached, so a
@@ -608,7 +625,9 @@ A search stops **starting** new sources once `EVER_JOBS_FANOUT_DEADLINE_MS` has 
 (default `120000`; in-flight sources finish, and one that never settles is abandoned at the
 deadline). `0` disables the deadline. The older name `EVER_JOBS_SEARCH_DEADLINE_MS` is still
 read when the new one is unset. Raise it for catalogue-wide list-mode crawls — with NDJSON the
-client keeps receiving progress lines, so a long deadline no longer risks an idle timeout.
+client keeps receiving progress lines, so a long deadline no longer risks an idle timeout. A crawl
+the deadline (or `EVER_JOBS_MAX_JOBS_PER_SEARCH`) cut short is reported on the NDJSON `end` line as
+`"complete":false` with its `stopReason` — see "Was the crawl complete?" above.
 
 ### `POST /api/jobs/analyze`
 

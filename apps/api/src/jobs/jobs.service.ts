@@ -20,6 +20,12 @@ import {
   parseSiteCategories,
 } from './search-input';
 import { DEFAULT_MAX_JOBS_PER_SEARCH, DEFAULT_MAX_RESULTS_WANTED } from '../config/search-config';
+import {
+  COMPLETE_SEARCH,
+  SearchCompleteness,
+  SearchStopReason,
+  buildSearchCompleteness,
+} from './search-completeness';
 
 /**
  * Detail carried by the per-source row of a plugin that was not dispatched
@@ -104,6 +110,20 @@ export function clampConcurrency(raw: unknown): number {
 }
 
 /**
+ * Rejection of a source still in flight when the fan-out deadline passes
+ * (Spec 5026). Its own class so the fan-out can count the source as skipped
+ * in the crawl-completeness record (Spec 1721 / FR-15); the message is the
+ * one this rejection always carried, so the per-source row still classifies
+ * as `timeout`.
+ */
+export class FanoutDeadlineError extends Error {
+  constructor(site: Site) {
+    super(`${site}: abandoned (search deadline exceeded mid-flight)`);
+    this.name = 'FanoutDeadlineError';
+  }
+}
+
+/**
  * Reject `promise` once `deadlineAt` passes (Spec 5026).
  *
  * The deadline check in the worker loop only stops us *starting* new sources.
@@ -131,7 +151,7 @@ function withDeadline<T>(
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expiry = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(
-      () => reject(new Error(`${site}: abandoned (search deadline exceeded mid-flight)`)),
+      () => reject(new FanoutDeadlineError(site)),
       Math.max(0, remaining),
     );
   });
@@ -225,7 +245,13 @@ export class JobsService implements OnModuleInit {
   async searchJobsWithDiagnostics(
     input: ScraperInputDto,
     options: SearchRunOptions = {},
-  ): Promise<{ jobs: JobPostDto[]; perSource: SourceDiagnosticDto[]; cancelled?: true }> {
+  ): Promise<{
+    jobs: JobPostDto[];
+    perSource: SourceDiagnosticDto[];
+    /** Spec 1721 / FR-15 — did the fan-out run every selected source? */
+    completeness: SearchCompleteness;
+    cancelled?: true;
+  }> {
     // Spec 1720 — one keyword semantics for every entry point: omitted, null,
     // "" and whitespace-only all mean list mode and reach plugins as an absent
     // `searchTerm`, never as "undefined"/"null"/"   ".
@@ -337,7 +363,7 @@ export class JobsService implements OnModuleInit {
 
     if (selectedScrapers.length === 0) {
       this.logger.warn('No valid scrapers selected');
-      return { jobs: [], perSource: keywordSkippedRows };
+      return { jobs: [], perSource: keywordSkippedRows, completeness: { ...COMPLETE_SEARCH } };
     }
 
     // Spec 5026 — bounded fan-out. Previously this was a bare
@@ -383,6 +409,17 @@ export class JobsService implements OnModuleInit {
     // because that reached EVER_JOBS_MAX_JOBS_PER_SEARCH.
     let collected = 0;
     let capSkipped = 0;
+    // Spec 1721 / FR-15 — sources abandoned mid-flight at the deadline, the
+    // first bound that stopped the fan-out, and the indices of every source
+    // that did not run to the end on its own (their rows are not failures).
+    let abandoned = 0;
+    let firstStop: SearchStopReason | null = null;
+    const stopped = new Set<number>();
+    // Set when the deadline race abandons a source. Node schedules that timer
+    // against libuv's cached loop time, so it can fire a few ms before
+    // `Date.now()` reaches `deadlineAt` — and the worker would then START
+    // the next source after the deadline had already cut one short.
+    let deadlinePassed = false;
     const isCancelled = (): boolean => {
       if (!options.isCancelled) return false;
       try {
@@ -431,8 +468,10 @@ export class JobsService implements OnModuleInit {
         // carry their own per-source timeouts and retry budgets); the point is
         // to bound how long the handler can live, not to abandon in-flight
         // sockets mid-read.
-        if (Date.now() >= deadlineAt) {
+        if (deadlinePassed || Date.now() >= deadlineAt) {
           skipped++;
+          firstStop ??= 'deadline';
+          stopped.add(index);
           this.metrics.scraperRequestsTotal.inc({ site, status: 'deadline_skipped' });
           results[index] = {
             status: 'rejected',
@@ -445,6 +484,9 @@ export class JobsService implements OnModuleInit {
         // for this answer any more, so stop scraping third-party sites for it.
         if (isCancelled()) {
           cancelledSkipped++;
+          // Not a failure either. No stop reason: a cancelled result is
+          // discarded by the caller (FR-14) and its record never reaches one.
+          stopped.add(index);
           this.metrics.scraperRequestsTotal.inc({ site, status: 'cancelled_skipped' });
           results[index] = {
             status: 'rejected',
@@ -460,6 +502,8 @@ export class JobsService implements OnModuleInit {
         // it as an HTTP status.
         if (maxJobsPerSearch > 0 && collected >= maxJobsPerSearch) {
           capSkipped++;
+          firstStop ??= 'job_ceiling';
+          stopped.add(index);
           this.metrics.scraperRequestsTotal.inc({ site, status: 'job_cap_skipped' });
           results[index] = {
             status: 'rejected',
@@ -482,6 +526,12 @@ export class JobsService implements OnModuleInit {
           collected += value?.jobs?.length ?? 0;
         } catch (err) {
           results[index] = { status: 'rejected', reason: err };
+          if (err instanceof FanoutDeadlineError) {
+            deadlinePassed = true;
+            abandoned++;
+            firstStop ??= 'deadline';
+            stopped.add(index);
+          }
         }
         reportProgress(results[index]);
       }
@@ -519,6 +569,10 @@ export class JobsService implements OnModuleInit {
     // from the settled outcome: jobs → `ok`, empty → `empty`, thrown → classify.
     const allJobs: JobPostDto[] = [];
     const perSource: SourceDiagnosticDto[] = [];
+    // Rows of the sources that RAN — the failure count excludes sources a
+    // bound skipped or abandoned (counted as skipped instead) and sources a
+    // disconnect left unstarted.
+    const ranRows: SourceDiagnosticDto[] = [];
     results.forEach((result, index) => {
       const site = selectedScrapers[index]?.site ?? 'unknown';
       if (result?.status === 'fulfilled') {
@@ -531,9 +585,9 @@ export class JobsService implements OnModuleInit {
         // carrying an error string in `detail`.
         const reason: ScrapeReason =
           jobs.length > 0 ? (diag ? 'partial' : 'ok') : (diag?.reason ?? 'empty');
-        perSource.push(
-          new SourceDiagnosticDto(site, jobs.length, reason, diag?.detail),
-        );
+        const row = new SourceDiagnosticDto(site, jobs.length, reason, diag?.detail);
+        perSource.push(row);
+        if (!stopped.has(index)) ranRows.push(row);
       } else {
         // "We deliberately stopped calling this source" is its own operational
         // state, not an unclassifiable error — the breaker is already tracked
@@ -543,9 +597,18 @@ export class JobsService implements OnModuleInit {
           err?.code === ERR_SOURCE_CIRCUIT_OPEN
             ? new ScrapeDiagnostics('circuit_open', `circuit open for ${site}`)
             : classifyScrapeError(result?.reason);
-        perSource.push(new SourceDiagnosticDto(site, 0, diag.reason, diag.detail));
+        const row = new SourceDiagnosticDto(site, 0, diag.reason, diag.detail);
+        perSource.push(row);
+        if (!stopped.has(index)) ranRows.push(row);
       }
     });
+    const completeness = buildSearchCompleteness(firstStop, skipped + abandoned + capSkipped, ranRows);
+    if (!completeness.complete) {
+      this.logger.warn(
+        `Incomplete crawl (${completeness.stopReason}): ${completeness.sourcesSkipped} of ` +
+          `${selectedScrapers.length} sources skipped or abandoned, ${completeness.sourcesFailed} failed`,
+      );
+    }
 
     // Post-processing: salary enrichment (mirrors Python __init__.py logic)
     for (const job of allJobs) {
@@ -581,8 +644,8 @@ export class JobsService implements OnModuleInit {
     // `cancelled` marks a PARTIAL result (sources were not started): callers
     // must not cache or persist it as if it were the answer to the request.
     return cancelledSkipped > 0
-      ? { jobs: allJobs, perSource, cancelled: true }
-      : { jobs: allJobs, perSource };
+      ? { jobs: allJobs, perSource, completeness, cancelled: true }
+      : { jobs: allJobs, perSource, completeness };
   }
 
   /**

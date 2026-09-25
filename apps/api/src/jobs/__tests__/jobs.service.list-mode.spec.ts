@@ -1,14 +1,21 @@
 import 'reflect-metadata';
 import { BadRequestException } from '@nestjs/common';
 import {
+  ERR_SOURCE_CIRCUIT_OPEN,
   IScraper,
   JobPostDto,
   JobResponseDto,
+  ScrapeDiagnostics,
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
 import type { IPluginMetadata, PluginCategory } from '@ever-jobs/plugin';
-import { JOB_CAP_SKIPPED_DETAIL, JobsService, LIST_MODE_SKIPPED_DETAIL } from '../jobs.service';
+import {
+  FanoutDeadlineError,
+  JOB_CAP_SKIPPED_DETAIL,
+  JobsService,
+  LIST_MODE_SKIPPED_DETAIL,
+} from '../jobs.service';
 import type { SearchProgress } from '../search-input';
 
 /**
@@ -555,5 +562,232 @@ describe('JobsService — result-size bounds (Spec 1720 / FR-12)', () => {
     });
     const { jobs } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
     expect(jobs).toHaveLength(10);
+  });
+});
+
+describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
+  function withConfig(service: JobsService, overrides: Record<string, unknown>): JobsService {
+    const base = (service as any).configService.get;
+    (service as any).configService = {
+      get: (key: string, def?: unknown) => (key in overrides ? overrides[key] : base(key, def)),
+    };
+    return service;
+  }
+
+  /** A plugin whose `scrape` is exactly `impl` (records nothing). */
+  function scripted(site: Site, impl: () => Promise<JobResponseDto>): FakePlugin {
+    return { site, category: 'job-board', scraper: { calls: [], scrape: jest.fn(impl) } };
+  }
+
+  const job = (id: string) =>
+    new JobPostDto({ id, title: `Engineer ${id}`, companyName: 'Co', jobUrl: `https://example.com/${id}` });
+
+  /** Never settles — the fan-out can only get past it through the deadline race. */
+  const hangs = () => new Promise<JobResponseDto>(() => undefined);
+
+  it('a fan-out that ran every source is complete; failures are counted, not treated as a stop', async () => {
+    const circuitOpen = Object.assign(new Error('circuit open'), { code: ERR_SOURCE_CIRCUIT_OPEN });
+    const plugins = [
+      recording(Site.LINKEDIN, 'job-board', { count: 2 }),
+      scripted(Site.INDEED, async () => {
+        throw new Error('getaddrinfo ENOTFOUND www.indeed.com');
+      }),
+      scripted(Site.GLASSDOOR, async () => new JobResponseDto([], new ScrapeDiagnostics('blocked', 'captcha'))),
+      scripted(
+        Site.REMOTEOK,
+        async () => new JobResponseDto([job('p1')], new ScrapeDiagnostics('fetch_error', 'page 2 failed')),
+      ),
+      scripted(Site.ZIP_RECRUITER, async () => new JobResponseDto([])),
+      scripted(Site.GOOGLE, async () => {
+        throw circuitOpen;
+      }),
+    ];
+    const service = createService(plugins);
+
+    const { perSource, completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+
+    const reasons = Object.fromEntries(perSource.map((r) => [r.site, r.reason]));
+    expect(reasons).toEqual({
+      [Site.LINKEDIN]: 'ok',
+      [Site.INDEED]: 'fetch_error',
+      [Site.GLASSDOOR]: 'blocked',
+      [Site.REMOTEOK]: 'partial',
+      [Site.ZIP_RECRUITER]: 'empty',
+      [Site.GOOGLE]: 'circuit_open',
+    });
+    // fetch_error + blocked + circuit_open; `partial` returned jobs, `empty` had none to return.
+    expect(completeness).toEqual({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 3 });
+    expect((service as any).logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Incomplete crawl'));
+  });
+
+  it('the job ceiling makes the crawl incomplete: stopReason job_ceiling, unstarted sources are skipped', async () => {
+    const plugins = [
+      recording(Site.LINKEDIN, 'job-board', { count: 2 }),
+      recording(Site.INDEED, 'job-board', { count: 2 }),
+      recording(Site.REMOTEOK, 'remote', { count: 2 }),
+      recording(Site.GLASSDOOR, 'job-board', { count: 2 }),
+    ];
+    const service = withConfig(createService(plugins), {
+      'search.concurrency': 1,
+      'search.maxJobsPerSearch': 3,
+    });
+
+    const { perSource, completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+
+    // The two skipped rows classify as `unknown` — they are skipped, not failed.
+    expect(perSource.filter((r) => r.detail === JOB_CAP_SKIPPED_DETAIL)).toHaveLength(2);
+    expect(completeness).toEqual({
+      complete: false,
+      stopReason: 'job_ceiling',
+      sourcesSkipped: 2,
+      sourcesFailed: 0,
+    });
+    expect((service as any).logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Incomplete crawl (job_ceiling): 2 of 4 sources skipped or abandoned, 0 failed'),
+    );
+  });
+
+  it('the deadline makes the crawl incomplete: the abandoned source and the unstarted ones are skipped', async () => {
+    const plugins = [
+      scripted(Site.LINKEDIN, hangs),
+      recording(Site.INDEED, 'job-board'),
+      recording(Site.REMOTEOK, 'remote'),
+    ];
+    const service = withConfig(createService(plugins), {
+      'search.concurrency': 1,
+      'search.deadlineMs': 25,
+    });
+
+    const { perSource, completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+
+    expect(plugins[1]!.scraper.scrape).not.toHaveBeenCalled();
+    expect(plugins[2]!.scraper.scrape).not.toHaveBeenCalled();
+    // The per-source rows keep the classification they always had.
+    expect(perSource.map((r) => r.reason)).toEqual(['timeout', 'timeout', 'timeout']);
+    expect(perSource.find((r) => r.site === Site.LINKEDIN)!.detail).toBe(
+      `${Site.LINKEDIN}: abandoned (search deadline exceeded mid-flight)`,
+    );
+    expect(completeness).toEqual({ complete: false, stopReason: 'deadline', sourcesSkipped: 3, sourcesFailed: 0 });
+  });
+
+  it('a source abandoned at the deadline with nothing left to start still makes the crawl incomplete', async () => {
+    const plugins = [scripted(Site.LINKEDIN, hangs), recording(Site.INDEED, 'job-board', { count: 2 })];
+    const service = withConfig(createService(plugins), {
+      'search.concurrency': 2,
+      'search.deadlineMs': 25,
+    });
+
+    const { jobs, completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+
+    expect(jobs).toHaveLength(2); // the source that finished in time
+    expect(completeness).toEqual({ complete: false, stopReason: 'deadline', sourcesSkipped: 1, sourcesFailed: 0 });
+  });
+
+  it('once the deadline abandons a source, no source starts — even while Date.now() lags the timer', async () => {
+    // Node schedules the deadline timer against libuv's cached loop time, so
+    // under load it fires before Date.now() reaches the deadline. Freezing the
+    // clock reproduces that deterministically: the timer still fires (real
+    // time passes), but Date.now() never catches up.
+    const frozen = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(frozen);
+    try {
+      const plugins = [
+        scripted(Site.LINKEDIN, hangs),
+        recording(Site.INDEED, 'job-board'),
+        recording(Site.REMOTEOK, 'remote'),
+      ];
+      const service = withConfig(createService(plugins), {
+        'search.concurrency': 1,
+        'search.deadlineMs': 20,
+      });
+
+      const { completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+
+      expect(plugins[1]!.scraper.scrape).not.toHaveBeenCalled();
+      expect(plugins[2]!.scraper.scrape).not.toHaveBeenCalled();
+      expect(completeness).toEqual({ complete: false, stopReason: 'deadline', sourcesSkipped: 3, sourcesFailed: 0 });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('FanoutDeadlineError is an Error carrying the historical message', () => {
+    const err = new FanoutDeadlineError(Site.LINKEDIN);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toBe(`${Site.LINKEDIN}: abandoned (search deadline exceeded mid-flight)`);
+  });
+
+  it('when both bounds trip, stopReason is the first one and sourcesSkipped counts both', async () => {
+    const plugins = [
+      scripted(Site.LINKEDIN, hangs), // abandoned at the deadline, AFTER the ceiling tripped
+      recording(Site.INDEED, 'job-board', { count: 2 }), // reaches the ceiling at once
+      recording(Site.REMOTEOK, 'remote'),
+      recording(Site.GLASSDOOR, 'job-board'),
+    ];
+    const service = withConfig(createService(plugins), {
+      'search.concurrency': 2,
+      'search.maxJobsPerSearch': 2,
+      'search.deadlineMs': 40,
+    });
+
+    const { jobs, completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+
+    expect(jobs).toHaveLength(2);
+    expect(plugins[2]!.scraper.scrape).not.toHaveBeenCalled();
+    expect(plugins[3]!.scraper.scrape).not.toHaveBeenCalled();
+    expect(completeness).toEqual({
+      complete: false,
+      stopReason: 'job_ceiling',
+      sourcesSkipped: 3,
+      sourcesFailed: 0,
+    });
+  });
+
+  it('a source that fails on its own while the deadline is armed is failed, not skipped', async () => {
+    const plugins = [
+      scripted(Site.LINKEDIN, async () => {
+        throw new Error('Request failed with status code 503');
+      }),
+      recording(Site.INDEED, 'job-board'),
+    ];
+    const service = withConfig(createService(plugins), { 'search.concurrency': 1, 'search.deadlineMs': 60_000 });
+
+    const { completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+
+    expect(completeness).toEqual({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 1 });
+  });
+
+  it('keyword-only sources list mode does not dispatch are neither skipped nor failed', async () => {
+    const plugins = [
+      recording(Site.LINKEDIN, 'job-board'),
+      recording(Site.BAYT, 'regional', { requiresSearchTerm: true }),
+    ];
+    const service = createService(plugins);
+
+    const { perSource, completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+
+    expect(perSource.find((r) => r.site === Site.BAYT)!.detail).toBe(LIST_MODE_SKIPPED_DETAIL);
+    expect(completeness).toEqual({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0 });
+  });
+
+  it('nothing selected is a complete (empty) crawl', async () => {
+    const service = createService([recording(Site.BAYT, 'regional', { requiresSearchTerm: true })]);
+    const { jobs, completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+    expect(jobs).toEqual([]);
+    expect(completeness).toEqual({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0 });
+  });
+
+  it('a client disconnect is not a bound: completeness stays complete (FR-14 discards the result anyway)', async () => {
+    let gone = false;
+    const first = scripted(Site.LINKEDIN, async () => {
+      gone = true;
+      return new JobResponseDto([job('a')]);
+    });
+    const service = withConfig(createService([first, recording(Site.INDEED, 'job-board')]), {
+      'search.concurrency': 1,
+    });
+    const result = await service.searchJobsWithDiagnostics(new ScraperInputDto({}), { isCancelled: () => gone });
+    expect(result.cancelled).toBe(true);
+    expect(result.completeness).toEqual({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0 });
   });
 });

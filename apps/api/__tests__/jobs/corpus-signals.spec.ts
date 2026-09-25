@@ -1,5 +1,6 @@
 import { JobsController } from '../../src/jobs/jobs.controller';
 import type { JobsService } from '../../src/jobs/jobs.service';
+import { COMPLETE_SEARCH } from '../../src/jobs/search-completeness';
 import { LegitimacyDetectorService } from '@ever-jobs/legitimacy-detector';
 import type { JobPostDto, ScraperInputDto } from '@ever-jobs/models';
 
@@ -27,7 +28,7 @@ function makeJobsServiceStub(corpus: () => JobPostDto[]): JobsServiceStub & {
     searchJobs: async () => corpus(),
     searchJobsWithDiagnostics: async () => {
       stub.diagnosticsCalls += 1;
-      return { jobs: corpus(), perSource: [] };
+      return { jobs: corpus(), perSource: [], completeness: { ...COMPLETE_SEARCH } };
     },
   };
   return stub;

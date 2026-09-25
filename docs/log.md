@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-09-25 — Spec 1721 FR-15..FR-18 — the NDJSON end line says when the crawl was incomplete
+
+**Why:** an integration check of the list-mode branch against its consumer found a contract gap:
+the fan-out stops early at the deadline (`EVER_JOBS_FANOUT_DEADLINE_MS`) or the job ceiling
+(`EVER_JOBS_MAX_JOBS_PER_SEARCH`), yet the `end` line of a crawl that covered half the catalogue
+looked exactly like one that covered all of it. A consumer that closes postings absent from a
+crawl would close every posting of every source that never ran.
+
+**Change:** the `end` line gains four additive fields — `complete`, `stopReason`
+(`"deadline"` | `"job_ceiling"` | `null`), `sourcesSkipped`, `sourcesFailed` (FR-15, FR-16).
+`JobsService.searchJobsWithDiagnostics` returns a `completeness` record: the first bound that
+stopped the fan-out, the sources it skipped or abandoned (`withDeadline` now rejects with
+`FanoutDeadlineError`, same message, so rows still read `timeout`; once it fires no further source
+starts, which closes a race where the timer — scheduled on libuv's cached loop time — fired before
+`Date.now()` reached the deadline and one more source was started), and the failures of the
+sources that ran (`partial` is not a failure; failures never make a crawl incomplete). The
+controller caches the record next to the raw set (`endpoint: "search-completeness"`, same
+parameters), reports it on a cache hit, re-runs the fan-out for an NDJSON hit without a valid
+record, and omits the fields rather than guess if a service reports none (FR-17, FR-18).
+Decisions D-04..D-08 in the spec record the alternatives. JSON responses are unchanged.
+
+**Files:** `apps/api/src/jobs/search-completeness.ts` (new), `apps/api/src/jobs/jobs.service.ts`,
+`apps/api/src/jobs/jobs.controller.ts` (incl. the OpenAPI `format` description), tests
+`apps/api/src/jobs/__tests__/{search-completeness.spec.ts (new),jobs.service.list-mode.spec.ts,jobs.controller.ndjson.spec.ts}`,
+`apps/api/__tests__/jobs/corpus-signals.spec.ts` (its typed stub now returns the record),
+`.specify/specs/1721-ndjson-search-stream/{spec,plan,tasks}.md` (FR-15..FR-18, D-04..D-08, T11),
+`README.md` ("Was the crawl complete?"), `tool_manifest.json`, `docs/index.md`, this log.
+
+**Also:** the rebase of this branch onto `origin/develop` (`42f3ad08`, which carries the fork sync,
+Spec 1689) kept develop's class-validator decorator on every GraphQL `SearchJobsInput` field and
+added them to the two fields this branch introduces (`searchTerm` → `@IsOptional() @IsString()`,
+nullable; `siteCategories` → `@IsOptional() @IsArray() @IsIn(SITE_CATEGORIES, { each: true })`),
+took develop's typed `JobsService` stub in `corpus-signals.spec.ts`, and restored the `---`
+separator between Q-100 and Q-096 in `docs/questions.md` that the merge of the two question
+blocks dropped.
+
+---
+
 ## 2026-09-25 — Spec 1722 (with 1720, 1721) — review fixes: store write path, NDJSON edges, result bounds, keyword-only plugins
 
 **Why:** a review of the list-mode branch found that the durable stores failed or stalled at

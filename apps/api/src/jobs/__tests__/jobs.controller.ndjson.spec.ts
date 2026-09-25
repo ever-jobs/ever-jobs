@@ -5,6 +5,11 @@ import { JobPostDto, LocationDto, ScraperInputDto } from '@ever-jobs/models';
 import { JobsController } from '../jobs.controller';
 import { NDJSON_CONTENT_TYPE, NDJSON_HEARTBEAT_MS } from '../ndjson-writer';
 import type { SearchProgress, SearchRunOptions } from '../search-input';
+import {
+  COMPLETE_SEARCH,
+  SEARCH_COMPLETENESS_CACHE_ENDPOINT,
+  type SearchCompleteness,
+} from '../search-completeness';
 
 /**
  * Spec 1721 — `POST /api/jobs/search?format=ndjson`.
@@ -41,6 +46,10 @@ interface Harness {
 function createHarness(opts: {
   jobs?: JobPostDto[];
   cached?: JobPostDto[] | null;
+  /** Spec 1721 / FR-15 — the completeness record stored next to `cached` (absent: none). */
+  cachedCompleteness?: unknown;
+  /** What the default fan-out reports; `null` = a service that reports none. */
+  completeness?: SearchCompleteness | null;
   search?: (input: ScraperInputDto, options?: SearchRunOptions) => Promise<unknown>;
   config?: Record<string, unknown>;
   deduped?: boolean;
@@ -56,7 +65,8 @@ function createHarness(opts: {
           options?.onProgress?.({ sourcesDone: 0, sourcesTotal: 2, jobs: 0 });
           options?.onProgress?.({ sourcesDone: 1, sourcesTotal: 2, jobs: jobs.length });
           options?.onProgress?.({ sourcesDone: 2, sourcesTotal: 2, jobs: jobs.length });
-          return { jobs, perSource: [] };
+          const completeness = opts.completeness === undefined ? { ...COMPLETE_SEARCH } : opts.completeness;
+          return completeness ? { jobs, perSource: [], completeness } : { jobs, perSource: [] };
         }),
     ),
   };
@@ -69,7 +79,9 @@ function createHarness(opts: {
     })),
   };
   const cacheService = {
-    get: jest.fn(async () => opts.cached ?? null),
+    get: jest.fn(async (params: { endpoint?: string }) =>
+      params.endpoint === SEARCH_COMPLETENESS_CACHE_ENDPOINT ? (opts.cachedCompleteness ?? null) : (opts.cached ?? null),
+    ),
     set: jest.fn(async () => undefined),
   };
   const config = opts.config ?? {};
@@ -167,7 +179,18 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
     expect(end).toMatchObject({ type: 'end', total: 3, deduped: true });
     expect(typeof end.durationMs).toBe('number');
     expect(end.durationMs as number).toBeGreaterThanOrEqual(0);
-    expect(Object.keys(end).sort()).toEqual(['deduped', 'durationMs', 'total', 'type']);
+    // Spec 1721 / FR-15 — the crawl-completeness fields are part of every end line.
+    expect(end).toMatchObject({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0 });
+    expect(Object.keys(end).sort()).toEqual([
+      'complete',
+      'deduped',
+      'durationMs',
+      'sourcesFailed',
+      'sourcesSkipped',
+      'stopReason',
+      'total',
+      'type',
+    ]);
   });
 
   it('each job line carries exactly the per-job JSON of the JSON response, in the same order', async () => {
@@ -256,7 +279,7 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
 
   it('streams a cache hit without running the fan-out', async () => {
     const cached = [makeJob(9)];
-    const { controller, jobsService } = createHarness({ cached });
+    const { controller, jobsService } = createHarness({ cached, cachedCompleteness: { ...COMPLETE_SEARCH } });
 
     const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
 
@@ -271,7 +294,7 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
   it('on a cache hit the first line is readable while dedup/persistence is still running', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
-    const harness = createHarness({ cached: [makeJob(9)] });
+    const harness = createHarness({ cached: [makeJob(9)], cachedCompleteness: { ...COMPLETE_SEARCH } });
     harness.aggregator.aggregateRaw.mockImplementation(async (raw: JobPostDto[]) => {
       await gate;
       return { jobs: raw, rawCount: raw.length, outputCount: raw.length, deduped: true };
@@ -370,14 +393,23 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
     release();
     for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
 
-    expect(harness.cacheService.set).toHaveBeenCalledTimes(1);
+    // The raw set (and, when the service reports one, its completeness record).
+    expect(harness.cacheService.set).toHaveBeenCalledWith(expect.objectContaining({ endpoint: 'search' }), [
+      expect.objectContaining({ id: 'job-1' }),
+    ]);
   });
 
   it('uses the same cache key as the JSON path and writes the raw fan-out to it', async () => {
     const { controller, cacheService } = createHarness();
     await readAll((await callNdjson(controller, new ScraperInputDto({ searchTerm: 'go' }))).file);
     expect(cacheService.get).toHaveBeenCalledWith(expect.objectContaining({ searchTerm: 'go', endpoint: 'search' }));
-    expect(cacheService.set).toHaveBeenCalledTimes(1);
+    // The raw fan-out, then its completeness record (Spec 1721 / FR-15).
+    expect(cacheService.set).toHaveBeenCalledTimes(2);
+    expect(cacheService.set.mock.calls[0]![0]).toMatchObject({ searchTerm: 'go', endpoint: 'search' });
+    expect(cacheService.set.mock.calls[1]![0]).toMatchObject({
+      searchTerm: 'go',
+      endpoint: SEARCH_COMPLETENESS_CACHE_ENDPOINT,
+    });
   });
 
   it('the first line is readable while the fan-out is still running (headers flush immediately)', async () => {
@@ -540,5 +572,149 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
     for (const line of lines.filter((l) => l.type === 'job')) {
       expect((line.data as Record<string, unknown>).liveness).toBeUndefined();
     }
+  });
+
+  describe('crawl completeness on the end line (FR-15)', () => {
+    const endOf = (lines: Line[]): Line => {
+      const end = lines[lines.length - 1]!;
+      expect(end.type).toBe('end');
+      return end;
+    };
+
+    it('a deadline-truncated crawl says so: complete=false, stopReason, skipped and failed counts', async () => {
+      const { controller } = createHarness({
+        completeness: { complete: false, stopReason: 'deadline', sourcesSkipped: 412, sourcesFailed: 9 },
+      });
+
+      const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
+      const { durationMs, ...end } = endOf(lines);
+
+      expect(typeof durationMs).toBe('number');
+      expect(end).toEqual({
+        type: 'end',
+        total: 3,
+        deduped: true,
+        complete: false,
+        stopReason: 'deadline',
+        sourcesSkipped: 412,
+        sourcesFailed: 9,
+      });
+      // The job lines are unchanged: completeness is only on the end line.
+      expect(lines.filter((l) => l.type === 'job')).toHaveLength(3);
+    });
+
+    it('a crawl stopped by the job ceiling reports job_ceiling', async () => {
+      const { controller } = createHarness({
+        completeness: { complete: false, stopReason: 'job_ceiling', sourcesSkipped: 3, sourcesFailed: 0 },
+      });
+      const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
+      expect(endOf(lines)).toMatchObject({ complete: false, stopReason: 'job_ceiling', sourcesSkipped: 3 });
+    });
+
+    it('failed sources alone do not make a crawl incomplete', async () => {
+      const { controller } = createHarness({
+        completeness: { complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 17 },
+      });
+      const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
+      expect(endOf(lines)).toMatchObject({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 17 });
+    });
+
+    it('a fresh fan-out caches its completeness next to the raw set, under the same parameters', async () => {
+      const completeness: SearchCompleteness = {
+        complete: false,
+        stopReason: 'deadline',
+        sourcesSkipped: 5,
+        sourcesFailed: 1,
+      };
+      const { controller, cacheService } = createHarness({ completeness });
+
+      await readAll((await callNdjson(controller, new ScraperInputDto({ searchTerm: 'rust', location: 'Berlin' }))).file);
+
+      const [[rawKey], [recordKey, record]] = cacheService.set.mock.calls as unknown as [
+        [Record<string, unknown>, unknown],
+        [Record<string, unknown>, unknown],
+      ];
+      expect(rawKey.endpoint).toBe('search');
+      expect(recordKey.endpoint).toBe(SEARCH_COMPLETENESS_CACHE_ENDPOINT);
+      // Every other parameter is identical, so a cache-key change moves both entries.
+      expect({ ...recordKey, endpoint: 'search' }).toEqual(rawKey);
+      expect(record).toEqual(completeness);
+    });
+
+    it('a cache hit reports the completeness of the crawl that produced it, without a fan-out', async () => {
+      const record: SearchCompleteness = { complete: false, stopReason: 'job_ceiling', sourcesSkipped: 2, sourcesFailed: 4 };
+      const { controller, jobsService, cacheService } = createHarness({
+        cached: [makeJob(9)],
+        cachedCompleteness: record,
+      });
+
+      const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
+
+      expect(jobsService.searchJobsWithDiagnostics).not.toHaveBeenCalled();
+      expect(cacheService.set).not.toHaveBeenCalled();
+      expect(endOf(lines)).toMatchObject({ total: 1, ...record });
+    });
+
+    it.each([
+      ['no completeness record (written before FR-15)', undefined],
+      ['a malformed record', { complete: false, stopReason: 'cancelled', sourcesSkipped: 1, sourcesFailed: 0 }],
+    ])('a cache hit with %s runs the fan-out instead of guessing', async (_label, cachedCompleteness) => {
+      const fresh = [makeJob(1), makeJob(2)];
+      const { controller, jobsService, cacheService } = createHarness({
+        jobs: fresh,
+        cached: [makeJob(9)],
+        cachedCompleteness,
+      });
+
+      const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
+
+      expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledTimes(1);
+      expect(lines.filter((l) => l.type === 'job').map((l) => (l.data as { id: string }).id)).toEqual([
+        'job-1',
+        'job-2',
+      ]);
+      expect(endOf(lines)).toMatchObject({ total: 2, complete: true, stopReason: null });
+      // Both entries are rewritten, so the next hit has a record.
+      expect(cacheService.set).toHaveBeenCalledTimes(2);
+      expect(cacheService.set.mock.calls[1]![0]).toMatchObject({ endpoint: SEARCH_COMPLETENESS_CACHE_ENDPOINT });
+    });
+
+    it('the JSON path still serves a cache hit that has no completeness record', async () => {
+      const { controller, jobsService, cacheService } = createHarness({ cached: [makeJob(9)] });
+
+      const result = (await controller.searchJobs(new ScraperInputDto({}))) as { cached: boolean; count: number };
+
+      expect(jobsService.searchJobsWithDiagnostics).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ cached: true, count: 1 });
+      // JSON does not report completeness, so it does not pay for reading the record.
+      expect(cacheService.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('a service that reports no completeness gets the fields omitted, never guessed', async () => {
+      const { controller } = createHarness({ completeness: null });
+
+      const lines = parseLines(await readAll((await callNdjson(controller, new ScraperInputDto({}))).file));
+
+      expect(Object.keys(endOf(lines)).sort()).toEqual(['deduped', 'durationMs', 'total', 'type']);
+    });
+
+    it('a cancelled fan-out still ends without an end line (completeness never reaches the client)', async () => {
+      const harness = createHarness({
+        search: async (_input, options) => {
+          options?.onProgress?.({ sourcesDone: 0, sourcesTotal: 2, jobs: 0 });
+          return {
+            jobs: [makeJob(1)],
+            perSource: [],
+            completeness: { ...COMPLETE_SEARCH },
+            cancelled: true,
+          };
+        },
+      });
+
+      const lines = parseLines(await readAll((await callNdjson(harness.controller, new ScraperInputDto({}))).file));
+
+      expect(lines.map((l) => l.type)).not.toContain('end');
+      expect(harness.cacheService.set).not.toHaveBeenCalled();
+    });
   });
 });

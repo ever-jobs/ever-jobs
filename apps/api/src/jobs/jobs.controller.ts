@@ -45,6 +45,11 @@ import {
   describeTerm,
   normalizeSearchInput,
 } from './search-input';
+import {
+  SEARCH_COMPLETENESS_CACHE_ENDPOINT,
+  SearchCompleteness,
+  isSearchCompleteness,
+} from './search-completeness';
 import { DEFAULT_LIVENESS_MAX_URLS, DEFAULT_MAX_RESULTS_WANTED } from '../config/search-config';
 import { AnalyticsService } from '@ever-jobs/analytics';
 import { CacheService } from '../cache/cache.service';
@@ -115,7 +120,9 @@ export class JobsController {
       'Output format: json (default), csv, or ndjson. ndjson streams Content-Type application/x-ndjson: ' +
       '{"type":"progress","sourcesDone":n,"sourcesTotal":m,"jobs":k} immediately (0/0/0), at fan-out start and at most every ~10 s, ' +
       'then one {"type":"job","data":{…}} per job (same order and per-job shape as json), then ' +
-      '{"type":"end","total":N,"deduped":bool,"durationMs":ms}. On failure after headers: {"type":"error","message":"…"} ' +
+      '{"type":"end","total":N,"deduped":bool,"durationMs":ms,"complete":bool,"stopReason":"deadline"|"job_ceiling"|null,' +
+      '"sourcesSkipped":n,"sourcesFailed":n} — complete=false means the fan-out deadline or the job ceiling left sources ' +
+      'unscraped, so a job missing from this result may still be open. On failure after headers: {"type":"error","message":"…"} ' +
       'and NO end line — treat a missing end line as a truncated result. Ignore unknown line types. ' +
       'paginate/page/page_size are ignored in ndjson mode.',
     example: 'json',
@@ -380,10 +387,37 @@ export class JobsController {
     input: ScraperInputDto,
     dedup: boolean,
     hooks: SearchRunOptions = {},
-  ): Promise<{ aggregated: AggregateResult; perSource: SourceDiagnosticDto[]; fromCache: boolean }> {
+    options: { requireCompleteness?: boolean } = {},
+  ): Promise<{
+    aggregated: AggregateResult;
+    perSource: SourceDiagnosticDto[];
+    fromCache: boolean;
+    /**
+     * Spec 1721 / FR-15 — completeness of the crawl that produced the raw set.
+     * `undefined` on a cache hit without `requireCompleteness` (the JSON path
+     * does not report it, so it does not read it), or when a `JobsService`
+     * reported none.
+     */
+    completeness: SearchCompleteness | undefined;
+  }> {
     // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
     const cacheParams = { ...input, endpoint: 'search' };
-    const cached = await this.cacheService.get<JobPostDto[]>(cacheParams);
+    // The completeness record lives next to the raw set under the same
+    // parameters, so any change to the cache key moves both.
+    const completenessParams = { ...cacheParams, endpoint: SEARCH_COMPLETENESS_CACHE_ENDPOINT };
+    let cached = await this.cacheService.get<JobPostDto[]>(cacheParams);
+    let completeness: SearchCompleteness | undefined;
+    if (cached && options.requireCompleteness) {
+      const record = await this.cacheService.get<unknown>(completenessParams);
+      if (isSearchCompleteness(record)) {
+        completeness = record;
+      } else {
+        // Written before FR-15 (or its record was evicted on its own): the
+        // NDJSON end line would have to guess, so run the fan-out instead.
+        this.logger.log('Cache hit without a completeness record — running the fan-out (NDJSON reports completeness)');
+        cached = null;
+      }
+    }
     let rawJobs: JobPostDto[];
     let fromCache = false;
     // Per-source outcome breakdown (Spec 5082). Only meaningful on a fresh
@@ -408,6 +442,12 @@ export class JobsController {
       rawJobs = result.jobs;
       perSource = result.perSource;
       await this.cacheService.set(cacheParams, rawJobs);
+      if (isSearchCompleteness(result.completeness)) {
+        completeness = result.completeness;
+        await this.cacheService.set(completenessParams, completeness);
+      } else {
+        this.logger.warn('JobsService reported no crawl completeness; the NDJSON end line will omit it');
+      }
     }
 
     // ── Dedup (Spec 003 / FR-1) ───────────
@@ -420,7 +460,7 @@ export class JobsController {
     this.logger.log(
       `Returning ${aggregated.jobs.length} jobs (raw=${aggregated.rawCount}, deduped=${aggregated.deduped}, cached=${fromCache})`,
     );
-    return { aggregated, perSource, fromCache };
+    return { aggregated, perSource, fromCache, completeness };
   }
 
   // ── NDJSON streaming (Spec 1721) ──
@@ -516,10 +556,12 @@ export class JobsController {
     },
   ): Promise<void> {
     try {
-      const { aggregated, fromCache } = await this.runSearch(input, flags.dedup, {
-        onProgress,
-        isCancelled: hooks.isCancelled,
-      });
+      const { aggregated, fromCache, completeness } = await this.runSearch(
+        input,
+        flags.dedup,
+        { onProgress, isCancelled: hooks.isCancelled },
+        { requireCompleteness: true },
+      );
       hooks.onFetched(aggregated.rawCount);
       const jobs = aggregated.jobs;
       await this.applyCorpusSignals(jobs, flags.liveness, flags.legitimacy);
@@ -528,15 +570,25 @@ export class JobsController {
       for (const job of jobs) {
         if (!(await writer.writeJob(job))) return; // consumer went away
       }
+      // Spec 1721 / FR-15 — the crawl-completeness fields are additive; they
+      // are omitted (never guessed) only if the service reported none.
       await writer.write({
         type: 'end',
         total: jobs.length,
         deduped: aggregated.deduped,
         durationMs: Date.now() - startedAt,
+        ...(completeness && {
+          complete: completeness.complete,
+          stopReason: completeness.stopReason,
+          sourcesSkipped: completeness.sourcesSkipped,
+          sourcesFailed: completeness.sourcesFailed,
+        }),
       });
       writer.end();
       this.logger.log(
-        `NDJSON stream complete: ${jobs.length} jobs (cached=${fromCache}) in ${Date.now() - startedAt}ms`,
+        `NDJSON stream complete: ${jobs.length} jobs (cached=${fromCache}` +
+          `${completeness && !completeness.complete ? `, INCOMPLETE: ${completeness.stopReason}, ${completeness.sourcesSkipped} sources skipped` : ''}` +
+          `) in ${Date.now() - startedAt}ms`,
       );
     } catch (err) {
       if (err instanceof SearchCancelledError) {
