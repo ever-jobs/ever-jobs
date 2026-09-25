@@ -125,8 +125,12 @@ export class JobsController {
       '{"type":"progress","sourcesDone":n,"sourcesTotal":m,"jobs":k} immediately (0/0/0), at fan-out start and at most every ~10 s, ' +
       'then one {"type":"job","data":{…}} per job (same order and per-job shape as json), then ' +
       '{"type":"end","total":N,"deduped":bool,"durationMs":ms,"complete":bool,"stopReason":"deadline"|"job_ceiling"|null,' +
-      '"sourcesSkipped":n,"sourcesFailed":n} — complete=false means the fan-out deadline or the job ceiling left sources ' +
-      'unscraped, so a job missing from this result may still be open. On failure after headers: {"type":"error","message":"…"} ' +
+      '"sourcesSkipped":n,"sourcesFailed":n,"sourcesPartial":n,"problemSources":[{"site":"…","reason":"…"}],"problemSourcesTotal":n} ' +
+      '— complete=false means the fan-out deadline or the job ceiling left sources unscraped, so a job missing from this result ' +
+      'may still be open. Decide expiry PER SOURCE: only a selected source that is not in problemSources (failed, partial, ' +
+      'skipped, cut at resultsWanted, or not queried in list mode — at most 200 listed; problemSourcesTotal > its length means ' +
+      'truncated, then assume none clean) ran cleanly and may expire its postings. Incomplete crawls are never cached. ' +
+      'On failure after headers: {"type":"error","message":"…"} ' +
       'and NO end line — treat a missing end line as a truncated result. Ignore unknown line types. ' +
       'paginate/page/page_size are ignored in ndjson mode.',
     example: 'json',
@@ -446,8 +450,12 @@ export class JobsController {
       }
       // Spec 1720 / FR-13 — a large set is served but not cached: in the
       // in-process LRU it would pin every job for the whole TTL.
+      // Spec 1721 / FR-20 — nor is an incomplete crawl: a retry within the TTL
+      // must get a fresh chance at the sources the bound left out.
       const cacheMaxJobs = this.configService.get<number>('cache.maxJobs', DEFAULT_CACHE_MAX_JOBS);
-      if (isCacheableJobCount(rawJobs.length, cacheMaxJobs)) {
+      if (completeness?.complete === false) {
+        this.logger.log(`Not caching an incomplete crawl (${completeness.stopReason})`);
+      } else if (isCacheableJobCount(rawJobs.length, cacheMaxJobs)) {
         await this.cacheService.set(cacheParams, toCachedSearch(rawJobs, completeness));
       } else {
         this.logger.log(
@@ -588,6 +596,10 @@ export class JobsController {
           stopReason: completeness.stopReason,
           sourcesSkipped: completeness.sourcesSkipped,
           sourcesFailed: completeness.sourcesFailed,
+          // FR-20 — per-source detail for expiry decisions.
+          sourcesPartial: completeness.sourcesPartial,
+          problemSources: completeness.problemSources,
+          problemSourcesTotal: completeness.problemSourcesTotal,
         }),
       });
       writer.end();

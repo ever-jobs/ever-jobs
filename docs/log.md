@@ -47,6 +47,14 @@ paths — in the in-process LRU a list-mode set would pin every job for the whol
 measured in a pod. README, `.env.example` and the OpenAPI description now say list mode should
 use NDJSON or pagination, and that unpaginated JSON/CSV is capped only by the job ceiling.
 
+**Spec 1721 FR-20 — per-source expiry detail.** The NDJSON `end` line gains `sourcesPartial`,
+`problemSources` (at most 200 `{ site, reason }`, fan-out order) and `problemSourcesTotal`: every
+selected source whose postings must not be expired — failed (its reason), `partial`, `skipped`
+(a bound), `results_wanted` (returned at least `resultsWanted` jobs) or `keyword_required` (list
+mode does not query it). README, OpenAPI and the tool manifest document the rule: expire per
+source, only for selected sources not listed, and nothing when the list is truncated. An
+incomplete crawl (`complete: false`) is no longer cached.
+
 **CI / docs.** The feature-plugin job now runs `store-sqlite-drizzle` and `store-postgres-prisma`
 (hermetic), and `ci-workflow.spec.ts` derives the list of feature plugins with unit specs from the
 filesystem so a new one cannot fall outside CI again. The list-mode log heading reads
@@ -60,7 +68,8 @@ another lane's date-only entry of the same day.
 `packages/plugins/dedup-hybrid/__tests__/dedup-hybrid.service.spec.ts`,
 `apps/api/src/jobs/__tests__/jobs.aggregator.dedup-key.spec.ts`, `.github/workflows/ci.yml`,
 `scripts/__tests__/ci-workflow.spec.ts`, `.specify/specs/1724-dedup-merge-gate/{spec,plan,tasks}.md` (new),
-`apps/api/src/jobs/{search-cache.ts (new),search-completeness.ts,jobs.controller.ts,jobs.resolver.ts}`,
+`apps/api/src/jobs/{search-cache.ts (new),search-completeness.ts,jobs.controller.ts,jobs.resolver.ts,jobs.service.ts}`,
+`apps/api/src/jobs/__tests__/jobs.service.list-mode.spec.ts`, `tool_manifest.json`,
 `apps/api/src/config/{search-config.ts,configuration.ts}`, `apps/api/src/config/__tests__/search-config.spec.ts`,
 `apps/api/src/jobs/__tests__/{jobs.controller.list-mode.spec.ts,jobs.resolver.cache-bound.spec.ts (new)}`,
 `.specify/specs/1720-list-mode-site-categories/{spec,tasks}.md`, `.env.example`,

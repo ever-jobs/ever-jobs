@@ -585,6 +585,24 @@ describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
   /** Never settles — the fan-out can only get past it through the deadline race. */
   const hangs = () => new Promise<JobResponseDto>(() => undefined);
 
+  /** Problem sources sorted by site (fan-out order is the registry's). */
+  const bySite = (list: ReadonlyArray<{ site: string; reason: string }>) =>
+    [...list].sort((a, b) => a.site.localeCompare(b.site));
+
+  it('FR-20 — a clean source that returned resultsWanted jobs is listed as cut at results_wanted', async () => {
+    const plugins = [
+      recording(Site.LINKEDIN, 'job-board', { count: 5 }),
+      recording(Site.INDEED, 'job-board', { count: 4 }),
+    ];
+    const service = createService(plugins);
+
+    const { completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({ resultsWanted: 5 }));
+
+    expect(completeness.complete).toBe(true);
+    expect(completeness.problemSources).toEqual([{ site: Site.LINKEDIN, reason: 'results_wanted' }]);
+    expect(completeness.problemSourcesTotal).toBe(1);
+  });
+
   it('a fan-out that ran every source is complete; failures are counted, not treated as a stop', async () => {
     const circuitOpen = Object.assign(new Error('circuit open'), { code: ERR_SOURCE_CIRCUIT_OPEN });
     const plugins = [
@@ -616,7 +634,24 @@ describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
       [Site.GOOGLE]: 'circuit_open',
     });
     // fetch_error + blocked + circuit_open; `partial` returned jobs, `empty` had none to return.
-    expect(completeness).toEqual({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 3 });
+    expect(completeness).toMatchObject({
+      complete: true,
+      stopReason: null,
+      sourcesSkipped: 0,
+      sourcesFailed: 3,
+      sourcesPartial: 1,
+      problemSourcesTotal: 4,
+    });
+    // FR-20 — every source whose postings must not be expired, with its reason;
+    // the clean ones (ok below resultsWanted, empty) are not listed.
+    expect(bySite(completeness.problemSources)).toEqual(
+      bySite([
+        { site: Site.INDEED, reason: 'fetch_error' },
+        { site: Site.GLASSDOOR, reason: 'blocked' },
+        { site: Site.REMOTEOK, reason: 'partial' },
+        { site: Site.GOOGLE, reason: 'circuit_open' },
+      ]),
+    );
     expect((service as any).logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Incomplete crawl'));
   });
 
@@ -641,6 +676,12 @@ describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
       stopReason: 'job_ceiling',
       sourcesSkipped: 2,
       sourcesFailed: 0,
+      sourcesPartial: 0,
+      problemSources: [
+        { site: Site.REMOTEOK, reason: 'skipped' },
+        { site: Site.GLASSDOOR, reason: 'skipped' },
+      ],
+      problemSourcesTotal: 2,
     });
     expect((service as any).logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Incomplete crawl (job_ceiling): 2 of 4 sources skipped or abandoned, 0 failed'),
@@ -667,7 +708,19 @@ describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
     expect(perSource.find((r) => r.site === Site.LINKEDIN)!.detail).toBe(
       `${Site.LINKEDIN}: abandoned (search deadline exceeded mid-flight)`,
     );
-    expect(completeness).toEqual({ complete: false, stopReason: 'deadline', sourcesSkipped: 3, sourcesFailed: 0 });
+    expect(completeness).toEqual({
+      complete: false,
+      stopReason: 'deadline',
+      sourcesSkipped: 3,
+      sourcesFailed: 0,
+      sourcesPartial: 0,
+      problemSources: [
+        { site: Site.LINKEDIN, reason: 'skipped' },
+        { site: Site.INDEED, reason: 'skipped' },
+        { site: Site.REMOTEOK, reason: 'skipped' },
+      ],
+      problemSourcesTotal: 3,
+    });
   });
 
   it('a source abandoned at the deadline with nothing left to start still makes the crawl incomplete', async () => {
@@ -680,7 +733,15 @@ describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
     const { jobs, completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
 
     expect(jobs).toHaveLength(2); // the source that finished in time
-    expect(completeness).toEqual({ complete: false, stopReason: 'deadline', sourcesSkipped: 1, sourcesFailed: 0 });
+    expect(completeness).toEqual({
+      complete: false,
+      stopReason: 'deadline',
+      sourcesSkipped: 1,
+      sourcesFailed: 0,
+      sourcesPartial: 0,
+      problemSources: [{ site: Site.LINKEDIN, reason: 'skipped' }],
+      problemSourcesTotal: 1,
+    });
   });
 
   it('once the deadline abandons a source, no source starts — even while Date.now() lags the timer', async () => {
@@ -705,7 +766,7 @@ describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
 
       expect(plugins[1]!.scraper.scrape).not.toHaveBeenCalled();
       expect(plugins[2]!.scraper.scrape).not.toHaveBeenCalled();
-      expect(completeness).toEqual({ complete: false, stopReason: 'deadline', sourcesSkipped: 3, sourcesFailed: 0 });
+      expect(completeness).toMatchObject({ complete: false, stopReason: 'deadline', sourcesSkipped: 3, sourcesFailed: 0 });
     } finally {
       clock.mockRestore();
     }
@@ -740,6 +801,13 @@ describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
       stopReason: 'job_ceiling',
       sourcesSkipped: 3,
       sourcesFailed: 0,
+      sourcesPartial: 0,
+      problemSources: [
+        { site: Site.LINKEDIN, reason: 'skipped' },
+        { site: Site.REMOTEOK, reason: 'skipped' },
+        { site: Site.GLASSDOOR, reason: 'skipped' },
+      ],
+      problemSourcesTotal: 3,
     });
   });
 
@@ -752,9 +820,12 @@ describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
     ];
     const service = withConfig(createService(plugins), { 'search.concurrency': 1, 'search.deadlineMs': 60_000 });
 
-    const { completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+    const { perSource, completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
 
-    expect(completeness).toEqual({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 1 });
+    expect(completeness).toMatchObject({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 1 });
+    // Listed with the reason its row carries — not as skipped.
+    const failed = perSource.find((r) => r.site === Site.LINKEDIN)!;
+    expect(completeness.problemSources).toEqual([{ site: Site.LINKEDIN, reason: failed.reason }]);
   });
 
   it('keyword-only sources list mode does not dispatch are neither skipped nor failed', async () => {
@@ -767,14 +838,24 @@ describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
     const { perSource, completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
 
     expect(perSource.find((r) => r.site === Site.BAYT)!.detail).toBe(LIST_MODE_SKIPPED_DETAIL);
-    expect(completeness).toEqual({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0 });
+    // Neither skipped nor failed — but its postings must not be expired (FR-20).
+    expect(completeness).toEqual({
+      complete: true,
+      stopReason: null,
+      sourcesSkipped: 0,
+      sourcesFailed: 0,
+      sourcesPartial: 0,
+      problemSources: [{ site: Site.BAYT, reason: 'keyword_required' }],
+      problemSourcesTotal: 1,
+    });
   });
 
   it('nothing selected is a complete (empty) crawl', async () => {
     const service = createService([recording(Site.BAYT, 'regional', { requiresSearchTerm: true })]);
     const { jobs, completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
     expect(jobs).toEqual([]);
-    expect(completeness).toEqual({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0 });
+    expect(completeness).toMatchObject({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0 });
+    expect(completeness.problemSources).toEqual([{ site: Site.BAYT, reason: 'keyword_required' }]);
   });
 
   it('a client disconnect is not a bound: completeness stays complete (FR-14 discards the result anyway)', async () => {
@@ -788,6 +869,6 @@ describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
     });
     const result = await service.searchJobsWithDiagnostics(new ScraperInputDto({}), { isCancelled: () => gone });
     expect(result.cancelled).toBe(true);
-    expect(result.completeness).toEqual({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0 });
+    expect(result.completeness).toMatchObject({ complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0 });
   });
 });

@@ -22,9 +22,11 @@ import {
 import { DEFAULT_MAX_JOBS_PER_SEARCH, DEFAULT_MAX_RESULTS_WANTED } from '../config/search-config';
 import {
   COMPLETE_SEARCH,
+  ProblemSource,
   SearchCompleteness,
   SearchStopReason,
   buildSearchCompleteness,
+  problemOfRanSource,
 } from './search-completeness';
 
 /**
@@ -360,10 +362,20 @@ export class JobsService implements OnModuleInit {
     const keywordSkippedRows = keywordSkipped.map(
       (site) => new SourceDiagnosticDto(site, 0, 'empty', LIST_MODE_SKIPPED_DETAIL),
     );
+    // Spec 1721 / FR-20 — a source list mode does not query cannot be used to
+    // expire its postings, although it neither failed nor was skipped.
+    const keywordProblems: ProblemSource[] = keywordSkipped.map((site) => ({
+      site,
+      reason: 'keyword_required',
+    }));
 
     if (selectedScrapers.length === 0) {
       this.logger.warn('No valid scrapers selected');
-      return { jobs: [], perSource: keywordSkippedRows, completeness: { ...COMPLETE_SEARCH } };
+      return {
+        jobs: [],
+        perSource: keywordSkippedRows,
+        completeness: buildSearchCompleteness(null, 0, [], keywordProblems),
+      };
     }
 
     // Spec 5026 — bounded fan-out. Previously this was a bare
@@ -573,6 +585,18 @@ export class JobsService implements OnModuleInit {
     // bound skipped or abandoned (counted as skipped instead) and sources a
     // disconnect left unstarted.
     const ranRows: SourceDiagnosticDto[] = [];
+    // Spec 1721 / FR-20 — every selected source whose result must not be used
+    // to expire its postings, in fan-out order.
+    const problems: ProblemSource[] = [];
+    const noteRan = (index: number, row: SourceDiagnosticDto): void => {
+      if (stopped.has(index)) {
+        problems.push({ site: row.site, reason: 'skipped' });
+        return;
+      }
+      ranRows.push(row);
+      const problem = problemOfRanSource(row, input.resultsWanted);
+      if (problem) problems.push(problem);
+    };
     results.forEach((result, index) => {
       const site = selectedScrapers[index]?.site ?? 'unknown';
       if (result?.status === 'fulfilled') {
@@ -587,7 +611,7 @@ export class JobsService implements OnModuleInit {
           jobs.length > 0 ? (diag ? 'partial' : 'ok') : (diag?.reason ?? 'empty');
         const row = new SourceDiagnosticDto(site, jobs.length, reason, diag?.detail);
         perSource.push(row);
-        if (!stopped.has(index)) ranRows.push(row);
+        noteRan(index, row);
       } else {
         // "We deliberately stopped calling this source" is its own operational
         // state, not an unclassifiable error — the breaker is already tracked
@@ -599,10 +623,13 @@ export class JobsService implements OnModuleInit {
             : classifyScrapeError(result?.reason);
         const row = new SourceDiagnosticDto(site, 0, diag.reason, diag.detail);
         perSource.push(row);
-        if (!stopped.has(index)) ranRows.push(row);
+        noteRan(index, row);
       }
     });
-    const completeness = buildSearchCompleteness(firstStop, skipped + abandoned + capSkipped, ranRows);
+    const completeness = buildSearchCompleteness(firstStop, skipped + abandoned + capSkipped, ranRows, [
+      ...problems,
+      ...keywordProblems,
+    ]);
     if (!completeness.complete) {
       this.logger.warn(
         `Incomplete crawl (${completeness.stopReason}): ${completeness.sourcesSkipped} of ` +

@@ -1,14 +1,19 @@
 import type { ScrapeReason } from '@ever-jobs/models';
 import {
   COMPLETE_SEARCH,
+  MAX_PROBLEM_SOURCES,
+  ProblemSource,
   buildSearchCompleteness,
   isFailedSourceReason,
   isSearchCompleteness,
+  problemOfRanSource,
 } from '../search-completeness';
 
-/** Spec 1721 / FR-15 — the crawl-completeness record and its cache guard. */
-describe('search-completeness (Spec 1721 / FR-15)', () => {
+/** Spec 1721 / FR-15, FR-20 — the crawl-completeness record and its cache guard. */
+describe('search-completeness (Spec 1721 / FR-15, FR-20)', () => {
   const rows = (...reasons: ScrapeReason[]) => reasons.map((reason) => ({ reason }));
+  /** FR-20 fields of a record with no problem sources. */
+  const clean = { sourcesPartial: 0, problemSources: [], problemSourcesTotal: 0 };
 
   describe('isFailedSourceReason', () => {
     it.each<[ScrapeReason, boolean]>([
@@ -28,13 +33,37 @@ describe('search-completeness (Spec 1721 / FR-15)', () => {
     });
   });
 
+  describe('problemOfRanSource (FR-20)', () => {
+    const row = (reason: ScrapeReason, count: number) => ({ site: 'acme', reason, count });
+
+    it.each<[ScrapeReason, number, ProblemSource | null]>([
+      ['ok', 3, null],
+      ['empty', 0, null],
+      ['partial', 4, { site: 'acme', reason: 'partial' }],
+      ['blocked', 0, { site: 'acme', reason: 'blocked' }],
+      ['timeout', 0, { site: 'acme', reason: 'timeout' }],
+      ['ok', 10, { site: 'acme', reason: 'results_wanted' }],
+      ['ok', 12, { site: 'acme', reason: 'results_wanted' }],
+      ['partial', 10, { site: 'acme', reason: 'partial' }],
+    ])('%s with %d jobs (resultsWanted 10) → %p', (reason, count, expected) => {
+      expect(problemOfRanSource(row(reason, count), 10)).toEqual(expected);
+    });
+
+    it('never reports results_wanted without a positive resultsWanted', () => {
+      expect(problemOfRanSource(row('ok', 50), undefined)).toBeNull();
+      expect(problemOfRanSource(row('ok', 50), 0)).toBeNull();
+    });
+  });
+
   describe('buildSearchCompleteness', () => {
-    it('no stop reason → complete, failures counted from the rows', () => {
+    it('no stop reason → complete, failures and partials counted from the rows', () => {
       expect(buildSearchCompleteness(null, 0, rows('ok', 'empty', 'partial', 'blocked', 'timeout'))).toEqual({
         complete: true,
         stopReason: null,
         sourcesSkipped: 0,
         sourcesFailed: 2,
+        ...clean,
+        sourcesPartial: 1,
       });
     });
 
@@ -44,20 +73,49 @@ describe('search-completeness (Spec 1721 / FR-15)', () => {
         stopReason: reason,
         sourcesSkipped: 7,
         sourcesFailed: 1,
+        ...clean,
       });
     });
 
     it('no rows → no failures', () => {
       expect(buildSearchCompleteness(null, 0, [])).toEqual(COMPLETE_SEARCH);
     });
+
+    it(`lists problem sources in order, capped at ${MAX_PROBLEM_SOURCES}, and reports the uncapped total`, () => {
+      const problems: ProblemSource[] = Array.from({ length: MAX_PROBLEM_SOURCES + 5 }, (_, i) => ({
+        site: `s${i}`,
+        reason: i % 2 ? 'skipped' : 'blocked',
+      }));
+      const record = buildSearchCompleteness('deadline', 3, rows('blocked'), problems);
+      expect(record.problemSources).toHaveLength(MAX_PROBLEM_SOURCES);
+      expect(record.problemSources[0]).toEqual({ site: 's0', reason: 'blocked' });
+      expect(record.problemSources[1]).toEqual({ site: 's1', reason: 'skipped' });
+      expect(record.problemSourcesTotal).toBe(MAX_PROBLEM_SOURCES + 5);
+      expect(isSearchCompleteness(record)).toBe(true);
+    });
   });
 
   describe('isSearchCompleteness (cache read-back guard)', () => {
     it.each([
-      ['complete', { complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 3 }],
-      ['deadline', { complete: false, stopReason: 'deadline', sourcesSkipped: 12, sourcesFailed: 0 }],
-      ['job ceiling', { complete: false, stopReason: 'job_ceiling', sourcesSkipped: 1, sourcesFailed: 1 }],
-      ['extra fields from a newer version', { complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0, x: 1 }],
+      ['complete', { complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 3, ...clean }],
+      ['deadline', { complete: false, stopReason: 'deadline', sourcesSkipped: 12, sourcesFailed: 0, ...clean }],
+      ['job ceiling', { complete: false, stopReason: 'job_ceiling', sourcesSkipped: 1, sourcesFailed: 1, ...clean }],
+      [
+        'problem sources',
+        {
+          complete: true,
+          stopReason: null,
+          sourcesSkipped: 0,
+          sourcesFailed: 1,
+          sourcesPartial: 1,
+          problemSources: [
+            { site: 'a', reason: 'blocked' },
+            { site: 'b', reason: 'partial' },
+          ],
+          problemSourcesTotal: 3,
+        },
+      ],
+      ['extra fields from a newer version', { complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0, ...clean, x: 1 }],
     ])('accepts %s', (_label, value) => {
       expect(isSearchCompleteness(value)).toBe(true);
     });
@@ -67,14 +125,36 @@ describe('search-completeness (Spec 1721 / FR-15)', () => {
       ['undefined', undefined],
       ['a legacy raw job array (the other cache entry)', [{ id: 'job-1' }]],
       ['a string', 'complete'],
-      ['complete without stopReason null', { complete: true, stopReason: 'deadline', sourcesSkipped: 0, sourcesFailed: 0 }],
-      ['incomplete with a null stopReason', { complete: false, stopReason: null, sourcesSkipped: 1, sourcesFailed: 0 }],
-      ['an unknown stopReason', { complete: false, stopReason: 'cancelled', sourcesSkipped: 1, sourcesFailed: 0 }],
-      ['a negative count', { complete: true, stopReason: null, sourcesSkipped: -1, sourcesFailed: 0 }],
-      ['a fractional count', { complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0.5 }],
-      ['a string count', { complete: true, stopReason: null, sourcesSkipped: '0', sourcesFailed: 0 }],
-      ['a missing count', { complete: true, stopReason: null, sourcesSkipped: 0 }],
-      ['complete as a string', { complete: 'true', stopReason: null, sourcesSkipped: 0, sourcesFailed: 0 }],
+      ['a pre-FR-20 record (no per-source fields)', { complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0 }],
+      ['complete without stopReason null', { complete: true, stopReason: 'deadline', sourcesSkipped: 0, sourcesFailed: 0, ...clean }],
+      ['incomplete with a null stopReason', { complete: false, stopReason: null, sourcesSkipped: 1, sourcesFailed: 0, ...clean }],
+      ['an unknown stopReason', { complete: false, stopReason: 'cancelled', sourcesSkipped: 1, sourcesFailed: 0, ...clean }],
+      ['a negative count', { complete: true, stopReason: null, sourcesSkipped: -1, sourcesFailed: 0, ...clean }],
+      ['a fractional count', { complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0.5, ...clean }],
+      ['a string count', { complete: true, stopReason: null, sourcesSkipped: '0', sourcesFailed: 0, ...clean }],
+      ['a missing count', { complete: true, stopReason: null, sourcesSkipped: 0, ...clean }],
+      ['complete as a string', { complete: 'true', stopReason: null, sourcesSkipped: 0, sourcesFailed: 0, ...clean }],
+      ['problemSources not an array', { complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0, ...clean, problemSources: {} }],
+      [
+        'a malformed problem source',
+        { complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0, ...clean, problemSources: [{ site: 1 }], problemSourcesTotal: 1 },
+      ],
+      [
+        'more problem sources than the total',
+        { complete: true, stopReason: null, sourcesSkipped: 0, sourcesFailed: 0, ...clean, problemSources: [{ site: 'a', reason: 'blocked' }] },
+      ],
+      [
+        'more problem sources than the cap',
+        {
+          complete: true,
+          stopReason: null,
+          sourcesSkipped: 0,
+          sourcesFailed: 0,
+          ...clean,
+          problemSources: Array.from({ length: MAX_PROBLEM_SOURCES + 1 }, () => ({ site: 'a', reason: 'blocked' })),
+          problemSourcesTotal: MAX_PROBLEM_SOURCES + 1,
+        },
+      ],
     ])('rejects %s', (_label, value) => {
       expect(isSearchCompleteness(value)).toBe(false);
     });
@@ -82,6 +162,7 @@ describe('search-completeness (Spec 1721 / FR-15)', () => {
 
   it('COMPLETE_SEARCH is frozen (callers spread it, never mutate the shared value)', () => {
     expect(Object.isFrozen(COMPLETE_SEARCH)).toBe(true);
+    expect(Object.isFrozen(COMPLETE_SEARCH.problemSources)).toBe(true);
     expect(isSearchCompleteness(COMPLETE_SEARCH)).toBe(true);
   });
 });

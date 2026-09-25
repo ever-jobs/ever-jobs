@@ -556,14 +556,14 @@ before raising either.
 {"type":"progress","sourcesDone":412,"sourcesTotal":1669,"jobs":6120}
 {"type":"job","data":{"id":"li-3693012711","title":"…","dedupKey":"4f1c…", …}}
 {"type":"job","data":{…}}
-{"type":"end","total":21873,"deduped":true,"durationMs":151234,"complete":true,"stopReason":null,"sourcesSkipped":0,"sourcesFailed":38}
+{"type":"end","total":21873,"deduped":true,"durationMs":151234,"complete":true,"stopReason":null,"sourcesSkipped":0,"sourcesFailed":38,"sourcesPartial":3,"problemSources":[…],"problemSourcesTotal":57}
 ```
 
 | Line | When |
 | ---- | ---- |
 | `progress` | first, immediately (`0/0/0` — this is what flushes the headers, also on a cache hit), again when the fan-out starts (real `sourcesTotal`), then at most every ~10 s while scraping, dedup, persistence and liveness run — doubles as a keep-alive for idle-timeout proxies |
 | `job` | one per job, **same order and same per-job JSON as the JSON response** (including `dedupKey` and any field another feature adds) |
-| `end` | exactly once, last; `total` equals the number of `job` lines; `complete`, `stopReason`, `sourcesSkipped`, `sourcesFailed` say whether the crawl covered every selected source (below) |
+| `end` | exactly once, last; `total` equals the number of `job` lines; `complete`, `stopReason`, `sourcesSkipped`, `sourcesFailed` say whether the crawl covered every selected source; `sourcesPartial`, `problemSources`, `problemSourcesTotal` say which sources may not be used to expire postings (below) |
 | `error` | `{"type":"error","message":"…"}` if anything fails after the headers were sent — the stream then closes **without** an `end` line |
 
 **Was the crawl complete?** (Spec 1721 / FR-15) The `end` line says so:
@@ -574,16 +574,30 @@ before raising either.
 | `stopReason` | `"deadline"`, `"job_ceiling"` (the first bound that tripped), or `null` when `complete` is `true` |
 | `sourcesSkipped` | sources that contributed nothing because the fan-out stopped: not started, or abandoned mid-flight at the deadline. Keyword-only sources that list mode does not call are not counted |
 | `sourcesFailed` | sources that ran and failed (`blocked`, `fetch_error`, `timeout`, `bad_input`, …). Failures do **not** make a crawl incomplete — a catalogue-wide crawl always has some |
+| `sourcesPartial` | sources that returned some jobs and then failed (`partial`) — not failures, but their lists are incomplete |
+| `problemSources` | `[{"site","reason"}]`, in fan-out order, at most 200: every selected source whose result must **not** be used to expire its postings. `reason` is a failure reason (`blocked`, `fetch_error`, `timeout`, …), `partial`, `skipped` (a bound left it unstarted or abandoned it), `results_wanted` (it returned at least `resultsWanted` jobs, so its list was probably cut there) or `keyword_required` (list mode does not query it) |
+| `problemSourcesTotal` | how many sources qualified before the cap; larger than `problemSources.length` means the list was truncated |
 
-A cache hit reports the completeness of the crawl that produced the cached set.
+A cache hit reports the completeness of the crawl that produced the cached set. An incomplete
+crawl (`complete: false`) is never cached, so a retry gets a fresh chance at the sources the
+bound left out.
+
+**Deciding expiry — per source.** A consumer that closes postings missing from a crawl must decide
+it **per source**, never for the crawl as a whole: only a source this request **selected**, that
+is **not** listed in `problemSources`, ran cleanly — it finished, did not fail, and was not cut
+at `resultsWanted` — and only its postings may be expired by their absence. If
+`problemSourcesTotal` is larger than `problemSources.length` the list was truncated: expire
+nothing from that crawl. A `complete: true` crawl can still list problem sources (failures do not
+make a crawl incomplete).
 
 ```text
-{"type":"end","total":14022,"deduped":true,"durationMs":120412,"complete":false,"stopReason":"deadline","sourcesSkipped":611,"sourcesFailed":35}
+{"type":"end","total":14022,"deduped":true,"durationMs":120412,"complete":false,"stopReason":"deadline","sourcesSkipped":611,"sourcesFailed":35,"sourcesPartial":4,"problemSources":[{"site":"indeed","reason":"blocked"},{"site":"remoteok","reason":"partial"},…],"problemSourcesTotal":650}
 ```
 
 Consumer rules: **treat a missing `end` line as a truncated, failed result**; **only treat a crawl
 as complete when `complete` is `true`** — never infer "this posting is gone" from a crawl whose
-`end` line says `false` or has no `complete` field (servers before FR-15 do not send it); and
+`end` line says `false` or has no `complete` field (servers before FR-15 do not send it); **expire
+per source only** (above; servers before FR-20 send no `problemSources` — then expire nothing); and
 ignore line types and fields you do not know (new ones may be added). Input the search rejects before scraping (an
 unknown `siteCategories` value, a `companyDomain` that maps to no plugin) is answered with a
 plain **400** before any line is sent. If the client disconnects, the server stops starting

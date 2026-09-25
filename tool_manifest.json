@@ -38,6 +38,7 @@
         "Source selection by plugin category via siteCategories (Spec 1720)",
         "NDJSON streaming of the full result set via ?format=ndjson (Spec 1721)",
         "NDJSON end line reports crawl completeness: complete, stopReason (deadline | job_ceiling), sourcesSkipped, sourcesFailed (Spec 1721 / FR-15)",
+        "NDJSON end line lists the sources whose postings must not be expired: sourcesPartial, problemSources [{site, reason}] (max 200), problemSourcesTotal; incomplete crawls are never cached (Spec 1721 / FR-20)",
         "Stable cross-source dedupKey on every job (Spec 1721)",
         "Optional persistence to memory, SQLite or Postgres selected by EVER_JOBS_STORE (Spec 1722)"
       ]
