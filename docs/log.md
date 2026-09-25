@@ -95,7 +95,7 @@ addenda), `README.md`, `.env.example`, `tool_manifest.json`.
 
 ---
 
-## 2026-09-25 — Specs 1720–1723 — list mode, NDJSON stream, store selection, liveness gate
+## 2026-09-25 — Spec 1720 (with 1721–1723) — list mode, NDJSON stream, store selection, liveness gate
 
 **Why:** the main consumer (a corpus builder) ingests from `POST /api/jobs/search` on a
 15-minute keyword rotation and stored only page 1 of each answer. Because results are sorted by
