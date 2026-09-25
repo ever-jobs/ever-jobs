@@ -384,8 +384,13 @@ jobs:
       #     regression. Sharing one knob would force the real gate loose.
       # legitimacy-detector (pure, hermetic) joined in Spec 1689 — it ran in no
       # job before, although corpus-signals uses it for real.
+      # store-sqlite-drizzle and store-postgres-prisma (Spec 1722): the batched write
+      # path, the conformance suite and the module wiring. Hermetic: SQLite runs
+      # in-process on :memory: (better-sqlite3 compiles against the headers above)
+      # and the Postgres suite uses a structural fake client; its real-database
+      # block stays gated on RUN_PG_TESTS=1. They ran in no job before.
       - name: Run feature plugin tests
-        run: npx jest --testPathPatterns 'packages/plugins/(dedup-hybrid|merge-default|store-memory|liveness-http|legitimacy-detector)/' --verbose
+        run: npx jest --testPathPatterns 'packages/plugins/(dedup-hybrid|merge-default|store-memory|store-sqlite-drizzle|store-postgres-prisma|liveness-http|legitimacy-detector)/' --verbose
         env:
           DEDUP_PERF_NFR1_MS: '1000'
           DEDUP_PERF_NFR2_MS: '8000'
