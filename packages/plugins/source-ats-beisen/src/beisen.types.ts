@@ -93,6 +93,8 @@ export interface BeisenJob {
   country?: string | null;
   /** Raw single-line location string, used for remote detection. */
   locationText?: string | null;
+  /** Per-site location triples (one entry per `LocNames` element). */
+  locationEntries?: { city: string | null; state: string | null; country: string | null }[] | null;
   /** Role-ad body (joined `Duty` + `Require`, or `Description`), when present. */
   descriptionHtml?: string | null;
   /** Department / recruitment-category label. */

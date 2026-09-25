@@ -94,7 +94,7 @@ describe('DuolingoService — Spec 046 / T04', () => {
       expect(eng?.jobUrl).toBe(
         'https://careers.duolingo.com/jobs/8369239002?gh_jid=8369239002',
       );
-      expect(eng?.location?.city).toBe('Remote - Pittsburgh, PA');
+      expect(eng?.location?.city).toBe('Pittsburgh');
       expect(eng?.department).toBe('Engineering');
       expect(eng?.isRemote).toBe(true);
       // D-08 regression guard: the description-cleanup pipeline must
@@ -110,7 +110,7 @@ describe('DuolingoService — Spec 046 / T04', () => {
       const biz = dto.jobs.find((j) => j.id === 'duolingo-8483526002');
       expect(biz?.isRemote).toBe(false);
       expect(biz?.department).toBe('Business Development');
-      expect(biz?.location?.city).toBe('São Paulo, Brazil');
+      expect(biz?.location?.city).toBe('São Paulo');
       // Named entity (&rsquo;) decoded to a real right-single-quote.
       expect(biz?.description).toContain('Duolingo’s');
 

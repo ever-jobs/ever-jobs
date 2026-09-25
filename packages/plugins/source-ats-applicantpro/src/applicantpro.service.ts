@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -286,13 +287,15 @@ export class ApplicantProService implements IScraper {
 
     const companyName = this.deriveCompanyName(job.company ?? job.companyName, tenant);
     const description = this.formatDescription(job.descriptionHtml ?? null, job.description ?? null, format);
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `applicantpro-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: this.detectRemote(job),
@@ -442,12 +445,12 @@ export class ApplicantProService implements IScraper {
   ): { city: string | null; state: string | null; country: string | null } {
     const marker = this.cleanText(jobInfo?.mdiMapMarker);
     if (marker) {
-      const parts = marker.split(',').map((p) => p.trim()).filter(Boolean);
-      if (parts.length >= 1) {
+      const parsed = parseLocationText(marker).location;
+      if (parsed) {
         return {
-          city: parts[0] ?? keywordParts.city,
-          state: parts[1] ?? keywordParts.state,
-          country: parts[2] ?? keywordParts.country,
+          city: parsed.city ?? keywordParts.city,
+          state: parsed.state ?? keywordParts.state,
+          country: parsed.country ?? keywordParts.country,
         };
       }
     }

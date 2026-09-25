@@ -104,6 +104,48 @@ describe('RdwService', () => {
     expect(locationResult.jobs[0].id).toBe('rdw-3132');
   });
 
+  // Spec 5121 — every JSON-LD jobLocation becomes a locations[] entry.
+  it('emits per-site locations[] when the detail page lists multiple jobLocations', async () => {
+    const multi = detail2Html.replace(
+      '"addressCountry": "US"\n          }\n        }\n      ]',
+      `"addressCountry": "US"
+          }
+        },
+        {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "Jacksonville",
+            "addressRegion": "Florida",
+            "addressCountry": "US"
+          }
+        }
+      ]`,
+    );
+    expect(multi).not.toBe(detail2Html);
+    (service as any).fetchHtml = jest.fn(async (url: string) => {
+      if (url.includes('/jobs/search')) return searchHtml;
+      if (url.includes('contract-assembly-technician')) return multi;
+      if (url.includes('temporary-instructional-designer')) return detail1Html;
+      return '<html></html>';
+    });
+
+    const result = await service.scrape(
+      new ScraperInputDto({ companyDomain: ['rdw.com'] }),
+    );
+
+    const second = result.jobs.find((j) => j.id === 'rdw-3132');
+    expect(second?.locations).toMatchObject([
+      {
+        city: 'Marlborough',
+        state: 'MA',
+        country: 'United States',
+        postalCode: '01752',
+      },
+      { city: 'Jacksonville', state: 'FL', country: 'United States' },
+    ]);
+  });
+
   it('returns an empty list for an empty search page', async () => {
     (service as any).fetchHtml = jest.fn(
       async () =>

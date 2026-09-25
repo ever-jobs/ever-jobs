@@ -211,12 +211,14 @@ export class ZohoRecruitService implements IScraper {
 
     const department = opening.Industry ?? null;
 
+    const location = this.extractLocation(opening);
     return new JobPostDto({
       id: `zohorecruit-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(opening),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(opening.Date_Opened),
       isRemote: this.detectRemote(opening),

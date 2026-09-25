@@ -93,7 +93,7 @@ describe('SymphonyService — Spec 172 / T04', () => {
       expect(JOBS_PAGE_RAW.jobs[0].departments[0].name).toBe('Customer Experience ');
       expect(csm?.department).toBe('Customer Experience');
       expect(csm?.department).not.toMatch(/\s$/);
-      expect(csm?.location?.city).toBe('New York, NY');
+      expect(csm?.location?.city).toBe('New York');
       expect(csm?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(csm?.description).not.toContain('&lt;');
@@ -105,7 +105,7 @@ describe('SymphonyService — Spec 172 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Staff Software Engineer');
       expect(sse?.companyName).toBe('Symphony Communication Services');
-      expect(sse?.location?.city).toBe('Sophia Antipolis, Remote');
+      expect(sse?.location?.city).toBe('Sophia Antipolis');
       expect(sse?.isRemote).toBe(true);
       // D-11 clean dept pass-through (no padding on this row).
       expect(sse?.department).toBe('Engineering');

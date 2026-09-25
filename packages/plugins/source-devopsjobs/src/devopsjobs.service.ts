@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import { DEVOPSJOBS_RSS_URL, DEVOPSJOBS_HEADERS } from './devopsjobs.constants';
@@ -179,9 +180,7 @@ export class DevopsjobsService implements IScraper {
     const jobId = this.extractIdFromUrl(item.guid ?? item.link);
 
     // Build location
-    const location = new LocationDto({
-      city: locationCity ?? null,
-    });
+    const location = locationCity ? parseLocationText(locationCity).location : null;
 
     return new JobPostDto({
       id: `devopsjobs-${jobId}`,
@@ -189,6 +188,7 @@ export class DevopsjobsService implements IScraper {
       jobUrl: item.link,
       companyName,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       compensation: null,
       datePosted,

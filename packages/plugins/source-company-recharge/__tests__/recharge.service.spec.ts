@@ -87,7 +87,7 @@ describe('RechargeService — Spec 167 / T04', () => {
       expect(em?.jobUrl).toContain('job-boards.greenhouse.io/recharge/jobs/');
       // D-11 clean dept pass-through.
       expect(em?.department).toBe('Engineering General');
-      expect(em?.location?.city).toBe('Remote, US');
+      expect(em?.location?.city).toBeUndefined();
       expect(em?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(em?.description).not.toContain('&lt;');
@@ -100,7 +100,7 @@ describe('RechargeService — Spec 167 / T04', () => {
       expect(sf).toBeDefined();
       expect(sf?.title).toBe('Strategic Finance Senior Analyst, GTM');
       expect(sf?.companyName).toBe('Recharge');
-      expect(sf?.location?.city).toBe('Santa Monica, CA');
+      expect(sf?.location?.city).toBe('Santa Monica');
       expect(sf?.isRemote).toBe(false);
       expect(sf?.department).toBe('FP&A');
       expect(sf?.jobUrl).toBe(

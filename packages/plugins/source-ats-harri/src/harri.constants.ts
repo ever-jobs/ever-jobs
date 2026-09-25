@@ -95,3 +95,17 @@ export const HARRI_HEADERS: Record<string, string> = {
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
   'Accept-Language': 'en-US,en;q=0.9',
 };
+
+/**
+ * Env toggle for Harri's country inference (Spec 1689), layered on top of the
+ * shared parser: a US address shape ("San Jose, CA 95130") fills a missing
+ * country with `US` and a UK postcode shape fills it with `GB` — the stamps
+ * Spec 5125 removed. `false` / `0` / `off` / `no` → shared-parser output only
+ * (literal-only country); unset or anything else → inference on.
+ */
+export const HARRI_LOCATION_HEURISTICS_ENV = 'HARRI_LOCATION_HEURISTICS';
+
+export function harriLocationHeuristicsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = (env[HARRI_LOCATION_HEURISTICS_ENV] ?? '').trim().toLowerCase();
+  return !(v === 'false' || v === '0' || v === 'off' || v === 'no');
+}

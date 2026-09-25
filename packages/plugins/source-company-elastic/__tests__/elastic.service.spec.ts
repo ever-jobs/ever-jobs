@@ -131,7 +131,7 @@ describe('ElasticService — Spec 060 / T04', () => {
       // D-04 duplicate-query-param lock: `?gh_jid=<id>&gh_jid=<id>`
       // shape with the same listing id repeated literally on the wire.
       expect(acc?.jobUrl).toContain('gh_jid=7505982&gh_jid=7505982');
-      expect(acc?.location?.city).toBe('United Kingdom');
+      expect(acc?.location?.city).toBeUndefined();
       // D-11 regression guard: the emitted `department` for the first
       // fixture listing is the compound `' - '`-separated string
       // `'Sales - EMEA - UKI'` byte-for-byte AND matches the wire
@@ -161,7 +161,7 @@ describe('ElasticService — Spec 060 / T04', () => {
       expect(eng).toBeDefined();
       expect(eng?.title).toBe('Senior Software Engineer - Search Platform');
       expect(eng?.companyName).toBe('Elastic');
-      expect(eng?.location?.city).toBe('Remote, United States');
+      expect(eng?.location?.city).toBeUndefined();
       expect(eng?.isRemote).toBe(true);
       // D-11 second-instance regression guard: the second fixture
       // listing's flat single-token department `'Engineering'` flows

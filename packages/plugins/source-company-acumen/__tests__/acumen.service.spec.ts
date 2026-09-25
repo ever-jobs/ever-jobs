@@ -109,14 +109,14 @@ describe('AcumenService — Spec 185 / T04', () => {
       expect(im?.title).toBe('Investment Manager, Acumen India');
       expect(im?.companyName).toBe('Acumen');
       expect(im?.department).toBe('Investing');
-      expect(im?.location?.city).toBe('Mumbai, India');
+      expect(im?.location?.city).toBe('Mumbai');
 
       const dsm = dto.jobs.find((j) => j.id === 'acumen-8499399002');
       expect(dsm).toBeDefined();
       expect(dsm?.title).toBe('Data Systems Manager');
       expect(dsm?.companyName).toBe('Acumen');
       expect(dsm?.department).toBe('Acumen Academy');
-      expect(dsm?.location?.city).toBe('Colombia');
+      expect(dsm?.location?.city).toBeUndefined();
 
       const calledUrls = mockGet.mock.calls.map((c) => c[0] as string);
       expect(calledUrls[0]).toBe(

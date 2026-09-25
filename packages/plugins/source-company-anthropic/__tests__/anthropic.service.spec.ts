@@ -84,7 +84,7 @@ describe('AnthropicService — Spec 020 / T04', () => {
       expect(research?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/anthropic/jobs/5001234',
       );
-      expect(research?.location?.city).toBe('San Francisco, CA');
+      expect(research?.location?.city).toBe('San Francisco');
       expect(research?.department).toBe('Research');
       expect(research?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

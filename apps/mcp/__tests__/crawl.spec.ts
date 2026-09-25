@@ -11,6 +11,7 @@ jest.mock('axios', () => ({
 import {
   CRAWL_POLICY_INPUT_SCHEMA,
   MCP_CRAWL_ENUMS,
+  MCP_REQUEST_KEYS_ENV_VAR,
   normalizeMcpCrawl,
   searchJobs,
 } from '../src/tools';
@@ -75,9 +76,20 @@ describe('normalizeMcpCrawl', () => {
 });
 
 describe('searchJobs → POST /api/jobs/search (Spec 1690)', () => {
+  // These tests pin the default camelCase body; `EVER_JOBS_MCP_REQUEST_KEYS`
+  // (documented in .env.example) would change it, so it is cleared per test.
+  let savedRequestKeys: string | undefined;
+
   beforeEach(() => {
+    savedRequestKeys = process.env[MCP_REQUEST_KEYS_ENV_VAR];
+    delete process.env[MCP_REQUEST_KEYS_ENV_VAR];
     mockPost.mockReset();
     mockPost.mockResolvedValue({ data: { jobs: [] } });
+  });
+
+  afterEach(() => {
+    if (savedRequestKeys === undefined) delete process.env[MCP_REQUEST_KEYS_ENV_VAR];
+    else process.env[MCP_REQUEST_KEYS_ENV_VAR] = savedRequestKeys;
   });
 
   it('forwards crawl under the camelCase key "crawl", unchanged', async () => {

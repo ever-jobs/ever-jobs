@@ -93,6 +93,9 @@ export interface ExactHireJob {
   state?: string | null;
   country?: string | null;
 
+  /** One `{city,state,country}` triple per JSON-LD `jobLocation` entry, when present. */
+  locationEntries?: Array<{ city: string | null; state: string | null; country: string | null }> | null;
+
   /** Department / org-unit label, when discernible from the meta. */
   department?: string | null;
 

@@ -89,7 +89,7 @@ describe('PostscriptService — Spec 164 / T04', () => {
       expect(csm?.jobUrl).toContain('job-boards.greenhouse.io/postscript/jobs/');
       // D-11 clean dept pass-through.
       expect(csm?.department).toBe('Customer Success');
-      expect(csm?.location?.city).toBe('Remote, US');
+      expect(csm?.location?.city).toBeUndefined();
       expect(csm?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(csm?.description).not.toContain('&lt;');
@@ -102,7 +102,7 @@ describe('PostscriptService — Spec 164 / T04', () => {
       expect(sbe).toBeDefined();
       expect(sbe?.title).toBe('Senior Backend Engineer');
       expect(sbe?.companyName).toBe('Postscript');
-      expect(sbe?.location?.city).toBe('Remote, US');
+      expect(sbe?.location?.city).toBeUndefined();
       expect(sbe?.isRemote).toBe(true);
       expect(sbe?.department).toBe('Engineering');
       expect(sbe?.jobUrl).toBe(

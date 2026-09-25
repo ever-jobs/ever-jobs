@@ -94,7 +94,7 @@ describe('StockXService — Spec 103 / T04', () => {
       expect(ap?.jobUrl).toContain('job-boards.greenhouse.io/stockx/jobs/');
       expect(ap?.jobUrl).not.toContain('stockx.com');
       expect(ap?.department).toBe('Finance');
-      expect(ap?.location?.city).toBe('Bangalore, India');
+      expect(ap?.location?.city).toBe('Bangalore');
       expect(ap?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ap?.description).not.toContain('&lt;');
@@ -113,7 +113,7 @@ describe('StockXService — Spec 103 / T04', () => {
       expect(cs?.department).toBe('Customer Service');
       expect(cs?.department).not.toBe(JOBS_PAGE_RAW.jobs[1].departments[0].name);
       expect(cs?.department).not.toMatch(/\s$/);
-      expect(cs?.location?.city).toBe('Detroit, MI');
+      expect(cs?.location?.city).toBe('Detroit');
       expect(cs?.isRemote).toBe(false);
       expect(cs?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/stockx/jobs/8465053002',

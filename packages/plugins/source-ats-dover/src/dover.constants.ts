@@ -59,6 +59,13 @@ export const DOVER_JOBS_API_TEMPLATE =
   'https://app.dover.com/api/v1/careers-page/{id}/jobs';
 
 /**
+ * Job groups (departments) by careers-page client id — the feed the board SPA
+ * uses for its per-group sections: `[{ id, name, jobs: [{ id, ... }] }]`.
+ */
+export const DOVER_JOB_GROUPS_API_TEMPLATE =
+  'https://app.dover.com/api/v1/job-groups/{id}/job-groups';
+
+/**
  * Per-role detail overlay. `application-portal-job` is preferred over the
  * cross-tenant `job-board/jobs/{id}` surface because the latter 404s for roles
  * not published to Dover's shared board, while this one is reliable per-tenant.
@@ -66,8 +73,41 @@ export const DOVER_JOBS_API_TEMPLATE =
 export const DOVER_DETAIL_API_TEMPLATE =
   'https://app.dover.com/api/v1/inbound/application-portal-job/{id}';
 
-/** Short board URL template (`/jobs/{slug}`) — used to build a role's `jobUrl`. */
+/** Per-role apply-form URL — the target each role links to on the board. */
+export const DOVER_APPLY_URL_TEMPLATE =
+  'https://app.dover.com/apply/{slug}/{jobId}';
+
+/**
+ * Short board URL template (`/jobs/{slug}`) — the `jobUrl` every Dover role
+ * carried before the per-role apply links. Kept so `DOVER_JOB_URL_STYLE=board`
+ * can restore that identity (URL-based dedup / history keyed on it).
+ */
 export const DOVER_BOARD_URL_TEMPLATE = 'https://app.dover.com/jobs/{slug}';
+
+/**
+ * Shape of a role's `jobUrl`:
+ *   - `apply` (default) — the per-role apply form `/apply/{slug}/{jobId}`;
+ *   - `board` — the tenant board `/jobs/{slug}` (the pre-apply-link shape).
+ * `applyUrl` is always the per-role apply form in both styles.
+ */
+export type DoverJobUrlStyle = 'apply' | 'board';
+
+/** Env var selecting the `jobUrl` style (`apply` | `board`). */
+export const DOVER_JOB_URL_STYLE_ENV = 'DOVER_JOB_URL_STYLE';
+
+/** `jobUrl` style used when the env var is unset or unrecognised. */
+export const DOVER_DEFAULT_JOB_URL_STYLE: DoverJobUrlStyle = 'apply';
+
+/**
+ * Normalise a raw `DOVER_JOB_URL_STYLE` value. Case/whitespace-insensitive;
+ * returns null for an unrecognised non-empty value so the caller can warn.
+ */
+export function parseDoverJobUrlStyle(raw: string | null | undefined): DoverJobUrlStyle | null {
+  const v = (raw ?? '').trim().toLowerCase();
+  if (!v) return DOVER_DEFAULT_JOB_URL_STYLE;
+  if (v === 'apply' || v === 'board') return v;
+  return null;
+}
 
 /** Careers-board URL by client id, when no slug is known. */
 export const DOVER_CAREERS_URL_TEMPLATE = 'https://app.dover.com/careers/{id}';

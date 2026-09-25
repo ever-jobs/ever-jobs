@@ -160,6 +160,7 @@ export class IcimsService implements IScraper {
       card.find('.header.left span:not(.field-label)').first().text(),
     );
     const { city, state, country } = this.parseLocation(locationRaw);
+    const locationEntries = this.parseLocations(locationRaw);
 
     const fields = this.parseHeaderFields($, card);
     const department = fields['Category'] ?? null;
@@ -179,6 +180,7 @@ export class IcimsService implements IScraper {
       city,
       state,
       country,
+      locationEntries,
       locationRaw,
       department,
       descriptionSnippet,
@@ -207,12 +209,16 @@ export class IcimsService implements IScraper {
     subdomain: string,
     companyName: string | null,
   ): JobPostDto {
+    const location = this.buildLocation(item);
+    const locations = this.buildLocations(item);
+
     return new JobPostDto({
       id: `icims-${subdomain}-${item.jobId}`,
       title: item.title,
       companyName: companyName ?? this.companyFromSubdomain(subdomain),
       jobUrl: item.url,
-      location: this.buildLocation(item),
+      location,
+      ...(locations.length > 0 ? { locations } : {}),
       description: item.descriptionSnippet,
       isRemote: item.isRemote,
       site: Site.ICIMS,
@@ -233,6 +239,33 @@ export class IcimsService implements IScraper {
       state: item.state,
       country: item.country,
     });
+  }
+
+  /** One LocationDto per `|`/`;`-separated location cell on the card. */
+  private buildLocations(item: IcimsListItem): LocationDto[] {
+    const out = (item.locationEntries ?? []).map(
+      (e) => new LocationDto({ city: e.city, state: e.state, country: e.country }),
+    );
+    if (out.length === 0) {
+      const merged = this.buildLocation(item);
+      if (merged) out.push(merged);
+    }
+    return out;
+  }
+
+  /** Parse every `|`/`;`-separated cell into its `{country}-{state}-{city}` parts. */
+  private parseLocations(raw: string | null): Array<{
+    city: string | null;
+    state: string | null;
+    country: string | null;
+  }> {
+    if (!raw) return [];
+    const out: Array<{ city: string | null; state: string | null; country: string | null }> = [];
+    for (const cell of raw.split(/[|;]/)) {
+      const triple = this.parseLocation(cell);
+      if (triple.city || triple.state || triple.country) out.push(triple);
+    }
+    return out;
   }
 
   /**

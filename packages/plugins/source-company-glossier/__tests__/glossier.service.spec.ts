@@ -134,7 +134,7 @@ describe('GlossierService — Spec 072 / T04', () => {
       expect(asd?.jobUrl).toContain('?gh_jid=');
       expect(asd?.jobUrl).not.toContain('job-boards.greenhouse.io');
       // Location is wire-clean for Glossier (D-12 not applied).
-      expect(asd?.location?.city).toBe('Washington, DC');
+      expect(asd?.location?.city).toBe('Washington');
       // D-11 first-listing regression guard: the emitted
       // `department` for the first fixture listing matches the wire
       // `departments[0].name === 'Retail (Stores)'` byte-for-byte
@@ -180,7 +180,7 @@ describe('GlossierService — Spec 072 / T04', () => {
       expect(sea?.title.endsWith(' ')).toBe(false);
       expect(sea?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 2);
       expect(sea?.companyName).toBe('Glossier');
-      expect(sea?.location?.city).toBe('Boston, MA');
+      expect(sea?.location?.city).toBe('Boston');
       expect(sea?.isRemote).toBe(false);
       // D-11 second-listing regression guard: the emitted
       // `department` for the second fixture listing matches the

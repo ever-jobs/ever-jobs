@@ -87,7 +87,7 @@ describe('GitlabService — Spec 033 / T04', () => {
       expect(runner?.jobUrl).toBe(
         'https://boards.greenhouse.io/gitlab/jobs/9201234',
       );
-      expect(runner?.location?.city).toBe('San Francisco, CA');
+      expect(runner?.location?.city).toBe('San Francisco');
       expect(runner?.department).toBe('Engineering');
       expect(runner?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

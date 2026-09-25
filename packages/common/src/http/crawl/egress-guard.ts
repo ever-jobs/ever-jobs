@@ -1,4 +1,4 @@
-import * as dns from 'dns';
+import type * as dns from 'dns';
 import * as http from 'http';
 import type { Agent as HttpAgent } from 'http';
 import * as https from 'https';
@@ -318,9 +318,18 @@ export type BaseLookup = (
   callback: (err: NodeJS.ErrnoException | null, addresses: dns.LookupAddress[]) => void,
 ) => void;
 
+/**
+ * The real `dns` module object. A namespace import (`import * as dns`) can
+ * compile to a snapshot copy of it — @swc/jest's CommonJS interop copies a
+ * CommonJS module's properties — and a copy never sees a spy (tests) or a
+ * runtime patch (diagnostics, APM agents) on `dns.lookup`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const dnsModule: typeof dns = require('dns');
+
 const defaultBaseLookup: BaseLookup = (hostname, options, callback) =>
   // Looked up at call time so tests (and diagnostics) can spy on `dns.lookup`.
-  dns.lookup(hostname, options, callback);
+  dnsModule.lookup(hostname, options, callback);
 
 /**
  * A `lookup` for `net.connect` / `http.Agent` that resolves ALL addresses of

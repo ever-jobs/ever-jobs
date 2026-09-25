@@ -89,7 +89,7 @@ describe('CheckrService — Spec 123 / T04', () => {
       );
       expect(im?.jobUrl).toContain('job-boards.greenhouse.io/checkr/jobs/');
       expect(im?.department).toBe('Implementations');
-      expect(im?.location?.city).toBe('Remote, US');
+      expect(im?.location?.city).toBeUndefined();
       expect(im?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(im?.description).not.toContain('&lt;');
@@ -104,7 +104,7 @@ describe('CheckrService — Spec 123 / T04', () => {
       expect(JOBS_PAGE_RAW.jobs[1].title).toBe('Senior Python Engineer, Truework ');
       expect(spe?.title).toBe('Senior Python Engineer, Truework');
       expect(spe?.companyName).toBe('Checkr');
-      expect(spe?.location?.city).toBe('San Francisco, CA');
+      expect(spe?.location?.city).toBe('San Francisco');
       expect(spe?.isRemote).toBe(false);
       // D-11 sub-axis observation — embedded-brand dept name.
       expect(spe?.department).toBe('CheckrX');

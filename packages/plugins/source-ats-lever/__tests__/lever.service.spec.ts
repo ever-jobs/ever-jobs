@@ -25,6 +25,10 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { LeverModule, LeverService } from '@ever-jobs/source-ats-lever';
+import {
+  ATS_COUNTRY_OVERLAY_ENV_VAR,
+  readAtsCountryOverlay,
+} from '../src/lever.constants';
 
 async function scrapeOne(job: Record<string, unknown>) {
   mockGet.mockResolvedValueOnce({ data: [job] });
@@ -143,6 +147,25 @@ describe('LeverService field mappings (spec 752)', () => {
       },
     });
     expect(job.location?.city).toBe('Nashua, NH; Brooklyn Park, MN');
+    expect(job.locations).toMatchObject([
+      { city: 'Nashua', state: 'NH' },
+      { city: 'Brooklyn Park', state: 'MN' },
+    ]);
+  });
+
+  it('should emit a per-site locations[] even when a label does not parse', async () => {
+    const job = await scrapeOne({
+      id: 'multi-unparsed',
+      text: 'Technician',
+      categories: {
+        allLocations: ['Berlin, Germany', 'Austin, TX'],
+      },
+    });
+    // Each allLocations label lands as its own locations[] entry.
+    expect(job.locations).toMatchObject([
+      { city: 'Berlin', country: 'Germany' },
+      { city: 'Austin', state: 'TX' },
+    ]);
   });
 
   it('should set workFromHomeType Hybrid without marking the job remote', async () => {
@@ -167,25 +190,115 @@ describe('LeverService field mappings (spec 752)', () => {
     expect(job.isRemote).toBe(true);
   });
 
-  it('should fold a non-US ISO-2 country code into the location', async () => {
-    const job = await scrapeOne({
-      id: 'country',
-      text: 'Operator',
-      categories: { location: 'Amsterdam' },
-      country: 'NL',
-    });
-    expect(job.location?.country).toBe('Netherlands');
-  });
-
-  it('should ignore an unresolvable country code', async () => {
+  it('should pass an unresolvable country code through verbatim', async () => {
     const job = await scrapeOne({
       id: 'bad-country',
       text: 'Operator',
       categories: { location: 'Nashua, NH' },
       country: 'QZ',
     });
+    expect(job.countryCode).toBe('QZ');
     expect(job.location?.city).toBe('Nashua');
     expect(job.location?.state).toBe('NH');
     expect(job.location?.country).toBeFalsy();
+  });
+
+  /**
+   * Spec 1689 — Spec 5118 removed the country fold-in; it is restored as the
+   * default and can be switched off with EVER_JOBS_ATS_COUNTRY_OVERLAY=false.
+   */
+  describe('ATS country overlay (Spec 1689)', () => {
+    const ENV = ATS_COUNTRY_OVERLAY_ENV_VAR;
+    let saved: string | undefined;
+
+    beforeEach(() => {
+      saved = process.env[ENV];
+      delete process.env[ENV];
+    });
+
+    afterEach(() => {
+      if (saved === undefined) delete process.env[ENV];
+      else process.env[ENV] = saved;
+    });
+
+    it('is ON by default: folds a non-US ISO-2 code into a country-less location', async () => {
+      const job = await scrapeOne({
+        id: 'country',
+        text: 'Operator',
+        categories: { location: 'Amsterdam' },
+        country: 'NL',
+      });
+      expect(job.location?.city).toBe('Amsterdam');
+      expect(job.location?.country).toBe('Netherlands');
+      // The single-site locations[] agrees with location.
+      expect(job.locations).toMatchObject([{ city: 'Amsterdam', country: 'Netherlands' }]);
+      // countryCode is still emitted, verbatim.
+      expect(job.countryCode).toBe('NL');
+    });
+
+    it('fills a location when the parser found none', async () => {
+      const job = await scrapeOne({ id: 'no-loc', text: 'Operator', country: 'DE' });
+      expect(job.location?.country).toBe('Germany');
+      expect(job.locations ?? []).toEqual([]);
+      expect(job.countryCode).toBe('DE');
+    });
+
+    it('never overwrites a country the parser found', async () => {
+      const job = await scrapeOne({
+        id: 'keep-country',
+        text: 'Operator',
+        categories: { location: 'Berlin, Germany' },
+        country: 'NL',
+      });
+      expect(job.location?.country).toBe('Germany');
+      expect(job.countryCode).toBe('NL');
+    });
+
+    it('fills the merged location but leaves a multi-site locations[] as parsed', async () => {
+      const job = await scrapeOne({
+        id: 'multi-country',
+        text: 'Technician',
+        categories: { allLocations: ['Amsterdam', 'Rotterdam'] },
+        country: 'NL',
+      });
+      expect(job.location?.country).toBe('Netherlands');
+      expect(job.locations).toHaveLength(2);
+      for (const site of job.locations ?? []) expect(site.country).toBeFalsy();
+    });
+
+    it.each(['false', 'FALSE', '0', 'no', 'off'])(
+      'is OFF when %s: the code goes to countryCode only (Spec 5118)',
+      async (value) => {
+        process.env[ENV] = value;
+        const job = await scrapeOne({
+          id: 'country-off',
+          text: 'Operator',
+          categories: { location: 'Amsterdam' },
+          country: 'NL',
+        });
+        expect(job.countryCode).toBe('NL');
+        expect(job.location?.city).toBe('Amsterdam');
+        expect(job.location?.country).toBeFalsy();
+        expect(job.locations?.[0]?.country).toBeFalsy();
+      },
+    );
+
+    it('treats an unrecognised value as ON', async () => {
+      process.env[ENV] = 'maybe';
+      const job = await scrapeOne({
+        id: 'country-weird',
+        text: 'Operator',
+        categories: { location: 'Amsterdam' },
+        country: 'NL',
+      });
+      expect(job.location?.country).toBe('Netherlands');
+    });
+
+    it('readAtsCountryOverlay parses the env var', () => {
+      expect(readAtsCountryOverlay({})).toBe(true);
+      expect(readAtsCountryOverlay({ [ENV]: '' })).toBe(true);
+      expect(readAtsCountryOverlay({ [ENV]: 'true' })).toBe(true);
+      expect(readAtsCountryOverlay({ [ENV]: ' Off ' })).toBe(false);
+    });
   });
 });

@@ -2,9 +2,12 @@ import { ObjectType, Field, InputType, Int, Float, ID, registerEnumType } from '
 import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
+  COUNTRY_CONFIG,
   CRAWL_POLICY_DTO_VALUES,
+  Country,
   CrawlPolicyDto,
   Site,
+  getIndeedDomain,
   type CrawlDtoDiscovery,
   type CrawlDtoProxyRotation,
   type CrawlDtoRateLimitScope,
@@ -112,10 +115,16 @@ export class CrawlPolicyGqlInput extends CrawlPolicyDto {
 }
 
 /**
- * The class-validator decorators below are what keeps these fields alive under
- * the global `ValidationPipe({ whitelist: true })`, which also runs on GraphQL
- * args: whitelisting strips every property without validation metadata, so an
- * undecorated input class arrives empty.
+ * GraphQL search input.
+ *
+ * 🛑 Every field carries a class-validator decorator (Spec 1689). The API
+ * installs a global `ValidationPipe({ whitelist: true })` (apps/api/src/main.ts),
+ * and Nest runs global pipes on resolver `@Args` too. Whitelisting strips every
+ * property that has no class-validator metadata, so without these decorators
+ * the resolver received an EMPTY input — no search term, no source filter —
+ * and every GraphQL search shared one cache key. The decorators mirror the
+ * GraphQL types, so nothing the schema accepts is rejected; the nested
+ * `crawl` input is validated by `CrawlPolicyDto`'s own rules (Spec 1690).
  */
 @InputType()
 export class SearchJobsInput {
@@ -139,7 +148,11 @@ export class SearchJobsInput {
   @IsInt()
   resultsWanted?: number;
 
-  @Field({ nullable: true, description: 'Country code (e.g. USA, UK, DE)' })
+  @Field({
+    nullable: true,
+    description:
+      'Country for country-scoped sources (Indeed, Glassdoor, …): a Country enum value (USA, UK, GERMANY), a country name or alias (United States, germany), or an ISO 3166 alpha-2 code (US, GB, DE). An unrecognised value is ignored.',
+  })
   @IsOptional()
   @IsString()
   country?: string;
@@ -180,6 +193,39 @@ export class SearchJobsInput {
   crawl?: CrawlPolicyGqlInput;
 }
 
+/** ISO alpha-2 -> Country, from each country's Indeed API code (first wins). */
+const COUNTRY_BY_ALPHA2: ReadonlyMap<string, Country> = (() => {
+  const map = new Map<string, Country>();
+  for (const country of Object.values(Country)) {
+    const code = getIndeedDomain(country).apiCountryCode;
+    if (/^[A-Z]{2}$/.test(code) && !map.has(code)) map.set(code, country);
+  }
+  return map;
+})();
+
+/**
+ * Map the GraphQL `country` string to a `Country` (Spec 1689). The REST DTO
+ * takes `@IsEnum(Country)`; GraphQL has always documented codes such as
+ * 'DE', which is not an enum value, and a raw 'DE' reaching a source made
+ * `getIndeedDomain('DE')` throw. Accepts, in order: an enum value
+ * ('GERMANY', case-insensitive), a COUNTRY_CONFIG name or alias
+ * ('united states', 'uk'), an ISO alpha-2 code ('DE', 'GB'). Returns
+ * `undefined` for anything else — the caller drops it.
+ */
+export function resolveSearchCountry(value: string | null | undefined): Country | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const upper = trimmed.toUpperCase();
+  if (Object.prototype.hasOwnProperty.call(COUNTRY_CONFIG, upper)) {
+    return upper as Country;
+  }
+  const lower = trimmed.toLowerCase();
+  for (const country of Object.keys(COUNTRY_CONFIG) as Country[]) {
+    if (COUNTRY_CONFIG[country].names.split(',').includes(lower)) return country;
+  }
+  return COUNTRY_BY_ALPHA2.get(upper);
+}
+
 // ── Output Types ─────────────────────────────────────────
 
 @ObjectType()
@@ -192,6 +238,39 @@ export class LocationGql {
 
   @Field({ nullable: true })
   state?: string;
+
+  // Spec 1689 — the richer LocationDto fields (Spec 5123), additive and
+  // nullable so existing `location { city state country }` queries are unchanged.
+  @Field(() => String, {
+    nullable: true,
+    description: "The source's own label for the site (e.g. \"Downtown Office\"). Not geography.",
+  })
+  name?: string | null;
+
+  @Field(() => String, {
+    nullable: true,
+    // Spec 1689 — describes what the shared parser actually emits: the
+    // per-site segment ('US' for 'Remote - US'), often absent, rarely the
+    // whole raw label. See docs/questions.md for the open parser cases.
+    description:
+      'The label text this site was read from, when it differs from the structured city/state/country: for most sources the per-site segment after list splitting and qualifier stripping (e.g. "US" for "Remote - US"), not the full raw label. Often null.',
+  })
+  text?: string | null;
+
+  @Field(() => String, { nullable: true, description: 'Street address, when the source carries one.' })
+  streetAddress?: string | null;
+
+  @Field(() => String, { nullable: true, description: 'Postal / ZIP code, when the source carries one.' })
+  postalCode?: string | null;
+}
+
+@ObjectType({
+  description:
+    'A company office the source tags on the posting (e.g. Greenhouse offices[]). A catalog entity — not necessarily where the role sits.',
+})
+export class OfficeGql extends LocationGql {
+  @Field(() => String, { nullable: true, description: "The source's own office identifier." })
+  id?: string | null;
 }
 
 @ObjectType()
@@ -228,6 +307,27 @@ export class JobPostGql {
 
   @Field(() => LocationGql, { nullable: true })
   location?: LocationGql;
+
+  // Spec 1689 — per-site data and the ATS posting country (Specs 5118/5123),
+  // additive and nullable.
+  @Field(() => [LocationGql], {
+    nullable: true,
+    description:
+      'Per-site locations when the source carries them. `location` stays the merged single-site view.',
+  })
+  locations?: LocationGql[] | null;
+
+  @Field(() => [OfficeGql], {
+    nullable: true,
+    description: 'Company offices the source tags on the posting (not necessarily the role sites).',
+  })
+  offices?: OfficeGql[] | null;
+
+  @Field(() => String, {
+    nullable: true,
+    description: 'ISO-3166 alpha-2 country the ATS declared for the posting (e.g. "NL"), verbatim.',
+  })
+  countryCode?: string | null;
 
   @Field({ nullable: true })
   description?: string;

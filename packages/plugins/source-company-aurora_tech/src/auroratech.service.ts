@@ -172,6 +172,9 @@ export class AuroraTechService implements IScraper {
         job.jobUrl ??
         `https://jobs.ashbyhq.com/${encodeURIComponent(boardSlug)}/${job.id}`,
       location: parsedLocations.location,
+      ...(parsedLocations.locations.length > 0
+        ? { locations: parsedLocations.locations }
+        : {}),
       description,
       compensation,
       datePosted,

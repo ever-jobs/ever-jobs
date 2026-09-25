@@ -8,7 +8,7 @@ import {
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList } from '@ever-jobs/common';
 import {
   TESLA_AKAMAI_STATUS_CODES,
   TESLA_BASE_URL,
@@ -229,9 +229,8 @@ export class TeslaService implements IScraper {
     const locationStr = lookup.locations?.[listing.l ?? ''] ?? null;
     const departmentStr = lookup.departments?.[listing.d ?? ''] ?? null;
 
-    const location = locationStr
-      ? new LocationDto({ city: locationStr })
-      : null;
+    const locationParsed = parseLocationList([locationStr]);
+    const location = locationStr ? locationParsed.location : null;
     const isRemote =
       locationStr?.toLowerCase().includes('remote') ?? false;
 
@@ -241,6 +240,7 @@ export class TeslaService implements IScraper {
       companyName: 'Tesla',
       jobUrl: this.buildJobUrl(listing.id, listing.t),
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       isRemote,
       site: Site.TESLA,
       atsId: listing.id,

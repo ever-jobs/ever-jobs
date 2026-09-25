@@ -9,7 +9,7 @@ import {
   getJobTypeFromString,
 } from '@ever-jobs/models';
 import {
-  createHttpClient, NaukriException, markdownConverter, extractEmails, randomSleep,
+  createHttpClient, NaukriException, markdownConverter, extractEmails, parseLocationText, randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
 import { NAUKRI_HEADERS } from './naukri.constants';
@@ -138,6 +138,7 @@ export class NaukriService implements IScraper {
       companyName: company,
       companyUrl: job.staticUrl ? `https://www.naukri.com/${job.staticUrl}` : null,
       location,
+      locations: [location],
       isRemote,
       datePosted: toDateOnly(datePosted),
       jobUrl,
@@ -158,11 +159,11 @@ export class NaukriService implements IScraper {
   private getLocation(placeholders: any[]): LocationDto {
     for (const p of placeholders) {
       if (p.type === 'location') {
-        const parts = (p.label ?? '').split(', ');
+        const parsed = parseLocationText(p.label ?? '').location;
         return new LocationDto({
-          city: parts[0] || null,
-          state: parts.length > 1 ? parts[1] : null,
-          country: Country.INDIA,
+          city: parsed?.city ?? null,
+          state: parsed?.state ?? null,
+          country: parsed?.country ?? Country.INDIA,
         });
       }
     }

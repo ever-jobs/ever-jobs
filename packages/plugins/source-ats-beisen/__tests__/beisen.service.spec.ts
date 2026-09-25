@@ -86,7 +86,8 @@ describe('BeisenService — Spec 741', () => {
       expect(job.jobUrl).toBe('https://examplecorp.zhiye.com/portal/jobs/621097372');
       expect(job.applyUrl).toBe('https://examplecorp.zhiye.com/portal/jobs/621097372');
       expect(job.location?.city).toBe('Shanghai');
-      expect(job.location?.state).toBe('China');
+      expect(job.location?.state).toBeNull();
+      expect(job.location?.country).toBe('China'); // 'China' is a country literal, not a state
       expect(job.department).toBe('社会招聘');
       expect(job.datePosted).toBe('2026-05-07');
       expect(job.description).toContain('scalable backend services');

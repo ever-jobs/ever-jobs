@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -36,8 +37,8 @@ import {
 import {
   InRecruitingListItem,
   InRecruitingJsonLd,
-  InRecruitingJsonLdPlace,
   InRecruitingJob,
+  LocationEntry,
 } from './inrecruiting.types';
 
 /**
@@ -269,7 +270,8 @@ export class InRecruitingService implements IScraper {
     const descriptionHtml =
       this.cleanText(ld?.description) ?? this.cleanText(og['og:description']) ?? null;
 
-    const address = this.firstAddress(ld);
+    const locationEntries = this.locationEntries(ld);
+    const address = locationEntries[0] ?? null;
     const locationText =
       this.locationFromAddress(address) ?? this.cleanText(item.location) ?? null;
     const { city, state, country } = this.splitLocation(address, item.location);
@@ -286,6 +288,7 @@ export class InRecruitingService implements IScraper {
       city,
       state,
       country,
+      locationEntries,
       locationText,
       description: descriptionHtml,
       department,
@@ -313,12 +316,16 @@ export class InRecruitingService implements IScraper {
     const companyName = job.companyName ?? this.deriveCompanyName(target.tenant);
     const description = this.formatDescription(job.description ?? null, format);
 
+    const location = this.extractLocation(job);
+    const locations = this.extractLocations(job);
+
     return new JobPostDto({
       id: `inrecruiting-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -491,27 +498,52 @@ export class InRecruitingService implements IScraper {
     return out;
   }
 
-  /** Return the first usable PostalAddress from a JSON-LD jobLocation (single or array). */
-  private firstAddress(ld: InRecruitingJsonLd | null): InRecruitingJsonLdPlace['address'] | null {
-    if (!ld?.jobLocation) return null;
+  /** Map every JSON-LD `jobLocation` Place to a structured location entry. */
+  private locationEntries(ld: InRecruitingJsonLd | null): LocationEntry[] {
+    if (!ld?.jobLocation) return [];
     const places = Array.isArray(ld.jobLocation) ? ld.jobLocation : [ld.jobLocation];
+    const out: LocationEntry[] = [];
     for (const place of places) {
-      if (place && typeof place === 'object' && place.address) return place.address;
+      const address = place && typeof place === 'object' ? place.address : null;
+      if (!address || typeof address !== 'object') continue;
+      out.push({
+        city: this.cleanText(address.addressLocality),
+        state: this.cleanText(address.addressRegion),
+        country: this.cleanText(address.addressCountry),
+        streetAddress: this.cleanText(address.streetAddress),
+        postalCode: this.cleanText(address.postalCode),
+      });
     }
-    return null;
+    return out;
   }
 
   /** Build a single-line location string from a JSON-LD address, when present. */
   private locationFromAddress(
-    address: InRecruitingJsonLdPlace['address'] | null,
+    address: LocationEntry | null,
   ): string | null {
     if (!address) return null;
-    const parts = [
-      this.cleanText(address.addressLocality),
-      this.cleanText(address.addressRegion),
-      this.cleanText(address.addressCountry),
-    ].filter((p): p is string => !!p);
+    const parts = [address.city, address.state, address.country].filter(
+      (p): p is string => !!p,
+    );
     return parts.length > 0 ? parts.join(', ') : null;
+  }
+
+  /** Per-site LocationDto list — one per JSON-LD `jobLocation` Place, else the merged location. */
+  private extractLocations(job: InRecruitingJob): LocationDto[] {
+    if (job.locationEntries && job.locationEntries.length > 0) {
+      return job.locationEntries.map(
+        (e) =>
+          new LocationDto({
+            city: e.city,
+            state: e.state,
+            country: e.country,
+            streetAddress: e.streetAddress ?? null,
+            postalCode: e.postalCode ?? null,
+          }),
+      );
+    }
+    const merged = this.extractLocation(job);
+    return merged ? [merged] : [];
   }
 
   /**
@@ -531,28 +563,22 @@ export class InRecruitingService implements IScraper {
    * / country); falls back to a best-effort split of the card's free-text location line.
    */
   private splitLocation(
-    address: InRecruitingJsonLdPlace['address'] | null,
+    address: LocationEntry | null,
     cardLocation: string | null | undefined,
   ): { city: string | null; state: string | null; country: string | null } {
-    if (address) {
-      const city = this.cleanText(address.addressLocality);
-      const state = this.cleanText(address.addressRegion);
-      const country = this.cleanText(address.addressCountry);
-      if (city || state || country) return { city, state, country };
+    if (address && (address.city || address.state || address.country)) {
+      return { city: address.city, state: address.state, country: address.country };
     }
     const text = this.cleanText(cardLocation);
     if (!text || this.isRemoteToken(text)) {
       return { city: null, state: null, country: null };
     }
-    const parts = text
-      .split(/[,•|]/)
-      .map((p) => this.cleanText(p))
-      .filter((p): p is string => !!p);
-    if (parts.length === 0) return { city: null, state: null, country: null };
-    if (parts.length === 1) return { city: parts[0], state: null, country: null };
-    const country = parts[parts.length - 1];
-    const city = parts.slice(0, parts.length - 1).join(', ');
-    return { city: city || null, state: null, country: country || null };
+    const parsed = parseLocationText(text).location;
+    return {
+      city: parsed?.city ?? null,
+      state: parsed?.state ?? null,
+      country: parsed?.country ?? null,
+    };
   }
 
   /** Detect remote roles from the title, location, department, or JSON-LD location type. */

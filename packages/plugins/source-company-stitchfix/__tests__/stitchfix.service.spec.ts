@@ -158,7 +158,7 @@ describe('StitchfixService — Spec 077 / T04', () => {
       const occurrences = (algos!.jobUrl!.match(/gh_jid=/g) ?? []).length;
       expect(occurrences).toBe(2);
       // Location — Stitch Fix's SF HQ on the first listing.
-      expect(algos?.location?.city).toBe('San Francisco, CA');
+      expect(algos?.location?.city).toBe('San Francisco');
       expect(algos?.isRemote).toBe(false);
       // D-11 first-listing regression guard: the emitted
       // `department` for the first fixture listing matches the wire
@@ -205,7 +205,7 @@ describe('StitchfixService — Spec 077 / T04', () => {
       expect(principal?.title.endsWith(' ')).toBe(false);
       expect(principal?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 1);
       expect(principal?.companyName).toBe('Stitch Fix');
-      expect(principal?.location?.city).toBe('Remote, USA');
+      expect(principal?.location?.city).toBeUndefined();
       expect(principal?.isRemote).toBe(true);
       // D-11 second-listing regression guard: the emitted
       // `department` for the second fixture listing matches the

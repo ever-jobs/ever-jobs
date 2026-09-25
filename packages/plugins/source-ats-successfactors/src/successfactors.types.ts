@@ -56,6 +56,8 @@ export interface SfCsbDetail {
   validThrough?: string | null;
   hiringOrganization?: string | null;
   industry?: string | null;
+  /** CSB job-layout token (`data-careersite-propertyid="dept"`), not microdata. */
+  department?: string | null;
   city?: string | null;
   state?: string | null;
   country?: string | null;

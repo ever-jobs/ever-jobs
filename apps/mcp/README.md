@@ -50,6 +50,10 @@ Search for jobs across all sources.
 | `company`     | string  | ❌       | Company slug for ATS sources (e.g. "stripe")       |
 | `limit`       | number  | ❌       | Max results (default: 20, max: 100)                |
 | `remote_only` | boolean | ❌       | Filter to remote positions only                    |
+| `crawl`       | object  | ❌       | Per-request crawl policy (Spec 1690), camelCase    |
+
+`crawl` is forwarded to the API unchanged as the `crawl` field (same key in every
+`EVER_JOBS_MCP_REQUEST_KEYS` style); see [`docs/CRAWL_POLICY.md`](../../docs/CRAWL_POLICY.md).
 
 ### `get_job_details`
 
@@ -103,9 +107,16 @@ _No parameters required._
 
 ## Environment Variables
 
-| Variable            | Default                 | Description            |
-| ------------------- | ----------------------- | ---------------------- |
-| `EVER_JOBS_API_URL` | `http://localhost:3001` | Ever Jobs API endpoint |
+| Variable                        | Default                 | Description                                                                                                                                                                  |
+| ------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EVER_JOBS_API_URL`             | `http://localhost:3001` | Ever Jobs API endpoint                                                                                                                                                       |
+| `EVER_JOBS_MCP_LOCATION_FORMAT` | `full`                  | How a job's `location` string is rendered: `full` = `city, state, country` (falling back to the site name, then its label text); `city` = the legacy city-only string        |
+| `EVER_JOBS_MCP_REQUEST_KEYS`    | `camel`                 | Search request key style sent to the API: `camel` (what `ScraperInputDto` accepts), `snake` (the legacy wire shape), `both`                                                  |
+
+Remote-only jobs: whether their `location` reads `Remote` depends on the API's
+`EVER_JOBS_LOCATION_REMOTE_CITY` (default `false` — a bare `Remote` label gives
+`null` and `Remote - US` gives `United States`, with `is_remote` carrying the
+signal; `true` restores `Remote` / `Remote, United States`). See `.env.example`.
 
 ## Source Coverage
 

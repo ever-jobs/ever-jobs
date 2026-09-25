@@ -16,11 +16,7 @@ import {
   getJobTypeFromString,
   Site,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import {
   JOOBLE_API_BASE_URL,
   JOOBLE_HEADERS,
@@ -165,9 +161,8 @@ export class JoobleService implements IScraper {
     }
 
     // Build location
-    const location = new LocationDto({
-      city: raw.location ?? null,
-    });
+    const locationParsed = parseLocationList([raw.location ?? null]);
+    const location = locationParsed.location;
 
     // Parse date (ISO format)
     let datePosted: string | null = null;
@@ -202,6 +197,7 @@ export class JoobleService implements IScraper {
       companyUrl: null,
       jobUrl: raw.link,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,

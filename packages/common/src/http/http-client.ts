@@ -6,6 +6,7 @@ import { SocksProxyAgent } from 'socks-proxy-agent';
 import { ScraperInputDto } from '@ever-jobs/models';
 
 import { getRequestId } from '../context';
+import { describeUrlForLog, pinUrlToHosts } from '../utils/url-guard';
 import {
   EgressGuardOptions,
   assertPublicHostname,
@@ -123,6 +124,37 @@ const RETRYABLE_NETWORK_CODES: ReadonlySet<string> = new Set([
   'UND_ERR_CONNECT_TIMEOUT',
 ]);
 
+/**
+ * `false` turns {@link HttpClientOptions.allowedRedirectHosts} off process-wide
+ * (redirects are followed as axios does by default) — an escape hatch should a
+ * pinned site start redirecting somewhere legitimate. Default on.
+ */
+export const HTTP_PIN_REDIRECTS_ENV = 'EVER_JOBS_HTTP_PIN_REDIRECTS';
+
+function redirectPinningEnabled(): boolean {
+  const raw = process.env[HTTP_PIN_REDIRECTS_ENV]?.trim().toLowerCase();
+  return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
+}
+
+/**
+ * The `beforeRedirect` hook for a pinned client: every hop must itself be an
+ * https URL on `allowedHosts` (or a subdomain), checked by the same
+ * {@link pinUrlToHosts} the plugin ran on the first URL. Throwing aborts the
+ * redirect, so the request rejects instead of following it.
+ */
+export function redirectPinGuard(
+  allowedHosts: readonly string[],
+): (redirectOptions: Record<string, unknown>) => void {
+  return (redirectOptions) => {
+    const href = typeof redirectOptions.href === 'string' ? redirectOptions.href : '';
+    if (!pinUrlToHosts(href, allowedHosts)) {
+      throw new Error(
+        `Refused redirect to ${describeUrlForLog(href)}: not an https URL on ${allowedHosts.join(', ')}`,
+      );
+    }
+  };
+}
+
 export interface HttpClientOptions {
   proxies?: string[];
   caCert?: string;
@@ -177,6 +209,22 @@ export interface HttpClientOptions {
   hostLimiter?: HostLimiter;
   /** robots.txt cache (default: the process-wide `getRobotsTxtCache()`). */
   robotsTxtCache?: RobotsTxtCache;
+  /**
+   * Pin every redirect hop to these hosts (Spec 1689). Unset (the default),
+   * axios follows up to 21 redirects to any host and scheme, so a pinned
+   * first URL on an allowlisted host with an open redirect could still land
+   * on loopback, a private range or cloud metadata. Set, each hop must pass
+   * `pinUrlToHosts(hop, allowedRedirectHosts)` — https only, same hosts or
+   * their subdomains, no credentials or explicit port — or the request
+   * rejects. `EVER_JOBS_HTTP_PIN_REDIRECTS=false` turns it off process-wide.
+   *
+   * Independent of the crawl policy's egress guard (Spec 1690 §4.8): when both
+   * apply, a hop must pass the pin first, then the egress check, then any
+   * `beforeRedirect` the request brought itself — through `request()` or
+   * straight through `getAxiosInstance()`, guard on or off (`transportFor` /
+   * `applyCrawlIdentity` compose the hooks).
+   */
+  allowedRedirectHosts?: readonly string[];
 }
 
 /**
@@ -320,6 +368,7 @@ const CLIENT_OPTION_KEYS: readonly (keyof HttpClientOptions)[] = [
   'egressAllowHosts',
   'hostLimiter',
   'robotsTxtCache',
+  'allowedRedirectHosts',
 ];
 
 /**
@@ -596,6 +645,12 @@ export class HttpClient {
   private readonly robotsTxtCacheOverride?: RobotsTxtCache;
   /** The instance-default `https.Agent` a `caCert` client gets (not a caller's own agent). */
   private readonly defaultHttpsAgent?: unknown;
+  /**
+   * The redirect pin (Spec 1689): `redirectPinGuard(allowedRedirectHosts)`, or
+   * undefined when the option is unset or `EVER_JOBS_HTTP_PIN_REDIRECTS=false`
+   * (read once, when the client is built).
+   */
+  private readonly redirectPin?: (redirectOptions: Record<string, unknown>) => void;
 
   constructor(options: HttpClientOptions = {}) {
     const opts: HttpClientOptions = isScraperInputDto(options)
@@ -627,9 +682,18 @@ export class HttpClient {
     // default for the guarded insecure agent whenever the egress guard is on, so
     // a call through `getAxiosInstance()` is DNS-guarded too.
     this.defaultHttpsAgent = opts.caCert ? new (require('https').Agent)({ rejectUnauthorized: false }) : undefined;
+    this.redirectPin =
+      opts.allowedRedirectHosts?.length && redirectPinningEnabled()
+        ? redirectPinGuard(opts.allowedRedirectHosts)
+        : undefined;
     this.client = axios.create({
       timeout: (opts.timeout ?? 60) * 1000,
       ...(this.defaultHttpsAgent ? { httpsAgent: this.defaultHttpsAgent } : {}),
+      // Spec 1689: the instance default, so a call straight through
+      // `getAxiosInstance()` is pinned too. A per-request `beforeRedirect`
+      // replaces it in axios' merge, so the request interceptor composes it
+      // back in (`transportFor`, or directly when the egress guard is off).
+      ...(this.redirectPin ? { beforeRedirect: this.redirectPin } : {}),
     });
     this.client.interceptors.request.use((config) => this.applyCrawlIdentity(config));
 
@@ -1015,6 +1079,16 @@ export class HttpClient {
       if (target && policy.blockPrivateNetworks) {
         assertPublicHostname(target.hostname, this.egressOptions);
         Object.assign(config, this.transportFor(null, policy, config, target));
+      } else if (this.redirectPin && config.beforeRedirect && config.beforeRedirect !== this.redirectPin) {
+        // Egress guard off: no egress check or agent swap, but the request's own
+        // `beforeRedirect` replaced the instance-default pin in axios' merge, so
+        // compose the pin back in — it runs first, the request's hook after it.
+        const pin = this.redirectPin;
+        const own = config.beforeRedirect;
+        config.beforeRedirect = ((...args: Parameters<typeof own>) => {
+          pin(args[0]);
+          own(...args);
+        }) as typeof own;
       }
       identity = this.identityFor(policy, headerValue(headers, 'user-agent'), ctx);
     }
@@ -1039,7 +1113,10 @@ export class HttpClient {
    *   A target on the client's `egressAllowHosts` gets the unguarded shared agents;
    * - `blockPrivateNetworks: false`: nothing — the pre-1690 agents.
    * With `blockPrivateNetworks`, every redirect target is checked too (a literal
-   * IP never reaches the DNS lookup).
+   * IP never reaches the DNS lookup). With `allowedRedirectHosts` (Spec 1689),
+   * every hop is also pinned to those hosts — first, before the egress check,
+   * and whatever `blockPrivateNetworks` says; a `beforeRedirect` the request
+   * brought itself runs last, so it can neither replace nor skip either guard.
    */
   private transportFor(
     proxy: string | null,
@@ -1058,32 +1135,40 @@ export class HttpClient {
       transport.httpAgent = agent;
       transport.httpsAgent = agent;
     }
-    if (!policy.blockPrivateNetworks) return transport;
+    const pin = this.redirectPin;
+    if (!policy.blockPrivateNetworks && !pin) return transport;
 
-    const ownHttpsAgent = config.httpsAgent !== undefined && config.httpsAgent !== this.defaultHttpsAgent;
-    if (!proxy && !config.httpAgent && !ownHttpsAgent && !config.proxy && this.goesDirect(target)) {
-      const allowListed =
-        !!target && !!this.egressOptions.allowHosts?.length && isEgressAllowListed(target.hostname, this.egressOptions);
-      const agents = getGuardedAgents({ insecureTls: Boolean(this.caCert), guard: !allowListed });
-      transport.httpAgent = agents.httpAgent;
-      transport.httpsAgent = agents.httpsAgent;
+    if (policy.blockPrivateNetworks) {
+      const ownHttpsAgent = config.httpsAgent !== undefined && config.httpsAgent !== this.defaultHttpsAgent;
+      if (!proxy && !config.httpAgent && !ownHttpsAgent && !config.proxy && this.goesDirect(target)) {
+        const allowListed =
+          !!target && !!this.egressOptions.allowHosts?.length && isEgressAllowListed(target.hostname, this.egressOptions);
+        const agents = getGuardedAgents({ insecureTls: Boolean(this.caCert), guard: !allowListed });
+        transport.httpAgent = agents.httpAgent;
+        transport.httpsAgent = agents.httpsAgent;
+      }
     }
 
-    const previous = config.beforeRedirect;
-    const allow = this.egressOptions;
+    // `config.beforeRedirect` is the pin itself when axios merged the instance
+    // default in (a direct `getAxiosInstance()` call) — run it once, not twice.
+    const previous = config.beforeRedirect === pin ? undefined : config.beforeRedirect;
+    const allow = policy.blockPrivateNetworks ? this.egressOptions : undefined;
     type BeforeRedirect = NonNullable<AxiosRequestConfig['beforeRedirect']>;
     transport.beforeRedirect = ((...args: Parameters<BeforeRedirect>) => {
       const [options] = args;
-      let host = '';
-      if (typeof options.href === 'string') {
-        try {
-          host = new URL(options.href).hostname;
-        } catch {
-          host = '';
+      pin?.(options);
+      if (allow) {
+        let host = '';
+        if (typeof options.href === 'string') {
+          try {
+            host = new URL(options.href).hostname;
+          } catch {
+            host = '';
+          }
         }
+        if (!host) host = typeof options.hostname === 'string' ? options.hostname : String(options.host ?? '');
+        assertPublicHostname(host, allow);
       }
-      if (!host) host = typeof options.hostname === 'string' ? options.hostname : String(options.host ?? '');
-      assertPublicHostname(host, allow);
       previous?.(...args);
     }) as BeforeRedirect;
     return transport;
@@ -1251,6 +1336,7 @@ export class HttpClient {
 export function createHttpClient(options?: HttpClientOptions | any): HttpClient {
   if (options && (options.requestTimeout !== undefined || options.proxies !== undefined)) {
     // It's likely a ScraperInputDto or a similar object from a scraper
+    // `allowedRedirectHosts` (Spec 1689) is one of the `CLIENT_OPTION_KEYS` it copies.
     return new HttpClient(clientOptionsFromScraperInput(options));
   }
   return new HttpClient(options as HttpClientOptions);

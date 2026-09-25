@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -206,13 +207,15 @@ export class GoHireService implements IScraper {
     }
 
     const department = this.extractType(detail?.type) ?? job.type ?? null;
+    const location = this.extractLocation(job, detail);
 
     return new JobPostDto({
       id: `gohire-${atsId}`,
       title,
       companyName: detail?.client?.name ?? fallbackCompanyName,
       jobUrl,
-      location: this.extractLocation(job, detail),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.date),
       isRemote: this.detectRemote(job, detail),
@@ -286,16 +289,7 @@ export class GoHireService implements IScraper {
     }
     const label = job.location;
     if (typeof label !== 'string' || !label.trim()) return null;
-    const parts = label.split(',').map((p) => p.trim()).filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    // Two-plus parts: first is city, last is country, middle (if any) is state.
-    const city = parts[0];
-    const country = parts[parts.length - 1];
-    const state = parts.length >= 3 ? parts[1] : null;
-    return new LocationDto({ city: city ?? null, state, country: country ?? null });
+    return parseLocationText(label).location;
   }
 
   /** Normalise the detail feed's `country` (object or string) to a label. */

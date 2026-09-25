@@ -95,7 +95,7 @@ describe('DremioService — Spec 128 / T04', () => {
       expect(spm?.jobUrl).toContain('?gh_jid=7578193003');
       expect(spm?.jobUrl).not.toContain('greenhouse.io');
       expect(spm?.department).toBe('Product');
-      expect(spm?.location?.city).toBe('Mountain View, CA');
+      expect(spm?.location?.city).toBe('Mountain View');
       expect(spm?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(spm?.description).not.toContain('&lt;');
@@ -108,7 +108,7 @@ describe('DremioService — Spec 128 / T04', () => {
       expect(fo).toBeDefined();
       expect(fo?.title).toBe('Future Opportunities');
       expect(fo?.companyName).toBe('Dremio');
-      expect(fo?.location?.city).toBe('Remote, US');
+      expect(fo?.location?.city).toBeUndefined();
       expect(fo?.isRemote).toBe(true);
       // **D-11 lock — first-cohort sentence-style catchall
       // dept name pass-through preserved byte-for-byte

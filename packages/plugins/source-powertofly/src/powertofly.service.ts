@@ -13,6 +13,7 @@ import {
 import {
   createHttpClient,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -138,6 +139,7 @@ export class PowertoflyService implements IScraper {
       companyName,
       jobUrl: item.link,
       location,
+      locations: [location],
       description,
       compensation: undefined,
       datePosted,
@@ -156,12 +158,7 @@ export class PowertoflyService implements IScraper {
     }
 
     // job_location may be "City, Country" or just "Remote"
-    const parts = item.job_location.split(',').map((p) => p.trim());
-
-    return new LocationDto({
-      city: parts[0] ?? null,
-      country: parts.length > 1 ? parts[parts.length - 1] : null,
-    });
+    return parseLocationText(item.job_location).location ?? new LocationDto({});
   }
 
   /**

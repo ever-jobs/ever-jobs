@@ -86,7 +86,7 @@ describe('IndigoService — Spec 157 / T04', () => {
       expect(fo?.jobUrl).toContain('job-boards.greenhouse.io/indigo/jobs/');
       // D-11 clean dept pass-through.
       expect(fo?.department).toBe('People');
-      expect(fo?.location?.city).toBe('Boston, MA');
+      expect(fo?.location?.city).toBe('Boston');
       expect(fo?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(fo?.description).not.toContain('&lt;');
@@ -98,7 +98,7 @@ describe('IndigoService — Spec 157 / T04', () => {
       // D-10 omitted — title byte-for-byte pass-through.
       expect(co?.title).toBe('Senior Carbon Operations Manager');
       expect(co?.companyName).toBe('Indigo');
-      expect(co?.location?.city).toBe('Charleston, SC');
+      expect(co?.location?.city).toBe('Charleston');
       expect(co?.isRemote).toBe(false);
       expect(co?.department).toBe('Carbon Operations');
       expect(co?.jobUrl).toBe(

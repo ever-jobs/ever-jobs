@@ -99,7 +99,7 @@ describe('SimplisafeService — Spec 171 / T04', () => {
       expect(cam?.jobUrl).toContain('job-boards.greenhouse.io/simplisafe/jobs/');
       // D-11 clean dept pass-through.
       expect(cam?.department).toBe('Marketing');
-      expect(cam?.location?.city).toBe('Richmond, VA');
+      expect(cam?.location?.city).toBe('Richmond');
       expect(cam?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(cam?.description).not.toContain('&lt;');
@@ -114,7 +114,7 @@ describe('SimplisafeService — Spec 171 / T04', () => {
       expect(sae?.title).toBe('Senior Automation Engineer (Firmware)');
       expect(sae?.title).not.toMatch(/\s$/);
       expect(sae?.companyName).toBe('SimpliSafe');
-      expect(sae?.location?.city).toBe('Remote, US');
+      expect(sae?.location?.city).toBeUndefined();
       expect(sae?.isRemote).toBe(true);
       expect(sae?.department).toBe('Engineering');
       expect(sae?.jobUrl).toBe(

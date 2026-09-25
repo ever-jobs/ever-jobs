@@ -119,7 +119,7 @@ describe('DollarShaveClubService — Spec 096 / T04', () => {
         'Brand Strategy & Marketing',
       );
       expect(bm?.department).toBe('Brand Strategy & Marketing');
-      expect(bm?.location?.city).toBe('Durham, North Carolina');
+      expect(bm?.location?.city).toBe('Durham');
       expect(bm?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(bm?.description).not.toContain('&lt;');
@@ -132,7 +132,7 @@ describe('DollarShaveClubService — Spec 096 / T04', () => {
       expect(lg).toBeDefined();
       expect(lg?.title).toBe('Legal Intern');
       expect(lg?.companyName).toBe('Dollar Shave Club');
-      expect(lg?.location?.city).toBe('Remote, United States');
+      expect(lg?.location?.city).toBeUndefined();
       expect(lg?.isRemote).toBe(true);
       // **D-11 lock — single-trailing-space form**: input
       // `departments[0].name === 'Legal '` (6 bytes; one

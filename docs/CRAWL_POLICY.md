@@ -665,6 +665,15 @@ EVER_JOBS_CRAWL_BLOCK_PRIVATE_NETWORKS=false
 A single client can also be given `egressAllowHosts` (see §19). A search caller cannot
 turn the guard off (§7.2).
 
+**Redirect pinning (Spec 1689) is a separate, stricter check.** A plugin that fetches only
+its own company's hosts passes `allowedRedirectHosts` to `createHttpClient`; every redirect
+hop must then be an https URL on those hosts (or their subdomains) — whatever
+`blockPrivateNetworks` says. When both apply, a hop is checked by the pin first, then by
+the egress guard, then by any `beforeRedirect` the request brought itself; neither can be
+replaced or skipped by a request (through `request()` or straight through
+`getAxiosInstance()`, egress guard on or off). `EVER_JOBS_HTTP_PIN_REDIRECTS=false` turns only the pin
+off (the escape hatch should a pinned site start redirecting somewhere legitimate).
+
 ---
 
 ## 14. Discovery modes

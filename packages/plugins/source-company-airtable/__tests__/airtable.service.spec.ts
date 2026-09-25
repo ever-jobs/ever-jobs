@@ -90,7 +90,7 @@ describe('AirtableService — Spec 106 / T04', () => {
       expect(ae?.jobUrl).toContain('job-boards.greenhouse.io/airtable/jobs/');
       expect(ae?.jobUrl).not.toContain('airtable.com');
       expect(ae?.department).toBe('Customer Success & Services');
-      expect(ae?.location?.city).toBe('Remote - US');
+      expect(ae?.location?.city).toBeUndefined();
       expect(ae?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(ae?.description).not.toContain('&lt;');
@@ -103,7 +103,7 @@ describe('AirtableService — Spec 106 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, Platform');
       expect(sse?.companyName).toBe('Airtable');
-      expect(sse?.location?.city).toBe('San Francisco, CA');
+      expect(sse?.location?.city).toBe('San Francisco');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('Engineering');
       expect(sse?.jobUrl).toBe(

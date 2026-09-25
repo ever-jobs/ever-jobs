@@ -136,7 +136,7 @@ describe('FivetranService — Spec 082 / T04', () => {
       expect(eng?.department).toBe('Engineering Department');
       expect(eng?.department).toBe(JOBS_PAGE_RAW.jobs[0].departments[0].name);
       // Location — Fivetran's Oakland HQ.
-      expect(eng?.location?.city).toBe('Oakland, CA');
+      expect(eng?.location?.city).toBe('Oakland');
       expect(eng?.isRemote).toBe(false);
       // D-08 regression guard: decode-then-strip pipeline.
       expect(eng?.description).not.toContain('&lt;');
@@ -158,7 +158,7 @@ describe('FivetranService — Spec 082 / T04', () => {
       expect(ae?.companyName).not.toBe(JOBS_PAGE_RAW.jobs[1].company_name);
       expect(JOBS_PAGE_RAW.jobs[1].company_name).toBe('Fivetran ');
       expect(ae?.companyName?.endsWith(' ')).toBe(false);
-      expect(ae?.location?.city).toBe('Remote, USA');
+      expect(ae?.location?.city).toBeUndefined();
       expect(ae?.isRemote).toBe(true);
       expect(ae?.department).toBe('Sales Department');
       expect(ae?.department).toBe(JOBS_PAGE_RAW.jobs[1].departments[0].name);

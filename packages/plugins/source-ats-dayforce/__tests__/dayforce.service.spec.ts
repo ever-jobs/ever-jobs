@@ -8,7 +8,7 @@ import {
 const mockGet = jest.fn();
 const mockPost = jest.fn();
 const mockSetHeaders = jest.fn();
-const mockCreateHttpClient = jest.fn(() => ({
+const mockCreateHttpClient = jest.fn((..._args: unknown[]) => ({
   get: mockGet,
   post: mockPost,
   setHeaders: mockSetHeaders,
@@ -18,7 +18,7 @@ jest.mock('@ever-jobs/common', () => {
   const actual = jest.requireActual('@ever-jobs/common');
   return {
     ...actual,
-    createHttpClient: mockCreateHttpClient,
+    createHttpClient: (...args: unknown[]) => mockCreateHttpClient(...args),
   };
 });
 

@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import { ANDROIDJOBS_RSS_URL, ANDROIDJOBS_HEADERS } from './androidjobs.constants';
@@ -179,9 +180,7 @@ export class AndroidjobsService implements IScraper {
     const jobId = this.extractIdFromUrl(item.guid ?? item.link);
 
     // Build location
-    const location = new LocationDto({
-      city: locationCity ?? null,
-    });
+    const location = locationCity ? parseLocationText(locationCity).location : null;
 
     return new JobPostDto({
       id: `androidjobs-${jobId}`,
@@ -189,6 +188,7 @@ export class AndroidjobsService implements IScraper {
       jobUrl: item.link,
       companyName,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       compensation: null,
       datePosted,

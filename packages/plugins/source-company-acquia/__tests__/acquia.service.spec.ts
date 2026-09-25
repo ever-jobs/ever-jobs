@@ -89,7 +89,7 @@ describe('AcquiaService — Spec 182 / T04', () => {
       expect(ae?.jobUrl).toContain('job-boards.greenhouse.io/acquia/jobs/');
       // D-11 clean — dept flows through byte-for-byte.
       expect(ae?.department).toBe('Sales');
-      expect(ae?.location?.city).toBe('Remote - United States');
+      expect(ae?.location?.city).toBeUndefined();
       expect(ae?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(ae?.description).not.toContain('&lt;');

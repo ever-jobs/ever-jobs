@@ -279,12 +279,14 @@ export class ConnexysService implements IScraper {
     const companyName = job.companyName ?? this.deriveCompanyName(site);
     const description = this.formatDescription(job.descriptionHtml ?? null, format);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `connexys-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,

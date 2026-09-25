@@ -1,5 +1,6 @@
 import { JobType } from '../enums/job-type.enum';
 import { LocationDto } from './location.dto';
+import { OfficeDto } from './office.dto';
 import { CompensationDto } from './compensation.dto';
 
 export class JobPostDto {
@@ -9,6 +10,19 @@ export class JobPostDto {
   jobUrl!: string;
   jobUrlDirect?: string | null;
   location?: LocationDto | null;
+
+  /** Per-site locations when the source carries them (e.g. an ATS `locations[]`
+   *  array). `location` remains the merged single-site view for compatibility. */
+  locations?: LocationDto[] | null;
+
+  /** Company offices the source tags on the posting (e.g. Greenhouse
+   *  `offices[]`). A catalog of company entities, not necessarily the role's
+   *  sites — use `locations[]` for those. */
+  offices?: OfficeDto[] | null;
+
+  /** ISO-3166 alpha-2 country the ATS declared for the posting (e.g. "NL").
+   *  Posting-level metadata — not the parsed country of `location`. */
+  countryCode?: string | null;
 
   description?: string | null;
   companyUrl?: string | null;

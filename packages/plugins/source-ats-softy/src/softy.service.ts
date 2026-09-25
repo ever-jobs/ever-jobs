@@ -25,6 +25,7 @@ import {
   isCrawlPolicyError,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   resolveCrawlPolicy,
   runWithScrapeContext,
   ScrapeContext,
@@ -849,13 +850,15 @@ export class SoftyService implements IScraper {
       format,
       job.description ? job.descriptionIsHtml === true : false,
     );
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `softy-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -997,8 +1000,8 @@ export class SoftyService implements IScraper {
 
   /**
    * Best-effort split of a single free-text location line into city / state /
-   * country. Comma-separated tail is treated as the country; the head as the city.
-   * Softy tenants are French, so a bare city line yields just the city.
+   * country through the shared `parseLocationText` (Spec 5125). Softy tenants are
+   * French, so a bare city line yields just the city.
    */
   private splitLocation(
     text: string | null,
@@ -1006,15 +1009,12 @@ export class SoftyService implements IScraper {
     if (!text || this.isRemoteToken(text)) {
       return { city: null, state: null, country: null };
     }
-    const parts = text
-      .split(',')
-      .map((p) => this.cleanText(p))
-      .filter((p): p is string => !!p);
-    if (parts.length === 0) return { city: null, state: null, country: null };
-    if (parts.length === 1) return { city: parts[0], state: null, country: null };
-    const country = parts[parts.length - 1];
-    const city = parts.slice(0, parts.length - 1).join(', ');
-    return { city: city || null, state: null, country: country || null };
+    const parsed = parseLocationText(text).location;
+    return {
+      city: parsed?.city ?? null,
+      state: parsed?.state ?? null,
+      country: parsed?.country ?? null,
+    };
   }
 
   /** Detect remote / télétravail roles from the title, location, or contract text. */

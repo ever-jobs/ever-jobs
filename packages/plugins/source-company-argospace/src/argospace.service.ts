@@ -15,13 +15,19 @@ import {
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient, markdownConverter } from '@ever-jobs/common';
+import {
+  createHttpClient,
+  markdownConverter,
+  parseLocationText,
+  stripParentheticals,
+} from '@ever-jobs/common';
 import {
   ARGOSPACE_CAREERS_URL,
   ARGOSPACE_COMPANY_NAME,
   ARGOSPACE_DEFAULT_RESULTS,
   ARGOSPACE_DEFAULT_TIMEOUT_SECONDS,
   ARGOSPACE_ORIGIN,
+  argospaceLocationHeuristicsEnabled,
 } from './argospace.constants';
 
 interface JobRef {
@@ -130,6 +136,7 @@ export class ArgospaceService implements IScraper {
       jobUrlDirect: ref.jobUrl,
       applyUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       compensation,
       isRemote: false,
@@ -201,28 +208,27 @@ export class ArgospaceService implements IScraper {
   }
 
   private parseLocation(raw: string): LocationDto | null {
-    const text = this.normalize(raw).replace(/\([^)]*\)/g, '').trim();
+    const text = this.normalize(raw);
     if (!text) return null;
+    if (!argospaceLocationHeuristicsEnabled()) return parseLocationText(text).location;
 
-    const twoLetterMatch = text.match(/^([^,]+?)\s*,\s*([A-Za-z]{2})\b/);
-    if (twoLetterMatch) {
-      return new LocationDto({
-        city: this.normalize(twoLetterMatch[1]),
-        state: twoLetterMatch[2].toUpperCase(),
-        country: Country.USA,
-      });
-    }
-
-    const parts = text.split(',').map((part) => this.normalize(part)).filter(Boolean);
-    if (parts.length >= 2) {
-      return new LocationDto({
-        city: parts[0],
-        state: parts.slice(1).join(', '),
-        country: Country.USA,
-      });
-    }
-
-    return new LocationDto({ city: text, country: Country.USA });
+    // Spec 1689 — pre-5125 Argo Space heuristics (ARGOSPACE_LOCATION_HEURISTICS
+    // =false turns them off): strip parenthetical qualifiers ("(On-site)")
+    // before parsing, falling back to the full label when the parenthetical is
+    // the geography; then fill a missing country with Country.USA, since Argo
+    // Space hires in the US only. Parsed fields always win.
+    // linear strip (the former /\([^)]*\)/g rescanned to the end from every
+    // unclosed '('); the stripped probe skips the parser's legacy Remote city
+    // so 'Remote (Austin, TX)' still falls back to Austin
+    const stripped = this.normalize(stripParentheticals(text, ''));
+    const location =
+      (stripped && stripped !== text
+        ? parseLocationText(stripped, { emitRemoteCity: false }).location
+        : null) ??
+      parseLocationText(text).location ??
+      new LocationDto({});
+    if (!location.country) location.country = Country.USA;
+    return location;
   }
 
   private parseCompensation(raw: string): CompensationDto | null {

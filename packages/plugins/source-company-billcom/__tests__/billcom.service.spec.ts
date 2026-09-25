@@ -114,7 +114,7 @@ describe('BillcomService — Spec 092 / T04', () => {
       expect(ds?.department).toBe('Engineering');
       expect(ds?.department).not.toBe(JOBS_PAGE_RAW.jobs[0].departments[0].name);
       expect(ds?.department).not.toMatch(/\s$/);
-      expect(ds?.location?.city).toBe('Draper, Utah, United States');
+      expect(ds?.location?.city).toBe('Draper');
       expect(ds?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ds?.description).not.toContain('&lt;');
@@ -135,7 +135,7 @@ describe('BillcomService — Spec 092 / T04', () => {
       expect(pm?.title?.charCodeAt(0)).not.toBe(9);
       expect(pm?.title).not.toMatch(/^\s/);
       expect(pm?.companyName).toBe('BILL');
-      expect(pm?.location?.city).toBe('Remote, USA');
+      expect(pm?.location?.city).toBeUndefined();
       expect(pm?.isRemote).toBe(true);
       // Second listing dept is byte-clean (`'Product'` — no pad)
       // so trimmed form === wire form.

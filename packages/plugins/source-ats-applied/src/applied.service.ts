@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -445,6 +446,7 @@ export class AppliedService implements IScraper {
       companyName,
       jobUrl: link.jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted,
       isRemote,
@@ -522,24 +524,7 @@ export class AppliedService implements IScraper {
     // Strip work-type prefix ("Hybrid · ", "Remote · ", etc.).
     const withoutPrefix = raw.replace(/^(hybrid|remote|on.?site|in-person)\s*[·•|]\s*/i, '').trim();
 
-    // Attempt "City, State, Country" comma-split.
-    return this.locationFromLabel(withoutPrefix);
-  }
-
-  /** Split a free-text "City, State, Country" label into a `LocationDto`. */
-  private locationFromLabel(label: string): LocationDto | null {
-    const parts = label
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    const city = parts[0];
-    const state = parts.length >= 3 ? parts[1] : null;
-    const country = parts[parts.length - 1];
-    return new LocationDto({ city, state, country });
+    return parseLocationText(withoutPrefix).location;
   }
 
   /** Detect remote roles from location text or description keywords. */

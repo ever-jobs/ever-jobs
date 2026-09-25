@@ -238,8 +238,10 @@ Spec: [spec.md](./spec.md) · Plan: [plan.md](./plan.md) · Operator guide:
 
 ## Notes
 
-- Out of scope, recorded as a follow-up in [plan.md](./plan.md) §8: a CI job that runs
-  `packages/common/__tests__` and the other core suites (none runs them today).
+- Recorded as a follow-up in [plan.md](./plan.md) §8, now resolved: the blocking
+  **Test (Core)** CI job (`npm run test:core`, Spec 1689, merged in from `develop`) runs
+  `packages/common/__tests__` — the crawl-policy suites included — and the other core
+  suites. Before that merge no job ran them.
 
 - Tests were written alongside each implementation task, per lane.
 - No `console.log` was added (Nest `Logger` throughout; the CLI keeps its existing

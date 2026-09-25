@@ -1,0 +1,7 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "../../../dist/packages/source-company-labs_actor"
+  },
+  "include": ["src/**/*"]
+}

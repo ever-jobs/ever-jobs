@@ -172,7 +172,7 @@ describe('MercorService (Spec 013 / T05 + T06 — single-GET explore-page)', () 
       expect(first.atsId).toBe('1001');
       expect(first.atsType).toBe('mercor');
       expect(first.site).toBe(Site.MERCOR);
-      expect(first.location?.city).toBe('San Francisco, CA');
+      expect(first.location?.city).toBe('San Francisco');
       expect(first.isRemote).toBe(false);
       expect(first.datePosted).toBe('2026-04-20');
       expect(first.jobUrl).toBe(

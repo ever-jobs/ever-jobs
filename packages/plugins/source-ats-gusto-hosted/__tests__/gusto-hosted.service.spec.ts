@@ -53,6 +53,8 @@ interface DetailOpts {
   currency?: string;
   unitText?: string;
   org?: string;
+  /** Extra schema.org jobLocation entries for multi-site postings. */
+  extraLocations?: Array<{ city?: string; region?: string; country?: string }>;
 }
 
 /** Build a posting detail page carrying a schema.org JobPosting JSON-LD block. */
@@ -70,6 +72,15 @@ function detail(o: DetailOpts): string {
     hiringOrganization: o.org ?? 'Material Hybrid Manufacturing Inc',
     jobLocation: [
       { '@type': 'Place', address: { '@type': 'PostalAddress', ...address } },
+      ...(o.extraLocations ?? []).map((site) => ({
+        '@type': 'Place',
+        address: {
+          '@type': 'PostalAddress',
+          ...(site.city ? { addressLocality: site.city } : {}),
+          ...(site.region ? { addressRegion: site.region } : {}),
+          ...(site.country ? { addressCountry: site.country } : {}),
+        },
+      })),
     ],
   };
   if (o.employmentType) ld.employmentType = o.employmentType;
@@ -169,6 +180,33 @@ describe('GustoHostedService', () => {
     expect(job.compensation?.minAmount).toBe(150000);
     expect(job.compensation?.maxAmount).toBe(200000);
     expect(job.emails).toContain('jobs@material.inc');
+    expect(job.locations).toMatchObject([
+      { city: 'Miami', state: 'FL', country: 'US' },
+    ]);
+  });
+
+  it('emits one locations[] entry per JSON-LD jobLocation site', async () => {
+    const service = serviceWith(
+      {
+        [SLUG]: board([{ postingSlug: 'multi', title: 'Field Tech' }]),
+      },
+      {
+        multi: {
+          title: 'Field Tech',
+          city: 'Miami',
+          region: 'FL',
+          country: 'US',
+          extraLocations: [{ city: 'Denver', region: 'CO', country: 'US' }],
+        },
+      },
+    );
+
+    const job = (await service.scrape(input())).jobs[0];
+    expect(job.location?.city).toBe('Miami');
+    expect(job.locations).toMatchObject([
+      { city: 'Miami', state: 'FL', country: 'US' },
+      { city: 'Denver', state: 'CO', country: 'US' },
+    ]);
   });
 
   it('consumes the input slug: different slugs yield different boards', async () => {

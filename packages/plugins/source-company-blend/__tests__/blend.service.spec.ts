@@ -93,7 +93,7 @@ describe('BlendService — Spec 138 / T04', () => {
       // convention** preserved byte-for-byte.
       expect(csm?.department).toBe('Customer Success- Blend Labs');
       expect(csm?.department).toMatch(/- Blend Labs$/);
-      expect(csm?.location?.city).toBe('San Francisco, CA');
+      expect(csm?.location?.city).toBe('San Francisco');
       expect(csm?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(csm?.description).not.toContain('&lt;');
@@ -106,7 +106,7 @@ describe('BlendService — Spec 138 / T04', () => {
       expect(se).toBeDefined();
       expect(se?.title).toBe('Sales Engineer - Enterprise');
       expect(se?.companyName).toBe('Blend');
-      expect(se?.location?.city).toBe('Remote, US');
+      expect(se?.location?.city).toBeUndefined();
       expect(se?.isRemote).toBe(true);
       // D-11 lock — second sample with company-suffix
       // convention.

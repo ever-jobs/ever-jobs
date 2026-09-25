@@ -338,12 +338,14 @@ export class CvWarehouseService implements IScraper {
     const companyName = job.companyName ?? this.deriveGuidName(companyGuid);
     const description = this.formatDescription(job.descriptionHtml ?? null, format);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `cvwarehouse-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: null,
       isRemote: job.isRemote ?? false,

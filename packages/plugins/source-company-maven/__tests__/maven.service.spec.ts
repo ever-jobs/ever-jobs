@@ -90,7 +90,7 @@ describe('MavenService — Spec 162 / T04', () => {
       expect(csm?.jobUrl).toContain('job-boards.greenhouse.io/maven/jobs/');
       // D-11 clean dept pass-through.
       expect(csm?.department).toBe('Operations');
-      expect(csm?.location?.city).toBe('San Francisco, CA');
+      expect(csm?.location?.city).toBe('San Francisco');
       expect(csm?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(csm?.description).not.toContain('&lt;');
@@ -103,7 +103,7 @@ describe('MavenService — Spec 162 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior/Staff Software Engineer');
       expect(sse?.companyName).toBe('Maven');
-      expect(sse?.location?.city).toBe('Remote, US');
+      expect(sse?.location?.city).toBeUndefined();
       expect(sse?.isRemote).toBe(true);
       expect(sse?.department).toBe('Engineering');
       expect(sse?.jobUrl).toBe(

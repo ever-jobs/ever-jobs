@@ -11,13 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationText, toDateOnly } from '@ever-jobs/common';
 import {
   ZIMYO_ROOT_DOMAIN,
   ZIMYO_API_BASE,
@@ -371,12 +365,14 @@ export class ZimyoService implements IScraper {
     const companyName = job.companyName ?? this.deriveOrgName(orgId);
     const description = this.formatDescription(job.descriptionHtml ?? null, format);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `zimyo-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -496,7 +492,7 @@ export class ZimyoService implements IScraper {
   private extractLocation(job: ZimyoJob): LocationDto | null {
     const text = job.locationText;
     if (!text) return null;
-    return new LocationDto({ city: text });
+    return parseLocationText(text).location;
   }
 
   /** Join the free-text location parts into a single line (deduping repeats). */

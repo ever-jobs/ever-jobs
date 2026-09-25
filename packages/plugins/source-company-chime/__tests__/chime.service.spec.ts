@@ -130,7 +130,7 @@ describe('ChimeService — Spec 059 / T04', () => {
       expect(acc?.jobUrl).toContain('/chime/jobs/');
       expect(acc?.jobUrl).toContain('?gh_jid=');
       expect(acc?.jobUrl).not.toContain('job-boards.greenhouse.io');
-      expect(acc?.location?.city).toBe('San Francisco, CA, USA');
+      expect(acc?.location?.city).toBe('San Francisco');
       // D-11 regression guard: the emitted `department` for the first
       // fixture listing is the flat single-token string `'Accounting'`
       // byte-for-byte AND matches the wire `departments[0].name`
@@ -161,7 +161,7 @@ describe('ChimeService — Spec 059 / T04', () => {
       expect(eng).toBeDefined();
       expect(eng?.title).toBe('Senior Software Engineer, AI Experience');
       expect(eng?.companyName).toBe('Chime');
-      expect(eng?.location?.city).toBe('Chicago, IL, USA');
+      expect(eng?.location?.city).toBe('Chicago');
       expect(eng?.isRemote).toBe(false);
       // D-11 second-instance pass-through guard: the literal `&` byte
       // in `'AI & App Experience Engineering'` flows through to the

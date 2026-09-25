@@ -88,7 +88,7 @@ describe('DoximityService — Spec 127 / T04', () => {
       );
       expect(da?.jobUrl).toContain('job-boards.greenhouse.io/doximity/jobs/');
       expect(da?.department).toBe('Data');
-      expect(da?.location?.city).toBe('San Francisco, CA');
+      expect(da?.location?.city).toBe('San Francisco');
       expect(da?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(da?.description).not.toContain('&lt;');
@@ -101,7 +101,7 @@ describe('DoximityService — Spec 127 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer II - Android (Kotlin)');
       expect(sse?.companyName).toBe('Doximity');
-      expect(sse?.location?.city).toBe('Remote, US');
+      expect(sse?.location?.city).toBeUndefined();
       expect(sse?.isRemote).toBe(true);
       expect(sse?.department).toBe('Mobile Engineering');
       expect(sse?.jobUrl).toBe(

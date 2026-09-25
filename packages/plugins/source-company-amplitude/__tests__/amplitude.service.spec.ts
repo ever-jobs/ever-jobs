@@ -98,7 +98,7 @@ describe('AmplitudeService — Spec 107 / T04', () => {
       expect(ai?.jobUrl).toContain('job-boards.greenhouse.io/amplitude/jobs/');
       expect(ai?.jobUrl).not.toContain('amplitude.com');
       expect(ai?.department).toBe('CFO : Financial Planning');
-      expect(ai?.location?.city).toBe('Remote - USA');
+      expect(ai?.location?.city).toBeUndefined();
       expect(ai?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(ai?.description).not.toContain('&lt;');
@@ -111,7 +111,7 @@ describe('AmplitudeService — Spec 107 / T04', () => {
       expect(sem).toBeDefined();
       expect(sem?.title).toBe('Senior Engineering Manager, Platform');
       expect(sem?.companyName).toBe('Amplitude');
-      expect(sem?.location?.city).toBe('San Francisco, CA');
+      expect(sem?.location?.city).toBe('San Francisco');
       expect(sem?.isRemote).toBe(false);
       expect(sem?.department).toBe('Engineering');
       expect(sem?.jobUrl).toBe(

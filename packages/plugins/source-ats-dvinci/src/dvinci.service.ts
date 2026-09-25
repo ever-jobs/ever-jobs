@@ -11,13 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationText, toDateOnly } from '@ever-jobs/common';
 import {
   DVINCI_HOST_SUFFIX,
   DVINCI_HOST_TEMPLATE,
@@ -185,13 +179,16 @@ export class DvinciService implements IScraper {
     const opening = pub.jobOpening ?? null;
     const description = this.buildDescription(pub, format);
 
+    const location = this.extractLocation(opening);
+    const locations = this.extractLocations(opening);
     return new JobPostDto({
       id: `dvinci-${atsId}`,
       title,
       companyName,
       jobUrl,
       jobUrlDirect: jobUrl,
-      location: this.extractLocation(opening),
+      location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       datePosted: this.parseDate(pub.startDate ?? opening?.createdDate),
       isRemote: this.detectRemote(pub, opening),
@@ -296,9 +293,21 @@ export class DvinciService implements IScraper {
     }
 
     const label = this.pickString(opening.location);
-    if (label) return new LocationDto({ city: label });
+    if (label) return parseLocationText(label).location;
 
     return null;
+  }
+
+  /** One LocationDto per structured `jobOpening.locations[]` entry, else the merged location. */
+  private extractLocations(opening: DvinciJobOpening | null): LocationDto[] {
+    if (opening && Array.isArray(opening.locations) && opening.locations.length > 0) {
+      const out = opening.locations
+        .map((entry) => this.fromStructured(entry))
+        .filter((l): l is LocationDto => !!l);
+      if (out.length > 0) return out;
+    }
+    const merged = this.extractLocation(opening);
+    return merged ? [merged] : [];
   }
 
   /** Build a LocationDto from a structured `jobOpening.locations[]` entry. */

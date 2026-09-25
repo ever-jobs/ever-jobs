@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationList,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -336,7 +337,7 @@ export class BeeSiteService implements IScraper {
     if (!atsId) return null;
 
     const title = this.cleanText(descriptor.PositionTitle);
-    const { city, state, country, locationText } = this.extractApiLocation(
+    const { city, state, country, locationText, locationEntries } = this.extractApiLocation(
       descriptor.PositionLocation,
     );
     const department = this.cleanText(descriptor.DepartmentName);
@@ -352,6 +353,7 @@ export class BeeSiteService implements IScraper {
       state,
       country,
       locationText,
+      locationEntries,
       descriptionHtml: this.extractApiDescription(descriptor.PositionFormattedDescription),
       department,
       employmentType: this.extractApiEmploymentType(descriptor),
@@ -367,7 +369,15 @@ export class BeeSiteService implements IScraper {
 
     const title = this.cleanText(row.title);
     const locationText = this.cleanText(row.location);
-    const { city, state, country } = this.splitLocation(locationText);
+    const parsed = parseLocationList([locationText]);
+    const city = parsed.location?.city ?? null;
+    const state = parsed.location?.state ?? null;
+    const country = parsed.location?.country ?? null;
+    const locationEntries = parsed.locations.map((l) => ({
+      city: l.city ?? null,
+      state: l.state ?? null,
+      country: l.country ?? null,
+    }));
 
     return {
       atsId,
@@ -379,6 +389,7 @@ export class BeeSiteService implements IScraper {
       state,
       country,
       locationText,
+      locationEntries,
       descriptionHtml: null, // the list row has no body; the detail page is not followed
       department: null,
       employmentType: null,
@@ -411,6 +422,9 @@ export class BeeSiteService implements IScraper {
       companyName,
       jobUrl,
       location: this.extractLocation(job),
+      ...(this.extractLocations(job).length > 0
+        ? { locations: this.extractLocations(job) }
+        : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -530,17 +544,31 @@ export class BeeSiteService implements IScraper {
   /** Flatten the JSON `PositionLocation` entries into structured + free-text parts. */
   private extractApiLocation(
     locations: BeeSitePositionLocation[] | null | undefined,
-  ): { city: string | null; state: string | null; country: string | null; locationText: string | null } {
+  ): {
+    city: string | null;
+    state: string | null;
+    country: string | null;
+    locationText: string | null;
+    locationEntries: { city: string | null; state: string | null; country: string | null }[];
+  } {
     if (!Array.isArray(locations) || locations.length === 0) {
-      return { city: null, state: null, country: null, locationText: null };
+      return { city: null, state: null, country: null, locationText: null, locationEntries: [] };
     }
-    const first = locations[0] ?? {};
-    const city = this.cleanText(first.CityName) ?? this.cleanText(first.LocationName);
-    const state = this.cleanText(first.CountrySubDivisionName);
-    const country = this.cleanText(first.CountryName);
+    const locationEntries = locations.map((loc) => ({
+      city: this.cleanText(loc?.CityName) ?? this.cleanText(loc?.LocationName),
+      state: this.cleanText(loc?.CountrySubDivisionName),
+      country: this.cleanText(loc?.CountryName),
+    }));
+    const first = locationEntries[0];
     const locationText =
-      [city, state, country].filter((p): p is string => !!p).join(', ') || null;
-    return { city, state, country, locationText };
+      [first.city, first.state, first.country].filter((p): p is string => !!p).join(', ') || null;
+    return {
+      city: first.city,
+      state: first.state,
+      country: first.country,
+      locationText,
+      locationEntries,
+    };
   }
 
   /** Extract the HTML job-ad body from the `PositionFormattedDescription` field. */
@@ -677,26 +705,13 @@ export class BeeSiteService implements IScraper {
     return new LocationDto({ city, state, country });
   }
 
-  /**
-   * Best-effort split of a single free-text location line into city / state / country.
-   * Comma-separated tail is treated as the country; the head as the city. A bare
-   * "Remote" token yields a null location.
-   */
-  private splitLocation(
-    text: string | null,
-  ): { city: string | null; state: string | null; country: string | null } {
-    if (!text || this.isRemoteToken(text)) {
-      return { city: null, state: null, country: null };
+  /** Per-site locations[] — the record's structured entries, else the singleton location. */
+  private extractLocations(job: BeeSiteJob): LocationDto[] {
+    if (job.locationEntries?.length) {
+      return job.locationEntries.map((e) => new LocationDto(e));
     }
-    const parts = text
-      .split(',')
-      .map((p) => this.cleanText(p))
-      .filter((p): p is string => !!p);
-    if (parts.length === 0) return { city: null, state: null, country: null };
-    if (parts.length === 1) return { city: parts[0], state: null, country: null };
-    const country = parts[parts.length - 1];
-    const city = parts.slice(0, parts.length - 1).join(', ');
-    return { city: city || null, state: null, country: country || null };
+    const location = this.extractLocation(job);
+    return location ? [location] : [];
   }
 
   /** Detect remote roles from the title, location, or department text. */
@@ -711,11 +726,6 @@ export class BeeSiteService implements IScraper {
       if (BEESITE_REMOTE_REGEX.test(field)) return true;
     }
     return false;
-  }
-
-  /** True when a location token is a bare "Remote" marker rather than a real place. */
-  private isRemoteToken(value: string): boolean {
-    return /^(remote|home[\s-]?office|homeoffice)$/i.test(value.trim());
   }
 
   /**

@@ -1,5 +1,6 @@
 export * from './auth';
 export * from './location.dto';
+export * from './office.dto';
 export * from './compensation.dto';
 export * from './job-post.dto';
 export * from './job-response.dto';

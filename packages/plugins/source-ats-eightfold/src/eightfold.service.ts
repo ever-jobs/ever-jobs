@@ -16,12 +16,14 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
   EIGHTFOLD_HOST_TEMPLATE,
   EIGHTFOLD_JOBS_PATH,
+  EIGHTFOLD_PCSX_SEARCH_PATH,
   EIGHTFOLD_PAGE_SIZE,
   EIGHTFOLD_MAX_CONCURRENCY,
   EIGHTFOLD_REQUEST_DELAY_MS,
@@ -30,8 +32,23 @@ import {
 import {
   EightfoldPosition,
   EightfoldJobsResponse,
+  EightfoldPcsxResponse,
   EightfoldLocationObject,
 } from './eightfold.types';
+
+/**
+ * Per-scrape state. `jobsPath` is the endpoint the tenant answers on,
+ * resolved on the first page: some tenants gate `/api/apply/v2/jobs` behind
+ * authorization ("Not authorized for PCSX") while leaving `/api/pcsx/search`
+ * open, others are the reverse. It is remembered for the rest of ONE scrape
+ * so later pages hit the working endpoint directly. It must never live on the
+ * service: Nest providers are singletons, so an instance field would leak
+ * tenant A's endpoint into tenant B's scrape and race between concurrent
+ * scrapes.
+ */
+interface EightfoldScrapeContext {
+  jobsPath: string | null;
+}
 
 /**
  * Eightfold AI ("PCSX" / SmartApply) careers scraper — generic, multi-tenant.
@@ -73,12 +90,16 @@ export class EightfoldService implements IScraper {
     const resultsWanted = input.resultsWanted ?? 100;
     const seen = new Set<string>();
     const jobPosts: JobPostDto[] = [];
+    // Endpoint resolution is per scrape (per tenant), never on the singleton
+    // service — see EightfoldScrapeContext.
+    const ctx: EightfoldScrapeContext = { jobsPath: null };
 
     try {
       this.logger.log(`Fetching Eightfold jobs for tenant: ${host} (domain=${domain})`);
 
-      // First page → positions + true total count.
-      const first = await this.fetchPage(client, host, domain, 0);
+      // First page → positions + true total count. It also resolves the
+      // endpoint (ctx.jobsPath) before the concurrent fan-out below reads it.
+      const first = await this.fetchPage(client, host, domain, 0, ctx);
       this.collect(first.positions, companySlug, companyName, host, input.descriptionFormat, seen, jobPosts);
 
       const total = Math.min(first.count || jobPosts.length, resultsWanted);
@@ -93,7 +114,7 @@ export class EightfoldService implements IScraper {
         for (let i = 0; i < offsets.length; i += EIGHTFOLD_MAX_CONCURRENCY) {
           const chunk = offsets.slice(i, i + EIGHTFOLD_MAX_CONCURRENCY);
           const settled = await Promise.allSettled(
-            chunk.map((start) => this.fetchPage(client, host, domain, start)),
+            chunk.map((start) => this.fetchPage(client, host, domain, start, ctx)),
           );
           for (const result of settled) {
             if (result.status === 'fulfilled') {
@@ -128,12 +149,17 @@ export class EightfoldService implements IScraper {
     }
   }
 
-  /** Fetch one positions page; returns its positions and the tenant total count. */
+  /**
+   * Fetch one positions page; returns its positions and the tenant total count.
+   * Resolves the working endpoint into `ctx.jobsPath` on the first success so
+   * later pages of the SAME scrape skip the doomed request.
+   */
   private async fetchPage(
     client: ReturnType<typeof createHttpClient>,
     host: string,
     domain: string,
     start: number,
+    ctx: EightfoldScrapeContext,
   ): Promise<{ positions: EightfoldPosition[]; count: number }> {
     const params = new URLSearchParams({
       domain,
@@ -143,13 +169,49 @@ export class EightfoldService implements IScraper {
       num: String(EIGHTFOLD_PAGE_SIZE),
       sort_by: 'timestamp',
     });
-    const url = `${host}${EIGHTFOLD_JOBS_PATH}?${params.toString()}`;
-    const response = await client.get(url);
-    const data: EightfoldJobsResponse = response.data ?? {};
-    return {
-      positions: data.positions ?? [],
-      count: data.count ?? 0,
-    };
+    const paths = ctx.jobsPath
+      ? [ctx.jobsPath]
+      : [EIGHTFOLD_JOBS_PATH, EIGHTFOLD_PCSX_SEARCH_PATH];
+    let lastError: unknown = null;
+    for (const path of paths) {
+      const url = `${host}${path}?${params.toString()}`;
+      try {
+        const response = await client.get(url);
+        const payload = this.unwrapPositionsAndCount(response.data);
+        if (payload) {
+          ctx.jobsPath = path;
+          return payload;
+        }
+      } catch (err) {
+        // A tenant can gate an endpoint behind an HTTP error (e.g. 403 on
+        // /api/apply/v2/jobs) while the other stays open — fall through.
+        lastError = err;
+      }
+    }
+    if (lastError) throw lastError;
+    return { positions: [], count: 0 };
+  }
+
+  /**
+   * Positions + total count out of either endpoint's envelope:
+   * `{positions, count}` at top level (SmartApply) or nested under `data`
+   * (PCSX search). Returns null for bodies without a payload — an HTML
+   * shell or a `{"message": "Not authorized for PCSX"}` gate — so the
+   * caller can try the next endpoint.
+   */
+  private unwrapPositionsAndCount(
+    body: EightfoldJobsResponse | EightfoldPcsxResponse | unknown,
+  ): { positions: EightfoldPosition[]; count: number } | null {
+    if (!body || typeof body !== 'object') return null;
+    const top = body as EightfoldJobsResponse;
+    if (Array.isArray(top.positions) || typeof top.count === 'number') {
+      return { positions: top.positions ?? [], count: top.count ?? 0 };
+    }
+    const wrapped = (body as EightfoldPcsxResponse).data;
+    if (wrapped && (Array.isArray(wrapped.positions) || typeof wrapped.count === 'number')) {
+      return { positions: wrapped.positions ?? [], count: wrapped.count ?? 0 };
+    }
+    return null;
   }
 
   /** Map raw positions → JobPostDto, de-duplicating by ATS id within this run. */
@@ -214,12 +276,15 @@ export class EightfoldService implements IScraper {
     const department =
       position.department ?? position.team ?? position.businessUnit ?? position.business_unit ?? position.category ?? null;
 
+    const locations = this.extractLocations(position);
+
     return new JobPostDto({
       id: `eightfold-${atsId}`,
       title,
       companyName: position.companyName ?? companyName,
       jobUrl,
-      location: this.extractLocation(position),
+      location: locations[0] ?? null,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       datePosted: this.parseDate(
         position.postedTs ?? position.creationTs ?? position.t_create ?? position.t_update,
@@ -281,29 +346,30 @@ export class EightfoldService implements IScraper {
   }
 
   /** Eightfold returns locations as string lists (newer) or dicts (older). */
-  private extractLocation(position: EightfoldPosition): LocationDto | null {
+  private extractLocations(position: EightfoldPosition): LocationDto[] {
     for (const key of ['standardizedLocations', 'locations'] as const) {
       const locs = position[key];
       if (Array.isArray(locs) && locs.length > 0) {
-        const first = locs[0];
-        if (typeof first === 'string' && first.trim()) {
-          // Eightfold strings are "Country, State, City" — reverse into city/state/country.
-          const parts = first.split(',').map((p) => p.trim()).filter(Boolean);
-          const [country, state, city] = parts.length >= 3 ? parts : [parts[parts.length - 1], parts[1], parts[0]];
-          return new LocationDto({ city: city ?? null, state: state ?? null, country: country ?? null });
-        }
-        if (first && typeof first === 'object') {
-          return this.locationFromObject(first);
-        }
+        return locs
+          .filter((l): l is string | EightfoldLocationObject => !!l)
+          .map((l) => this.locationEntry(l));
       }
     }
     const primary = position.primaryLocation ?? position.primary_location;
-    if (primary && typeof primary === 'object') return this.locationFromObject(primary);
+    if (primary && typeof primary === 'object') return [this.locationFromObject(primary)];
     if (typeof primary === 'string' && primary.trim()) {
-      const parts = primary.split(',').map((p) => p.trim());
-      return new LocationDto({ city: parts[0] ?? null, state: parts[1] ?? null, country: parts[2] ?? null });
+      const parsed = parseLocationText(primary).location;
+      if (parsed) return [parsed];
     }
-    return null;
+    return [];
+  }
+
+  private locationEntry(entry: string | EightfoldLocationObject): LocationDto {
+    if (entry && typeof entry === 'object') return this.locationFromObject(entry);
+    // Eightfold strings are "Country, State, City" — reverse into city/state/country.
+    const parts = String(entry).split(',').map((p) => p.trim()).filter(Boolean);
+    const [country, state, city] = parts.length >= 3 ? parts : [parts[parts.length - 1], parts[1], parts[0]];
+    return new LocationDto({ city: city ?? null, state: state ?? null, country: country ?? null });
   }
 
   private locationFromObject(obj: EightfoldLocationObject): LocationDto {

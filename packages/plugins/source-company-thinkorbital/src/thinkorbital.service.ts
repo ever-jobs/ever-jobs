@@ -13,12 +13,13 @@ import {
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient, markdownConverter } from '@ever-jobs/common';
+import { createHttpClient, markdownConverter, normalizeUsState, parseLocationText } from '@ever-jobs/common';
 import {
   THINKORBITAL_CAREERS_URL,
   THINKORBITAL_COMPANY_NAME,
   THINKORBITAL_DEFAULT_RESULTS,
   THINKORBITAL_DEFAULT_TIMEOUT_SECONDS,
+  thinkorbitalLocationHeuristicsEnabled,
 } from './thinkorbital.constants';
 
 interface ParsedSection {
@@ -119,6 +120,7 @@ export class ThinkorbitalService implements IScraper {
     const isRemote = this.detectRemote(employmentType, locationText);
     const workFromHomeType = this.resolveWorkFromHomeType(employmentType, isRemote);
     const description = this.buildDescription(body);
+    const location = this.parseLocation(locationText);
 
     const id = `thinkorbital-${this.slugFromTitle(resolvedTitle)}`;
 
@@ -130,7 +132,8 @@ export class ThinkorbitalService implements IScraper {
       companyUrl,
       jobUrl: companyUrl,
       jobUrlDirect: companyUrl,
-      location: this.parseLocation(locationText),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       isRemote,
       workFromHomeType,
@@ -215,35 +218,41 @@ export class ThinkorbitalService implements IScraper {
   private parseLocation(raw: string): LocationDto | null {
     const text = this.normalize(raw);
     if (!text) return null;
-
-    const twoLetterMatch = text.match(/^([^,]+?)\s*,\s*([A-Za-z]{2})\b/);
-    if (twoLetterMatch) {
-      return new LocationDto({
-        city: this.normalize(twoLetterMatch[1]),
-        state: twoLetterMatch[2].toUpperCase(),
-        country: Country.USA,
-      });
-    }
-
-    const parts = text.split(',').map((part) => this.normalize(part)).filter(Boolean);
-    if (parts.length >= 2) {
-      const city = parts[0];
-      const rest = parts.slice(1).join(', ');
-      const state = this.resolveStateName(rest);
-      if (state) {
-        return new LocationDto({ city, state, country: Country.USA });
-      }
-      return new LocationDto({ city, country: Country.USA });
-    }
-
-    return new LocationDto({ city: text, country: Country.USA });
+    const parsed = parseLocationText(text).location;
+    return thinkorbitalLocationHeuristicsEnabled() ? this.applyUsHeuristics(text, parsed) : parsed;
   }
 
+  /**
+   * ThinkOrbital location heuristics (Spec 1689 — restores the data Spec 5125
+   * dropped; THINKORBITAL_LOCATION_HEURISTICS=false turns them off):
+   *  - a US state named anywhere after the city ("Boulder, Colorado or
+   *    Washington, DC Area") fills a missing state, with the first comma
+   *    segment as the city (the pre-5125 resolveStateName behaviour);
+   *  - a missing country is filled with `Country.USA`: ThinkOrbital only hires
+   *    in the US, so the country is known even when the label omits it.
+   * Fields the shared parser found always win; only gaps are filled.
+   */
+  private applyUsHeuristics(text: string, parsed: LocationDto | null): LocationDto {
+    let location = parsed ?? new LocationDto({});
+    if (!location.state) {
+      const parts = text.split(',').map((part) => this.normalize(part)).filter(Boolean);
+      const state = parts.length >= 2 ? this.resolveStateName(parts.slice(1).join(', ')) : null;
+      if (state) {
+        location = new LocationDto({ ...location, city: parts[0], state });
+      }
+    }
+    if (!location.country) location.country = Country.USA;
+    return location;
+  }
+
+  /** First US state (name or code) among "Colorado or Texas"-style segments, as its code. */
   private resolveStateName(raw: string): string | null {
-    const segments = raw.split(/[,;]|\s+(?:or|and|&)\s+/).map((s) => this.normalize(s).toLowerCase());
+    // `(?<!\s)`: the connector match starts at the head of its whitespace
+    // run (same splits; no per-position rescan of a long run — Spec 1689)
+    const segments = raw.split(/[,;]|(?<!\s)\s+(?:or|and|&)\s+/).map((s) => this.normalize(s));
     for (const segment of segments) {
-      const abbrev = US_STATE_ABBREVIATIONS.get(segment);
-      if (abbrev) return abbrev;
+      const code = segment ? normalizeUsState(segment) : null;
+      if (code) return code;
     }
     return null;
   }
@@ -362,55 +371,3 @@ export class ThinkorbitalService implements IScraper {
   }
 }
 
-const US_STATE_ABBREVIATIONS: Map<string, string> = new Map([
-  ['alabama', 'AL'],
-  ['alaska', 'AK'],
-  ['arizona', 'AZ'],
-  ['arkansas', 'AR'],
-  ['california', 'CA'],
-  ['colorado', 'CO'],
-  ['connecticut', 'CT'],
-  ['delaware', 'DE'],
-  ['florida', 'FL'],
-  ['georgia', 'GA'],
-  ['hawaii', 'HI'],
-  ['idaho', 'ID'],
-  ['illinois', 'IL'],
-  ['indiana', 'IN'],
-  ['iowa', 'IA'],
-  ['kansas', 'KS'],
-  ['kentucky', 'KY'],
-  ['louisiana', 'LA'],
-  ['maine', 'ME'],
-  ['maryland', 'MD'],
-  ['massachusetts', 'MA'],
-  ['michigan', 'MI'],
-  ['minnesota', 'MN'],
-  ['mississippi', 'MS'],
-  ['missouri', 'MO'],
-  ['montana', 'MT'],
-  ['nebraska', 'NE'],
-  ['nevada', 'NV'],
-  ['new hampshire', 'NH'],
-  ['new jersey', 'NJ'],
-  ['new mexico', 'NM'],
-  ['new york', 'NY'],
-  ['north carolina', 'NC'],
-  ['north dakota', 'ND'],
-  ['ohio', 'OH'],
-  ['oklahoma', 'OK'],
-  ['oregon', 'OR'],
-  ['pennsylvania', 'PA'],
-  ['rhode island', 'RI'],
-  ['south carolina', 'SC'],
-  ['south dakota', 'SD'],
-  ['tennessee', 'TN'],
-  ['texas', 'TX'],
-  ['utah', 'UT'],
-  ['vermont', 'VT'],
-  ['virginia', 'VA'],
-  ['washington', 'WA'],
-  ['west virginia', 'WV'],
-  ['wisconsin', 'WI'],
-  ['wyoming', 'WY'],
-]);

@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
 } from '@ever-jobs/common';
 import {
   BIZNEO_ROOT_DOMAIN,
@@ -207,7 +208,7 @@ export class BizneoService implements IScraper {
       const url = `${host}${BIZNEO_JOBS_PATH}/${slug}`;
       const windowText = this.cardWindow(html, match.index);
       const posting = postingsByUrl.get(slug) ?? null;
-      const address = this.firstAddress(posting?.jobLocation);
+      const addresses = this.addresses(posting?.jobLocation);
 
       const role: BizneoBoardJob = {
         slug,
@@ -218,7 +219,8 @@ export class BizneoService implements IScraper {
           this.titleFromSlug(slug),
         location:
           this.fieldFromWindow(windowText, 'Location|Ubicaci[oó]n|Localizaci[oó]n') ??
-          this.addressText(address),
+          this.addressText(addresses[0] ?? null),
+        addresses,
         brand: this.fieldFromWindow(windowText, 'Brand|Marca'),
         workMode: this.workModeFromWindow(windowText),
       };
@@ -397,6 +399,7 @@ export class BizneoService implements IScraper {
       city,
       state,
       country,
+      locationEntries: this.locationEntries(item.addresses),
       locationText,
       department: this.cleanText(item.brand),
       employmentType: null,
@@ -430,12 +433,16 @@ export class BizneoService implements IScraper {
       format,
     );
 
+    const location = this.extractLocation(job);
+    const locations = this.extractLocations(job);
+
     return new JobPostDto({
       id: `bizneo-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -573,15 +580,12 @@ export class BizneoService implements IScraper {
     if (!text || this.isRemoteToken(text)) {
       return { city: null, state: null, country: null };
     }
-    const parts = text
-      .split(',')
-      .map((p) => this.cleanText(p))
-      .filter((p): p is string => !!p);
-    if (parts.length === 0) return { city: null, state: null, country: null };
-    if (parts.length === 1) return { city: parts[0], state: null, country: null };
-    const country = parts[parts.length - 1];
-    const city = parts.slice(0, parts.length - 1).join(', ');
-    return { city: city || null, state: null, country: country || null };
+    const parsed = parseLocationText(text).location;
+    return {
+      city: parsed?.city ?? null,
+      state: parsed?.state ?? null,
+      country: parsed?.country ?? null,
+    };
   }
 
   /** Detect remote roles from the title, location, or work-mode text. */
@@ -613,13 +617,36 @@ export class BizneoService implements IScraper {
   }
 
   /** Return the first `PostalAddress` from a `jobLocation` (object or array). */
-  private firstAddress(
+  private addresses(
     jobLocation: BizneoJobLocation | BizneoJobLocation[] | null | undefined,
-  ): BizneoPostalAddress | null {
-    if (!jobLocation) return null;
-    const first = Array.isArray(jobLocation) ? jobLocation[0] : jobLocation;
-    const address = first?.address;
-    return address && typeof address === 'object' ? address : null;
+  ): BizneoPostalAddress[] {
+    if (!jobLocation) return [];
+    const nodes = Array.isArray(jobLocation) ? jobLocation : [jobLocation];
+    return nodes
+      .map((n) => n?.address)
+      .filter((a): a is BizneoPostalAddress => !!a && typeof a === 'object');
+  }
+
+  /** One `{city,state,country}` triple per JSON-LD `jobLocation` address. */
+  private locationEntries(
+    addresses: BizneoPostalAddress[] | null | undefined,
+  ): Array<{ city: string | null; state: string | null; country: string | null }> {
+    return (addresses ?? []).map((a) => ({
+      city: this.cleanText(a.addressLocality),
+      state: this.cleanText(a.addressRegion),
+      country: this.countryName(a.addressCountry),
+    }));
+  }
+
+  /** Per-site LocationDto list — one per JSON-LD address, else the merged location. */
+  private extractLocations(job: BizneoJob): LocationDto[] {
+    if (job.locationEntries && job.locationEntries.length > 0) {
+      return job.locationEntries
+        .filter((e) => e.city || e.state || e.country)
+        .map((e) => new LocationDto({ city: e.city, state: e.state, country: e.country }));
+    }
+    const merged = this.extractLocation(job);
+    return merged ? [merged] : [];
   }
 
   /** Trim a string, returning null for empty / non-string values. */

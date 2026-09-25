@@ -102,7 +102,7 @@ describe('SezzleService — Spec 169 / T04', () => {
       expect(cro?.department).toBe('EX-Executive');
       expect(cro?.department).not.toMatch(/^\s/);
       expect(cro?.department).not.toMatch(/\s$/);
-      expect(cro?.location?.city).toBe('Minneapolis, United States');
+      expect(cro?.location?.city).toBe('Minneapolis');
       expect(cro?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(cro?.description).not.toContain('&lt;');
@@ -120,7 +120,7 @@ describe('SezzleService — Spec 169 / T04', () => {
       expect(ai?.title).toBe('AI Engineer I (Remote)');
       expect(ai?.title).not.toMatch(/^\s/);
       expect(ai?.companyName).toBe('Sezzle');
-      expect(ai?.location?.city).toBe('Bogota, Colombia');
+      expect(ai?.location?.city).toBe('Bogota');
       // location string does not contain 'remote'; isRemote stays false.
       expect(ai?.isRemote).toBe(false);
       // **D-11 clean dept pass-through lock** — wire dept

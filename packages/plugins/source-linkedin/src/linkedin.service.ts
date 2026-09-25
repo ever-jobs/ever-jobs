@@ -16,16 +16,7 @@ import {
   DescriptionFormat,
   Site,
 } from '@ever-jobs/models';
-import {
-  HttpClient,
-  createHttpClient,
-  LinkedInException,
-  markdownConverter,
-  plainConverter,
-  extractEmails,
-  randomSleep,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, HttpClient, LinkedInException, markdownConverter, parseLocationList, plainConverter, randomSleep, toDateOnly } from '@ever-jobs/common';
 import { LINKEDIN_HEADERS } from './linkedin.constants';
 import { jobTypeCode, parseJobType, parseJobLevel, parseCompanyIndustry, isJobRemote } from './linkedin.utils';
 
@@ -183,7 +174,8 @@ export class LinkedInService implements IScraper {
       }
     }
 
-    const location = new LocationDto({ city: locationStr || null });
+    const locationParsed = parseLocationList([locationStr || null]);
+    const location = locationParsed.location;
     const remote = isJobRemote(title, '', locationStr);
 
     return new JobPostDto({
@@ -193,9 +185,10 @@ export class LinkedInService implements IScraper {
       companyUrl,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       compensation,
       datePosted: datePosted ? toDateOnly(datePosted) : null,
-      isRemote: remote,
+      isRemote: (remote) || locationParsed.remoteMentioned,
       site: Site.LINKEDIN,
     });
   }

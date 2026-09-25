@@ -248,12 +248,14 @@ export class VivaHRService implements IScraper {
     const org = posting.hiringOrganization;
     const resolvedCompanyName = org?.name ?? companyName;
 
+    const location = this.extractLocation(posting);
     return new JobPostDto({
       id: `vivahr-${atsId}`,
       title,
       companyName: resolvedCompanyName,
       jobUrl,
-      location: this.extractLocation(posting),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(posting.datePosted),
       isRemote: this.detectRemote(posting),

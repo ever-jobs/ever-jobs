@@ -14,6 +14,22 @@ import {
 } from '../src/http/crawl/scrape-context';
 import { PluginCrawlPolicy } from '../src/http/crawl/types';
 
+// Count the resolver calls through a module mock that wraps the real function.
+// `jest.spyOn(resolveModule, ...)` needs a configurable export property, which
+// the CommonJS output of @swc/jest (the default transformer since Spec 1689) does
+// not have ("Cannot redefine property"); this works under ts-jest as well.
+jest.mock('../src/http/crawl/resolve', () => {
+  const actual = jest.requireActual('../src/http/crawl/resolve');
+  return { ...actual, explainCrawlPolicy: jest.fn(actual.explainCrawlPolicy) };
+});
+
+/** The wrapped `explainCrawlPolicy`, its call log cleared. */
+function explainCalls(): jest.Mock {
+  const mock = resolveModule.explainCrawlPolicy as unknown as jest.Mock;
+  mock.mockClear();
+  return mock;
+}
+
 const tick = (ms = 0) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** Spec 1690 §4.6 — the per-scrape context carried through AsyncLocalStorage. */
@@ -255,7 +271,7 @@ describe('scrape context (Spec 1690)', () => {
     });
 
     it('keeps a whole search worth of (site, host) entries: LRU, not a wholesale clear at 512', () => {
-      const spy = jest.spyOn(resolveModule, 'explainCrawlPolicy');
+      const spy = explainCalls();
       try {
         // ~1,850 sites × a host or two, interleaved like a real fan-out.
         const keys = Array.from({ length: 3000 }, (_, i) => [`site${i % 1850}`, `h${i}.example`] as const);
@@ -269,12 +285,12 @@ describe('scrape context (Spec 1690)', () => {
         expect(spy.mock.calls.length).toBe(3000); // the second pass is served entirely from the memo
         expect(CRAWL_POLICY_MEMO_MAX).toBeGreaterThanOrEqual(3000);
       } finally {
-        spy.mockRestore();
+        spy.mockClear();
       }
     });
 
     it('evicts the least recently used entry when full', () => {
-      const spy = jest.spyOn(resolveModule, 'explainCrawlPolicy');
+      const spy = explainCalls();
       try {
         getEffectiveCrawlPolicy('hot.example');
         for (let i = 0; i < CRAWL_POLICY_MEMO_MAX; i++) {
@@ -287,7 +303,7 @@ describe('scrape context (Spec 1690)', () => {
         getEffectiveCrawlPolicy('cold0.example');
         expect(spy.mock.calls.length).toBe(before + 1); // the oldest went first
       } finally {
-        spy.mockRestore();
+        spy.mockClear();
       }
     });
 

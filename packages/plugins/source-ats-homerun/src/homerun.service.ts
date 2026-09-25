@@ -11,13 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { HOMERUN_API_URL, HOMERUN_HEADERS } from './homerun.constants';
 import { HomerunJob, HomerunResponse } from './homerun.types';
 
@@ -121,9 +115,8 @@ export class HomerunService implements IScraper {
 
     // Location from location string
     const locationStr = job.location ?? null;
-    const location = locationStr
-      ? new LocationDto({ city: locationStr })
-      : null;
+    const locationParsed = parseLocationList([locationStr]);
+    const location = locationStr ? locationParsed.location : null;
 
     // Remote detection from location string
     const isRemote = locationStr?.toLowerCase().includes('remote') ?? false;
@@ -143,6 +136,7 @@ export class HomerunService implements IScraper {
       companyName: companySlug,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       datePosted,
       isRemote,

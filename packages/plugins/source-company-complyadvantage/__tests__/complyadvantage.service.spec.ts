@@ -96,7 +96,7 @@ describe('ComplyAdvantageService — Spec 141 / T04', () => {
       expect(ds?.jobUrl).toContain('?gh_jid=');
       // D-11 clean dept pass-through.
       expect(ds?.department).toBe('Technology');
-      expect(ds?.location?.city).toBe('London, United Kingdom');
+      expect(ds?.location?.city).toBe('London');
       expect(ds?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ds?.description).not.toContain('&lt;');
@@ -111,7 +111,7 @@ describe('ComplyAdvantageService — Spec 141 / T04', () => {
       expect(sd?.title).toBe('Senior Director, Revenue Operations');
       expect(sd?.title).not.toMatch(/ $/);
       expect(sd?.companyName).toBe('ComplyAdvantage');
-      expect(sd?.location?.city).toBe('Remote, US');
+      expect(sd?.location?.city).toBeUndefined();
       expect(sd?.isRemote).toBe(true);
       // D-11 clean dept pass-through (single-token form).
       expect(sd?.department).toBe('Commercial');

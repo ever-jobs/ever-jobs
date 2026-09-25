@@ -251,6 +251,82 @@ describe('BrowserPool', () => {
     expect(mockLaunchPersistentContext).toHaveBeenCalledTimes(1);
   });
 
+  describe('persistent context cap (Spec 1689)', () => {
+    afterEach(() => {
+      delete process.env.EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS;
+    });
+
+    const launched = (): any[] =>
+      mockLaunchPersistentContext.mock.results.map((r: { value: unknown }) => r.value);
+
+    it('closes the least-recently-used idle context when rotating proxies exceed the cap', async () => {
+      process.env.EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS = '2';
+      for (const proxy of ['http://p:1', 'http://p:2', 'http://p:3']) {
+        const page = await BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy });
+        await page.close();
+      }
+      const contexts = await Promise.all(launched());
+
+      expect(mockLaunchPersistentContext).toHaveBeenCalledTimes(3);
+      expect(contexts[0].close).toHaveBeenCalledTimes(1);
+      expect(contexts[1].close).not.toHaveBeenCalled();
+      expect(contexts[2].close).not.toHaveBeenCalled();
+    });
+
+    it('evicts by recency, not launch order', async () => {
+      process.env.EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS = '2';
+      for (const proxy of ['http://p:1', 'http://p:2', 'http://p:1', 'http://p:3']) {
+        const page = await BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy });
+        await page.close();
+      }
+      const contexts = await Promise.all(launched());
+
+      expect(contexts).toHaveLength(3);
+      // p:1 was used again after p:2, so p:2 is the least recently used
+      expect(contexts[1].close).toHaveBeenCalledTimes(1);
+      expect(contexts[0].close).not.toHaveBeenCalled();
+    });
+
+    it('counts launches still in flight against the cap, so a concurrent burst cannot leave idle contexts over it', async () => {
+      process.env.EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS = '2';
+      const first = await BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy: 'http://p:1' });
+      await first.close(); // p:1 is now idle
+      await Promise.all([
+        BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy: 'http://p:2' }),
+        BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy: 'http://p:3' }),
+      ]);
+      const contexts = await Promise.all(launched());
+
+      expect(contexts).toHaveLength(3);
+      // Without reserving in-flight launches both see one cached context,
+      // evict nothing, and three contexts stay alive under a cap of two.
+      expect(contexts[0].close).toHaveBeenCalledTimes(1);
+      expect(contexts[1].close).not.toHaveBeenCalled();
+      expect(contexts[2].close).not.toHaveBeenCalled();
+    });
+
+    it('never closes a context whose page is still open; launches over the cap instead', async () => {
+      process.env.EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS = '1';
+      await BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy: 'http://p:1' }); // left open
+      await BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy: 'http://p:2' });
+      const contexts = await Promise.all(launched());
+
+      expect(mockLaunchPersistentContext).toHaveBeenCalledTimes(2);
+      expect(contexts[0].close).not.toHaveBeenCalled();
+    });
+
+    it('0 keeps every context (the previous, unbounded behaviour)', async () => {
+      process.env.EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS = '0';
+      for (const proxy of ['http://p:1', 'http://p:2', 'http://p:3', 'http://p:4', 'http://p:5']) {
+        const page = await BrowserPool.getPage({ userDataDir: '/tmp/cap', proxy });
+        await page.close();
+      }
+      const contexts = await Promise.all(launched());
+
+      expect(contexts.every((c) => c.close.mock.calls.length === 0)).toBe(true);
+    });
+  });
+
   /**
    * Spec 1690: under the default (`polite`, `identify`) policy a stealth page
    * keeps its JS patches but sends the honest Ever Jobs UA, not a pool Chrome UA.
@@ -726,6 +802,23 @@ describe('BrowserPool', () => {
       const lines = log.mock.calls.map((c) => String(c[0])).join('\n');
       expect(lines).toContain('***@proxy.example:8080');
       expect(lines).not.toContain('secret');
+    });
+
+    it('the over-the-cap eviction (Spec 1689) logs the redacted key', async () => {
+      process.env.EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS = '1';
+      const log = jest.spyOn((BrowserPool as any).logger, 'log').mockImplementation(() => undefined);
+      try {
+        const first = await BrowserPool.getPage({ userDataDir: '/tmp/p', proxy: 'http://user:secret@proxy.example:8080' });
+        await first.close();
+        await BrowserPool.getPage({ userDataDir: '/tmp/p', proxy: 'http://other.example:8080' });
+
+        const lines = log.mock.calls.map((c) => String(c[0]));
+        expect(lines.some((line) => line.startsWith('Closing idle persistent Chromium context'))).toBe(true);
+        expect(lines.join('\n')).toContain('***@proxy.example:8080');
+        expect(lines.join('\n')).not.toContain('secret');
+      } finally {
+        delete process.env.EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS;
+      }
     });
   });
 

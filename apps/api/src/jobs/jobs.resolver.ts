@@ -10,6 +10,7 @@ import {
   SearchJobsInput,
   SearchJobsResult,
   SourceListResult,
+  resolveSearchCountry,
 } from './gql-types';
 
 /**
@@ -91,12 +92,21 @@ export class JobsResolver {
       fromCache = true;
       this.logger.log(`Cache hit — ${rawJobs.length} raw cached results`);
     } else {
+      // Spec 1689 — the free-form GraphQL country becomes a `Country`
+      // (what the REST DTO validates); an unrecognised one is dropped, as
+      // the whitelist pipe used to drop every GraphQL field.
+      const country = resolveSearchCountry(input.country);
+      if (input.country && !country) {
+        this.logger.warn(
+          `GraphQL searchJobs: ignoring unrecognised country ${JSON.stringify(input.country.slice(0, 64))}`,
+        );
+      }
       // Map GraphQL input to the service DTO shape.
       const scraperInput: any = {
         searchTerm: input.searchTerm,
         location: input.location,
         resultsWanted: input.resultsWanted ?? 20,
-        country: input.country,
+        country,
         distance: input.distance,
         companySlug: input.companySlug,
         descriptionFormat: input.descriptionFormat ?? 'markdown',

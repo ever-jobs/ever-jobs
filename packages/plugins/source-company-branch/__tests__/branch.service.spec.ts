@@ -87,7 +87,7 @@ describe('BranchService — Spec 121 / T04', () => {
       );
       expect(sse?.jobUrl).toContain('job-boards.greenhouse.io/branch/jobs/');
       expect(sse?.department).toBe('Engineering');
-      expect(sse?.location?.city).toBe('Palo Alto, CA');
+      expect(sse?.location?.city).toBe('Palo Alto');
       expect(sse?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(sse?.description).not.toContain('&lt;');
@@ -100,7 +100,7 @@ describe('BranchService — Spec 121 / T04', () => {
       expect(sec).toBeDefined();
       expect(sec?.title).toBe('Senior Application Security Engineer');
       expect(sec?.companyName).toBe('Branch');
-      expect(sec?.location?.city).toBe('Remote, US');
+      expect(sec?.location?.city).toBeUndefined();
       expect(sec?.isRemote).toBe(true);
       expect(sec?.department).toBe('Security');
       expect(sec?.jobUrl).toBe(

@@ -106,7 +106,7 @@ describe('BigIdService — Spec 137 / T04', () => {
       expect(pe?.jobUrl).not.toContain('www.');
       expect(pe?.jobUrl).not.toContain('greenhouse.io');
       expect(pe?.department).toBe('Engineering');
-      expect(pe?.location?.city).toBe('Tel Aviv, Israel');
+      expect(pe?.location?.city).toBe('Tel Aviv');
       expect(pe?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(pe?.description).not.toContain('&lt;');
@@ -119,7 +119,7 @@ describe('BigIdService — Spec 137 / T04', () => {
       expect(sdr).toBeDefined();
       expect(sdr?.title).toBe('Sales Development Representative');
       expect(sdr?.companyName).toBe('BigID');
-      expect(sdr?.location?.city).toBe('New York, NY');
+      expect(sdr?.location?.city).toBe('New York');
       expect(sdr?.isRemote).toBe(false);
       // **D-11 APPLIED lock** — wire dept carries trailing-
       // space pad; emitted dept trimmed.

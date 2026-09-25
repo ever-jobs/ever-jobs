@@ -87,7 +87,7 @@ describe('AsanaService — Spec 031 / T04', () => {
       expect(workflow?.jobUrl).toBe(
         'https://boards.greenhouse.io/asana/jobs/9001234',
       );
-      expect(workflow?.location?.city).toBe('San Francisco, CA');
+      expect(workflow?.location?.city).toBe('San Francisco');
       expect(workflow?.department).toBe('Engineering');
       expect(workflow?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

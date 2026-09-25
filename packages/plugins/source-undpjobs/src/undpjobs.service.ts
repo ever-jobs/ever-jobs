@@ -11,13 +11,7 @@ import {
   DescriptionFormat,
   Site,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { UNDPJOBS_RSS_URL, UNDPJOBS_DEFAULT_RESULTS, UNDPJOBS_HEADERS } from './undpjobs.constants';
 import { UndpJobsRssItem } from './undpjobs.types';
 
@@ -142,9 +136,8 @@ export class UndpJobsService implements IScraper {
       }
     }
 
-    const location = new LocationDto({
-      city: item.dutyStation ?? null,
-    });
+    const locationParsed = parseLocationList([item.dutyStation ?? null]);
+    const location = locationParsed.location;
 
     let datePosted: string | undefined;
     if (item.dcDate) {
@@ -163,10 +156,11 @@ export class UndpJobsService implements IScraper {
       companyName: item.organization ?? 'UNDP',
       jobUrl: item.link,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation: undefined,
       datePosted,
-      isRemote: false,
+      isRemote: locationParsed.remoteMentioned,
       emails: extractEmails(description ?? null),
       site: Site.UNDPJOBS,
     });

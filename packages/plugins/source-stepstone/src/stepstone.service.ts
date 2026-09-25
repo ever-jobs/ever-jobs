@@ -17,12 +17,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  randomSleep,
-} from '@ever-jobs/common';
+import { extractEmails, htmlToPlainText, markdownConverter, parseLocationList, randomSleep } from '@ever-jobs/common';
 import { BrowserPool } from '@ever-jobs/common';
 import {
   STEPSTONE_DEFAULT_DOMAIN,
@@ -138,6 +133,7 @@ export class StepStoneService implements IScraper, OnModuleDestroy {
 
         const company = card.find('[data-at="job-item-company-name"], .res-company-name').text().trim() || null;
         const location = card.find('[data-at="job-item-location"], .res-location').text().trim() || null;
+        const locationParsed = parseLocationList([location]);
 
         const id = `stepstone-${Math.abs(this.hashCode(href))}`;
 
@@ -146,7 +142,10 @@ export class StepStoneService implements IScraper, OnModuleDestroy {
           title,
           companyName: company,
           jobUrl: href,
-          location: location ? new LocationDto({ city: location }) : null,
+          location: location ? locationParsed.location : null,
+          ...(locationParsed.locations.length > 0
+            ? { locations: locationParsed.locations }
+            : {}),
           site: Site.STEPSTONE,
         }));
       } catch {

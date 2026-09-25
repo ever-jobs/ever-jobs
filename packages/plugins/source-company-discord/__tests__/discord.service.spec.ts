@@ -85,7 +85,7 @@ describe('DiscordService — Spec 022 / T04', () => {
       expect(voice?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/discord/jobs/7201234',
       );
-      expect(voice?.location?.city).toBe('San Francisco, CA');
+      expect(voice?.location?.city).toBe('San Francisco');
       expect(voice?.department).toBe('Engineering');
       expect(voice?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

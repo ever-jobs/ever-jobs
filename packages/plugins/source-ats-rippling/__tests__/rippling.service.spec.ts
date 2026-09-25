@@ -395,18 +395,164 @@ describe("RipplingService pagination", () => {
       jobType: [JobType.FULL_TIME],
       employmentType: "Full-time",
       location: {
-        city: "Centennial Campus",
         state: "CO",
         country: "United States",
       },
+      locations: [
+        { name: "Centennial Campus", state: "CO", country: "United States" },
+      ],
     });
+    expect(result.jobs[0].location?.city).toBeFalsy();
     expect(result.jobs[0]).not.toHaveProperty("applyUrl");
     expect(result.jobs[1]).toMatchObject({
       employmentType: "Seasonal specialist",
-      location: { city: "Remote - United States" },
+      location: { country: "United States" },
       isRemote: true,
     });
     expect(result.jobs[1]).not.toHaveProperty("jobType");
+  });
+});
+
+describe("RipplingService structured locations (Spec 5119)", () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockGet.mockResolvedValue({ data: {} });
+  });
+
+  async function scrapeOne(listed: RipplingJob): Promise<JobPostDto> {
+    mockGet
+      .mockResolvedValueOnce({ data: page([listed]) })
+      .mockResolvedValueOnce({ data: page([]) });
+    const result = await new RipplingService().scrape({
+      companySlug: "boom-supersonic",
+      resultsWanted: 1,
+    } as ScraperInputDto);
+    return result.jobs[0];
+  }
+
+  it("keeps each structured entry's own country instead of re-parsing labels", async () => {
+    const listed = job("per-site-country");
+    listed.locations = [
+      { name: "Brisbane HQ", city: "Brisbane", stateCode: "CA", countryCode: "US" },
+      { name: "Berlin Office", city: "Berlin", countryCode: "DE" },
+    ];
+
+    const post = await scrapeOne(listed);
+
+    expect(post.locations).toEqual([
+      { name: "Brisbane HQ", city: "Brisbane", state: "CA", country: "United States" },
+      { name: "Berlin Office", city: "Berlin", state: null, country: "Germany" },
+    ]);
+    // merged view: structured join, country omitted when sites disagree
+    expect(post.location).toMatchObject({
+      city: "Brisbane, CA; Berlin, Germany",
+    });
+    expect(post.location?.country).toBeFalsy();
+  });
+
+  it("consumes remote-marker names as a signal and drops them from locations", async () => {
+    const listed = job("remote-marker");
+    listed.locations = [
+      { name: "Remote (US)", workplaceType: "REMOTE" },
+      { city: "Denver", stateCode: "CO", countryCode: "US" },
+    ];
+
+    const post = await scrapeOne(listed);
+
+    expect(post.isRemote).toBe(true);
+    expect(post.workFromHomeType).toBe("Remote");
+    expect(post.locations).toEqual([
+      { name: null, city: "Denver", state: "CO", country: "United States" },
+    ]);
+    expect(post.location?.city).toBe("Denver");
+  });
+
+  it("keeps a differing hiring-entity name but not one equal to companyName", async () => {
+    const listed = job("entity-names");
+    listed.companyName = "Boom Supersonic";
+    listed.locations = [
+      { city: "Centennial", stateCode: "CO", countryCode: "US" },
+      { name: "Boom Supersonic" },
+      { name: "Boom Technology, Inc." },
+    ];
+
+    const post = await scrapeOne(listed);
+
+    expect(post.locations).toEqual([
+      { name: null, city: "Centennial", state: "CO", country: "United States" },
+      { name: "Boom Technology, Inc." },
+    ]);
+    expect(post.location?.city).toBe("Centennial");
+  });
+
+  it("uses workLocations and parseable pay-band labels only as fallback", async () => {
+    const listed = job("fallback");
+    listed.locations = [];
+    listed.workLocations = ["Austin, TX"];
+    listed.payRangeDetails = [
+      {
+        location: "Manager",
+        currency: "USD",
+        frequency: "YEAR",
+        rangeStart: 100000,
+        rangeEnd: 120000,
+      },
+      {
+        location: "Sandy, UT",
+        currency: "USD",
+        frequency: "YEAR",
+        rangeStart: 90000,
+        rangeEnd: 110000,
+      },
+    ];
+
+    const post = await scrapeOne(listed);
+
+    expect(post.locations).toEqual([
+      expect.objectContaining({ city: "Austin", state: "TX" }),
+      expect.objectContaining({ city: "Sandy", state: "UT" }),
+    ]);
+    expect(post.location?.city).toBe("Austin, TX; Sandy, UT");
+  });
+
+  it("ignores free-text fallbacks when structured sites exist", async () => {
+    const listed = job("structured-wins-location");
+    listed.locations = [{ city: "Denver", stateCode: "CO", countryCode: "US" }];
+    listed.workLocations = ["Bogus, ZZ"];
+    listed.payRangeDetails = [
+      {
+        location: "Sandy, UT",
+        currency: "USD",
+        frequency: "YEAR",
+        rangeStart: 1,
+        rangeEnd: 2,
+      },
+    ];
+
+    const post = await scrapeOne(listed);
+
+    expect(post.locations).toEqual([
+      { name: null, city: "Denver", state: "CO", country: "United States" },
+    ]);
+    expect(post.location?.city).toBe("Denver");
+  });
+
+  it("reads payRangeDetails.isRemote as a remote signal", async () => {
+    const listed = job("pay-band-remote");
+    listed.locations = [{ city: "Denver", stateCode: "CO", countryCode: "US" }];
+    listed.payRangeDetails = [
+      {
+        currency: "USD",
+        frequency: "YEAR",
+        rangeStart: 1,
+        rangeEnd: 2,
+        isRemote: true,
+      },
+    ];
+
+    const post = await scrapeOne(listed);
+
+    expect(post.isRemote).toBe(true);
   });
 });
 

@@ -92,9 +92,51 @@ describe('ArgospaceService', () => {
     const senior = response.jobs.find((job) => job.title === 'Senior Propulsion Engineer')!;
     expect(senior.location?.city).toBe('El Segundo');
     expect(senior.location?.state).toBe('CA');
+    // Spec 1689: Argo Space hires only in the US — the country default is restored.
     expect(senior.location?.country).toBe('USA');
     expect(senior.isRemote).toBe(false);
     expect(senior.workFromHomeType).toBe('On Site');
+  });
+
+  /** Spec 1689 — pre-5125 location data restored on top of the shared parser. */
+  describe('location heuristics (ARGOSPACE_LOCATION_HEURISTICS)', () => {
+    const saved = process.env.ARGOSPACE_LOCATION_HEURISTICS;
+    const parse = (label: string) => (service as any).parseLocation(label);
+
+    beforeEach(() => {
+      delete process.env.ARGOSPACE_LOCATION_HEURISTICS;
+    });
+
+    afterAll(() => {
+      if (saved === undefined) delete process.env.ARGOSPACE_LOCATION_HEURISTICS;
+      else process.env.ARGOSPACE_LOCATION_HEURISTICS = saved;
+    });
+
+    it('strips parenthetical qualifiers and fills USA by default', () => {
+      expect(parse('El Segundo, CA (On-site)')).toMatchObject({ city: 'El Segundo', state: 'CA', country: 'USA' });
+      expect(parse('El Segundo (Headquarters), CA')).toMatchObject({ city: 'El Segundo', state: 'CA', country: 'USA' });
+    });
+
+    it('falls back to the full label when the parenthetical is the geography', () => {
+      expect(parse('Remote (Austin, TX)')).toMatchObject({ city: 'Austin', state: 'TX', country: 'USA' });
+    });
+
+    it('keeps a country the shared parser found', () => {
+      expect(parse('Toronto, ON, Canada')?.country).toBe('Canada');
+    });
+
+    it('emits USA on every scraped job by default', async () => {
+      const response = await service.scrape(new ScraperInputDto({ resultsWanted: 999 }));
+      expect(response.jobs.length).toBeGreaterThan(0);
+      for (const job of response.jobs) expect(job.location?.country).toBe('USA');
+    });
+
+    it.each(['false', '0', 'off', 'no'])('=%s returns the shared-parser output only', (value) => {
+      process.env.ARGOSPACE_LOCATION_HEURISTICS = value;
+      const location = parse('El Segundo, CA (On-site)');
+      expect(location).toMatchObject({ city: 'El Segundo', state: 'CA' });
+      expect(location?.country).toBeUndefined();
+    });
   });
 
   it('parses compensation for yearly and hourly ranges', async () => {
@@ -224,5 +266,37 @@ describe('ArgospaceService', () => {
     expect(response.jobs).toHaveLength(0);
     expect(response.diagnostics).toBeDefined();
     expect(response.diagnostics!.detail).toMatch(/Current Openings list/);
+  });
+});
+
+/** Best of three wall-clock runs, in ms (one run can overshoot on a throttled pod). */
+function bestOf3Ms(fn: () => unknown): number {
+  let best = Infinity;
+  for (let i = 0; i < 3; i++) {
+    const started = performance.now();
+    fn();
+    best = Math.min(best, performance.now() - started);
+  }
+  return best;
+}
+
+describe('ArgospaceService scraped-text regexes stay linear (Spec 1689)', () => {
+  const parse = (raw: string) =>
+    (new ArgospaceService() as unknown as { parseLocation(r: string): { city?: string | null } | null }).parseLocation(
+      raw,
+    );
+
+  it('still falls back to the parenthetical when it is the geography', () => {
+    expect(parse('Remote (Austin, TX)')?.city).toBe('Austin');
+  });
+
+  // 40k chars and a 1 s budget: the plugin's own char-by-char normalize() is
+  // linear but slow (~50 ms per 20k chars on a dev box, run twice here); the
+  // former /\([^)]*\)/g was quadratic — 553 ms at 20k, so ~2.2 s at 40k.
+  it.each([
+    ['unclosed parens', '('.repeat(40_000)],
+    ['open-paren words', '(a'.repeat(20_000)],
+  ])('strips a 40k-char label of %s in linear time', (_name, raw) => {
+    expect(bestOf3Ms(() => parse(raw))).toBeLessThan(1000);
   });
 });

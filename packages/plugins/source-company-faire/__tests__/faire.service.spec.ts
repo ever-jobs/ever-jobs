@@ -133,7 +133,7 @@ describe('FaireService — Spec 063 / T04', () => {
       expect(designer?.jobUrl).toContain('/faire/jobs/');
       expect(designer?.jobUrl).toContain('?gh_jid=');
       expect(designer?.jobUrl).not.toContain('job-boards.greenhouse.io');
-      expect(designer?.location?.city).toBe('San Francisco, CA');
+      expect(designer?.location?.city).toBe('San Francisco');
       // D-11 regression guard: the emitted `department` for the first
       // fixture listing is the multi-word descriptive string
       // `'Customer Support Management'` byte-for-byte AND matches the
@@ -171,7 +171,7 @@ describe('FaireService — Spec 063 / T04', () => {
       // byte-for-byte.
       expect(eng?.title).toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(eng?.companyName).toBe('Faire');
-      expect(eng?.location?.city).toBe('Toronto, Canada');
+      expect(eng?.location?.city).toBe('Toronto');
       // The fixture location string does NOT contain "Remote"
       // (Toronto hybrid string, no remote keyword) so isRemote
       // should be false.

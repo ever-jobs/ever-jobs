@@ -13,13 +13,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { HIRINGTHING_API_URL, HIRINGTHING_HEADERS } from './hiringthing.constants';
 import { HiringThingResponse, HiringThingJob } from './hiringthing.types';
 
@@ -122,9 +116,8 @@ export class HiringThingService implements IScraper {
     }
 
     // Location — API provides a single location string
-    const location = job.location
-      ? new LocationDto({ city: job.location })
-      : null;
+    const locationParsed = parseLocationList([job.location]);
+    const location = job.location ? locationParsed.location : null;
 
     // Compensation — parse salary string if available
     let compensation: CompensationDto | null = null;
@@ -149,6 +142,7 @@ export class HiringThingService implements IScraper {
       companyName: job.company_name ?? null,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,

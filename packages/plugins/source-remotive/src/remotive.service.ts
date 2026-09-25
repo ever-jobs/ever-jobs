@@ -14,7 +14,7 @@ import {
   CompensationInterval,
   JobType,
 } from '@ever-jobs/models';
-import { createHttpClient, htmlToPlainText, markdownConverter, extractEmails } from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList } from '@ever-jobs/common';
 import { REMOTIVE_API_URL, REMOTIVE_HEADERS } from './remotive.constants';
 import { RemotiveApiResponse, RemotiveJob } from './remotive.types';
 
@@ -130,9 +130,8 @@ export class RemotiveService implements IScraper {
     const compensation = this.parseSalary(entry.salary);
 
     // Build location
-    const location = new LocationDto({
-      city: entry.candidate_required_location || null,
-    });
+    const locationParsed = parseLocationList([entry.candidate_required_location || null]);
+    const location = locationParsed.location;
 
     // Map job type
     const jobType = this.mapJobType(entry.job_type);
@@ -152,11 +151,12 @@ export class RemotiveService implements IScraper {
       companyLogo,
       jobUrl: entry.url,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,
       jobType: jobType ? [jobType] : null,
-      isRemote: true,
+      isRemote: (true) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       site: Site.REMOTIVE,
       skills: entry.tags?.length > 0 ? entry.tags : null,

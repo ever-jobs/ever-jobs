@@ -175,7 +175,7 @@ describe('FlexportService — Spec 070 / T04', () => {
       // Trim is exactly 1 byte shorter than the wire form.
       expect(cm?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 1);
       expect(cm?.companyName).toBe('Flexport');
-      expect(cm?.location?.city).toBe('Guadalajara, Mexico');
+      expect(cm?.location?.city).toBe('Guadalajara');
       expect(cm?.isRemote).toBe(false);
       // D-11 second-listing regression guard: the emitted `department`
       // for the second fixture listing matches the wire

@@ -97,7 +97,7 @@ describe('DeepmindService — Spec 156 / T04', () => {
       );
       // D-11 clean dept (this listing has clean wire dept).
       expect(ab?.department).toBe('Office of the CEO');
-      expect(ab?.location?.city).toBe('London, UK');
+      expect(ab?.location?.city).toBe('London');
       expect(ab?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ab?.description).not.toContain('&lt;');
@@ -117,7 +117,7 @@ describe('DeepmindService — Spec 156 / T04', () => {
       expect(re?.department).toBe('Frontier AI');
       expect(re?.department).not.toMatch(/\s$/);
       expect(re?.companyName).toBe('DeepMind');
-      expect(re?.location?.city).toBe('Mountain View, CA');
+      expect(re?.location?.city).toBe('Mountain View');
       expect(re?.isRemote).toBe(false);
       expect(re?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/deepmind/jobs/7822249',

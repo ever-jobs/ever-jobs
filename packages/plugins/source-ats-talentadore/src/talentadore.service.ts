@@ -11,13 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationText, toDateOnly } from '@ever-jobs/common';
 import {
   TALENTADORE_ATS_HOST,
   TALENTADORE_FEED_PATH_TEMPLATE,
@@ -216,12 +210,14 @@ export class TalentAdoreService implements IScraper {
     const rawText = job.description_text ?? job.descriptionText ?? null;
     const description = this.formatDescription(rawHtml, rawText, format);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `talentadore-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.start_date ?? job.startDate ?? job.updated),
       isRemote: this.detectRemote(job),
@@ -337,7 +333,7 @@ export class TalentAdoreService implements IScraper {
     if (!city && !state && !country) {
       // Fall back to the free-text location blob's leading segment as a city.
       const loc = typeof job.location === 'string' ? job.location.trim() : '';
-      if (loc) return new LocationDto({ city: loc });
+      if (loc) return parseLocationText(loc).location;
       return null;
     }
     return new LocationDto({ city, state, country });

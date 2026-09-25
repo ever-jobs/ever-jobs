@@ -179,6 +179,12 @@ No data is written, so rollback is configuration only:
 
 - Q-097 — default UA mode and which plugins opt into `plugin` mode.
 - Q-098 — default pacing numbers (4 per host, 100 ms, builtin bulk hosts).
-- A CI job that runs `packages/common/__tests__` does not exist yet (the politeness
-  tests run locally and in the verification lane only); adding one is additive and
-  outside this spec.
+- CI coverage of `packages/common/__tests__`: resolved outside this spec. When this
+  work was written no CI job ran those suites (the politeness tests ran locally and in
+  the verification lane only); Spec 1689, merged in from `develop`, added the blocking
+  **Test (Core)** job (`npm run test:core`), which now runs every `packages/common`
+  suite — the crawl-policy ones included — alongside the models / plugin / API / MCP
+  core suites. The merge also added `apps/cli/__tests__` to `test:core` (Spec 1689's
+  guard requires every non-e2e spec under `apps/` there), so the CLI's
+  `crawl-options.spec.ts` runs in Test (Core) too; the Softy / USAJobs / HeadHunter /
+  SimplyHired plugin suites run in the source unit shards.

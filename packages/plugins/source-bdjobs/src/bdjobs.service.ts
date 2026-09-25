@@ -10,7 +10,7 @@ import {
 } from '@ever-jobs/models';
 import {
   createHttpClient, markdownConverter, removeAttributes,
-  extractEmails, randomSleep, toDateOnly,
+  extractEmails, parseLocationText, randomSleep, toDateOnly,
 } from '@ever-jobs/common';
 import { BDJOBS_HEADERS, BDJOBS_SEARCH_PARAMS, BDJOBS_JOB_SELECTORS } from './bdjobs.constants';
 
@@ -132,11 +132,11 @@ export class BDJobsService implements IScraper {
     // Location
     const locationEl = card.find('[class*="locon" i], [class*="location" i]');
     const locationText = locationEl.text().trim() || 'Dhaka, Bangladesh';
-    const locationParts = locationText.split(',');
+    const parsedLocation = parseLocationText(locationText).location;
     const location = new LocationDto({
-      city: locationParts[0]?.trim() || null,
-      state: locationParts.length > 1 ? locationParts[1].trim() : null,
-      country: Country.BANGLADESH,
+      city: parsedLocation?.city ?? null,
+      state: parsedLocation?.state ?? null,
+      country: parsedLocation?.country ?? Country.BANGLADESH,
     });
 
     // Date
@@ -152,6 +152,7 @@ export class BDJobsService implements IScraper {
       title,
       companyName,
       location,
+      locations: [location],
       datePosted,
       jobUrl,
       isRemote,

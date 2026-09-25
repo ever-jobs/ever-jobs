@@ -1147,6 +1147,9 @@ import { CanekastModule } from './source-company-canekast';
 import { VelontraModule } from './source-company-velontra';
 import { SolideonModule } from './source-company-solideon';
 import { GaladyneIoModule } from './source-company-galadyne_io';
+import { OctbrAiModule } from './source-ats-octbr_ai';
+import { NodiGlobalModule } from './source-ats-nodi_global';
+import { WellfoundAtsModule } from './source-ats-wellfound';
 import { GustoHostedModule } from './source-ats-gusto-hosted';
 import { ReelementtechModule } from './source-company-reelementtech';
 import { FlymotionusModule } from './source-company-flymotionus';
@@ -1155,6 +1158,7 @@ import { HylIoModule } from './source-company-hyl_io';
 import { TrueMetalSupplyModule } from './source-company-truemetalsupply';
 import { FrameworkCoModule } from './source-company-framework_co';
 import { TerminusIndustrialsModule } from './source-company-terminusindustrials';
+import { TauRoboticsModule } from './source-company-tau-robotics';
 import { MaraIncModule } from './source-company-mara_inc';
 import { VightaeroModule } from './source-company-vightaero';
 import { AirwallexModule } from './source-company-airwallex';
@@ -1858,6 +1862,15 @@ import { WATCHVICELeingangECommerceModule } from './source-company-watchvicelein
 import { WEBBTradersModule } from './source-company-webbtraders';
 import { WeeztixModule } from './source-company-weeztix';
 import { XSARUSModule } from './source-company-xsarus';
+import { PowerUsModule } from './source-company-power_us';
+import { MundaneCoModule } from './source-company-mundane_co';
+import { GetMaxSpaceModule } from './source-company-getmaxspace';
+import { AmpflameModule } from './source-company-ampflame';
+import { FourEarthTechModule } from './source-company-4earth_tech';
+import { ZennoAstronauticsModule } from './source-company-zennoastronautics';
+import { ThermwoodModule } from './source-company-thermwood';
+import { LabsActorModule } from './source-company-labs_actor';
+import { SoundryxModule } from './source-company-soundryx';
 export const ALL_SOURCE_MODULES = [
   FourDayWeekModule,
   AcademiccareersModule,
@@ -3709,4 +3722,17 @@ export const ALL_SOURCE_MODULES = [
   WEBBTradersModule,
   WeeztixModule,
   XSARUSModule,
+  OctbrAiModule,
+  NodiGlobalModule,
+  WellfoundAtsModule,
+  TauRoboticsModule,
+  PowerUsModule,
+  MundaneCoModule,
+  GetMaxSpaceModule,
+  AmpflameModule,
+  FourEarthTechModule,
+  ZennoAstronauticsModule,
+  ThermwoodModule,
+  LabsActorModule,
+  SoundryxModule,
 ];

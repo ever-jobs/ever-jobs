@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 /** Google Careers API endpoint */
 const API_URL = 'https://careers.google.com/api/v3/search/';
@@ -50,11 +50,13 @@ export class GoogleCareersService implements IScraper {
         const jobId = listing.id ?? listing.job_id ?? '';
         const id = `google-careers-${jobId || Math.abs(this.hashCode(title))}`;
 
-        const locationStr = listing.locations?.join(', ')
-          ?? listing.location ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const parsedLocations = parseLocationList(
+          listing.locations?.length
+            ? listing.locations
+            : [listing.location ?? null],
+        );
+        const location = parsedLocations.location;
+        const locations = parsedLocations.locations;
 
         const description = listing.description
           ? stripHtmlTags(listing.description)
@@ -68,9 +70,10 @@ export class GoogleCareersService implements IScraper {
             companyName: 'Google',
             jobUrl: listing.apply_url ?? `${CAREERS_BASE}${jobId}`,
             location,
+            ...(locations.length > 0 ? { locations } : {}),
             description,
             datePosted: listing.publish_date ?? null,
-            isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+            isRemote: parsedLocations.remoteMentioned,
           }),
         );
       }

@@ -11,13 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { CRYPTOJOBSLIST_RSS_URL, CRYPTOJOBSLIST_HEADERS } from './cryptojobslist.constants';
 import { CryptoJobsListRssItem } from './cryptojobslist.types';
 
@@ -177,9 +171,8 @@ export class CryptoJobsListService implements IScraper {
     }
 
     // Build location from media:location
-    const location = new LocationDto({
-      city: item.mediaLocation ?? null,
-    });
+    const locationParsed = parseLocationList([item.mediaLocation ?? null]);
+    const location = locationParsed.location;
 
     // Parse date
     let datePosted: string | undefined;
@@ -201,10 +194,11 @@ export class CryptoJobsListService implements IScraper {
       companyLogo: item.mediaContent ?? undefined,
       jobUrl: item.link,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation: undefined,
       datePosted,
-      isRemote: false,
+      isRemote: locationParsed.remoteMentioned,
       emails: extractEmails(description ?? null),
       site: Site.CRYPTOJOBSLIST,
     });

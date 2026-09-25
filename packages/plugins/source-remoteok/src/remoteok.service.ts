@@ -13,7 +13,7 @@ import {
   DescriptionFormat,
   CompensationInterval,
 } from '@ever-jobs/models';
-import { createHttpClient, htmlToPlainText, markdownConverter, extractEmails } from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList } from '@ever-jobs/common';
 import { REMOTEOK_API_URL, REMOTEOK_HEADERS } from './remoteok.constants';
 import { RemoteOkJob } from './remoteok.types';
 
@@ -129,9 +129,8 @@ export class RemoteOkService implements IScraper {
     }
 
     // Build location
-    const location = new LocationDto({
-      city: entry.location || null,
-    });
+    const locationParsed = parseLocationList([entry.location || null]);
+    const location = locationParsed.location;
 
     // Parse date
     const datePosted = entry.date
@@ -147,10 +146,11 @@ export class RemoteOkService implements IScraper {
       jobUrlDirect: entry.apply_url || null,
       applyUrl: entry.apply_url || null,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,
-      isRemote: true,
+      isRemote: (true) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       site: Site.REMOTEOK,
       skills: entry.tags?.length > 0 ? entry.tags : null,

@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -214,13 +215,15 @@ export class AvionteService implements IScraper {
 
     const rawHtml = job.description ?? null;
     const description = this.formatDescription(rawHtml, format);
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `avionte-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.pubDate ?? job.pubdate),
       isRemote: this.detectRemote(job),
@@ -350,10 +353,10 @@ export class AvionteService implements IScraper {
     if (!city && !state && !country) {
       const label = this.cleanText(job.location);
       if (label) {
-        const parts = label.split(',').map((p) => p.trim()).filter(Boolean);
-        city = parts[0] ?? null;
-        state = parts[1] ?? null;
-        country = parts[2] ?? null;
+        const parsed = parseLocationText(label).location;
+        city = parsed?.city ?? null;
+        state = parsed?.state ?? null;
+        country = parsed?.country ?? null;
       }
     }
 

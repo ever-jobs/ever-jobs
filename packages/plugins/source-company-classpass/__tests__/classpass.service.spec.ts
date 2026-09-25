@@ -131,7 +131,7 @@ describe('ClasspassService — Spec 067 / T04', () => {
       expect(am?.jobUrl).toContain('playlist.com/careers/opportunities/');
       expect(am?.jobUrl).toContain('?gh_jid=');
       expect(am?.jobUrl).not.toContain('job-boards.greenhouse.io');
-      expect(am?.location?.city).toBe('New York, NY');
+      expect(am?.location?.city).toBe('New York');
       // D-11 first-listing regression guard: the emitted `department`
       // for the first fixture listing matches the wire
       // `departments[0].name === 'Sales'` byte-for-byte (clean
@@ -177,7 +177,7 @@ describe('ClasspassService — Spec 067 / T04', () => {
       expect(JOBS_PAGE_RAW.jobs[1].title.endsWith(' ')).toBe(true);
       expect(dpm?.title.endsWith(' ')).toBe(false);
       expect(dpm?.companyName).toBe('ClassPass');
-      expect(dpm?.location?.city).toBe('San Francisco, CA');
+      expect(dpm?.location?.city).toBe('San Francisco');
       expect(dpm?.isRemote).toBe(false);
       // D-11 second-listing regression guard: the emitted `department`
       // for the second fixture listing matches the wire

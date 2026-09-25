@@ -88,7 +88,7 @@ describe('StarburstService — Spec 134 / T04', () => {
       );
       expect(psa?.jobUrl).toContain('job-boards.greenhouse.io/starburst/jobs/');
       expect(psa?.department).toBe('Presales');
-      expect(psa?.location?.city).toBe('Boston, MA');
+      expect(psa?.location?.city).toBe('Boston');
       expect(psa?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(psa?.description).not.toContain('&lt;');
@@ -101,7 +101,7 @@ describe('StarburstService — Spec 134 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, Galaxy');
       expect(sse?.companyName).toBe('Starburst');
-      expect(sse?.location?.city).toBe('Warsaw, Poland');
+      expect(sse?.location?.city).toBe('Warsaw');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('Engineering');
       expect(sse?.jobUrl).toBe(

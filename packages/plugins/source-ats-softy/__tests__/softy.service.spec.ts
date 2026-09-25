@@ -224,6 +224,8 @@ describe('SoftyService (Spec 1691)', () => {
         department: null,
       });
       expect(job.location).toMatchObject({ city: 'Toulouse' });
+      // Spec 5126: a one-line posting carries exactly [location]
+      expect(job.locations).toEqual([job.location]);
       expect(job.emails).toEqual(['jobs@acme.example']);
       expect(job.description).toContain("L'entreprise");
       expect(job.description).toContain('Concevoir des API');
@@ -335,12 +337,14 @@ describe('SoftyService (Spec 1691)', () => {
         isRemote: false,
       });
       expect(dev.location).toMatchObject({ city: 'Toulouse' });
+      expect(dev.locations).toEqual([dev.location]);
       expect(dev.description).toContain('Concevoir des API');
       expect(pmo).toMatchObject({ title: 'Chef de projet & PMO - H/F', employmentType: 'CDD - 6 Mois', datePosted: '2026-09-18' });
       expect(alt).toMatchObject({ employmentType: 'Apprentissage - 24 Mois' });
       expect(data).toMatchObject({ isRemote: true, datePosted: '2026-09-10' });
       expect(stage).toMatchObject({ jobUrl: OFFER(1005), employmentType: 'Stage - 6 Mois', datePosted: '2026-09-22' });
       expect(stage.location).toMatchObject({ city: 'Nantes' });
+      expect(stage.locations).toEqual([stage.location]);
     });
 
     it('stops paginating once resultsWanted cards are collected', async () => {
@@ -402,6 +406,51 @@ describe('SoftyService (Spec 1691)', () => {
       expect(res.jobs).toHaveLength(30);
       expect(res.jobs[24].description).toContain('Concevoir des API');
       expect(res.jobs[25].description).toBe('Ville 3025');
+    });
+  });
+
+  // ── locations ───────────────────────────────────────────────────────────────
+
+  describe('locations (Spec 5125 shared parser, Spec 5126 locations[])', () => {
+    const card = (id: number, lines: string[]) => `<a href="${OFFER(id)}"><div data-slot="card"><h3 data-slot="joboffer-title">Offre ${id}</h3>
+        <div data-slot="joboffer-locations">${lines.map((line) => `<p>${line}</p>`).join('')}</div>
+        <span data-slot="badge">CDI</span></div></a>`;
+
+    async function scrapeCards(...cards: string[]) {
+      fake.set(PAGE(1), `<html><body><main>${cards.join('\n')}</main></body></html>`);
+      const res = await service.scrape(
+        input({ crawl: { discovery: 'listing' }, descriptionDepth: 'board', resultsWanted: cards.length }),
+      );
+      return res.jobs;
+    }
+
+    it('keeps location as the primary line and emits locations: [location] (Spec 5126 singleton)', async () => {
+      const [job] = await scrapeCards(card(2001, ['Toulouse', 'Paris, France', 'Télétravail']));
+      expect(job.location).toEqual(expect.objectContaining({ city: 'Toulouse', state: null, country: null }));
+      expect(job.locations).toEqual([job.location]);
+      // A remote marker on any line still flags the role remote.
+      expect(job.isRemote).toBe(true);
+    });
+
+    it('never emits locations[] without a location (remote marker as the primary line)', async () => {
+      const [job] = await scrapeCards(card(2005, ['Télétravail', 'Paris']));
+      expect(job.location).toBeNull();
+      expect(job.locations).toBeUndefined();
+      expect(job.isRemote).toBe(true);
+    });
+
+    it('splits a line through the shared parseLocationText (not a comma split)', async () => {
+      const [job] = await scrapeCards(card(2002, ['Nantes (44)']));
+      expect(job.location).toMatchObject({ city: 'Nantes' });
+      expect(job.locations).toEqual([job.location]);
+    });
+
+    it('emits one entry for a repeated line, and a remote-only posting emits neither location nor locations', async () => {
+      const [twice, remote] = await scrapeCards(card(2003, ['Lyon', 'Lyon (69)']), card(2004, ['Télétravail']));
+      expect(twice.locations).toEqual([expect.objectContaining({ city: 'Lyon' })]);
+      expect(remote.location).toBeNull();
+      expect(remote.locations).toBeUndefined();
+      expect(remote.isRemote).toBe(true);
     });
   });
 

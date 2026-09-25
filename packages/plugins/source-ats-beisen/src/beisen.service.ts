@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationList,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -380,7 +381,7 @@ export class BeisenService implements IScraper {
 
     const title = this.cleanText(this.pickTitle(record));
     const url = beisenJobUrl(tenant.base, atsId);
-    const { city, state, country, locationText } = this.deriveLocation(record);
+    const { city, state, country, locationText, locationEntries } = this.deriveLocation(record);
     const department = this.cleanText(record.Category) ?? this.cleanText(record.Department);
 
     return {
@@ -393,6 +394,7 @@ export class BeisenService implements IScraper {
       state,
       country,
       locationText,
+      locationEntries,
       descriptionHtml: this.deriveBody(record),
       department,
       salaryText: this.cleanText(record.Salary),
@@ -423,6 +425,9 @@ export class BeisenService implements IScraper {
       companyName,
       jobUrl,
       location: this.extractLocation(job),
+      ...(this.extractLocations(job).length > 0
+        ? { locations: this.extractLocations(job) }
+        : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -517,6 +522,7 @@ export class BeisenService implements IScraper {
     state: string | null;
     country: string | null;
     locationText: string | null;
+    locationEntries: { city: string | null; state: string | null; country: string | null }[];
   } {
     const parts: string[] = [];
     if (Array.isArray(record?.LocNames)) {
@@ -530,12 +536,20 @@ export class BeisenService implements IScraper {
       if (flat) parts.push(flat);
     }
     if (parts.length === 0) {
-      return { city: null, state: null, country: null, locationText: null };
+      return { city: null, state: null, country: null, locationText: null, locationEntries: [] };
     }
-    const locationText = parts.join(', ');
-    const city = parts[0];
-    const state = parts.length > 1 ? parts.slice(1).join(', ') : null;
-    return { city, state, country: null, locationText };
+    const parsed = parseLocationList(parts);
+    return {
+      city: parsed.location?.city ?? null,
+      state: parsed.location?.state ?? null,
+      country: parsed.location?.country ?? null,
+      locationText: parts.join(', '),
+      locationEntries: parsed.locations.map((l) => ({
+        city: l.city ?? null,
+        state: l.state ?? null,
+        country: l.country ?? null,
+      })),
+    };
   }
 
   /**
@@ -562,6 +576,15 @@ export class BeisenService implements IScraper {
     const country = job.country;
     if (!city && !state && !country) return null;
     return new LocationDto({ city, state, country });
+  }
+
+  /** Per-site locations[] — the `LocNames` entries, else the singleton location. */
+  private extractLocations(job: BeisenJob): LocationDto[] {
+    if (job.locationEntries?.length) {
+      return job.locationEntries.map((e) => new LocationDto(e));
+    }
+    const location = this.extractLocation(job);
+    return location ? [location] : [];
   }
 
   /** Detect remote roles from the title, location, or department text (EN + ZH). */

@@ -13,11 +13,7 @@ import {
   DescriptionFormat,
   Site,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { JOINRISE_API_URL, JOINRISE_HEADERS, JOINRISE_DEFAULT_RESULTS, JOINRISE_MAX_RESULTS } from './joinrise.constants';
 import { JoinRiseResponse, JoinRiseJob } from './joinrise.types';
 
@@ -124,9 +120,8 @@ export class JoinRiseService implements IScraper {
       });
     }
 
-    const location = new LocationDto({
-      city: raw.locationAddress ?? null,
-    });
+    const locationParsed = parseLocationList([raw.locationAddress ?? null]);
+    const location = locationParsed.location;
 
     let datePosted: string | null = null;
     if (raw.createdAt) {
@@ -146,6 +141,7 @@ export class JoinRiseService implements IScraper {
       companyLogo: raw.owner?.photo ?? null,
       jobUrl: raw.url,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,

@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -297,7 +298,7 @@ export class MokaHrService implements IScraper {
     const title = this.cleanText(this.pickTitle(record));
     const url = this.cleanText(record.url) ?? mokahrJobUrl(tenant.slug, tenant.orgId, atsId);
 
-    const { city, state, country, locationText } = this.deriveLocation(record);
+    const { city, state, country, locationText, locationEntries } = this.deriveLocation(record);
     const department = this.deriveDepartment(record);
 
     return {
@@ -310,6 +311,7 @@ export class MokaHrService implements IScraper {
       state,
       country,
       locationText,
+      locationEntries,
       descriptionHtml:
         this.cleanText(record.description) ??
         this.cleanText(record.jobDescription) ??
@@ -348,6 +350,9 @@ export class MokaHrService implements IScraper {
       companyName,
       jobUrl,
       location: this.extractLocation(job),
+      ...(this.extractLocations(job).length > 0
+        ? { locations: this.extractLocations(job) }
+        : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -392,11 +397,20 @@ export class MokaHrService implements IScraper {
     state: string | null;
     country: string | null;
     locationText: string | null;
+    locationEntries: { city: string | null; state: string | null; country: string | null }[];
   } {
+    const locationEntries = this.deriveLocationEntries(record);
     const loc = this.pickLocation(record);
     if (typeof loc === 'string') {
       const text = this.cleanText(loc);
-      return { ...this.splitLocation(text), locationText: text };
+      const parsed = parseLocationText(text).location;
+      return {
+        city: parsed?.city ?? null,
+        state: parsed?.state ?? null,
+        country: parsed?.country ?? null,
+        locationText: text,
+        locationEntries,
+      };
     }
     if (loc) {
       const city = this.cleanText(loc.city) ?? this.cleanText(loc.name) ?? this.cleanText(loc.address);
@@ -404,10 +418,24 @@ export class MokaHrService implements IScraper {
       const country = this.cleanText(loc.country);
       const locationText =
         [city, state, country].filter((p): p is string => !!p).join(', ') || null;
-      return { city, state, country, locationText };
+      return { city, state, country, locationText, locationEntries };
     }
     const flatCity = this.cleanText(record?.city);
-    return { city: flatCity, state: null, country: null, locationText: flatCity };
+    return { city: flatCity, state: null, country: null, locationText: flatCity, locationEntries };
+  }
+
+  /** One triple per usable `locations[]` record entry — the per-site locations[] source. */
+  private deriveLocationEntries(
+    record: MokaHrJobRecord,
+  ): { city: string | null; state: string | null; country: string | null }[] {
+    if (!Array.isArray(record?.locations)) return [];
+    return record.locations
+      .filter((l) => l && (this.cleanText(l.city) || this.cleanText(l.name) || this.cleanText(l.address)))
+      .map((l) => ({
+        city: this.cleanText(l.city) ?? this.cleanText(l.name) ?? this.cleanText(l.address),
+        state: this.cleanText(l.province),
+        country: this.cleanText(l.country),
+      }));
   }
 
   /** Pick the first usable location from the role's `locations[]` / `location` / flat fields. */
@@ -514,27 +542,13 @@ export class MokaHrService implements IScraper {
     return new LocationDto({ city, state, country });
   }
 
-  /**
-   * Best-effort split of a single free-text location line into city / state / country.
-   * Comma-separated tail is treated as the country; the head as the city. A MokaHR
-   * location is often a single free-text line, so the whole value lands in `city` when
-   * there is no comma.
-   */
-  private splitLocation(
-    text: string | null,
-  ): { city: string | null; state: string | null; country: string | null } {
-    if (!text || this.isRemoteToken(text)) {
-      return { city: null, state: null, country: null };
+  /** Per-site locations[] — the record's structured entries, else the singleton location. */
+  private extractLocations(job: MokaHrJob): LocationDto[] {
+    if (job.locationEntries?.length) {
+      return job.locationEntries.map((e) => new LocationDto(e));
     }
-    const parts = text
-      .split(',')
-      .map((p) => this.cleanText(p))
-      .filter((p): p is string => !!p);
-    if (parts.length === 0) return { city: null, state: null, country: null };
-    if (parts.length === 1) return { city: parts[0], state: null, country: null };
-    const country = parts[parts.length - 1];
-    const city = parts.slice(0, parts.length - 1).join(', ');
-    return { city: city || null, state: null, country: country || null };
+    const location = this.extractLocation(job);
+    return location ? [location] : [];
   }
 
   /** Detect remote roles from the title, location, or department text. */
@@ -549,11 +563,6 @@ export class MokaHrService implements IScraper {
       if (MOKAHR_REMOTE_REGEX.test(field)) return true;
     }
     return false;
-  }
-
-  /** True when a location token is a bare "Remote" marker rather than a real place. */
-  private isRemoteToken(value: string): boolean {
-    return /^remote$/i.test(value.trim());
   }
 
   /**

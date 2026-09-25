@@ -11,7 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import { createHttpClient, htmlToPlainText, markdownConverter, extractEmails } from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList } from '@ever-jobs/common';
 import { NODESK_API_URL, NODESK_HEADERS } from './nodesk.constants';
 import { NoDeskJob } from './nodesk.types';
 
@@ -120,9 +120,8 @@ export class NoDeskService implements IScraper {
     }
 
     // Build location
-    const location = new LocationDto({
-      city: entry.location || null,
-    });
+    const locationParsed = parseLocationList([entry.location || null]);
+    const location = locationParsed.location;
 
     // Parse date
     const rawDate = entry.published_at || entry.date;
@@ -135,10 +134,11 @@ export class NoDeskService implements IScraper {
       companyLogo: entry.company_logo || null,
       jobUrl: entry.url,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation: null,
       datePosted,
-      isRemote: true,
+      isRemote: (true) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       site: Site.NODESK,
       skills: entry.tags?.length ? entry.tags : null,

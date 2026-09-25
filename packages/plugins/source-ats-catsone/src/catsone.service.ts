@@ -16,7 +16,9 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
+  stripParentheticals,
 } from '@ever-jobs/common';
 import {
   CATSONE_HOST_TEMPLATE,
@@ -29,6 +31,7 @@ import {
   CATSONE_REQUEST_DELAY_MS,
   CATSONE_DEFAULT_RESULTS,
   CATSONE_HEADERS,
+  catsoneLocationHeuristicsEnabled,
 } from './catsone.constants';
 import { CatsoneJobStub, CatsoneJobDetail, CatsoneTenantContext } from './catsone.types';
 
@@ -409,12 +412,15 @@ export class CatsoneService implements IScraper {
       }
     }
 
+    const locationDto = location ? this.parseLocation(location) : null;
+
     return new JobPostDto({
       id: `catsone-${atsId}`,
       title,
       companyName: fallbackCompanyName,
       jobUrl,
-      location: location ? this.parseLocation(location) : null,
+      location: locationDto,
+      ...(locationDto ? { locations: [locationDto] } : {}),
       description,
       datePosted: null,
       isRemote: this.detectRemote(title, location),
@@ -477,26 +483,26 @@ export class CatsoneService implements IScraper {
   }
 
   /**
-   * Parse a free-text location label into a `LocationDto`.
-   *
-   * CATS location labels typically follow `"City, State"` or
-   * `"City (qualifier), Country"` patterns. We split on commas and map the
-   * parts to city / state / country heuristically.
+   * Parse a CATS location label. CATS labels often carry parenthetical
+   * qualifiers ("Leeds (Head Office), UK", "London (Hybrid)"); with
+   * CATSONE_LOCATION_HEURISTICS on (default — Spec 1689 restores the pre-5125
+   * behaviour) they are stripped before parsing so they never land in the
+   * city. When the parenthetical IS the geography ("Remote (Paris, FR)") the
+   * stripped label parses to nothing and the full label is parsed instead.
+   * The strip is linear (the former `/\s*\([^)]*\)/g` was quadratic on
+   * long whitespace runs and unclosed '('), and the stripped label is probed
+   * without the parser's legacy Remote city, so 'Remote (Paris, FR)' still
+   * falls back to Paris.
    */
   private parseLocation(label: string): LocationDto | null {
-    const clean = label.replace(/\s*\([^)]*\)/g, '').trim(); // strip parenthetical qualifiers
-    const parts = clean
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
+    if (catsoneLocationHeuristicsEnabled()) {
+      const stripped = stripParentheticals(label, '', { space: 'before' }).trim();
+      if (stripped && stripped !== label) {
+        const parsed = parseLocationText(stripped, { emitRemoteCity: false }).location;
+        if (parsed) return parsed;
+      }
     }
-    const city = parts[0];
-    const state = parts.length >= 3 ? parts[1] : null;
-    const country = parts[parts.length - 1];
-    return new LocationDto({ city, state, country });
+    return parseLocationText(label).location;
   }
 
   /** Detect remote roles from the title or location text. */

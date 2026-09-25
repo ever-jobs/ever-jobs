@@ -92,7 +92,7 @@ describe('DescopeService — Spec 125 / T04', () => {
       expect(JOBS_PAGE_RAW.jobs[0].departments[0].name).toBe('Customer Success ');
       expect(cse?.department).toBe('Customer Success');
       expect(cse?.department).not.toMatch(/\s$/);
-      expect(cse?.location?.city).toBe('Remote, US');
+      expect(cse?.location?.city).toBeUndefined();
       expect(cse?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(cse?.description).not.toContain('&lt;');
@@ -105,7 +105,7 @@ describe('DescopeService — Spec 125 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, MCP');
       expect(sse?.companyName).toBe('Descope');
-      expect(sse?.location?.city).toBe('Tel Aviv, Israel');
+      expect(sse?.location?.city).toBe('Tel Aviv');
       expect(sse?.isRemote).toBe(false);
       // **D-11 APPLIED lock — second sample**: wire dept
       // `'Engineering '` padded; emitted trimmed.

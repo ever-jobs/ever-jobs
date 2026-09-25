@@ -17,6 +17,7 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { StackAdaptModule, StackAdaptService } from '../src';
+import { parseLocationText } from '@ever-jobs/common';
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures');
 const JOBS_PAGE_RAW = JSON.parse(
@@ -82,7 +83,7 @@ describe('StackAdaptService — Spec 942 / T04', () => {
           ? String(first.departments[0].name).trim()
           : null;
       expect(job0?.department).toBe(firstDept);
-      expect(job0?.location?.city).toBe(first.location.name);
+      expect(job0?.location?.city).toBe(parseLocationText(first.location.name).location?.city);
       expect(job0?.isRemote).toBe(
         String(first.location.name).toLowerCase().includes('remote'),
       );

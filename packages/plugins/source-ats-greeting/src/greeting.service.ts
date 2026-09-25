@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -435,12 +436,15 @@ export class GreetingService implements IScraper {
     const companyName = job.companyName ?? this.deriveCompanyName(tenant);
     const description = this.formatDescription(job.descriptionHtml ?? null, format);
 
+    const location = this.extractLocation(job);
+
     return new JobPostDto({
       id: `greeting-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -600,9 +604,19 @@ export class GreetingService implements IScraper {
     const head = parts[0];
     if (this.isCountryToken(head)) {
       const rest = parts.slice(1).join(' ');
-      return { city: rest || null, state: null, country: head };
+      const parsed = rest ? parseLocationText(rest).location : null;
+      return {
+        city: parsed?.city ?? (rest || null),
+        state: parsed?.state ?? null,
+        country: parsed?.country ?? head,
+      };
     }
-    return { city: text, state: null, country: null };
+    const parsed = parseLocationText(text).location;
+    return {
+      city: parsed?.city ?? null,
+      state: parsed?.state ?? null,
+      country: parsed?.country ?? null,
+    };
   }
 
   /** True when a token is a recognised country marker (Korean / English). */
