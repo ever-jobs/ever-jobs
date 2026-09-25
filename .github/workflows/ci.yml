@@ -31,7 +31,13 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       - name: Run docs-lint
         run: npm run lint:docs
@@ -69,7 +75,13 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       - name: Type-check
         run: npx tsc --project apps/api/tsconfig.build.json --noEmit
@@ -115,7 +127,13 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       - name: Run health endpoint tests
         run: npx jest --testPathPatterns 'apps/api/__tests__/health' --verbose
@@ -157,7 +175,13 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       - name: Run core unit & hermetic integration tests
         run: npm run test:core -- --maxWorkers=${{ vars.JEST_CORE_MAX_WORKERS || '3' }} --verbose --reporters=default --reporters=github-actions
@@ -188,7 +212,13 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_8 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       - name: Run API search & analyze E2E tests
         run: npx jest --testPathPatterns 'apps/api/__tests__/(search|analyze)' --verbose
@@ -249,7 +279,13 @@ jobs:
           expect-vip: ${{ (vars.RUNNER_SOURCE_UNIT || vars.RUNNER_LINUX_X64_8) != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       - name: Run source scraper unit tests
         run: npx jest --testPathPatterns 'packages/plugins/source-' --testPathIgnorePatterns 'e2e-spec' --shard=${{ matrix.shard }}/3 --maxWorkers=${{ vars.JEST_SOURCE_UNIT_MAX_WORKERS || '5' }} --testTimeout=30000 --passWithNoTests --verbose --reporters=default --reporters=github-actions
@@ -284,7 +320,13 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       - name: Run source scraper e2e tests
         run: npx jest --testPathPatterns 'source-.*e2e-spec' --shard=${{ matrix.shard }}/6 --passWithNoTests --verbose --reporters=default --reporters=github-actions
@@ -316,7 +358,13 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       # Hermetic offline suites (no live APIs) — these gate the build.
       # Perf budgets are relaxed for shared-runner variance via the suites'
