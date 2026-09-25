@@ -15,3 +15,8 @@
 - [x] T7 — Controller + resolver: normalise before cache, `term=<none>` log, GraphQL `siteCategories` + nullable `searchTerm`. Acceptance: controller test asserts log text and shared cache key for `""`/omitted.
 - [x] T8 — Static guard over `packages/plugins/*/src` for bare `input.searchTerm` interpolation. Acceptance: passes on the current tree; fails on a planted sample (red control in the test itself).
 - [x] T9 — Docs: README "Getting ALL jobs" + "Choosing sources by category", OpenAPI descriptions, `docs/log.md`, `docs/index.md`, Q-100.
+
+Review fixes (2026-09-25):
+
+- [ ] T10 — Flag `stepstone` + `careeronestop`; extend the static guard (keyword fallback literal, term as a path segment; exemptions for log calls and flagged plugins). Acceptance: red controls in the test; the real tree passes; Q-100 addendum.
+- [ ] T11 — `EVER_JOBS_MAX_RESULTS_WANTED` + `EVER_JOBS_MAX_JOBS_PER_SEARCH` (config resolvers, service clamp + ceiling, controller clamp before the cache key). Acceptance: config, service and controller tests; README/.env.example document both with the memory arithmetic.

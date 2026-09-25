@@ -7,7 +7,7 @@
 | Status         | done                                     |
 | Owner          | agent                                    |
 | Created        | 2026-09-24                               |
-| Last updated   | 2026-09-24                               |
+| Last updated   | 2026-09-25                               |
 | Supersedes     | (none)                                   |
 | Related specs  | 004, 5024                                |
 
@@ -64,6 +64,10 @@ only configuration that behaves sensibly — and it must keep behaving exactly a
 | FR-9  | Schema: `npm run store:postgres:generate` (Prisma client) and `npm run store:postgres:migrate` (applies `prisma/migrations` via `prisma migrate deploy`, reading the same URL variables). | must |
 | FR-10 | The `NODE_ENV=production` memory warning fires only when persistence into memory is actually enabled. | should |
 | FR-11 | The Docker image runs `prisma generate` best-effort (a failure cannot fail the build; `postgres` would then fail fast at boot with the generate hint) and ships `openssl` for the Prisma engine on Alpine. | should |
+| FR-12 | **The write path works at list-mode size** (review fix, 2026-09-25). A persisted search can carry 20–30 k canonical jobs. `postgres` `upsertMany` writes set-based: one `INSERT … ON CONFLICT (canonical_job_id) DO UPDATE` statement per chunk of `EVER_JOBS_STORE_BATCH_SIZE` rows (default 500), rows de-duplicated (last wins) and sorted by id; no interactive transaction, so Prisma's 5 s interactive-transaction timeout cannot abort it. Atomic per chunk, not per call — a failure part-way leaves earlier chunks written, which is safe because every write is an idempotent upsert. `inserted + updated` always equals the input length (a repeated id counts as an update, exactly as sequential upserts would). | must |
+| FR-13 | `IJobObservationStore` gains an optional batch method `putAllMany(entries)` = `putAll` for every entry. `postgres` implements it as one statement per chunk that deletes the observations no longer present and upserts the rest, rewriting a row only when `url`, `observed_at` or `raw_title` changed (no delete-and-reinsert of every observation on every run); entries whose canonical row does not exist are skipped instead of failing the chunk. `sqlite` implements it chunked. `JobsAggregator` uses `putAllMany` when the bound store has it, otherwise calls `putAll` with at most 8 in flight (never one call per job all at once); observation failures stay best-effort and are logged with a count. | must |
+| FR-14 | `postgres` constructs the Prisma client with explicit `transactionOptions` (`EVER_JOBS_STORE_TX_TIMEOUT_MS`, default 30000; `EVER_JOBS_STORE_TX_MAX_WAIT_MS`, default 10000) for the interactive transactions that remain (single `putAll`). Invalid values fail the boot with `ERR_STORE_CONFIG_INVALID`. | must |
+| FR-15 | `sqlite` `upsertMany` / `putAllMany` never bind more than one row's values per statement (prepared statements; no `IN (…)` over the whole batch, so no `too many SQL variables` at > 32 766 rows), write one transaction per chunk of `EVER_JOBS_STORE_BATCH_SIZE` rows and yield to the event loop (`setImmediate`) between chunks. | must |
 
 ## 6. Non-Functional Requirements
 
@@ -71,6 +75,7 @@ only configuration that behaves sensibly — and it must keep behaving exactly a
 | ----- | ----------- | ------ |
 | NFR-1 | Cold start in `memory` mode | unchanged — no Prisma / SQLite code loaded |
 | NFR-2 | Secrets | the database URL is never logged; errors print `postgres://host:port/db` only |
+| NFR-3 | Persist 10 000+ canonical jobs (+ observations) | `postgres`: succeeds, no P2028; `sqlite`: succeeds at 33 000+ rows, and the event loop runs between chunks |
 
 ## 7. Contracts
 
@@ -104,6 +109,16 @@ function connectPostgresStoreClient(url, loadCtor?): Promise<ConnectablePrismaCl
 
 // @ever-jobs/plugin
 interface StoreModuleForActiveOptions { providers?: ReadonlyArray<Provider> }
+
+// @ever-jobs/models — review fix (FR-13), optional so every existing store still conforms
+interface IJobObservationStore {
+  putAllMany?(entries: ReadonlyArray<{ canonicalJobId: string; observations: ReadonlyArray<SourceObservation> }>): Promise<void>;
+}
+
+// apps/api/src/config/store-config.ts — review fix (FR-12, FR-14, FR-15)
+function resolveStoreWriteTuning(env): { batchSize: number; txTimeoutMs: number; txMaxWaitMs: number };
+// EVER_JOBS_STORE_BATCH_SIZE (500, 1..5000), EVER_JOBS_STORE_TX_TIMEOUT_MS (30000),
+// EVER_JOBS_STORE_TX_MAX_WAIT_MS (10000); non-numeric / out of range → ERR_STORE_CONFIG_INVALID
 ```
 
 ### 7.3 Errors
@@ -129,6 +144,12 @@ interface StoreModuleForActiveOptions { providers?: ReadonlyArray<Provider> }
   back; the existing Spec 004 conformance suite against the same database; unreachable URL →
   `ERR_STORE_BACKEND_DOWN` with a redacted message. Exercised against a throwaway PostgreSQL 16
   cluster after `store:postgres:migrate`.
+- **Scale (FR-12..FR-15):** `RUN_PG_TESTS` case upserting 10 000 canonical jobs + observations
+  through the production client constructor (default transaction options), re-persisting them
+  (all `updated`, unchanged observations not rewritten), and a batch with a repeated id;
+  SQLite cases at 33 000 rows (red before: `too many SQL variables`) and an event-loop probe
+  that must run before `upsertMany` resolves; aggregator tests for `putAllMany` and for the
+  bounded `putAll` fallback (never more than 8 in flight).
 
 ## 9. Open Questions
 
@@ -150,6 +171,16 @@ interface StoreModuleForActiveOptions { providers?: ReadonlyArray<Provider> }
   whose name lacks "test" (it truncates). Running it for the first time against a real database
   exposed a harness bug: the migration replay dropped every chunk that *began* with a comment,
   i.e. every `CREATE TABLE`, so the suite could never have passed. Fixed.
+- D-06 — (review fix) The Postgres batch writes use raw SQL fed by ONE `jsonb` parameter per
+  chunk (`jsonb_to_recordset`) rather than Prisma's per-row `upsert` in an interactive
+  transaction. Measured before the fix on PG16 over loopback: 3 000 rows took 3.9 s in one
+  transaction and 10 000 rows hit Prisma's default 5 s timeout (P2028); a `putAll` per job,
+  all at once, drained the pool. One parameter per chunk also keeps every statement far below
+  the 65 535-parameter limit whatever the batch size.
+- D-07 — Persistence stays on the response's critical path (awaited). Backgrounding it would
+  let a slow store accumulate unbounded pending corpora in the heap across requests; awaiting
+  gives natural back-pressure, and after FR-12/FR-13 a 25 k-job persist is seconds. The NDJSON
+  heartbeat keeps the connection alive meanwhile (Spec 1721 FR-9).
 
 ## 11. References
 

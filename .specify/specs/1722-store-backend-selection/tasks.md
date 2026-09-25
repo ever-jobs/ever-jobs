@@ -14,3 +14,10 @@
 - [x] T6 — Postgres harness via `EVER_JOBS_TEST_PG_URL`; boot-path integration test. Acceptance: conformance + boot tests green against the throwaway cluster; unreachable URL → `ERR_STORE_BACKEND_DOWN`, password absent from the message.
 - [x] T7 — Dockerfile best-effort generate + `openssl`. Acceptance: reviewed; not built in this lane (recorded).
 - [x] T8 — Docs: README "Storage backends" with the env matrix and forker walkthrough, `.env.example`, `docs/log.md`, `docs/index.md`, Q-102.
+
+Review fixes (2026-09-25):
+
+- [ ] T9 — Postgres set-based `upsertMany` + `putAllMany` (FR-12, FR-13), `transactionOptions` from env (FR-14). Acceptance: `RUN_PG_TESTS` 10 000-row case green through the production client constructor; re-persist reports all `updated` and leaves unchanged observations untouched; conformance suite still green.
+- [ ] T10 — SQLite chunked prepared-statement writes with event-loop yields (FR-15). Acceptance: 33 000-row `upsertMany` + `putAllMany` succeed (red before: `too many SQL variables`); an event-loop probe runs before `upsertMany` resolves; conformance suite still green.
+- [ ] T11 — Aggregator: `putAllMany` when available, otherwise `putAll` with ≤ 8 in flight; failures logged with a count and never flip `persisted`. Acceptance: aggregator unit tests.
+- [ ] T12 — `resolveStoreWriteTuning` + bootstrap wiring + docs (`README`, `.env.example`). Acceptance: store-config tests; bootstrap test sees `transactionOptions` passed to the Prisma constructor.

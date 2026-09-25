@@ -13,3 +13,9 @@
 - [x] T5 — Controller NDJSON branch + heartbeat + error line. Acceptance: controller suite (order, shape equality, pagination ignored, error without `end`, cache hit, heartbeat with fake timers, extra fields pass through).
 - [x] T6 — CSV nested arrays; GraphQL `dedupKey`. Acceptance: CSV test sees `dedupKey` column and `a; b` for a nested array.
 - [x] T7 — Docs: README "Streaming NDJSON" + "Fan-out deadline", `.env.example`, OpenAPI `format` description, `docs/log.md`, `docs/index.md`, Q-103.
+
+Review fixes (2026-09-25):
+
+- [ ] T8 — Initial progress line written synchronously (FR-12). Acceptance: cache-hit stream is `progress, job, end`; the first line is readable while `aggregateRaw` is still pending.
+- [ ] T9 — `JobsService.assertSearchable` + controller pre-check (FR-13). Acceptance: unresolvable `companyDomain` → `BadRequestException` thrown by the handler, no stream, no fan-out; the service's own message is reused.
+- [ ] T10 — `SearchRunOptions.isCancelled` + controller wiring (FR-14). Acceptance: service test — cancelled after the first source → no further scraper called, `cancelled: true`, `cancelled_skipped` metric; controller test — after `close`, no cache write and no dedup.

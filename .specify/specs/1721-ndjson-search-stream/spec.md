@@ -7,7 +7,7 @@
 | Status         | done                                     |
 | Owner          | agent                                    |
 | Created        | 2026-09-24                               |
-| Last updated   | 2026-09-24                               |
+| Last updated   | 2026-09-25                               |
 | Supersedes     | (none)                                   |
 | Related specs  | 003, 5025, 5026, 1720, 1723              |
 
@@ -42,6 +42,7 @@ In addition:
 - Streaming *while* scraping (emitting jobs before the fan-out ends). Dedup, liveness and
   legitimacy need the whole set, and the contract requires the JSON order.
 - Cancelling in-flight scrapers on client disconnect (no `AbortSignal` in the plugin contract).
+  FR-14 only stops *starting* new ones, exactly like the deadline.
 - Changing the JSON response shape (only the additive `dedupKey` per job).
 
 ## 4. Caller Stories
@@ -67,13 +68,16 @@ In addition:
 | FR-9  | `search.deadlineMs` resolves `EVER_JOBS_FANOUT_DEADLINE_MS`, then `EVER_JOBS_SEARCH_DEADLINE_MS`, then `120000`. Blank / non-numeric values fall through to the next source; `0` or negative disables the deadline (existing semantics). | must |
 | FR-10 | Every returned job carries `dedupKey`: `sha256(normalizeCompany(company) + "|" + normalizeTitle(title) + "|" + normalizeLocation(location))` — the same function the dedup engine uses for `canonicalJobId`. Computed on the output set for `dedup=true` and `dedup=false`, from cache or fresh. Absent only when a job has neither title nor company. | must |
 | FR-11 | CSV gains a `dedupKey` column automatically; nested arrays inside object fields are joined with `; ` (same as top-level arrays) so extra structured fields remain readable. GraphQL `JobPostGql` gains `dedupKey`. | must |
+| FR-12 | (review fix, 2026-09-25 — tightens FR-1) The very first line, `{"type":"progress","sourcesDone":0,"sourcesTotal":0,"jobs":0}`, is written synchronously when the stream is created — before the cache lookup — so headers flush immediately on a cache hit too (where dedup and persistence of a large set can take seconds before the first job line) and heartbeats cover that phase. The fan-out-start line with the real `sourcesTotal` follows as before. | must |
+| FR-13 | (review fix) Input the service would reject before any scraping — a `companyDomain` that resolves to no plugin while nothing else is selected, an unknown `siteCategories` value from a caller that bypassed validation — is checked before the stream is created and answered with **400**, not with `201` + an `error` line. | must |
+| FR-14 | (review fix) When the NDJSON client disconnects, the fan-out stops **starting** sources (checked next to the deadline; in-flight sources finish), skipped sources count as `cancelled_skipped` in `scraper_requests_total`, and the partial result is **not** cached, deduped or persisted — a retry must never be served a truncated set from the cache. | must |
 
 ## 6. Non-Functional Requirements
 
 | ID    | Requirement | Target |
 | ----- | ----------- | ------ |
 | NFR-1 | Peak extra memory of NDJSON vs JSON | one line buffer (≤ one job) + the stream high-water mark |
-| NFR-2 | Time to first byte | ≤ fan-out setup (no scraping) |
+| NFR-2 | Time to first byte | immediate — the first line exists before the cache lookup (FR-12) |
 | NFR-3 | `dedupKey` cost | one sha-256 per returned job (~25 µs) |
 
 ## 7. Contracts
@@ -81,6 +85,7 @@ In addition:
 ### 7.1 Wire format
 
 ```text
+{"type":"progress","sourcesDone":0,"sourcesTotal":0,"jobs":0}
 {"type":"progress","sourcesDone":0,"sourcesTotal":1669,"jobs":0}
 {"type":"progress","sourcesDone":412,"sourcesTotal":1669,"jobs":6120}
 {"type":"job","data":{"id":"…","title":"…","dedupKey":"4f1c…",…}}
@@ -94,6 +99,12 @@ Failure: `…{"type":"error","message":"<reason>"}` then EOF, no `end`.
 
 ```ts
 export interface SearchProgress { sourcesDone: number; sourcesTotal: number; jobs: number }
+export interface SearchRunOptions {
+  onProgress?: (progress: SearchProgress) => void;
+  isCancelled?: () => boolean;            // FR-14 — checked before each source starts
+}
+// JobsService.searchJobsWithDiagnostics(...) → { jobs, perSource, cancelled?: true }
+// JobsService.assertSearchable(input): void — FR-13, throws the service's own BadRequestException
 export function dedupKeyForJob(job: Pick<JobPostDto,'title'|'companyName'|'location'>): string | undefined; // @ever-jobs/common
 class JobPostDto { dedupKey?: string | null }
 ```
@@ -110,6 +121,12 @@ class JobPostDto { dedupKey?: string | null }
   punctuation, `Inc.` suffix) → same key; different title → different key; matches
   `canonicalJobId`; class vs plain `LocationDto` → same key.
 - Aggregator: `dedupKey` present on `dedup=true`, `dedup=false`, no-engine paths.
+- Review fixes: a cache hit streams `progress` → `job` → `end`, and the first line is readable
+  while dedup/persistence of the cached set is still running (FR-12); an unresolvable
+  `companyDomain` makes the handler throw `BadRequestException` before any stream exists and
+  the fan-out never runs (FR-13); after `res` emits `close`, no further source is started,
+  `cacheService.set` and `aggregateRaw` are not called (FR-14); service-level test that
+  `isCancelled` stops the worker pool and reports `cancelled: true`.
 
 ## 9. Open Questions
 

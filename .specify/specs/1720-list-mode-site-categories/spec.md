@@ -7,7 +7,7 @@
 | Status         | done                                     |
 | Owner          | agent                                    |
 | Created        | 2026-09-24                               |
-| Last updated   | 2026-09-24                               |
+| Last updated   | 2026-09-25                               |
 | Supersedes     | (none)                                   |
 | Related specs  | 5026, 5082, 1721, 1722, 1723             |
 
@@ -73,6 +73,8 @@ Ever Jobs for "everything you can list":
 | FR-8  | With neither `siteType` nor `siteCategories`, the selection is byte-for-byte today's. | must |
 | FR-9  | `siteCategories` participates in the cache key (it changes the result set). | must |
 | FR-10 | GraphQL `SearchJobsInput.searchTerm` becomes nullable (list mode) and gains `siteCategories`. | should |
+| FR-11 | (review fix, 2026-09-25) A plugin that substitutes a **default keyword** when none is given (`input.searchTerm ?? 'developer'`) or puts the term in a URL **path segment** (`/{userId}/{keyword}/{location}/…` → `//` when absent) is not listing — it is a keyword search or a malformed request. Such plugins are flagged `requiresSearchTerm`: `stepstone` (falls back to searching "developer"), `careeronestop` (keyword is a path segment of its v2 API). The static guard (FR-T8) additionally fails on (a) `searchTerm ?? '<non-empty literal>'` / `\|\| '<literal>'` outside a log call and (b) a term-derived value interpolated as a whole path segment, in any plugin **not** flagged `requiresSearchTerm`. | must |
+| FR-12 | (review fix) Server-side bounds on result size, applied to every entry point (JSON, CSV, NDJSON, GraphQL, CLI) inside `JobsService` and before the controller's cache lookup: `EVER_JOBS_MAX_RESULTS_WANTED` (default **1000**, `0` = no cap) clamps `resultsWanted` per source, with a warning log; `EVER_JOBS_MAX_JOBS_PER_SEARCH` (default **100000**, `0` = no cap) stops **starting** sources once the fan-out has collected that many raw jobs (in-flight sources finish, exactly like the deadline; skipped sources get a `per_source` row whose detail names the variable, and a warning log). Peak raw jobs per request are therefore bounded by `MAX_JOBS_PER_SEARCH + concurrency × MAX_RESULTS_WANTED`. | must |
 
 ## 6. Non-Functional Requirements
 
@@ -125,12 +127,20 @@ searchJobsWithDiagnostics(input, options?: { onProgress?: (p: SearchProgress) =>
 - Controller: log line prints `term=<none>`; `""` and omitted share a cache key.
 - Static guard (`list-mode-source-audit.spec.ts`): no plugin interpolates a bare
   `input.searchTerm` into a template literal or string concatenation.
+- Review fixes: the guard's red controls catch `?? 'developer'`, `|| "jobs"` and a
+  term-derived path segment, and accept the same spellings inside a logger call or in a plugin
+  flagged `requiresSearchTerm`; the real tree passes; `stepstone` and `careeronestop` metadata
+  carry the flag. `search-config.spec.ts`: both caps' env parsing. Service: `resultsWanted`
+  clamped before dispatch; the job ceiling stops starting sources and reports them; `0`
+  disables both. Controller: the clamp happens before the cache key is built.
 
 ## 9. Open Questions
 
 - Q-100 — which plugins to flag `requiresSearchTerm`, and whether a flagged plugin's diagnostic
   should be `empty` or `bad_input`. Default: flag only plugins whose request is provably
   malformed without a term (`bayt`, `naukri`); report `empty` with an explanatory detail.
+  Addenda (review): `stepstone` and `careeronestop` flagged (FR-11); the result-size caps'
+  defaults (FR-12).
 
 ## 10. Decisions
 
