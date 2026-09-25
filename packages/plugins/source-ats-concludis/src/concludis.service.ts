@@ -411,12 +411,14 @@ export class ConcludisService implements IScraper {
     const companyName = ld?.hiringOrganization?.name?.trim() || fallbackCompanyName;
     const department = this.normalizeEmploymentType(ld?.employmentType);
 
+    const location = this.extractLocation(ld);
     return new JobPostDto({
       id: `concludis-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(ld),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(ld?.datePosted),
       isRemote: this.detectRemote(title, rawDescription, ld),

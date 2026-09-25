@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
 } from '@ever-jobs/common';
 import {
   BOEING_API_URL,
@@ -105,14 +106,7 @@ export class BoeingService implements IScraper {
 
     // --- Location ---
     const locStr = raw.location ?? '';
-    const locParts = locStr.split(',').map((s) => s.trim());
-    const location = locStr
-      ? new LocationDto({
-          city: locParts[0] ?? null,
-          state: locParts[1] ?? null,
-          country: locParts[2] ?? null,
-        })
-      : undefined;
+    const location = locStr ? parseLocationText(locStr).location ?? undefined : undefined;
 
     // --- Description ---
     let description: string | null = null;
@@ -147,6 +141,7 @@ export class BoeingService implements IScraper {
       companyName: 'Boeing',
       jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       emails: emails?.length ? emails : null,
       datePosted: raw.posted_date ?? undefined,

@@ -16,13 +16,7 @@ import {
   Site,
   Country,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import {
   ADZUNA_API_BASE_URL,
   ADZUNA_HEADERS,
@@ -208,9 +202,8 @@ export class AdzunaService implements IScraper {
     }
 
     // Build location from display_name
-    const location = new LocationDto({
-      city: raw.location?.display_name ?? null,
-    });
+    const locationParsed = parseLocationList([raw.location?.display_name ?? null]);
+    const location = locationParsed.location;
 
     // Build compensation (only use non-predicted salaries)
     let compensation: CompensationDto | null = null;
@@ -252,11 +245,12 @@ export class AdzunaService implements IScraper {
       companyName: raw.company?.display_name ?? null,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,
       jobType,
-      isRemote: null,
+      isRemote: locationParsed.remoteMentioned,
       emails: extractEmails(description),
       site: Site.ADZUNA,
     });

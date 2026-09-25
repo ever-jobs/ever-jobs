@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 const API_URL = 'https://www.metacareers.com/graphql';
 const CAREERS_BASE = 'https://www.metacareers.com/jobs/';
@@ -51,11 +51,13 @@ export class MetaService implements IScraper {
             const jobId = listing.id ?? listing.req_id ?? '';
             const id = `meta-${jobId || Math.abs(this.hashCode(title))}`;
 
-            const locationStr = listing.locations?.join(', ')
-              ?? listing.location ?? null;
-            const location = locationStr
-              ? new LocationDto({ city: locationStr })
-              : null;
+            const parsedLocations = parseLocationList(
+              listing.locations?.length
+                ? listing.locations
+                : [listing.location ?? null],
+            );
+            const location = parsedLocations.location;
+            const locations = parsedLocations.locations;
 
             jobs.push(
               new JobPostDto({
@@ -65,11 +67,12 @@ export class MetaService implements IScraper {
                 companyName: 'Meta',
                 jobUrl: listing.url ?? `${CAREERS_BASE}${jobId}`,
                 location,
+                ...(locations.length > 0 ? { locations } : {}),
                 description: listing.description
                   ? stripHtmlTags(listing.description)
                   : null,
                 datePosted: listing.posted_date ?? null,
-                isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+                isRemote: parsedLocations.remoteMentioned,
                 department: listing.team ?? listing.department ?? null,
               }),
             );

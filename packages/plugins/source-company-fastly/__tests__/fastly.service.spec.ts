@@ -93,7 +93,7 @@ describe('FastlyService — Spec 113 / T04', () => {
       expect(ddm?.jobUrl).toContain('?gh_jid=7858959');
       expect(ddm?.jobUrl).not.toContain('greenhouse.io');
       expect(ddm?.department).toBe('CFO');
-      expect(ddm?.location?.city).toBe('San Francisco, CA');
+      expect(ddm?.location?.city).toBe('San Francisco');
       expect(ddm?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ddm?.description).not.toContain('&lt;');
@@ -106,7 +106,7 @@ describe('FastlyService — Spec 113 / T04', () => {
       expect(csoc).toBeDefined();
       expect(csoc?.title).toBe('CSOC Engineer - Security Automation');
       expect(csoc?.companyName).toBe('Fastly');
-      expect(csoc?.location?.city).toBe('Pune,  India');
+      expect(csoc?.location?.city).toBe('Pune');
       expect(csoc?.isRemote).toBe(false);
       expect(csoc?.department).toBe('Customer Security - CSOC');
       expect(csoc?.jobUrl).toBe(

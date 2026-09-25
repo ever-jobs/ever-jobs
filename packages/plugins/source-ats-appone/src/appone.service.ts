@@ -216,6 +216,7 @@ export class ApponeService implements IScraper {
       companyName,
       jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       emails: extractEmails(description),
       datePosted: this.toDatePosted(post.datePosted),

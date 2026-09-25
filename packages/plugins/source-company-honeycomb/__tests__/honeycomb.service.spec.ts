@@ -139,7 +139,7 @@ describe('HoneycombService — Spec 073 / T04', () => {
       // Location — Honeycomb wire is fully clean (D-12 not applied).
       // Remote-detection picks up the literal `remote` substring
       // case-insensitively.
-      expect(eae?.location?.city).toBe('Remote - United Kingdom');
+      expect(eae?.location?.city).toBeUndefined();
       expect(eae?.isRemote).toBe(true);
       // D-11 first-listing regression guard: the emitted
       // `department` for the first fixture listing matches the wire
@@ -180,7 +180,7 @@ describe('HoneycombService — Spec 073 / T04', () => {
       expect(ssa?.title.endsWith(' ')).toBe(false);
       expect(ssa?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 1);
       expect(ssa?.companyName).toBe('Honeycomb.io');
-      expect(ssa?.location?.city).toBe('Remote - Canada');
+      expect(ssa?.location?.city).toBeUndefined();
       expect(ssa?.isRemote).toBe(true);
       // D-11 second-listing regression guard: the emitted
       // `department` for the second fixture listing matches the

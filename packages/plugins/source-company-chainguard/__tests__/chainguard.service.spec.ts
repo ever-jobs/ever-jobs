@@ -90,7 +90,7 @@ describe('ChainguardService — Spec 122 / T04', () => {
       );
       expect(eae?.jobUrl).toContain('job-boards.greenhouse.io/chainguard/jobs/');
       expect(eae?.department).toBe('International Sales');
-      expect(eae?.location?.city).toBe('Remote, US');
+      expect(eae?.location?.city).toBeUndefined();
       expect(eae?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(eae?.description).not.toContain('&lt;');
@@ -108,7 +108,7 @@ describe('ChainguardService — Spec 122 / T04', () => {
       expect(sse?.title).toBe('Senior Software Engineer (Experience)');
       expect(sse?.title).not.toMatch(/^\s/);
       expect(sse?.companyName).toBe('Chainguard');
-      expect(sse?.location?.city).toBe('Kirkland, WA');
+      expect(sse?.location?.city).toBe('Kirkland');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('Developer Enablement');
       expect(sse?.jobUrl).toBe(

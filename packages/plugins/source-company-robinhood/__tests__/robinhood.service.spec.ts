@@ -88,7 +88,7 @@ describe('RobinhoodService — Spec 026 / T04', () => {
       expect(brokerage?.jobUrl).toBe(
         'https://boards.greenhouse.io/robinhoodjobs/jobs/7601234',
       );
-      expect(brokerage?.location?.city).toBe('Menlo Park, CA');
+      expect(brokerage?.location?.city).toBe('Menlo Park');
       expect(brokerage?.department).toBe('Engineering');
       expect(brokerage?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

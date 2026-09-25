@@ -272,12 +272,14 @@ export class JobtrainService implements IScraper {
     const rawHtml = this.cleanText(posting.description);
     const description = this.formatDescription(rawHtml, format);
 
+    const location = this.extractLocation(posting);
     return new JobPostDto({
       id: `jobtrain-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(posting),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(posting.datePosted),
       isRemote: this.detectRemote(posting),

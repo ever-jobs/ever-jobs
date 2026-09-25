@@ -12,13 +12,7 @@ import {
   DescriptionFormat,
   Site,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { FINDWORK_API_URL, FINDWORK_HEADERS, FINDWORK_DEFAULT_RESULTS } from './findwork.constants';
 import { FindWorkApiResponse, FindWorkJob } from './findwork.types';
 
@@ -156,9 +150,8 @@ export class FindWorkService implements IScraper {
     }
 
     // Build location
-    const location = new LocationDto({
-      city: raw.location ?? null,
-    });
+    const locationParsed = parseLocationList([raw.location ?? null]);
+    const location = locationParsed.location;
 
     // Parse date
     let datePosted: string | null = null;
@@ -176,11 +169,12 @@ export class FindWorkService implements IScraper {
       companyName: raw.company_name ?? null,
       jobUrl: raw.url,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation: null,
       datePosted,
       jobType: null,
-      isRemote: raw.remote ?? false,
+      isRemote: (raw.remote ?? false) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       skills: raw.keywords ?? null,
       site: Site.FINDWORK,

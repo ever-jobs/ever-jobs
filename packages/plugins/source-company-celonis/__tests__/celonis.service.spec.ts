@@ -90,7 +90,7 @@ describe('CelonisService — Spec 140 / T04', () => {
       expect(bd?.jobUrl).toContain('job-boards.greenhouse.io/celonis/jobs/');
       // D-11 clean dept pass-through.
       expect(bd?.department).toBe('Sales');
-      expect(bd?.location?.city).toBe('Munich, Germany');
+      expect(bd?.location?.city).toBe('Munich');
       expect(bd?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(bd?.description).not.toContain('&lt;');
@@ -111,7 +111,7 @@ describe('CelonisService — Spec 140 / T04', () => {
       expect(cto?.title).toBe('Field CTO');
       expect(cto?.title).not.toMatch(/^ /);
       expect(cto?.companyName).toBe('Celonis');
-      expect(cto?.location?.city).toBe('Remote, US');
+      expect(cto?.location?.city).toBeUndefined();
       expect(cto?.isRemote).toBe(true);
       // D-11 clean dept pass-through (multi-token form).
       expect(cto?.department).toBe('Value Engineering');

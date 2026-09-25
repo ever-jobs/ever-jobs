@@ -269,12 +269,14 @@ export class DayforceService implements IScraper {
     const department =
       posting.JobFunction ?? posting.jobFunction ?? posting.department ?? posting.Department ?? posting.category ?? null;
 
+    const location = this.extractLocation(posting);
     return new JobPostDto({
       id: `dayforce-${atsId}`,
       title,
       companyName: posting.CompanyName ?? posting.companyName ?? posting.ClientSiteName ?? companyName,
       jobUrl,
-      location: this.extractLocation(posting),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(
         posting.postingStartTimestampUTC ?? posting.DatePosted ?? posting.datePosted ?? posting.LastUpdated,

@@ -85,7 +85,7 @@ describe('CoinbaseService — Spec 023 / T04', () => {
       expect(exchange?.jobUrl).toBe(
         'https://boards.greenhouse.io/coinbase/jobs/7301234',
       );
-      expect(exchange?.location?.city).toBe('San Francisco, CA');
+      expect(exchange?.location?.city).toBe('San Francisco');
       expect(exchange?.department).toBe('Engineering');
       expect(exchange?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

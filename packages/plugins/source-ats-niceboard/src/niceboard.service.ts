@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -222,13 +223,15 @@ export class NiceboardService implements IScraper {
     }
 
     const department = job.category?.name ?? job.jobtype?.name ?? null;
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `niceboard-${atsId}`,
       title,
       companyName: job.company_name ?? job.company?.name ?? companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.published_at ?? job.publishedAt ?? job.created_at),
       isRemote: this.detectRemote(job),
@@ -316,29 +319,13 @@ export class NiceboardService implements IScraper {
         return new LocationDto({ city, state, country });
       }
       if (loc.name && loc.name.trim()) {
-        return this.locationFromLabel(loc.name);
+        return parseLocationText(loc.name).location;
       }
     }
     if (typeof job.location_name === 'string' && job.location_name.trim()) {
-      return this.locationFromLabel(job.location_name);
+      return parseLocationText(job.location_name).location;
     }
     return null;
-  }
-
-  /** Split a free-text "City, State, Country" label into a LocationDto. */
-  private locationFromLabel(label: string): LocationDto | null {
-    const parts = label
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    const city = parts[0];
-    const state = parts.length >= 3 ? parts[1] : parts[parts.length - 1];
-    const country = parts.length >= 3 ? parts[parts.length - 1] : null;
-    return new LocationDto({ city: city ?? null, state: state ?? null, country: country ?? null });
   }
 
   /** Detect remote roles from the explicit flags or the title. */

@@ -91,7 +91,7 @@ describe('IterableService — Spec 159 / T04', () => {
       expect(fpa?.jobUrl).toContain('job-boards.greenhouse.io/iterable/jobs/');
       // D-11 clean dept pass-through.
       expect(fpa?.department).toBe('Finance');
-      expect(fpa?.location?.city).toBe('San Francisco, CA');
+      expect(fpa?.location?.city).toBe('San Francisco');
       expect(fpa?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(fpa?.description).not.toContain('&lt;');
@@ -107,7 +107,7 @@ describe('IterableService — Spec 159 / T04', () => {
       expect(sre?.title).toBe('Senior Site Reliability Engineer (Cloud Platform)');
       expect(sre?.title).not.toMatch(/\s$/);
       expect(sre?.companyName).toBe('Iterable');
-      expect(sre?.location?.city).toBe('Lisbon, Portugal');
+      expect(sre?.location?.city).toBe('Lisbon');
       expect(sre?.isRemote).toBe(false);
       expect(sre?.department).toBe('Engineering');
       expect(sre?.jobUrl).toBe(

@@ -14,12 +14,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList } from '@ever-jobs/common';
 import { JOBSTREET_API_URL, JOBSTREET_HEADERS } from './jobstreet.constants';
 import { JobstreetResponse, JobstreetJob } from './jobstreet.types';
 
@@ -147,9 +142,8 @@ export class JobstreetService implements IScraper {
 
     // Resolve location from multiple possible fields
     const locationStr = raw.locationWhereValue ?? raw.location ?? null;
-    const location = new LocationDto({
-      city: locationStr,
-    });
+    const locationParsed = parseLocationList([locationStr]);
+    const location = locationParsed.location;
 
     // Parse salary/compensation
     const compensation = this.parseSalary(raw.salary ?? raw.salaryLabel);
@@ -163,10 +157,11 @@ export class JobstreetService implements IScraper {
       companyName,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,
-      isRemote: raw.isRemote ?? false,
+      isRemote: (raw.isRemote ?? false) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       site: Site.JOBSTREET,
     });

@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, decodeHtmlEntities, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, decodeHtmlEntities, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 /**
  * Solaris — Solaris is a German Banking-as-a-Service provider that lets companies embed regulated financial products, such as accounts, cards, and lending, into their own offerings via APIs..
@@ -95,9 +95,8 @@ export class SolarisService implements IScraper {
         const id = `solarisbank-${jobId}`;
 
         const locationStr = listing.location?.name ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const locationParsed = parseLocationList([locationStr]);
+        const location = locationStr ? locationParsed.location : null;
 
         if (input.location && locationStr) {
           if (!locationStr.toLowerCase().includes(input.location.toLowerCase())) continue;
@@ -119,11 +118,12 @@ export class SolarisService implements IScraper {
               listing.absolute_url ??
               `https://job-boards.greenhouse.io/solarisbank/jobs/${listing.id}`,
             location,
+            ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
             description: listing.content
               ? stripHtmlTags(decodeHtmlEntities(listing.content))
               : null,
             datePosted: listing.updated_at ?? null,
-            isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+            isRemote: (locationStr?.toLowerCase().includes('remote') ?? false) || locationParsed.remoteMentioned,
             department,
           }),
         );

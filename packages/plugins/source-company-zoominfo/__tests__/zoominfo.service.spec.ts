@@ -134,7 +134,7 @@ describe('ZoomInfoService — Spec 057 / T04', () => {
       expect(ae?.jobUrl).toContain('www.zoominfo.com');
       expect(ae?.jobUrl).toContain('?gh_jid=');
       expect(ae?.jobUrl).not.toContain('job-boards.greenhouse.io');
-      expect(ae?.location?.city).toBe('Remote');
+      expect(ae?.location?.city).toBeUndefined();
       // D-11 regression guard: the emitted `department` for the first
       // fixture listing is the numeric-code-prefixed string
       // `'801 Client Services - Support'` byte-for-byte AND matches
@@ -174,7 +174,7 @@ describe('ZoomInfoService — Spec 057 / T04', () => {
       expect(growth?.title).not.toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(growth?.companyName).toBe('ZoomInfo');
       expect(growth?.location?.city).toBe(
-        'Bethesda, Maryland, United States; Vancouver, Washington, United States; Waltham, Massachusetts, United States',
+        'Bethesda, Maryland; Vancouver, Washington; Waltham, Massachusetts',
       );
       // The fixture location string does NOT contain "Remote" (multi-
       // office HQ string, no remote keyword) so isRemote should be

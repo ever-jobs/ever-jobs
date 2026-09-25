@@ -96,7 +96,7 @@ describe('PagerdutyService — Spec 117 / T04', () => {
       );
       expect(am?.jobUrl).toContain('job-boards.greenhouse.io/pagerduty/jobs/');
       expect(am?.department).toBe('Sales');
-      expect(am?.location?.city).toBe('San Francisco, CA');
+      expect(am?.location?.city).toBe('San Francisco');
       expect(am?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(am?.description).not.toContain('&lt;');
@@ -109,7 +109,7 @@ describe('PagerdutyService — Spec 117 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, Operations Cloud');
       expect(sse?.companyName).toBe('PagerDuty');
-      expect(sse?.location?.city).toBe('Toronto, ON, Canada');
+      expect(sse?.location?.city).toBe('Toronto');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('Product Management');
       expect(sse?.jobUrl).toBe(

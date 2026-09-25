@@ -114,7 +114,7 @@ describe('PostmanService — Spec 054 / T04', () => {
       // form Ramp Network introduced in Spec 052.
       expect(adr?.jobUrl).toContain('job-boards.greenhouse.io');
       expect(adr?.jobUrl).not.toContain('job-boards.eu.greenhouse.io');
-      expect(adr?.location?.city).toBe('San Francisco, California, United States');
+      expect(adr?.location?.city).toBe('San Francisco');
       expect(adr?.department).toBe('Sales');
       expect(adr?.isRemote).toBe(false);
       // D-08 regression guard: the description-cleanup pipeline must
@@ -142,7 +142,7 @@ describe('PostmanService — Spec 054 / T04', () => {
       expect(danish).toBeDefined();
       expect(danish?.title).toBe('Account Development Representative (Danish Speaking)');
       expect(danish?.companyName).toBe('Postman');
-      expect(danish?.location?.city).toBe('London, UK; Remote, UK');
+      expect(danish?.location?.city).toBe('London');
       // The fixture location string contains "Remote" so isRemote
       // should be true.
       expect(danish?.isRemote).toBe(true);

@@ -88,7 +88,7 @@ describe('EarnestService — Spec 144 / T04', () => {
       expect(ae?.jobUrl).toContain('?gh_jid=');
       // D-11 clean dept (this listing has clean wire dept).
       expect(ae?.department).toBe('Analytics');
-      expect(ae?.location?.city).toBe('San Francisco, CA');
+      expect(ae?.location?.city).toBe('San Francisco');
       expect(ae?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ae?.description).not.toContain('&lt;');
@@ -108,7 +108,7 @@ describe('EarnestService — Spec 144 / T04', () => {
       expect(dc?.department).toBe('Engineering');
       expect(dc?.department).not.toMatch(/\s$/);
       expect(dc?.companyName).toBe('Earnest');
-      expect(dc?.location?.city).toBe('Remote, US');
+      expect(dc?.location?.city).toBeUndefined();
       expect(dc?.isRemote).toBe(true);
       expect(dc?.jobUrl).toBe(
         'https://app.careerpuck.com/job-board/earnest/job/7875507?gh_jid=7875507',

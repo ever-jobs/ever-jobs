@@ -85,7 +85,7 @@ describe('AlmaService — Spec 152 / T04', () => {
       expect(bi?.jobUrl).toContain('job-boards.greenhouse.io/alma/jobs/');
       // D-11 clean dept pass-through.
       expect(bi?.department).toBe('Business Intelligence');
-      expect(bi?.location?.city).toBe('New York, NY');
+      expect(bi?.location?.city).toBe('New York');
       expect(bi?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(bi?.description).not.toContain('&lt;');
@@ -100,7 +100,7 @@ describe('AlmaService — Spec 152 / T04', () => {
       expect(ds?.title).toBe('Senior Data Scientist');
       expect(ds?.title).not.toMatch(/\s$/);
       expect(ds?.companyName).toBe('Alma');
-      expect(ds?.location?.city).toBe('Remote, US');
+      expect(ds?.location?.city).toBeUndefined();
       expect(ds?.isRemote).toBe(true);
       expect(ds?.department).toBe('Data Science');
       expect(ds?.jobUrl).toBe(

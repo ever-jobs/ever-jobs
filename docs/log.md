@@ -5,6 +5,425 @@
 
 ---
 
+## 2026-09-25 — Spec 1689 — Fork sync hardening: ReDoS, SSRF, shared state, and behaviour the fork removed
+
+**Change:** `fork-sync/makedeeply-2026-09-24` fast-forwards `origin/develop` (`574bd922`) to the
+MakeDeeply fork tip `11c61771` (118 commits: the fork's Specs 5118–5152, including the entries
+directly below this one). A read-only review of the fork in six lanes (supply chain, authorship,
+prompt injection, dangerous code, core, plugins) plus a merge test found no supply-chain or
+provenance compromise, but did find defects that would land with it. Commit `a243b1b9` fixes them
+on top of the fork tip, and keeps every behaviour the fork changed or removed reachable through an
+option or env variable:
+
+- **ReDoS (merge blocker).** The Spec 5124 parser's `remoteIn` regex
+  (`/^(?:remote|hybrid)\b(?:[\s-]*\w+)*?\s+in\s+(.+)$/i`) was exponential on any `Remote …`/
+  `Hybrid …` label without ` in ` — 7.2 s for `Hybrid Washington Metropolitan Area Office`, over
+  60 s at 53 characters — on a path ~978 plugins and `source-authenticjobs`' caller-supplied
+  `location` now reach. Replaced by the linear `matchRemoteInGeo` (0 disagreements with the old
+  regex over 300,000 fuzz strings), plus a per-chunk label cap
+  (`EVER_JOBS_LOCATION_MAX_LABEL_LENGTH`, 256), linear trims, a static country lookup instead of
+  `countryFromString`'s throw path (~4× faster), and the same fix in `scripts/proto`.
+- **Parser readings.** Ambiguous two-letter tails read as the US state (`Downtown, Los Angeles,
+  CA` was Canada; `EVER_JOBS_LOCATION_PREFER_US_STATE`), with vetoes that keep
+  `Bengaluru, KA, IN` in India and `Toronto, Ontario, CA` in Canada; region codes are no longer
+  re-read as countries (`Munich, BY, DE` was Belarus); `Remote, CA` reads as the state only with
+  `EVER_JOBS_LOCATION_PREFER_US_STATE_AFTER_QUALIFIER`. The fork's removed outputs are options
+  with the fork's defaults kept: `EVER_JOBS_LOCATION_REMOTE_CITY` (false, **Q-094**) and
+  `EVER_JOBS_LOCATION_BARE_STATE` (true, **Q-095**).
+- **Dedup.** The canonical key keeps a remote bucket and one spelling per country
+  (`EVER_JOBS_CANONICAL_KEY_REMOTE_BUCKET`, `EVER_JOBS_CANONICAL_KEY_NORMALIZE_COUNTRY`, both on),
+  and `dedup-hybrid` now passes `isRemote`, so a parsed `Remote` / `Remote - US` hash-merges with
+  an iCIMS `{ city: 'Remote' }` again. 🛑 Both options change `canonicalJobId` for remote-only
+  postings and labels ending in a country — one-time duplicates in a persistent store
+  (`store-sqlite-drizzle`, `store-postgres-prisma`); both `false` gives the fork's Spec 5123 key.
+  `CanonicalJob` gains `countryCode`.
+- **SSRF.** New shared `url-guard.ts` (`pinUrlToHosts`, `isPubliclyRoutableHostname`,
+  `describeUrlForLog`). `octbr_ai` spliced `companySlug` into its host and fetched every `job.url`
+  from tenant JSON; it now refuses a slug that is not one DNS label (`bad_input`, no request),
+  pins detail URLs to `{slug}.octbr.ai` and fetches them in batches of 5. The nine company plugins
+  (`4earth_tech`, `ampflame`, `getmaxspace`, `labs_actor`, `mundane_co`, `pulsespace`, `soundryx`,
+  `tau-robotics`, `thermwood`) pin `companyUrl` to their own domain or ignore it, logging the host
+  only. Every redirect hop of those clients is re-pinned (`HttpClientOptions.allowedRedirectHosts`;
+  escape hatch `EVER_JOBS_HTTP_PIN_REDIRECTS=false`).
+- **Shared state.** `mundane_co` closed the process-wide `BrowserPool` after every scrape, killing
+  other plugins' pages; it now closes only its own page (the old behaviour is
+  `MUNDANE_CO_CLOSE_BROWSER_POOL_AFTER_SCRAPE=true`). Idle persistent Chromium contexts are
+  LRU-capped (`EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS`, 4). Eightfold's endpoint and
+  Wellfound's remote-config map are per scrape instead of on the singleton service.
+- **Removed behaviour restored as options.** Dover's optional job-groups call no longer fails the
+  scrape (`DOVER_JOB_URL_STYLE=apply|board`); ADP stops paging at `offset + resultsWanted`
+  (`ADP_MAX_LIST_PAGES`, 100); the Lever/Workday ATS country overlay is back
+  (`EVER_JOBS_ATS_COUNTRY_OVERLAY`, on); PulseSpace's plain-HTTP bundle strategy is back beside
+  the browser one (`PULSESPACE_STRATEGY=rendered|bundle|auto`, default `rendered`) with its
+  fixtures restored; 11 plugins get their pre-Spec-5125 location heuristics back
+  (`<PLUGIN>_LOCATION_HEURISTICS`, on). Catastrophic-backtracking regexes in `tau-robotics`,
+  `4earth_tech`, `labs_actor` and nine quadratic ones elsewhere are linear.
+- **API surfaces.** MCP renders `location` as a string (`EVER_JOBS_MCP_LOCATION_FORMAT`) and
+  sends the camelCase keys the API's whitelist pipe keeps (`EVER_JOBS_MCP_REQUEST_KEYS`) — it was
+  searching with no search term. GraphQL exposes `countryCode`, `locations`, `offices` and the new
+  location fields; `SearchJobsInput` gets class-validator decorators (the whitelist pipe had been
+  stripping it to `{}`) and `country` is resolved to a `Country` or dropped with a warning.
+- **CI / tooling.** Unit shards take `JEST_SOURCE_UNIT_MAX_WORKERS` (5) on `RUNNER_SOURCE_UNIT`
+  instead of `--maxWorkers=75%` of the host; a new blocking `Test (Core)` job (`npm run
+  test:core`, `JEST_CORE_MAX_WORKERS` 3) runs the suites no job ran, and the two stale
+  `apps/api` specs it would have caught are fixed; `JEST_TRANSFORMER=ts-jest` / `npm run
+  test:typed` restore type-checked test runs; docs-lint check 8 flags conflict markers, and the
+  stray `||||||| 062a1346` line in `docs/questions.md` is removed.
+
+Not in scope and recorded: a global SSRF guard and resolved-IP checks for the older plugins, the
+two-label in-cluster hostname gap, caller-supplied `proxies`/`caCert`, and the shared-parser
+mis-splits in **Q-096**.
+
+**Files:** `packages/common/src/{utils/location-parser.ts,utils/url-guard.ts,utils/index.ts,canonical-key.ts,normalize.ts,http/http-client.ts,browser/browser-pool.ts}`,
+`packages/models/src/{interfaces/canonical-job.interface.ts,schemas/canonical-job.schema.ts}`,
+`packages/plugins/dedup-hybrid/src/dedup-hybrid.service.ts`,
+`packages/plugins/source-ats-{adp,catsone,cleverconnect,dover,eightfold,employmenthero,greenhouse,harri,jobsoid,lever,octbr_ai,pinpoint,umantis,wellfound,workday,workstream}/src/*`,
+`packages/plugins/source-company-{4earth_tech,amazon,ampflame,argospace,getmaxspace,labs_actor,mundane_co,pulsespace,soundryx,tau-robotics,thermwood,thinkorbital,zennoastronautics}/src/*`,
+`packages/plugins/source-company-pulsespace/__tests__/fixtures/{bundle.js,careers-bundle-shell.html,principal-avionics-architect.html}`,
+`apps/api/src/jobs/{gql-types.ts,jobs.resolver.ts}`, `apps/mcp/src/tools.ts`,
+`.github/workflows/ci.yml`, `jest.config.js`, `package.json`,
+`scripts/{docs-lint.ts,jest-typed.ts,proto/location-parser-v2.ts}`, the specs beside each of
+those, `apps/api/__tests__/{jobs/corpus-signals.spec.ts,integration/source-ats-batch-1.integration.spec.ts}`,
+`.env.example`, `apps/mcp/README.md`, `docs/questions.md` (Q-094–Q-096, marker removed),
+`.specify/specs/1689-fork-sync-hardening/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx tsc --project tsconfig.typecheck.json --noEmit` and
+`npx tsc --project apps/api/tsconfig.build.json --noEmit` clean; `npm run lint:docs` clean;
+`npm run test:scripts` 15/15 suites, 241 tests; jest `packages/(common|models|plugin)/` 751/751;
+`apps/(api|mcp)/` 316/316; the 30 touched plugin dirs 665/665; `packages/plugins/source-`
+1,626/1,626 suites, 16,226/16,226 tests. Each fix lane's new tests were run red against the fork's
+code first (e.g. Eightfold 3, Dover 8, ADP 6, MCP 4 failures; the fork parser took 11.2 s on
+`Remote Nationwide Opportunities Available`, the new one 3.9 ms). Known flake: `dedup-perf`
+NFR-1 (1,000 jobs < 250 ms, local budget) failed 2 of 6 runs at 278–284 ms with four workers on a
+loaded host and passed in isolation; the changed tree is ~5–10% slower there, and CI runs that
+suite with a 1,000 ms budget.
+
+**Review follow-ups (PR #91, automated review):** (1) `source-ats-adp` now returns the requested window (`offset` .. `offset + resultsWanted`) and spends detail requests only on it - it previously sliced from row 0, so `offset` was ignored (pre-existing, made visible by the new list budget); `source-ats-wellfound`, `source-ats-nodi_global` and `source-ats-octbr_ai` (new from the fork) honour `offset` too. (2) `BrowserPool` counts launches still in flight against `EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS` and re-checks after each launch, so a burst of concurrent identities can no longer leave idle contexts over the cap (red control: the new test fails without the fix). (3) CI: every `npm ci` step exports `npm_config_nodedir` = the setup-node install prefix, so `better-sqlite3` (no prebuilt for the runner Node) compiles against local headers instead of fetching them from nodejs.org - that fetch timed out from the ARC runners and failed two whole jobs on this PR (the same fix the Dockerfile has carried since 2026-08-01). Validation: the four plugin suites 66/66, browser-pool 22/22, `tsc --project tsconfig.typecheck.json` clean.
+
+---
+
+## 2026-09-24 — Spec 5152 — `source-company-soundryx`: Soundryx careers plugin
+
+**Change:** New company plugin `source-company-soundryx` (`Site.SOUNDRYX = 'soundryx'` — the Spec 5069 domain derivation of `soundryx.com`; `companyDomains: ['soundryx.com']` declared to pre-claim the host). `soundryx.com/careers/` is an Astro static site — fully server-rendered, static GETs only: the index's `a.srx-tile.is-link` tiles map to per-role `/careers/NNNNN-slug/` detail pages rendered under `.vp-doc`. Per detail: `h1`'s first text node → `title` (the trailing `<br/>` meta parenthetical is dropped); the `<strong>Location</strong>: …` line → `parseLocationText` with an `(onsite)` marker → `workFromHomeType: 'On Site'`; the `h2#compensation` sibling `ul` text → `resolveCompensation`; the `h2#apply-now` scope's Cloudflare `data-cfemail` payload (first byte = XOR key for the rest) decodes to the shared careers `mailto:` — an `email-protection#hex` href or bare `mailto:` also resolve. `description` = the `.vp-doc` body minus `section.footnotes` via `htmlToPlainText` (h2 section headings + `ul/li` bullets). `jobUrl`/`jobUrlDirect` = the detail page; `applyUrl` = the decoded mailto; ids `soundryx-{url-slug}` (the `NNNNN-` prefix is already unique). No `datePosted`/`department`. Empty index → `empty` diagnostic; fetch failure → `classifyScrapeError`; `resultsWanted`/`searchTerm`/`location`/`offset` honored.
+
+**Files:** `packages/plugins/source-company-soundryx/*` (new), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5152-source-company-soundryx/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-company-soundryx` — 8 tests green on live-fetched fixtures (3 roles mapped to detail pages, index→detail fetch order, description without footnotes, cfemail decode, Compensation→`resolveCompensation`, empty/error diagnostics, input filters); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Verified live: `soundryx.com/careers/` → 3 roles with locations, compensation, mailto apply, and full descriptions.
+
+---
+
+## 2026-09-24 — Spec 5151 — `source-company-labs_actor`: Actor careers plugin
+
+**Change:** New company plugin `source-company-labs_actor` (`Site.LABS_ACTOR = 'labs_actor'` — the Spec 5069 domain derivation of `labs.actor`; `companyDomains: ['labs.actor']` declared to pre-claim the host). `labs.actor/hiring` is a ~1 KB React SPA shell; the postings live in a webpack lazy chunk, so fetches are static-only: shell → `/static/js/main.{hash}.js` → the webpack runtime chunk map (`{115:"bae9c619",…}[e]+".chunk.js"`) → candidate chunks scanned for the jobs-array anchor (`=[{id:"…",title:"` — other chunks ship their own `[{id:…}]` literals like the `{id:"excavator",name:…}` machine specs, so the anchor matches the job-entry shape). Entries `{id,title,team,location,type,summary,responsibilities[],requirements[]}` are extracted by balanced-bracket slicing + top-level splitting, never evaluated. `team` → `department`; `location` has its `·`-qualifier tail stripped before `parseLocationText`; `type` → `extractJobType` + raw `employmentType`; `description` composes `summary` + `responsibilities` ("What you will do") + `requirements` ("What we are looking for"). `jobUrl`/`jobUrlDirect` = the careers page (roles expand inline); `applyUrl` = the site's own per-team mailto (`lane@labs.actor` for Hardware/Growth, `shashi@labs.actor` otherwise, subject `"{title} — application"`). Ids `labs_actor-{entry.id}`. No `datePosted`/`compensation`. No matching chunk → `empty`; fetch failure → `classifyScrapeError`; `resultsWanted`/`searchTerm`/`location`/`offset` honored.
+
+**Files:** `packages/plugins/source-company-labs_actor/*` (new), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5151-source-company-labs_actor/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-company-labs_actor` — 9 tests green on live-fetched fixtures (4 roles mapped, chunk-scan fetch order, description composition, per-team mailto routing, empty/error diagnostics, input filters); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Verified live: `labs.actor/hiring` → 4 roles.
+
+---
+
+## 2026-09-24 — Spec 5150 — `source-company-thermwood`: Thermwood job-card careers plugin
+
+**Change:** New company plugin `source-company-thermwood` (`Site.THERMWOOD = 'thermwood'` — the Spec 5069 domain derivation of `thermwood.com`; `companyDomains: ['thermwood.com']` declared to pre-claim the host). `thermwood.com/employment-opportunities.htm` is a fully server-rendered static page: one plain GET, Cheerio over `div.job-card` — retired cards persist in the markup inside `<!-- -->` comments and are never matched, so only live cards emit. Per card: `h3.job-card-title` → title; `.job-card-date` → `datePosted` (`Posted: MM-DD-YYYY` parses; `Ongoing` → null); `.job-card-location` "Dale, IN • Full-time" splits on `•` into `parseLocationText` and `extractJobType` (hyphen-normalized) + raw `employmentType`; `.job-card-details` → `description` via `htmlToPlainText` (h4 headings + `ul/li` bullets); the resume `mailto:` is captured via `extractEmails`. `jobUrl`/`jobUrlDirect` = the careers page; `applyUrl` = `{page}#application-form` — all cards share one HubSpot form embed (no per-role apply). Ids derive `thermwood-{slug-from-title}`. No `compensation`/`department`. Zero cards → `empty`; fetch failure → `classifyScrapeError`; `resultsWanted`/`searchTerm`/`location`/`offset` honored.
+
+**Files:** `packages/plugins/source-company-thermwood/*` (new), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5150-source-company-thermwood/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-company-thermwood` — 8 tests green on the live-fetched fixture (2 live cards parsed, commented-out cards excluded, date/location/type split, composed description, apply anchor, empty/error diagnostics, input filters); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Verified live: `thermwood.com/employment-opportunities.htm` → 2 cards.
+
+---
+
+## 2026-09-24 — Spec 5149 — `source-company-zennoastronautics`: Zenno Astronautics Sanity careers plugin
+
+**Change:** New company plugin `source-company-zennoastronautics` (`Site.ZENNOASTRONAUTICS = 'zennoastronautics'` — the Spec 5069 domain derivation of `zennoastronautics.com`; `companyDomains: ['zennoastronautics.com']` declared to pre-claim the host). The careers page is a ~650-byte SPA shell; its bundle queries the site's Sanity dataset (`zsx1k6t6`/`production`) through the public query endpoint. One anonymous GET — `?query=` + the encoded GROQ `*[_type == "job" && isActive == true]{title, slug, location, type, compensation, "text": description[]{style, listItem, children, markDefs}}` — returns every active job with its full portable-text description; no headless, no HTML parsing. `description` composes blocks to plain text (`listItem` → `- ` bullets, spans linked via `markDefs` → `text (href)`, empty blocks skipped). `type` maps through `extractJobType` (hyphen-normalized) + raw `employmentType`; `compensation` parses via `resolveCompensation` when the field is populated. `jobUrl`/`jobUrlDirect`/`applyUrl` are the per-role `/careers/{slug}` page (the SPA renders a detail route per slug; apply/contact is a mailto CTA on it). Ids derive `zennoastronautics-{slug.current}`. No `datePosted`/`department`. Zero entries → `empty`; fetch/parse failure → `classifyScrapeError`; `resultsWanted`/`searchTerm`/`location`/`offset` honored.
+
+**Files:** `packages/plugins/source-company-zennoastronautics/*` (new), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5149-source-company-zennoastronautics/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-company-zennoastronautics` — 10 tests green on the live-fetched fixture (3 roles parsed, portable-text composition, ids, per-role URLs, compensation parse, empty/error diagnostics, input filters); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Verified live: `zennoastronautics.com/careers` → 3 roles with descriptions.
+
+---
+
+## 2026-09-24 — Spec 5148 — `source-company-4earth_tech`: 4Earth careers chunk plugin
+
+**Change:** New company plugin `source-company-4earth_tech` (`Site.FOUR_EARTH_TECH = '4earth_tech'` — the Spec 5069 domain derivation of `4earth.tech`, `.tech` kept and dot → underscore; `companyDomains: ['4earth.tech']` declared to pre-claim the host). `4earth.tech/careers` is a React/Vercel site: the SSR cards are truncated, and the full postings live in a `=[{id:` array embedded in the `/assets/Careers-{hash}.js` chunk. Two plain GETs (careers shell → chunk, resolved from the modulepreload link each run); the array literal is extracted by balanced-bracket slicing and top-level comma splitting — never evaluated — and fields read by key (strings may be single- or double-quoted with escapes). `description` is composed from `mission` + `roleIntro` + `roleSummary` + `rolePoints` bullets + each `sections` heading with `{label, text}`/`isList` items + `whySection`. `type` ("Full-time (Onsite)") maps through `extractJobType` (hyphen-normalized) → `JobType.FULL_TIME` + raw `employmentType`; `jobUrl`/`jobUrlDirect`/`applyUrl` are the careers page — details expand inline and apply is an on-page Supabase modal, so no per-role URL exists. Ids derive `4earth_tech-{entry.id}` (native slugs). No `datePosted`/`compensation`/`department`. Zero entries → `empty`; fetch failure → `classifyScrapeError`; `resultsWanted`/`searchTerm`/`location`/`offset` honored.
+
+**Files:** `packages/plugins/source-company-4earth_tech/*` (new), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5148-source-company-4earth_tech/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-company-4earth_tech` — 8 tests green on the live-fetched fixtures (2 roles parsed with full descriptions, ids, applyUrl, empty/error diagnostics, input filters); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Verified live: `4earth.tech/careers` → 2 roles with ~3.8 KB descriptions each.
+
+---
+
+## 2026-09-24 — Spec 5147 — `source-company-ampflame`: Accurate Metals Next.js careers table
+
+**Change:** New company plugin `source-company-ampflame` (`Site.AMPFLAME = 'ampflame'` — the Spec 5069 domain derivation of `ampflame.com`; `companyDomains: ['ampflame.com']` declared to pre-claim the host). `ampflame.com/about/` is server-rendered Next.js — one static GET yields the "Join Our Team" listings as a `div[role="table"][aria-label="Open positions"]` whose `div[role="row"]` data rows carry `span[role="cell"][data-label]` cells keyed Department/Location/Position/Apply. Selectors target the ARIA/`data-label` attributes only — the `CareersSection_*` class names are hashed CSS modules and change per build. `jobUrl`/`jobUrlDirect` is the careers page (no per-role page exists); `applyUrl` is each row's Apply href resolved absolute (all roles share the generic `/accurate-metals-contact-us/` form). Ids derive `ampflame-{position-slug}-{location-slug}` since two roles share title + department across cities. No descriptions, `datePosted`, or `compensation` are published. Zero rows → `empty`; fetch failure → `classifyScrapeError`; `resultsWanted`/`searchTerm`/`location`/`offset` honored.
+
+**Files:** `packages/plugins/source-company-ampflame/*` (new), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5147-source-company-ampflame/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-company-ampflame` — 9 tests green on the live-markup fixture (3 rows parsed, same-title dedupe via location slug, applyUrl absolutized, empty/error diagnostics, input filters); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean.
+
+---
+
+## 2026-09-23 — Spec 5146 — `source-ats-eddy`: vanity-slug tenant resolution
+
+**Change:** `source-ats-eddy` previously addressed tenants by organization UUID only — a `companySlug` or `companyUrl` carrying the tenant's **vanity short name** (`hypercraftusa`, `/careers/hypercraftusa/preview/embed`) resolved to nothing and silently returned an empty board. The careers SPA itself resolves slugs first, via the public anonymous `GET /api/ds/organization/{slug}/id` → `{organizationUuid}`; the adapter now mirrors that. New `eddyOrganizationIdUrl` constant + `EddyOrganizationIdResponse` type; `scrape()` builds the HTTP client first and only issues the one lookup when no UUID was found in the input (bare non-UUID slug, or the first non-UUID `/careers/{…}` segment); unresolvable slugs still degrade to empty, never throw.
+
+**Files:** `packages/plugins/source-ats-eddy/src/eddy.{service,constants,types}.ts`, `packages/plugins/source-ats-eddy/__tests__/eddy.slug-resolution.spec.ts` (new), `.specify/specs/5146-eddy-vanity-slug-resolution/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-ats-eddy` — 12 tests green (7 new mocked: bare-slug + embed-URL + UUID-less-URL resolution, zero-lookup for UUID input, 404/non-UUID/non-Eddy → empty); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Live-verified end-to-end: `hypercraftusa` (both input shapes) → `d7e3b662-b7f9-458c-8a91-34374094c69f` → 3 open roles.
+
+---
+
+## 2026-09-23 — Spec 5145 — `source-ats-eightfold`: HTTP-error endpoint fallback
+
+**Change:** `fetchPage` now wraps each candidate endpoint's `client.get` + `unwrapPositionsAndCount` in per-path try/catch. Spec 5138's PCSX fallback only fired when the gated `/api/apply/v2/jobs` request *succeeded* with a non-payload body; real gated tenants answer **403** (e.g. `careers.gf.com`), so `client.get` threw before the fallback ran and the whole scrape returned an empty diagnostic. Now an HTTP error on one candidate falls through to the next; when every candidate path throws, the **last** error is rethrown so a genuine outage still surfaces as a classified diagnostic rather than a silent empty board. Resolved-`jobsPath` behavior unchanged.
+
+**Files:** `packages/plugins/source-ats-eightfold/src/eightfold.service.ts`, `packages/plugins/source-ats-eightfold/__tests__/eightfold.endpoints.spec.ts`, `.specify/specs/5145-eightfold-http-error-fallback/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-ats-eightfold` — 14 tests green (new: apply/v2-403 → pcsx-200 yields positions + resolves `jobsPath`; all-paths-fail surfaces diagnostics; 5138 200-gate-JSON fallback regression covered); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Live verification during triage: `careers.gf.com` apply/v2 → 403, `/api/pcsx/search` → 524 positions anonymous.
+
+---
+
+## 2026-09-23 — Spec 5143 — `source-company-getmaxspace`: Max Space Webflow careers
+
+**Change:** New company plugin `source-company-getmaxspace` (`Site.GETMAXSPACE = 'getmaxspace'` — the Spec 5069 domain derivation of `getmaxspace.com`; `companyDomains: ['getmaxspace.com']` declared to pre-claim the host). `getmaxspace.com/careers` is a server-rendered Webflow CMS collection — one static GET yields all 5 roles as `a.career-jobs_cms-link` items; the `career-jobs_list-title is-1..is-4` column divs map to `title`, `department` (Engineering ×4, Business Development ×1), `employmentType` ("Permanent"), and `location` (all "Rockledge, Florida"). `jobUrl`/`jobUrlDirect` is the item's Indeed href (`indeed.com/job/{slug}-{hex}` or `indeed.com/viewjob?jk={hex}`, `&amp;` decoded); ids derive `getmaxspace-{hex|jk|slug-from-title}`. Indeed is never fetched — postings ship without descriptions, `datePosted`, or `compensation` (same sparse-row class as power_us). Zero items → `empty`; fetch failure → `classifyScrapeError`; `resultsWanted`/`searchTerm`/`location`/`offset` honored.
+
+**Files:** `packages/plugins/source-company-getmaxspace/` (new), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5143-source-company-getmaxspace/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-company-getmaxspace` — 7 tests green (5-job mapping on the live-markup fixture, `/job/` hex + `jk=` + slug id fallbacks, `&amp;` decode, department mapping, `empty`, fetch failure, `resultsWanted`/`searchTerm`); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Live site verified during outline: 5 Webflow collection items, Indeed apply links confirmed 2026-09-23.
+
+---
+
+## 2026-09-23 — Spec 5142 — `source-company-mundane_co`: Mundane careers bundle extraction
+
+**Change:** New company plugin `source-company-mundane_co` (`Site.MUNDANE_CO = 'mundane_co'` — the Spec 5069 domain derivation of `mundane.co`, the `.co` TLD kept; `companyDomains: ['mundane.co']` declared to pre-claim the host). `mundane.co/join-us` is a ~3 KB React shell; the job list is a literal array embedded in the site's JS bundle — two static GETs (shell → `/assets/index-*.js`) yield entries of shape `{title, category, location, url}` matched by field shape + apply-URL host (Airtable shared form or LinkedIn post), not the minified array identifier. Ids derive `mundane_co-{linkedinJobId|airtableFormId|slug-title}`; LinkedIn tracking params stripped from `jobUrl`. Descriptions come from the Airtable shared forms (client-rendered hyperbase SPA) — each Airtable apply URL renders via `BrowserPool` and the form description block is extracted (selector list + longest-paragraph fallback); LinkedIn apply links are never fetched, those jobs ship without description. `category`→`department`; titles containing `intern` → `JobType.INTERNSHIP`. Zero entries or a missing bundle reference → `empty`; render failure emits the job sans description; no `datePosted`/`compensation` (not published). Every array entry is emitted unconditionally — including the genuinely-titled "VP, Teleportation".
+
+**Files:** `packages/plugins/source-company-mundane_co/` (new), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5142-source-company-mundane_co/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-company-mundane_co` — 9 tests green (10-job mapping on a live-shape bundle fixture, id variants, department/intern mapping, Airtable description attach + render-failure fallback, `empty` diagnostics, fetch failure, `searchTerm`/`location`/`offset`/`resultsWanted`); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Live site verified during outline: `/join-us` shell + bundle entries + Airtable apply forms confirmed 2026-09-23.
+
+---
+
+## 2026-09-23 — Spec 5141 — `source-company-power_us`: Powerus careers JSON feed
+
+**Change:** New company plugin `source-company-power_us` (`Site.POWER_US = 'power_us'` — the Spec 5069 domain derivation of `power.us`, the `.us` TLD kept; `companyDomains: ['power.us']` declared to pre-claim the host). The careers page is a static shell; the job list comes from an open JSON endpoint — one anonymous `GET /api/careers` returns all 35 entries (`title`, `department`, `location`, `type`, `summary`, `responsibilities[]`, `qualifications[]`, `preferredSkills[]`, `linkedInUrl`). `id`/`atsId` derive from the LinkedIn job id (`power_us-{n}`, slug-from-title fallback); `jobUrl` is the LinkedIn detail link — never fetched (auth-gated). Description sections (`summary` + `Responsibilities:`/`Qualifications:`/`Preferred skills:`) emit only when populated — they are empty on all 35 live entries today. Zero jobs → `empty`; no `datePosted`/`compensation` (not in the payload).
+
+**Files:** `packages/plugins/source-company-power_us/` (new), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5141-source-company-power_us/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-company-power_us` — 7 tests green (35-job mapping on the live fixture, linkedinJobId derivation + slug fallback, descriptions when populated / omitted when empty, `empty`, fetch failure, `resultsWanted`); `npx tsc --project tsconfig.typecheck.json --noEmit` clean. API verified live: 35 entries, anonymous, ~0.8 s.
+
+---
+
+## 2026-09-23 — Spec 5140 — `source-company-tau-robotics`: Tau Robotics careers board
+
+**Change:** New company plugin `source-company-tau-robotics` (`Site.TAU_ROBOTICS = 'tau-robotics'` — the Spec 5069 domain derivation of `tau-robotics.com`, hyphens passing through `deriveSiteToken` unchanged; `companyDomains: ['tau-robotics.com']` declared to pre-claim the host). The site is fully static: two fetches cover the whole board — `careers.html` for the role list (`a[href*="apply.html?role="]` anchors → `.role__title`, `.role__meta` split on `·` → department/location/jobType) and `apply.js` for per-role detail (the apply page renders `#roleTitle`/`#roleMeta`/`#roleBody` from a `ROLES` literal keyed by slug). `ROLES` is extracted by balanced-brace slicing and a small single-quoted-literal parser — never `eval`. Descriptions emit `Responsibilities:`/`Requirements:` lists; a slug missing from the map (or `apply.js` unreachable) still yields the careers row, minus description. `open-application` is skipped as a non-role; zero anchors → `empty`. `datePosted`/`compensation` are absent by design — the site does not publish them.
+
+**Files:** `packages/plugins/source-company-tau-robotics/` (new), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5140-source-company-tau-robotics/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-company-tau-robotics` — 8 tests green (8-role mapping, descriptions from `ROLES`, open-application skip, meta variants, `empty`, missing-slug/apply.js-unavailable fallbacks, `resultsWanted`); `npx tsc --project tsconfig.typecheck.json --noEmit` clean. Live page verified during outline: `/careers` and `/apply.js` both 200 anonymous plain-HTTP.
+
+---
+
+## 2026-09-23 — Spec 5139 — `source-ats-wellfound`: slug-keyed Wellfound company boards
+
+**Change:** New plugin `source-ats-wellfound` (`Site.WELLFOUND_ATS`, `category: 'ats'`, `isAts: true`) for employers whose careers page links out to a Wellfound-hosted board — e.g. `chipmotors.com/jobs` → `wellfound.com/company/chipmotors/jobs`, with postings that exist only on Wellfound. The aggregator plugin `source-wellfound` is a `searchTerm`→`wellfound.com/jobs?q=…` search scraper and cannot guarantee one company's full board, so this is a separate `source-ats-*` plugin keyed by board identity: `companyUrl` containing `/company/{slug}` or `companySlug`. Fetching is headless (`BrowserPool` stealth — plain HTTP gets the Cloudflare challenge), and job data comes from the SSR `__NEXT_DATA__` → `apolloState.data` normalized Apollo cache (`JobListing`/`Startup`/`JobListingRemoteConfig` nodes, shape verified against an archived live board). Pagination iterates `?page=N` collecting `JobListing` nodes by id until a page yields nothing new — safe whether the parameter is honored or ignored — capped by `resultsWanted` and a max-page guard, with a `totalPageCount` truncation warning. Challenge/missing payloads report `blocked`/`bad_input`/`empty` via `ScrapeDiagnostics`, never a silent zero. Mapping: `primaryRoleParent`→`department`, `compensation` string (`"$120k – $200k"`)→structured yearly min/max/currency, `remote`+`remoteConfig.kind`→`isRemote`, `liveStartAt` (epoch s)→`datePosted`, `jobUrl`=`/jobs/{id}-{slug}`, `descriptionSnippet`→`description` honoring `descriptionFormat`. Detail pages are not fetched (snippet + URL only).
+
+**Files:** `packages/plugins/source-ats-wellfound/` (new), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5139-source-ats-wellfound/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-ats-wellfound` — 7 tests green (slug/url resolution, Apollo enumeration + dedupe pagination, field mapping, `bad_input`, `blocked`, `empty`, `resultsWanted`); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Live-board behavior unverifiable from CI networks — wellfound.com Cloudflare-walls datacenter IPs; residential/proxy egress (`input.proxies`) is the intended path.
+
+---
+
+## 2026-09-23 — Spec 5138 — Eightfold PCSX endpoint fallback (`eightfold-pcsx-endpoint-fallback`)
+
+**Change:** `source-ats-eightfold` fell back to zero jobs on tenants that gate `/api/apply/v2/jobs` behind authorization — the response is `{"message": "Not authorized for PCSX"}` (or the SPA HTML shell when `domain` is wrong), neither of which carries a positions payload. `fetchPage` now iterates the ordered endpoint list — resolved endpoint first, then `EIGHTFOLD_JOBS_PATH`, then `EIGHTFOLD_PCSX_SEARCH_PATH` — using a new `unwrapPositionsAndCount` helper that accepts either envelope (`{positions, count}` top-level or `{data: {positions, count}}` PCSX) and rejects payload-less bodies. The winning path is cached on `this.jobsPath` so later pages hit it directly — one doomed request per run, not per page. A present-but-empty `positions`/`count` counts as a valid response, so a legitimately empty board never re-queries. Verified live on `careers.gf.com`: SmartApply returns "Not authorized for PCSX" while `pcsx/search?domain=globalfoundries.com` serves 525 positions anonymously.
+
+**Files:** `packages/plugins/source-ats-eightfold/src/eightfold.service.ts`, `packages/plugins/source-ats-eightfold/__tests__/eightfold.endpoints.spec.ts`, `.specify/specs/5138-eightfold-pcsx-endpoint-fallback/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-ats-eightfold` — 12 tests green (5 new endpoint-resolution cases: primary-works, gated→PCSX, HTML→PCSX, empty-valid no-fallback, resolved-endpoint reuse); `npx tsc --noEmit -p packages/plugins/source-ats-eightfold/tsconfig.json` clean; live probe confirmed `careers.gf.com`/`globalfoundries.com` PCSX endpoint returns positions without auth.
+
+---
+
+## 2026-09-21 — Spec 5137 — CI unit/e2e shard split (`ci-unit-e2e-shard-split`)
+
+**Change:** Split `Test (Source Scrapers N/6)` into two jobs in `.github/workflows/ci.yml`. `test-sources` becomes `Test (Source Scrapers unit N/3)` on `RUNNER_LINUX_X64_8` over the ~1,600 mocked unit suites with `--testPathIgnorePatterns 'e2e-spec' --shard=N/3 --maxWorkers=75% --testTimeout=30000` and the `github-actions` reporter; `EXA_API_KEY` is dropped from it. New `test-source-e2e` job runs the ~250 live `*.e2e-spec.ts` suites in 6 shards on `RUNNER_LINUX_X64_4`, inheriting `maxWorkers: 1` and `testTimeout: 120_000` from `jest.config.js` and keeping `EXA_API_KEY`. Motivation: live-network timeouts (heyrecruit/paycor e2e) were redding unit shards on ~40% of recent develop merges, invisibly under `continue-on-error`; unit legs now run ~9–12 min (was >60). Transform moved from ts-jest to `@swc/jest` (es2021, `legacyDecorator`+`decoratorMetadata`+`useDefineForClassFields: false`+`keepClassNames` — matching `tsconfig.base.json` assign semantics so tests emit production-shaped objects); `preset: 'ts-jest'` dropped, the uuid ESM entry stays on ts-jest, jest globals unchanged. Since swc transpiles without type-checking, `build` gains a `tsc --project tsconfig.typecheck.json --noEmit` step and an `up42` metadata canary guards decorator metadata; dayforce's `jest.mock` factory defers its const to avoid TDZ under swc hoisting.
+
+**Files:** `.github/workflows/ci.yml`, `jest.config.js`, `package.json`/`package-lock.json` (`@swc/core`, `@swc/jest`), `tsconfig.typecheck.json`, `packages/plugins/source-ats-dayforce/__tests__/dayforce.service.spec.ts`, `packages/plugins/source-ats-up42/__tests__/up42.metadata-canary.spec.ts`, `.specify/specs/5137-ci-unit-e2e-shard-split/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `jest --listTests` partition verified — 1,600 unit + ~250 e2e; `tsc --project tsconfig.typecheck.json --noEmit` clean; 30-suite unit sample + dedup perf suites green under swc; CI unit legs 9–12 min.
+
+---
+
+## 2026-09-19 — Spec 5135 — Source ATS plugin: Nodi (`source-ats-nodi_global`)
+
+**Change:** New `source-ats-nodi_global` plugin for Nodi, a multi-tenant ATS where each customer board is `app.nodi.global/company/<slug>` (Next.js shell — the SSR page only renders a "0 positions" skeleton; jobs load client-side). The plugin calls the public JSON API instead: `api.nodi.global/job-offers/active/company/<slug>` returns every active offer in one call (`id`, `title`, `location`, `department`, `type`, `modality`, `seniority`, `min_salary`/`max_salary`/`currency`/`frequency`, `created_at`, `magic_link`, HTML `description`) — no detail fetches. `api.nodi.global/companies/by-name?name=<slug>` resolves `companyName`/`companyUrl`; its failure degrades to the slug without failing the scrape. `jobUrl`/`applyUrl` = `magic_link`; `modality` → `isRemote`/`workFromHomeType`; `type` → `jobType`/`employmentType`; salary → `compensation` (description fallback); `created_at` → `datePosted`; description HTML-stripped. `companySlug` addresses the tenant.
+
+**Files:** `packages/plugins/source-ats-nodi_global/*`, `packages/models/src/enums/site.enum.ts` (`NODI_GLOBAL`), `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5135-source-ats-nodi_global/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-ats-nodi_global` — 9 tests green; live `radical ai` board returns 8 jobs with salary ranges, departments, and descriptions.
+
+---
+
+## 2026-09-19 — Spec 5134 — PulseSpace rendered-DOM scrape (`pulsespace-rendered-dom`)
+
+**Change:** `source-company-pulsespace` was returning 0 jobs after the site rebuilt — the careers bundle no longer carries a `wve` job-map literal (`wve` is now a React component name; role data lives in unrelated minified consts). The plugin now renders `pulsespace.com/careers` via `BrowserPool`, collects rendered `/careers/<slug>` links, and parses each rendered detail page: `main h1` title, badge `span`s identified by lucide icon (`map-pin` → location, `briefcase` → job type, `building2` → department, positional fallback), and `h2` sections composed into the description. `id`/`jobUrl` derive from the slug; no apply URL or posted date exists on the page.
+
+**Files:** `packages/plugins/source-company-pulsespace/src/{pulsespace.service.ts,pulsespace.constants.ts}`, `packages/plugins/source-company-pulsespace/__tests__/*`, `.specify/specs/5134-pulsespace-rendered-dom/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-company-pulsespace` — 9 tests green; live scrape returns the 1 live role (`principal-controls-engineering-architect`) with title, `Seattle, WA` location, `Engineering / Controls` department, and a ~4.3 KB description (was 0).
+
+---
+
+## 2026-09-17 — Spec 5133 — ADP requisition-list pagination (`adp-list-pagination`)
+
+**Change:** `source-ats-adp` no longer truncates boards to the first 20 requisitions. The list endpoint caps a response at 20 and reports the real total in `meta.totalNumber`; `fetchList` now walks `&$skip=N&$top=20` pages until the collected set covers the total, a page yields no fresh `itemID`s, or a page fetch fails (partial results kept, logged). `resultsWanted` still slices afterward. Four live tenants verified truncated pre-fix (`totalNumber` 160 / 230 / 67 / 36, all returning 20).
+
+**Files:** `packages/plugins/source-ats-adp/src/{adp.constants.ts,adp.service.ts}`, `packages/plugins/source-ats-adp/__tests__/adp.service.spec.ts`, `.specify/specs/5133-adp-list-pagination/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest source-ats-adp` — 11 tests green; live tenant returns 160 unique jobs post-fix (was 20).
+
+---
+
+## 2026-09-17 — Spec 5132 — Source ATS plugin: Octbr (`source-ats-octbr_ai`)
+
+**Change:** New `source-ats-octbr_ai` plugin for Octbr, a multi-tenant ATS where each customer runs a `<slug>.octbr.ai` Laravel + Inertia careers app. The listing page's root div carries an Inertia `data-page` JSON prop; `props.jobsByDepartment` enumerates every open role (`id`, `title`, `slug`, `url`, `location`, `employment_type`, `location_type`) and `props.organisation.name` gives the company name. The plugin then GETs each `job.url` — another Inertia page — for `description`, `responsibilities`, `requirements` (HTML-stripped into the JD) and the absolute `posted_date` (the listing carries only relative dates). Detail fetches run via `Promise.allSettled`; a failed detail fetch keeps the job with a null description. The advertised `/feeds/jobs.json` feed returns an HTML error page on the observed tenant and is not used. `companySlug` addresses the tenant.
+
+**Files:** `packages/plugins/source-ats-octbr_ai/*`, `packages/models/src/enums/site.enum.ts` (`OCTBR_AI`), `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `.specify/specs/5132-source-ats-octbr_ai/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest packages/plugins/source-ats-octbr_ai` — 7 tests green; live scrape of the `starcloud` tenant returned 15 jobs with department, location, and descriptions.
+
+---
+
+## 2026-09-17 — Spec 5131 — Location parser: dash-prefixed US-state sites (`dash-state-prefix-sites`)
+
+**Change:** `location-parser.ts` now claims `state` from a leading `'ST - X'`/`'ST-X'` US-code prefix before any country or site-name rule can misread it. Solo `'ST - X'` labels previously fell through to the ISO alpha-2 fallback on the leftover code — `'MA - Boston'` emitted Morocco, `'MD - Gaither Rd.'` Moldova (`'CA'`→Canada, `'IL'`→Israel, `'IN'`→India likewise); the dash suffix now lands in `city` (`'MA - Boston'` → `{city:'Boston', state:'MA'}`) or `name` when its tail is a street suffix (`'MD - Gaither Rd.'` → `{state:'MD', name:'Gaither Rd.'}` — a new ~12-entry `STREET_SUFFIX_RE` scoped to dash tails only, so `'Warsaw, PL'` still reads Poland). As a comma part the whole `'ST - X'` used to survive into `city` (`'MD - Gaither Rd., Rockville Corp Hqtrs'` → `city:'MD - Gaither Rd.'`); now the state is consumed and a remaining `'City <descriptor>'` part splits into `city`+`name` when `city` is free (`{city:'Rockville', state:'MD', name:'Gaither Rd. - Corp Hqtrs'}`) or joins `name` wholesale when the dash suffix already claimed it (`'MA - Boston, Corp Hqtrs'` → `{city:'Boston', state:'MA', name:'Corp Hqtrs'}`). The descriptor split reuses `SITE_DESCRIPTOR_RE` and is gated on a `'ST -'` state having been claimed — a bare `'Rockville Corp Hqtrs'` still emits `city` whole. Two guards: only the **first** comma part carries a state prefix (`'Austin, TX - Atlas'` keeps `city:'Austin', state:'TX', name:'Atlas'`), and unspaced `'ST-X'` needs a title-case suffix (`'CO-OP'`/`'T-Mobile'` stay whole).
+
+**Files:** `packages/common/src/utils/location-parser.ts`, `packages/common/__tests__/location-parser.spec.ts`, `.specify/specs/5131-dash-state-prefix-sites/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest packages/common` — 295 tests green (12 new spec-5131 cases); `npx jest packages/plugins` — green; `tsc --noEmit` on `packages/common` clean.
+
+---
+
+## 2026-09-17 — Spec 5130 — Location parser: US state names, territories, and dotted codes (`location-parser-us-subdivision-recognition`)
+
+**Change:** `location-parser.ts` recognizes four more US-subdivision label shapes. The `'X, Country'` city slot now resolves state **names** and territory names, not just codes — `'Arizona, USA'` → `{state:'AZ', country:'United States'}`, `'Puerto Rico, USA'` → `{state:'Puerto Rico', country:'United States'}` (collision names stay cities: `'New York, USA'`). A new `US_TERRITORY_NAMES` map emits the display name verbatim (`'Puerto Rico'` bare → `{state:'Puerto Rico'}`, consistent with `'Virginia'` → `{state:'VA'}`) rather than a code. `normalizeUsState` strips periods so `D.C.`/`N.Y.` resolve to `DC`/`NY` — which also repairs comma-packed groups: `'Bristol, RI, Washington, D.C'` previously collapsed to one `city` blob when `D.C` failed the firm check, now splits into `{Bristol,RI}` + `{Washington,DC}`. Space-joined `'City ST'` labels split (`'Bristol RI'` → `{city:'Bristol', state:'RI'}`). Territory names count as US for implied-country and comma-group firmness.
+
+**Files:** `packages/common/src/utils/location-parser.ts`, `packages/common/__tests__/location-parser.spec.ts`, `.specify/specs/5130-location-parser-us-subdivision-recognition/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest packages/common` — 283 tests green (8 new spec-5130 cases); the 16 plugin suites whose fixtures carry affected labels — 181 tests green; `tsc --noEmit` on `packages/common` clean.
+
+---
+
+## 2026-09-16 — Spec 5129 — Pinpoint nested department + SuccessFactors CSB department token (`pinpoint-and-successfactors-csb-department`)
+
+**Change:** Two adapters now emit `department` the feed already carries. `source-ats-pinpoint` resolves `department` from `job.department.name` (the nested `{ id, name }` object `postings.json` returns per posting — verified on 2 live boards: 191/191 and 36/36 postings) ahead of the legacy flat `department_name` / string-`department` keys. `source-ats-successfactors`' CSB reader also extracts the job-layout department token (`<span data-careersite-propertyid="dept">` — rendered on detail pages, absent from the schema.org microdata the parser was limited to) into `SfCsbDetail.department` and onto `JobPostDto.department`; tenants whose pages lack the token keep `department` unset. No OData-path, wire-shape, or URL changes.
+
+**Files:** `packages/plugins/source-ats-pinpoint/{src/pinpoint.service.ts,__tests__/pinpoint.service.spec.ts}`, `packages/plugins/source-ats-successfactors/{src/successfactors.types.ts,src/successfactors.service.ts,__tests__/successfactors-csb.service.spec.ts}`, `.specify/specs/5129-pinpoint-and-successfactors-csb-department/*`, `docs/index.md`, `docs/log.md`.
+
+---
+
+## 2026-09-16 — Spec 5128 — Dover job-groups (department) + per-job apply links (`dover-job-groups-and-apply-links`)
+
+**Change:** `source-ats-dover` now calls `GET /api/v1/job-groups/{clientId}/job-groups` after the roles list and maps each role id to its group `name` onto `JobPostDto.department` (roles absent from every group stay unset; a 4xx/malformed feed degrades to an empty map, never a failure). `jobUrl`/`applyUrl` become the per-role apply form `https://app.dover.com/apply/{slug}/{jobId}` — the target each role links to on the board — replacing the whole-board `/jobs/{slug}` URL every job previously carried; careers pages resolved with no slug keep the `/careers/{clientId}` fallback. New surface: `DOVER_JOB_GROUPS_API_TEMPLATE`, `DOVER_APPLY_URL_TEMPLATE`, `DoverJobGroup`, `DoverJob.department`; `DOVER_BOARD_URL_TEMPLATE` removed.
+
+**Files:** `packages/plugins/source-ats-dover/src/{dover.constants.ts,dover.types.ts,dover.service.ts}`, `packages/plugins/source-ats-dover/__tests__/dover.service.spec.ts`, `.specify/specs/5128-dover-job-groups-and-apply-links/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest` `source-ats-dover` — 12 tests green (3 new: department mapping, job-groups 404 degradation, no-slug careers fallback); `apps/api` `tsc --noEmit` clean.
+
+---
+
+## 2026-09-16 — Spec 5127 — Verbatim-label plugins emit parsed `location` + `locations[]` (`verbatim-location-labels`)
+
+**Change:** 919 plugin services that emitted `location: new LocationDto({ city: <verbatim label> })` — no parse, no remote detection, no `locations[]` — now route the label through the shared Spec-5124 parser (`parseLocationList`/`parseLocationText`), emit `locations[]` when non-empty, and OR-merge `isRemote` with `remoteMentioned`. Two mechanical transforms (const-assigned label template; structured `{city,state,country}` helpers → `locations: [location]`) plus manual rewires for the ten files outside the template (`wellfound`, `dvinci`, `dice`, `dribbble`, `monster`, `techcareers`, `careerbuilder`, `coroflot`, `jobsdb`, `stepstone`) and seven label-fallback helpers (`beetween`, `talentsoft`, `zimyo`, `darwinbox`, `talentadore`, `talentreef`, `pinpoint`) → `parseLocationText`. `monster`'s `\`${city}, ${stateProvince}\`` composition is replaced by a direct structured emit. Left unchanged: empty `{}` placeholders, `city:'Remote'` fallbacks, structured city passthroughs (`varbi`, `webcruiter`, `oorwin`, `paylocity`). Generated spec expectations pinned to the parsed contract — a single label's merged `location` is now the parsed DTO (`'Oakland, CA'` → `city:'Oakland'`, `state:'CA'`), pure qualifiers land in `isRemote`/`workFromHomeType` instead of minting a `city`.
+
+**Files:** 919 `packages/plugins/*/src/*.service.ts`, ~808 `__tests__` spec files, `.specify/specs/5127-verbatim-location-labels/*`, `docs/index.md`, `docs/log.md`.
+
+---
+
+## 2026-09-16 — Spec 5126 — Structured wire location entries emitted as per-site `locations[]` (`structured-location-entries`)
+
+**Change:** The 11 plugins deferred from Spec 5125 each read `[0]`/first from a structured multi-site wire field and dropped the rest; all now emit one `LocationDto` per wire entry into `locations[]` while `location` keeps its previous value. `bizneo`, `exacthire`, `hreasily`, `icims`, `inrecruiting`, and `pcrecruiter` thread `{city,state,country,streetAddress?,postalCode?}` `locationEntries` through their normalized-job types (JSON-LD `jobLocation` Places / iCIMS `|`/`;` cells all mapped); `cornerstone`, `eightfold`, `prescreen`, and `jsonld` map their wire arrays (`requisition.locations[]`, `standardizedLocations`, `jobLocation`, `posting.locations`) directly; `altamira` emits `locations: [location]` (singleton — the board gives one `locationText` per job). Free-text label fallbacks (card labels, display strings, listing locations) all delegate to `parseLocationText`; bespoke wire-order parsers stay where the order is the wire format — `altamira` slug-tail `Country-Region-City`, `icims` `CC-ST-City`, `eightfold` `"Country, State, City"`. `country` fields remain literal-only end to end.
+
+**Files:** `packages/plugins/{source-ats-altamira,source-ats-bizneo,source-ats-cornerstone,source-ats-eightfold,source-ats-exacthire,source-ats-hreasily,source-ats-icims,source-ats-inrecruiting,source-ats-pcrecruiter,source-ats-prescreen}/src/*` (+ `*.types.ts` for `locationEntries`/`addresses`), `packages/plugins/source-jsonld/src/jsonld.service.ts`, 11 new `__tests__/<plugin>.locations.spec.ts`, `.specify/specs/5126-structured-location-entries/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest` across the 11 touched packages — 58 existing tests + 34 new locations tests green; `npx tsc --noEmit -p tsconfig.base.json` clean; repo has no lint config — jest + tsc are the gates.
+
+---
+
+## 2026-09-16 — Spec 5125 — Positional location-label parsers swapped onto the shared parser (`positional-location-parsers`)
+
+**Change:** All remaining positional label→`LocationDto` parsers are swapped onto the shared `parseLocationText`/`parseLocationList` (Spec 5124). Fifty-nine plugins delete their private `split()`/`parts[i]` bodies — the helper now returns `parseLocationText(label).location`, and `JobPostDto` emits `locations[]` (singleton, or the parsed list for multi-label wire arrays in `microsoft`/`nvidia`/`zoom`/`themuse`/`solidjobs`). Tuple-signature helpers are retained only where the shape feeds something other than the DTO (`authenticjobs`' `{city,state}` input filter; `umantis`/`trackerrms` normalized-job triples) — bodies delegate to the shared parser. Prose-regex extractors (`harri`, `workstream`) keep their address-regex pre-extraction but feed the match to `parseLocationText` and drop the hardcoded `country:'US'`/`'GB'` stamps; `greeting` keeps its Korean-country/remote token pre-checks. Inferred country stamps removed per the literal-only rule — `amazon` `?? 'US'`, `argospace`/`thinkorbital` `Country.USA` (+ `resolveStateName`/`US_STATE_ABBREVIATIONS` deleted) — while board-level constants stay as fallback (`bdjobs`→`Country.BANGLADESH`, `naukri`→`Country.INDIA`). Deferred to follow-ups: 11 plugins whose label parse coexists with structured multi-site wire data or by-design exceptions (`altamira`, `bizneo`, `cornerstone`, `eightfold`, `exacthire`, `hreasily`, `icims`, `inrecruiting`, `pcrecruiter`, `prescreen`, `jsonld`).
+
+**Files:** 59 `packages/plugins/*/src/*.service.ts` (+ `argospace`/`thinkorbital` spec expectations), `.specify/specs/5125-positional-location-parsers/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest` across the 59 touched plugin packages — 281 tests / 59 suites green (two `country:'USA'` expectations updated to undefined per literal-only semantics); `npx tsc --noEmit -p tsconfig.base.json` clean; repo has no lint config — jest + tsc are the gates.
+
+---
+
+## 2026-09-16 — Spec 5124 — Location parser rewrite + join-then-reparse caller cleanup (`location-parser-rewrite`)
+
+**Change:** `packages/common/src/utils/location-parser.ts` rewritten under the existing export names with the ruleset validated against a harvested corpus of real board labels (~2,006 unique label sets). `;`/`|` split unconditionally; `&`/`/`/`and`/`or` split only when the parts validate (`and`/`or` all-firm; `&`/`/` allow bare title-case cities when ≥1 part is firm), and ALL-CAPS 2-letter tokens are never read as word connectors or qualifier words (`'Portland, OR / Hybrid'` keeps `OR` = Oregon). Comma-packed `City, ST[, Country]` groups (width-3/2) split into per-site entries. Spaced-dash rules peel `Country - X`, `X - Country`, `X - <qualifier>`, and trailing `X - <site name>` per comma part. `Remote`/`Hybrid`/`On-site`/`(N)` markers — parenthesized, fused, or affixed — feed the remote/hybrid flags only and never mint `city`/`name`; `name` is reserved for site-descriptor tokens (`hq|office|campus|plant|ltd|inc|…`). `country` fields are literal-only: implied geography (e.g. `TX`→`US`) may veto a conflicting literal stamp but never creates one. Bare US state names resolve to `state` by default (`allowBareStateProvince !== false`) except the `{washington,new york,georgia}` city-name collisions, which stay `city`. `'Korea'`→`'South Korea'` alias added plus a 71-entry ISO alpha-3 map. The merged `location` is a back-compat verbatim geo-only blob (literal-country segments and qualifiers stripped) and stamps `country` only when exactly one literal country is unopposed. `text` is recorded only when the label isn't trivially regenerable. `parseLocationText` now delegates to the `parseLocationList` pipeline so single labels get the same splitting.
+
+Seventeen plugins that joined structured fields or whole `locations[]` arrays into a comma string and then re-parsed or blobbed it are rewired to flow per-site structure straight into `LocationDto`/`locations[]`: `google`, `ibm`, `meta`, `talroo`, `reliefweb` (wire arrays → `parseLocationList`), `submit4jobs`, `canekast`, `builtin`, `successfactors` (fields → DTO directly; CSB-tile flat text → `parseLocationText`), `mokahr`, `beesite`, `beisen` (per-site `locationEntries` threaded through the normalized-job types → `locations[]`; private `splitLocation` bodies deleted), `solides`, `isolved` (singleton `locations`), `jobvite`, `workingnomads`, `glassdoor` (private `split(',')` parsers deleted). One beisen fixture expectation updated: `'China'` is a country literal, not a `state`. Deferred: ~20 more plugins with positional `split(',')` single-label parsers (follow-up spec); `adp`/`breezyhr` per-site label composition is the parser's input contract and stays; `indeed` `companyAddresses` is an employer display field.
+
+**Files:** `packages/common/src/utils/location-parser.ts`, `packages/common/__tests__/location-parser.spec.ts`, `packages/plugins/{source-company-google,source-company-ibm,source-company-meta,source-talroo,source-reliefweb,source-builtin,source-ats-successfactors,source-ats-submit4jobs,source-company-canekast,source-ats-mokahr,source-ats-beesite,source-ats-solides,source-ats-beisen,source-ats-isolved,source-ats-jobvite,source-workingnomads,source-glassdoor}` (+ `*.types.ts` for `locationEntries` and the beisen spec fixture), `.specify/specs/5124-location-parser-rewrite/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest` across `packages/common` + the 17 touched plugins — 415 tests / 32 suites green (one beisen fixture expectation updated: `state:'China'`→`country:'China'`); `npm run build` (tsc + webpack, api/cli/mcp) clean; repo has no lint config — jest + tsc are the gates.
+
+---
+
+## 2026-09-15 — Spec 5123 — `CanonicalJob` `locations[]`/`offices[]` + site-set identity key (`canonical-job-locations-offices`)
+
+**Change:** `CanonicalJob` — the merged record emitted only on the dedup path (`?dedup=true`, the default on `GET /api/jobs/search` and GraphQL `searchJobs`; `dedup=false` callers see raw `JobPostDto`s and are unaffected) — gains `locations`/`offices` so per-site data survives materialisation. Singleton clusters copy the observation's arrays unchanged; multi-observation clusters emit the union of every observation's sites, deduped on `city|state|country` (`name|text` when an entry carries no geography) for `locations` and on `id` (else `name|text`) for `offices`, head-first so each surviving entry keeps its own raw `text`/`name`/`postalCode`. Union — not head-wins — because stage-2 (MinHash) can weld postings whose site lists genuinely differ (a repost that added a site); head-wins would drop those sites. The `canonicalJobId` location component switches from the flattened `location` string to the sorted set of `normalizeLocation("city, state, country")` triples drawn from `locations[]` — site order and label punctuation no longer affect identity — with a fallback to the flat string when a row has no per-site geography, so mixed batches still merge. `canonicalJobId` values change for postings carrying `locations[]` (ids re-derive per dedup pass). `location` stays populated as the fallback scalar; `CanonicalJobSchema` mirrors both arrays.
+
+**Files:** `packages/models/src/interfaces/canonical-job.interface.ts`, `packages/models/src/schemas/canonical-job.schema.ts`, `packages/common/src/canonical-key.ts`, `packages/plugins/dedup-hybrid/src/dedup-hybrid.service.ts`, `packages/common/__tests__/canonical-key.spec.ts`, `packages/plugins/dedup-hybrid/__tests__/dedup-hybrid.service.spec.ts`, `.specify/specs/5123-canonical-job-locations-offices/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest` on `dedup-hybrid` + `canonical-key`: 84/84 pass (8 suites, 8 new cases incl. MinHash-weld site union and offices `id`-dedupe); `tsc --noEmit` clean on models/common/dedup-hybrid; `npm run lint:docs` clean. Non-goal: store-plugin columns for the new arrays (separate migration spec).
+
+---
+
+## 2026-09-15 — Spec 5122 — Greenhouse `locations[]` + `offices[]`/`OfficeDto` (`greenhouse-locations-offices`)
+
+**Change:** `source-ats-greenhouse` now emits `locations[]` — one `LocationDto` per `locationLabels` segment of the packed `location.name` (`text` = the segment verbatim, so e.g. `"Rockville, MD or Hawthorne, CA or Tulsa, OK"` yields three entries) — alongside a new `JobPostDto.offices?: OfficeDto[]`. `OfficeDto` extends `LocationDto` with `id` and carries the posting's tagged office catalog verbatim: `name` = `office.name` as wired (`"Quantum Space - Rockville, MD (HQ)"`, `"US"`, `"Remote "`), `text` = `office.location` when present (so `name`/`text` keep distinct provenance), and geography derived from `office.location` first, else the last `" - "` segment of the office name minus parentheticals — accepted as `city` only when it parses with a state/country or carries no site-name keyword and no digits, which keeps `"HQ (190 Tasman)"`, `"Denver Office"`, `"Remote"`, `"Any location"`, `"Multiple Locations"` out of the geo fields. A trailing `(...)` group containing a digit is treated as an address: `street, city, ST zip` unpacks into `streetAddress`/`city`/`state`/`postalCode` (`"Alameda HQ (707 West Tower Avenue, Suite A, Alameda, CA 94501)"`); other digit-bearing parens go to `streetAddress` verbatim. Offices are a company catalog — they never mint `locations[]` entries (a corpus pass showed per-job location segments vs offices diverge in both directions: 978 equal / 69 locs>off / 61 locs<off across 1108 cached jobs). `RawJobSchema` gains an `offices` mirror. Merged `location`, `isRemote`, and `workFromHomeType` (Spec 5027 `officeLabels`/`workLocationLabels` evidence) are unchanged.
+
+**Files:** `packages/models/src/dtos/office.dto.ts`, `packages/models/src/dtos/index.ts`, `packages/models/src/dtos/job-post.dto.ts`, `packages/models/src/schemas/canonical-job.schema.ts`, `packages/plugins/source-ats-greenhouse/src/greenhouse.service.ts`, `packages/plugins/source-ats-greenhouse/__tests__/greenhouse.service.spec.ts`, `.specify/specs/5122-greenhouse-locations-offices/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest` on `source-ats-greenhouse` + `packages/models`: 86/86 pass (7 suites, 6 new office/location cases); `tsc --noEmit` clean on both; `npm run lint:docs` clean.
+
+---
+
+## 2026-09-14 — Spec 5121 — Ashby/ADP structured locations + `postalCode`/`streetAddress` + canonical-schema mirror (`ashby-adp-rdw-locations`)
+
+**Change:** Extends `LocationDto` with two optional address fields — `streetAddress` and `postalCode` — for sources whose wire carries real address data, and mirrors the locations feature in `canonical-job.schema.ts` (`RawJobSchema.location` gains `name`/`text`/`streetAddress`/`postalCode`; a `locations` array of the same shape is added) so per-site data survives the canonical path. `source-ats-ashby` stops joining `postalAddress` parts into a text label and re-parsing its own composition: each site is mapped structurally — `addressLocality`→`city`, `addressRegion`→`state` (normalized), `addressCountry`→`country`, `streetAddress`, `postalCode` — while the raw `location` label is preserved verbatim in `text`. An `addressLocality` containing digits is treated as a street address rather than a city (observed in the field: `"2889 W. 5th ST"` carrying `Oxnard`'s street), the city falling back to the parsed text; site-name keywords (`HQ`, `Office`, `Ranch`, `Campus`, `Lab`, `Studio`, `Facility`, `Warehouse`, …) land in `name`. `secondaryLocations[]` entries become additional `locations[]`, deduped on `name|city|state|country`. Postings with no `postalAddress` keep the `parseLocationText` fallback plus `text`. The merged `location`/`isRemote`/`workFromHomeType` outputs are unchanged — still derived from the same labels via `parseLocationList`. `source-ats-adp` replaces its `[cityName, subdivision].join(', ')` → `parseLocationList` round-trip with structural mapping of `requisitionLocations[]` (`cityName`→`city`, `countrySubdivisionLevel1.codeValue`→`state`, `countryCode`→`country`, `nameCode.shortName`→`text`), falling back to the parser when no structured entries exist. `source-company-rdw` now emits every `jobLocation` ld entry in `locations[]` (previously only the first) including `postalCode`, and stamps `text` with the composed site label; its `card.locationText` path forwards `parsed.locations`.
+
+**Files:** `packages/models/src/dtos/location.dto.ts`, `packages/models/src/schemas/canonical-job.schema.ts`, `packages/plugins/source-ats-ashby/src/ashby.service.ts`, `packages/plugins/source-ats-ashby/src/ashby.types.ts`, `packages/plugins/source-ats-ashby/__tests__/ashby.service.spec.ts`, `packages/plugins/source-ats-adp/src/adp.service.ts`, `packages/plugins/source-ats-adp/__tests__/adp.service.spec.ts`, `packages/plugins/source-company-rdw/src/rdw.service.ts`, `packages/plugins/source-company-rdw/__tests__/rdw.service.spec.ts`, `.specify/specs/5121-ashby-adp-rdw-locations/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest` across the four touched packages: 107/107 pass (9 suites); `tsc --noEmit` clean on `packages/models` and the three plugin packages; `npm run lint:docs` clean.
+
+---
+
+## 2026-09-14 — Spec 5120 — `LocationDto.text` + per-site `locations[]` in six plugins (`location-text-and-per-site-locations`)
+
+**Change:** Two additive recoveries of information the shared location path discarded. `LocationDto.text` records the source's raw location label verbatim before parsing: `parseLocationList` now stamps every concrete per-site `LocationDto` it produces with the normalized label, so a caller can apply its own parsing to the original string instead of trusting `city`, which on the parser's fallback path still holds the entire unparsed label (unchanged — MCP output, CLI location column, analytics location facet and the dedup key all keep their current values). The synthesized merged multi-site `location` (`city = A; B`) carries no `text`, nor do remote-only/country-only results, which have no site label. Because the single-site branch returns the same object as `location` and `locations[0]`, `text` appears on the singular `location` too — for every `parseLocationList` caller, not only the plugins below. Second, the six plugins that feed `parseLocationList` a genuine multi-label list now emit the per-site `locations[]` it computes instead of dropping it at the DTO boundary: `source-ats-lever` (`categories.allLocations`), `source-ats-workday` (`location` + `additionalLocations` + `locationsText`), `source-ats-breezyhr` (structured `listing.locations[]`), `source-ats-gusto-hosted` (JSON-LD `jobLocation` entries mapped structurally on the detail path, parser output on the rendered-HTML path), `source-ats-workatastartup`, and `source-company-aurora_tech` (`location` + `secondaryLocations`). Site boundaries a merged `"A; B"` string cannot express — e.g. an unparsable label sitting next to a `City, ST` — now survive as separate `LocationDto`s.
+
+**Files:** `packages/models/src/dtos/location.dto.ts`, `packages/common/src/utils/location-parser.ts`, `packages/common/__tests__/location-parser.spec.ts`, `packages/plugins/source-ats-lever/src/lever.service.ts` (+ spec), `packages/plugins/source-ats-workday/src/workday.service.ts` (+ spec), `packages/plugins/source-ats-breezyhr/src/breezyhr.service.ts` (+ spec), `packages/plugins/source-ats-gusto-hosted/src/gusto-hosted.service.ts`, `packages/plugins/source-ats-gusto-hosted/src/gusto-hosted.types.ts` (+ spec), `packages/plugins/source-ats-workatastartup/src/workatastartup.service.ts` (+ spec), `packages/plugins/source-company-aurora_tech/src/auroratech.service.ts` (+ spec), `.specify/specs/5120-location-text-and-per-site-locations/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest` across the 8 touched packages: 137/137 pass; `tsc --noEmit` clean on `packages/models`, `packages/common`, and the six plugin packages (`source-ats-breezyhr` shows a pre-existing `TS6059` rootDir complaint unrelated to this change); `npm run lint:docs` clean.
+
+## 2026-09-14 — Spec 5119 — Rippling: structured per-site locations (`rippling-structured-locations`)
+
+**Change:** `source-ats-rippling` flattened each structured `locations[]` entry into a comma-joined label and re-parsed it through `parseLocationList`, so a hiring-entity `name` became `city` when `city` was empty, non-US `City, Country` pairs stayed undivided, duplicated `workLocations` strings survived as pseudo-sites, and a US+non-US mixed posting was stamped `country: "United States"` (only US tokens are country-recognized). Each wire entry now maps directly to a `LocationDto` from its own fields (`city`, `stateCode`/`state`, `countryCode`/`country`); `workLocations` and state-bearing `payRangeDetails[].location` labels are a parser fallback only when no structured entry carries geography; remote-marker and `companyName`-equal names are consumed as signals or dropped, other name-only entries are kept as `{name}` sites. Model additions: `JobPostDto.locations?: LocationDto[]` (per-site list; `location` stays the merged compat view, built by `mergeSites` with `country` omitted on disagreement) and `LocationDto.name` (shown by `displayLocation()` only when `city` is absent). `normalizeUsState` is exported from `location-parser`; `payRangeDetails[].isRemote` now feeds `hasRemoteWorkplaceType`; `department` is typed. The missing `searchTerm`/`location`/`isRemote`/`jobType`/`offset` filters are parked as Q-093.
+
+**Files:** `packages/models/src/dtos/location.dto.ts`, `packages/models/src/dtos/job-post.dto.ts`, `packages/common/src/utils/location-parser.ts`, `packages/plugins/source-ats-rippling/src/rippling.service.ts`, `packages/plugins/source-ats-rippling/src/rippling.types.ts`, `packages/plugins/source-ats-rippling/__tests__/rippling.service.spec.ts`, `.specify/specs/5119-rippling-structured-locations/*`, `docs/index.md`, `docs/log.md`, `docs/questions.md`.
+
+**Validation:** `npx jest packages/plugins/source-ats-rippling` 33/33 pass; `tsc --noEmit` clean on `packages/models`, `packages/common`, `source-ats-rippling`, `apps/api`; `npm run lint:docs` clean.
+
+## 2026-09-14 — Spec 5118 — Posting-level `countryCode` on `JobPostDto`; remove `applyCountry` overlays (`ats-posting-country-code`)
+
+**Change:** The `applyCountry` helper added by Specs 5010/5013 folded a per-posting ATS country code (Lever `job.country`, Workday `jobPostingInfo.jobRequisitionLocation.country.alpha2Code`) into the parsed `LocationDto` whenever the parser left `country` bare. That field describes the posting/requisition, not each advertised site: on multi-site postings it stamped one country onto the merged `"A; B"` blob, on label/code disagreement it silently preferred whichever side already had a country, and with no parseable labels it fabricated a country-only `LocationDto`. Both plugins now emit `location` verbatim from `parseLocationList` and surface the code on a new optional `JobPostDto.countryCode` — the raw ISO alpha-2, marked posting-level in the field docs so consumers don't conflate it with the label-derived `location.country`.
+
+**Files:** `packages/models/src/dtos/job-post.dto.ts`, `packages/plugins/source-ats-lever/src/lever.service.ts`, `packages/plugins/source-ats-workday/src/workday.service.ts`, `packages/plugins/source-ats-lever/__tests__/lever.service.spec.ts`, `packages/plugins/source-ats-workday/__tests__/workday.service.spec.ts`, `.specify/specs/5118-ats-posting-country-code/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx jest packages/plugins/source-ats-lever packages/plugins/source-ats-workday` 67/67 pass; `tsc --noEmit` clean on `packages/models`, `source-ats-lever`, `source-ats-workday`; `npm run lint:docs` clean.
+
 ## 2026-09-13 — Spec 1688 — a Recruitee board is on the public internet, or it is not a board
 
 **Change:** Spec 5100 taught `source-ats-recruitee` to serve customers whose board sits on their

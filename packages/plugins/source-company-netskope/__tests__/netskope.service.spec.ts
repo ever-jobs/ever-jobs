@@ -95,7 +95,7 @@ describe('NetskopeService — Spec 163 / T04', () => {
       expect(csm?.jobUrl).toContain('?gh_jid=');
       // D-11 clean dept pass-through.
       expect(csm?.department).toBe('Channel Sales');
-      expect(csm?.location?.city).toBe('Austin, TX');
+      expect(csm?.location?.city).toBe('Austin');
       expect(csm?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(csm?.description).not.toContain('&lt;');
@@ -108,7 +108,7 @@ describe('NetskopeService — Spec 163 / T04', () => {
       expect(aice).toBeDefined();
       expect(aice?.title).toBe('AI Consulting Solutions Engineer');
       expect(aice?.companyName).toBe('Netskope');
-      expect(aice?.location?.city).toBe('Remote, US');
+      expect(aice?.location?.city).toBeUndefined();
       expect(aice?.isRemote).toBe(true);
       expect(aice?.department).toBe('Sales Engineering');
       expect(aice?.jobUrl).toBe(

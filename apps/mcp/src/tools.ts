@@ -11,6 +11,59 @@ import axios, { AxiosInstance } from 'axios';
 
 const API_URL = process.env.EVER_JOBS_API_URL ?? 'http://localhost:3001';
 
+/**
+ * Which key spelling `searchJobs` uses in the `POST /api/jobs/search` body
+ * (Spec 1689).
+ *
+ * The API validates the body against `ScraperInputDto` under a global
+ * `ValidationPipe({ whitelist: true })`, and that DTO only declares camelCase
+ * properties (`searchTerm`, `siteType`, `companySlug`, `resultsWanted`). The
+ * legacy snake_case keys were therefore stripped before the handler ran, so an
+ * MCP search went out with no search term, no source filter and the DTO's
+ * default page size — i.e. a fan-out across the whole catalogue.
+ *
+ *  - `camel` (default) — the keys `ScraperInputDto` accepts.
+ *  - `snake` — the legacy wire shape, kept for API servers that expect it.
+ *  - `both`  — send both spellings (whitelisting servers drop the extra set).
+ *
+ * Unrecognised values fall back to `camel`.
+ */
+export type SearchRequestKeyStyle = 'camel' | 'snake' | 'both';
+
+export const MCP_REQUEST_KEYS_ENV_VAR = 'EVER_JOBS_MCP_REQUEST_KEYS';
+
+export function readSearchRequestKeyStyle(
+  env: NodeJS.ProcessEnv = process.env,
+): SearchRequestKeyStyle {
+  const raw = env[MCP_REQUEST_KEYS_ENV_VAR]?.trim().toLowerCase();
+  return raw === 'snake' || raw === 'both' ? raw : 'camel';
+}
+
+/**
+ * How `JobResult.location` is rendered from the API's structured
+ * `LocationDto` (Spec 1689).
+ *
+ *  - `full` (default) — `city, state, country` joined, falling back to the
+ *    source's `name`, then its raw `text`, then `null`. Mirrors the CLI's
+ *    CSV rendering (apps/cli/src/commands/search.command.ts).
+ *  - `city` — the legacy output: the `city` field alone when there is one.
+ *    Jobs without a city fall back to the `full` rendering, so the declared
+ *    `string | null` contract holds (the old code returned the whole location
+ *    object in that case).
+ *
+ * Unrecognised values fall back to `full`.
+ */
+export type LocationFormat = 'full' | 'city';
+
+export const MCP_LOCATION_FORMAT_ENV_VAR = 'EVER_JOBS_MCP_LOCATION_FORMAT';
+
+export function readLocationFormat(
+  env: NodeJS.ProcessEnv = process.env,
+): LocationFormat {
+  const raw = env[MCP_LOCATION_FORMAT_ENV_VAR]?.trim().toLowerCase();
+  return raw === 'city' ? 'city' : 'full';
+}
+
 function getClient(): AxiosInstance {
   return axios.create({
     baseURL: API_URL,
@@ -282,20 +335,15 @@ export async function searchJobs(params: JobSearchParams): Promise<SearchRespons
   const client = getClient();
 
   try {
-    const response = await client.post('/api/jobs/search', {
-      search_term: params.query,
-      location: params.location ?? '',
-      site_type: params.source ? [params.source] : undefined,
-      company_slug: params.company,
-      results_wanted: Math.min(params.limit ?? 20, 100),
-    });
+    const response = await client.post('/api/jobs/search', buildSearchRequestBody(params));
 
     const data = response.data;
+    const locationFormat = readLocationFormat();
     const jobs: JobResult[] = (data.jobs ?? []).map((job: any) => ({
       id: job.id ?? '',
       title: job.title ?? '',
       company: job.companyName ?? job.company_name ?? '',
-      location: job.location?.city ?? job.location ?? null,
+      location: formatJobLocation(job.location, locationFormat),
       url: job.jobUrl ?? job.job_url ?? '',
       description: truncateDescription(job.description),
       date_posted: job.datePosted ?? job.date_posted ?? null,
@@ -356,7 +404,7 @@ export async function getJobDetails(params: {
       id: job.id ?? '',
       title: job.title ?? '',
       company: job.companyName ?? job.company_name ?? '',
-      location: job.location?.city ?? job.location ?? null,
+      location: formatJobLocation(job.location, readLocationFormat()),
       url: job.jobUrl ?? job.job_url ?? '',
       description: truncateDescription(job.description),
       full_description: job.description ?? null,
@@ -531,6 +579,73 @@ export function compareSources(): {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Build the `POST /api/jobs/search` body for {@link searchJobs}. See
+ * {@link SearchRequestKeyStyle} for why camelCase is the default.
+ */
+export function buildSearchRequestBody(
+  params: JobSearchParams,
+  style: SearchRequestKeyStyle = readSearchRequestKeyStyle(),
+): Record<string, unknown> {
+  const siteType = params.source ? [params.source] : undefined;
+  const resultsWanted = Math.min(params.limit ?? 20, 100);
+  const location = params.location ?? '';
+
+  const camel = {
+    searchTerm: params.query,
+    location,
+    siteType,
+    companySlug: params.company,
+    resultsWanted,
+  };
+  const snake = {
+    search_term: params.query,
+    location,
+    site_type: siteType,
+    company_slug: params.company,
+    results_wanted: resultsWanted,
+  };
+
+  if (style === 'snake') return snake;
+  if (style === 'both') return { ...snake, ...camel };
+  return camel;
+}
+
+/**
+ * Render the API's structured location as the `string | null` the MCP tools
+ * declare. The API returns a `LocationDto` object (`city`/`state`/`country`,
+ * plus the source's `name` and raw `text`); older servers may return a plain
+ * string, which is passed through.
+ *
+ * Remote-only postings carry no location object at all and render `null` —
+ * `is_remote` carries that signal.
+ */
+export function formatJobLocation(
+  location: unknown,
+  format: LocationFormat = 'full',
+): string | null {
+  if (location == null) return null;
+  if (typeof location === 'string') return nonEmpty(location);
+  if (typeof location !== 'object') return null;
+
+  const loc = location as Record<string, unknown>;
+  const city = nonEmpty(loc.city);
+  if (format === 'city' && city) return city;
+
+  const geo = [city, nonEmpty(loc.state), nonEmpty(loc.country)].filter(
+    (part): part is string => part !== null,
+  );
+  if (geo.length > 0) return geo.join(', ');
+
+  return nonEmpty(loc.name) ?? nonEmpty(loc.text);
+}
+
+function nonEmpty(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 function truncateDescription(desc: string | null | undefined): string | null {
   if (!desc) return null;

@@ -90,7 +90,7 @@ describe('CrestaService — Spec 165 / T04', () => {
       expect(am?.jobUrl).toContain('job-boards.greenhouse.io/cresta/jobs/');
       // D-11 clean dept pass-through.
       expect(am?.department).toBe('Sales');
-      expect(am?.location?.city).toBe('United States');
+      expect(am?.location?.city).toBeUndefined();
       // D-08 regression guard.
       expect(am?.description).not.toContain('&lt;');
       expect(am?.description).not.toContain('&amp;');
@@ -102,7 +102,7 @@ describe('CrestaService — Spec 165 / T04', () => {
       expect(ds).toBeDefined();
       expect(ds?.title).toBe('Applied Data Scientist');
       expect(ds?.companyName).toBe('Cresta');
-      expect(ds?.location?.city).toBe('Remote, US');
+      expect(ds?.location?.city).toBeUndefined();
       expect(ds?.isRemote).toBe(true);
       expect(ds?.department).toBe('Engineering');
       expect(ds?.jobUrl).toBe(
@@ -118,7 +118,7 @@ describe('CrestaService — Spec 165 / T04', () => {
       expect(pm?.title).not.toMatch(/^\s/);
       expect(pm?.title).not.toMatch(/\s$/);
       expect(pm?.department).toBe('Product');
-      expect(pm?.location?.city).toBe('San Francisco, CA');
+      expect(pm?.location?.city).toBe('San Francisco');
 
       const calledUrls = mockGet.mock.calls.map((c) => c[0] as string);
       expect(calledUrls[0]).toBe(

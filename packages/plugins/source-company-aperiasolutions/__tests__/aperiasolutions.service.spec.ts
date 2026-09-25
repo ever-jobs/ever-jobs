@@ -17,6 +17,7 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { AperiasolutionsModule, AperiasolutionsService } from '../src';
+import { parseLocationText } from '@ever-jobs/common';
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures');
 const JOBS_PAGE_RAW = JSON.parse(
@@ -78,7 +79,7 @@ describe('AperiasolutionsService — Spec 280 / T04', () => {
       expect(job0?.jobUrl).toContain('job-boards.greenhouse.io/aperiasolutions/jobs/');
       // D-11 department-trim lock.
       expect(job0?.department).toBe(String(first.departments[0].name).trim());
-      expect(job0?.location?.city).toBe(first.location.name);
+      expect(job0?.location?.city).toBe(parseLocationText(first.location.name).location?.city);
       expect(job0?.isRemote).toBe(
         String(first.location.name).toLowerCase().includes('remote'),
       );

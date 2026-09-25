@@ -102,3 +102,18 @@ export const UMANTIS_DATE_REGEX = /\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b/;
 /** Detects remote / home-office roles across the title, location, and body text. */
 export const UMANTIS_REMOTE_REGEX =
   /\b(remote|home[\s-]?office|home[\s-]?(?:based|working)|work\s*from\s*home|wfh|telecommute|fully\s*remote|t[ée]l[ée]travail)\b/i;
+
+/**
+ * Env toggle for Umantis location heuristics (Spec 1689), layered on top of
+ * the shared parser: a "City (Country)" label ("Munich (Germany)") maps the
+ * parenthesised token to the country — the pre-5125 behaviour; the shared
+ * parser folds it into the city ("Munich Germany"). Workplace / numeric
+ * parentheticals ("(Hybrid)", "(80%)") are left to the parser. `false` / `0`
+ * / `off` / `no` → shared-parser output only; unset or anything else → on.
+ */
+export const UMANTIS_LOCATION_HEURISTICS_ENV = 'UMANTIS_LOCATION_HEURISTICS';
+
+export function umantisLocationHeuristicsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = (env[UMANTIS_LOCATION_HEURISTICS_ENV] ?? '').trim().toLowerCase();
+  return !(v === 'false' || v === '0' || v === 'off' || v === 'no');
+}

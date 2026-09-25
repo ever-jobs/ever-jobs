@@ -110,7 +110,7 @@ describe('MasterclassService — Spec 075 / T04', () => {
       expect(aiml?.jobUrl).not.toContain('?gh_jid=');
       // Location — Remote-detection picks up `remote` substring
       // case-insensitively.
-      expect(aiml?.location?.city).toBe('Remote - United States');
+      expect(aiml?.location?.city).toBeUndefined();
       expect(aiml?.isRemote).toBe(true);
       // D-11 first-listing regression guard: emitted `department`
       // matches wire `departments[0].name === 'Engineering'`
@@ -135,7 +135,7 @@ describe('MasterclassService — Spec 075 / T04', () => {
       expect(pmm?.title).toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(pmm?.title.endsWith(' ')).toBe(false);
       expect(pmm?.companyName).toBe('MasterClass');
-      expect(pmm?.location?.city).toBe('Hybrid - San Francisco, CA');
+      expect(pmm?.location?.city).toBe('San Francisco');
       expect(pmm?.isRemote).toBe(false);
       // D-11 second-listing regression guard.
       expect(pmm?.department).toBe('Marketing');

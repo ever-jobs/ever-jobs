@@ -93,7 +93,7 @@ describe('AcrisureInnovationService — Spec 183 / T04', () => {
       expect(da?.jobUrl).toContain('job-boards.greenhouse.io/acrisureinnovation/jobs/');
       // D-11 clean — dept flows through byte-for-byte.
       expect(da?.department).toBe('Data');
-      expect(da?.location?.city).toBe('Atlanta, GA');
+      expect(da?.location?.city).toBe('Atlanta');
       expect(da?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(da?.description).not.toContain('&lt;');

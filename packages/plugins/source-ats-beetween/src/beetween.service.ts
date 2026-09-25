@@ -11,13 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationText, toDateOnly } from '@ever-jobs/common';
 import {
   BEETWEEN_PORTAL_HOST,
   BEETWEEN_PORTAL_PATH_TEMPLATE,
@@ -298,12 +292,14 @@ export class BeetweenService implements IScraper {
     const rawText = job.descriptionText ?? job.description_text ?? null;
     const description = this.formatDescription(rawHtml, rawText, format);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `beetween-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(
         job.publishedAt ?? job.published_at ?? job.datePosted ?? job.date ?? job.updatedAt ?? job.updated_at,
@@ -428,7 +424,7 @@ export class BeetweenService implements IScraper {
     const country = typeof job.country === 'string' && job.country.trim() ? job.country.trim() : null;
     if (!city && !state && !country) {
       const loc = typeof job.location === 'string' ? job.location.trim() : '';
-      if (loc) return new LocationDto({ city: loc });
+      if (loc) return parseLocationText(loc).location;
       return null;
     }
     return new LocationDto({ city, state, country });

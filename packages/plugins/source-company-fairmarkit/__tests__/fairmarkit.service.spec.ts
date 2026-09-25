@@ -89,7 +89,7 @@ describe('FairmarkitService — Spec 146 / T04', () => {
       );
       // D-11 clean dept (this listing has clean wire dept).
       expect(ga?.department).toBe('Sales');
-      expect(ga?.location?.city).toBe('London, UK');
+      expect(ga?.location?.city).toBe('London');
       expect(ga?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ga?.description).not.toContain('&lt;');
@@ -120,7 +120,7 @@ describe('FairmarkitService — Spec 146 / T04', () => {
       expect(cs?.department).toBe('International Operations');
       expect(cs?.department).not.toMatch(/ $/);
       expect(cs?.companyName).toBe('Fairmarkit');
-      expect(cs?.location?.city).toBe('Remote, US');
+      expect(cs?.location?.city).toBeUndefined();
       expect(cs?.isRemote).toBe(true);
       expect(cs?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/fairmarkit/jobs/5802084004',

@@ -87,7 +87,7 @@ describe('PendoService — Spec 118 / T04', () => {
       );
       expect(ad?.jobUrl).toContain('job-boards.greenhouse.io/pendo/jobs/');
       expect(ad?.department).toBe('Enterprise');
-      expect(ad?.location?.city).toBe('San Francisco, CA');
+      expect(ad?.location?.city).toBe('San Francisco');
       expect(ad?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ad?.description).not.toContain('&lt;');
@@ -100,7 +100,7 @@ describe('PendoService — Spec 118 / T04', () => {
       expect(sre).toBeDefined();
       expect(sre?.title).toBe('Site Reliability Engineer');
       expect(sre?.companyName).toBe('Pendo');
-      expect(sre?.location?.city).toBe('Raleigh, NC');
+      expect(sre?.location?.city).toBe('Raleigh');
       expect(sre?.isRemote).toBe(false);
       expect(sre?.department).toBe('Engineering Operations');
       expect(sre?.jobUrl).toBe(

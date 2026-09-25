@@ -103,9 +103,16 @@ _No parameters required._
 
 ## Environment Variables
 
-| Variable            | Default                 | Description            |
-| ------------------- | ----------------------- | ---------------------- |
-| `EVER_JOBS_API_URL` | `http://localhost:3001` | Ever Jobs API endpoint |
+| Variable                        | Default                 | Description                                                                                                                                                                  |
+| ------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EVER_JOBS_API_URL`             | `http://localhost:3001` | Ever Jobs API endpoint                                                                                                                                                       |
+| `EVER_JOBS_MCP_LOCATION_FORMAT` | `full`                  | How a job's `location` string is rendered: `full` = `city, state, country` (falling back to the site name, then its label text); `city` = the legacy city-only string        |
+| `EVER_JOBS_MCP_REQUEST_KEYS`    | `camel`                 | Search request key style sent to the API: `camel` (what `ScraperInputDto` accepts), `snake` (the legacy wire shape), `both`                                                  |
+
+Remote-only jobs: whether their `location` reads `Remote` depends on the API's
+`EVER_JOBS_LOCATION_REMOTE_CITY` (default `false` — a bare `Remote` label gives
+`null` and `Remote - US` gives `United States`, with `is_remote` carrying the
+signal; `true` restores `Remote` / `Remote, United States`). See `.env.example`.
 
 ## Source Coverage
 

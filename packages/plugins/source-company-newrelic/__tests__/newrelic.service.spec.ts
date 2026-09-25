@@ -115,7 +115,7 @@ describe('NewRelicService — Spec 085 / T04', () => {
       // First-listing department clean — D-11 omitted.
       expect(ae1?.department).toBe('Commercial');
       expect(ae1?.department).toBe(JOBS_PAGE_RAW.jobs[0].departments[0].name);
-      expect(ae1?.location?.city).toBe('Remote, EU');
+      expect(ae1?.location?.city).toBeUndefined();
       expect(ae1?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(ae1?.description).not.toContain('&lt;');
@@ -149,7 +149,7 @@ describe('NewRelicService — Spec 085 / T04', () => {
       expect(ae2?.title.endsWith(' ')).toBe(false);
       expect(ae2?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 2);
       expect(ae2?.companyName).toBe('New Relic');
-      expect(ae2?.location?.city).toBe('San Francisco, CA');
+      expect(ae2?.location?.city).toBe('San Francisco');
       expect(ae2?.isRemote).toBe(false);
       expect(ae2?.department).toBe('Enterprise');
       expect(ae2?.department).toBe(JOBS_PAGE_RAW.jobs[1].departments[0].name);

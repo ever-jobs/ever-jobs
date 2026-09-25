@@ -134,7 +134,7 @@ describe('LatticeService — Spec 074 / T04', () => {
       // Location — Lattice wire is fully clean on the location axis
       // (D-12 not applied). Remote-detection picks up the literal
       // `Remote` substring case-insensitively.
-      expect(ae?.location?.city).toBe('Remote-US, PST or EST');
+      expect(ae?.location?.city).toBe('US, PST');
       expect(ae?.isRemote).toBe(true);
       // D-11 first-listing regression guard: the emitted
       // `department` for the first fixture listing matches the wire
@@ -166,7 +166,7 @@ describe('LatticeService — Spec 074 / T04', () => {
       expect(spm?.title).toBe('Staff Product Manager, AI');
       expect(spm?.title).toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(spm?.companyName).toBe('Lattice');
-      expect(spm?.location?.city).toBe('Remote - Canada');
+      expect(spm?.location?.city).toBeUndefined();
       expect(spm?.isRemote).toBe(true);
       // D-11 application lock — single-trailing-pad form: the
       // emitted `department` for the second listing equals the

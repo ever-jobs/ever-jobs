@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationList,
   toDateOnly,
 } from '@ever-jobs/common';
 import { TALROO_API_URL, TALROO_HEADERS, TALROO_DEFAULT_RESULTS, TALROO_MAX_RESULTS } from './talroo.constants';
@@ -143,11 +144,13 @@ export class TalrooService implements IScraper {
       // HTML format: pass through as-is
     }
 
-    // Build location from city array
-    const cityStr = Array.isArray(raw.city) ? raw.city.join(', ') : (raw.city ?? null);
-    const location = new LocationDto({
-      city: cityStr,
-    });
+    // Build location from the per-site city array — each element is a site
+    // label, so the shared parser emits structured entries.
+    const parsedLocations = parseLocationList(
+      Array.isArray(raw.city) ? raw.city : [raw.city ?? null],
+    );
+    const location = parsedLocations.location;
+    const locations = parsedLocations.locations;
 
     // Determine if remote based on city
     const isRemote = Array.isArray(raw.city)
@@ -172,6 +175,7 @@ export class TalrooService implements IScraper {
       companyName: raw.company ?? null,
       jobUrl: raw.onclick,
       location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       compensation: null,
       datePosted,

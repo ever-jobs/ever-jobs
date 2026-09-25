@@ -90,7 +90,7 @@ describe('DescriptService — Spec 112 / T04', () => {
       expect(ae?.jobUrl).toContain('?gh_jid=7633072003');
       expect(ae?.jobUrl).not.toContain('job-boards.greenhouse.io');
       expect(ae?.department).toBe('Sales & Business Development');
-      expect(ae?.location?.city).toBe('San Francisco, CA or Remote, US');
+      expect(ae?.location?.city).toBe('San Francisco, CA');
       expect(ae?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(ae?.description).not.toContain('&lt;');
@@ -103,7 +103,7 @@ describe('DescriptService — Spec 112 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, Audio');
       expect(sse?.companyName).toBe('Descript');
-      expect(sse?.location?.city).toBe('San Francisco, CA');
+      expect(sse?.location?.city).toBe('San Francisco');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('Engineering');
       expect(sse?.jobUrl).toBe(

@@ -28,6 +28,8 @@ export interface BizneoBoardJob {
   title?: string | null;
   /** Raw location text (from the card's location line). */
   location?: string | null;
+  /** JSON-LD `jobLocation` PostalAddresses, when the board emits them. */
+  addresses?: BizneoPostalAddress[] | null;
   /** Optional brand / sub-organisation label shown on the card (e.g. "PizzaHut"). */
   brand?: string | null;
   /** Raw work-mode token (e.g. "On-site", "Remote", "Hybrid"), when present. */
@@ -83,6 +85,9 @@ export interface BizneoJob {
   city?: string | null;
   state?: string | null;
   country?: string | null;
+
+  /** One `{city,state,country}` triple per JSON-LD `jobLocation` address, when present. */
+  locationEntries?: Array<{ city: string | null; state: string | null; country: string | null }> | null;
 
   /** Raw single-line location string, used as the description fallback / remote signal. */
   locationText?: string | null;

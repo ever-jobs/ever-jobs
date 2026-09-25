@@ -136,7 +136,7 @@ describe('ScaleaiService — Spec 064 / T04', () => {
       expect(ops?.jobUrl).toContain('job-boards.greenhouse.io');
       expect(ops?.jobUrl).toContain('/scaleai/jobs/');
       expect(ops?.jobUrl).not.toContain('?gh_jid=');
-      expect(ops?.location?.city).toBe('San Francisco, CA');
+      expect(ops?.location?.city).toBe('San Francisco');
       // D-11 regression guard: the emitted `department` for the first
       // fixture listing is the multi-word string `'GPS Sales'`
       // byte-for-byte (with initialism + plain word) AND matches the
@@ -171,7 +171,7 @@ describe('ScaleaiService — Spec 064 / T04', () => {
       // D-10 omission: this fixture title is already trim-clean.
       expect(eng?.title).toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(eng?.companyName).toBe('Scale AI');
-      expect(eng?.location?.city).toBe('Remote, United States');
+      expect(eng?.location?.city).toBeUndefined();
       // The fixture location string contains "Remote" so isRemote
       // should be true.
       expect(eng?.isRemote).toBe(true);

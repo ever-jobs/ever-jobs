@@ -80,7 +80,7 @@ describe('AvatureService — Spec 006 / T03 + T04', () => {
       expect(first.jobUrl).toBe(
         'https://bloomberg.avature.net/careers/JobDetail/Senior-Software-Engineer/12345',
       );
-      expect(first.location?.city).toBe('New York, NY');
+      expect(first.location?.city).toBe('New York');
       expect(first.department).toBe('Engineering');
       expect(first.isRemote).toBe(false);
 

@@ -95,7 +95,7 @@ describe('JustworksService — Spec 129 / T04', () => {
       expect(ocsa?.jobUrl).toContain('?gh_jid=7814842');
       expect(ocsa?.jobUrl).not.toContain('job-boards.greenhouse.io');
       expect(ocsa?.department).toBe('Customer Success');
-      expect(ocsa?.location?.city).toBe('Remote, US');
+      expect(ocsa?.location?.city).toBeUndefined();
       expect(ocsa?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(ocsa?.description).not.toContain('&lt;');
@@ -111,7 +111,7 @@ describe('JustworksService — Spec 129 / T04', () => {
       expect(sek?.title).toBe('Senior Engineer, Knowledge Systems');
       expect(sek?.title).not.toMatch(/\s$/);
       expect(sek?.companyName).toBe('Justworks');
-      expect(sek?.location?.city).toBe('New York, NY');
+      expect(sek?.location?.city).toBe('New York');
       expect(sek?.isRemote).toBe(false);
       expect(sek?.department).toBe('Engineering');
       expect(sek?.jobUrl).toBe(

@@ -85,7 +85,7 @@ describe('DatabricksService — Spec 021 / T04', () => {
       expect(lakehouse?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/databricks/jobs/6101234',
       );
-      expect(lakehouse?.location?.city).toBe('San Francisco, CA');
+      expect(lakehouse?.location?.city).toBe('San Francisco');
       expect(lakehouse?.department).toBe('Engineering');
       expect(lakehouse?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

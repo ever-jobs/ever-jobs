@@ -20,7 +20,7 @@ import {
   CompensationInterval,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient, stripHtmlTags, extractSalary } from '@ever-jobs/common';
+import { createHttpClient, stripHtmlTags, extractSalary, parseLocationList } from '@ever-jobs/common';
 
 const DRIBBBLE_BASE_URL = 'https://dribbble.com';
 const DRIBBBLE_JOBS_URL = 'https://dribbble.com/jobs';
@@ -106,9 +106,11 @@ export class DribbbleService implements IScraper {
       }
 
       const locationStr = raw.location ?? raw.city ?? null;
-      const location = locationStr ? new LocationDto({ city: locationStr }) : null;
+      const locationParsed = parseLocationList([locationStr]);
+      const location = locationStr ? locationParsed.location : null;
       const isRemote = raw.remote === true || raw.workplace_type === 'remote' ||
-        locationStr?.toLowerCase().includes('remote') || false;
+        locationStr?.toLowerCase().includes('remote') || locationParsed.remoteMentioned ||
+        false;
 
       let compensation = null;
       if (raw.salary_min || raw.salary_max) {
@@ -127,6 +129,9 @@ export class DribbbleService implements IScraper {
         companyUrl: raw.company_url ?? null,
         jobUrl,
         location,
+        ...(locationParsed.locations.length > 0
+          ? { locations: locationParsed.locations }
+          : {}),
         description: raw.description ? stripHtmlTags(raw.description).slice(0, 500) : null,
         compensation: compensation as any,
         datePosted: raw.published_at ?? raw.created_at ?? null,
@@ -190,7 +195,10 @@ export class DribbbleService implements IScraper {
           }
         }
 
-        const isRemote = location?.toLowerCase().includes('remote') ?? false;
+        const locationParsed = parseLocationList([location]);
+        const isRemote =
+          (location?.toLowerCase().includes('remote') ?? false) ||
+          locationParsed.remoteMentioned;
         const id = `dribbble-${Math.abs(this.hashCode(href))}`;
 
         jobs.push(new JobPostDto({
@@ -198,7 +206,10 @@ export class DribbbleService implements IScraper {
           title,
           companyName: company,
           jobUrl: href,
-          location: location ? new LocationDto({ city: location }) : null,
+          location: location ? locationParsed.location : null,
+          ...(locationParsed.locations.length > 0
+            ? { locations: locationParsed.locations }
+            : {}),
           compensation: compensation as any,
           isRemote,
           site: Site.DRIBBBLE,

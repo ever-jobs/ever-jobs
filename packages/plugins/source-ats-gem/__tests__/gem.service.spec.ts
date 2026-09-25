@@ -121,7 +121,7 @@ describe('GemService — Spec 006 / T05 + T06', () => {
       expect(first.atsId).toBe('ext-1001');
       expect(first.site).toBe(Site.GEM);
       expect(first.jobUrl).toBe('https://jobs.gem.com/acme/ext-1001');
-      expect(first.location?.city).toBe('New York, NY');
+      expect(first.location?.city).toBe('New York');
       expect(first.department).toBe('Engineering');
       expect(first.isRemote).toBe(false);
       // employmentType is humanised from the list `job.employmentType` enum.
@@ -130,7 +130,7 @@ describe('GemService — Spec 006 / T05 + T06', () => {
       // Remote-detection sanity check on the SRE row.
       const sre = result.jobs.find((j) => j.atsId === 'ext-1002');
       expect(sre?.isRemote).toBe(true);
-      expect(sre?.location?.city).toBe('Remote — US');
+      expect(sre?.location?.city).toBeUndefined();
 
       // Hybrid → not flagged as remote.
       const designer = result.jobs.find((j) => j.atsId === 'ext-1003');

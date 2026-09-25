@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -248,13 +249,15 @@ export class JobDivaService implements IScraper {
 
     const resolvedCompany =
       (typeof job.company === 'string' && job.company.trim() ? job.company.trim() : '') || companyName;
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `jobdiva-${atsId}`,
       title,
       companyName: resolvedCompany,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.issuedate ?? job.issueDate ?? job.startdate ?? job.startDate),
       isRemote: this.detectRemote(job),
@@ -423,13 +426,7 @@ export class JobDivaService implements IScraper {
     // Fall back to the free-text "City, STATE" location label.
     const label = typeof job.location === 'string' ? job.location.trim() : '';
     if (!label) return null;
-    const parts = label
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) return new LocationDto({ city: parts[0] });
-    return new LocationDto({ city: parts[0], state: parts[1], country: parts[2] ?? null });
+    return parseLocationText(label).location;
   }
 
   /** Use the first advertising division as the department. */

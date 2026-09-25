@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
 } from '@ever-jobs/common';
 import {
@@ -375,6 +376,7 @@ export class RecruitisService implements IScraper {
     }
 
     const locationLabel = item.location ?? detail?.location ?? null;
+    const location = this.locationFromLabel(locationLabel);
     const department = item.category ?? detail?.category ?? null;
 
     return new JobPostDto({
@@ -382,7 +384,8 @@ export class RecruitisService implements IScraper {
       title,
       companyName,
       jobUrl,
-      location: this.locationFromLabel(locationLabel),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: null,
       isRemote: this.detectRemote(item, rawDescription),
@@ -464,22 +467,7 @@ export class RecruitisService implements IScraper {
    */
   private locationFromLabel(label: string | null | undefined): LocationDto | null {
     if (!label) return null;
-    const parts = label
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    const city = parts[0];
-    const state = parts.length >= 3 ? parts[1] : null;
-    const country = parts[parts.length - 1];
-    return new LocationDto({
-      city: city ?? null,
-      state: state ?? null,
-      country: country ?? null,
-    });
+    return parseLocationText(label).location;
   }
 
   /** Detect remote roles from the location chip, title, or description text. */

@@ -284,12 +284,14 @@ export class TempWorksService implements IScraper {
     const companyName = this.deriveCompanyName(job.companyName, tenant);
     const description = this.formatDescription(job.descriptionHtml ?? null, job.description ?? null, format);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `tempworks-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,

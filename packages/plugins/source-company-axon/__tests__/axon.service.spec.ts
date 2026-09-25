@@ -98,7 +98,7 @@ describe('AxonService — Spec 135 / T04', () => {
       expect(ae?.department).toMatch(/^\d+ /);
       // Internal double-space anomaly preserved.
       expect(ae?.department).toMatch(/&  Warehousing/);
-      expect(ae?.location?.city).toBe('Boston, MA');
+      expect(ae?.location?.city).toBe('Boston');
       expect(ae?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ae?.description).not.toContain('&lt;');
@@ -111,7 +111,7 @@ describe('AxonService — Spec 135 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, Evidence.com');
       expect(sse?.companyName).toBe('Axon');
-      expect(sse?.location?.city).toBe('Scottsdale, AZ');
+      expect(sse?.location?.city).toBe('Scottsdale');
       expect(sse?.isRemote).toBe(false);
       // D-11 lock — second sample with numeric-prefix-with-
       // space convention.

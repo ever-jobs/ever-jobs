@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, decodeHtmlEntities, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, decodeHtmlEntities, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 /**
  * PsiQuantum — PsiQuantum is building a large-scale, fault-tolerant quantum computer based on silicon photonics.
@@ -86,9 +86,8 @@ export class PsiQuantumService implements IScraper {
         const id = `psiquantum-${jobId}`;
 
         const locationStr = listing.location?.name ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const locationParsed = parseLocationList([locationStr]);
+        const location = locationStr ? locationParsed.location : null;
 
         if (input.location && locationStr) {
           if (!locationStr.toLowerCase().includes(input.location.toLowerCase())) continue;
@@ -110,11 +109,12 @@ export class PsiQuantumService implements IScraper {
               listing.absolute_url ??
               `https://job-boards.greenhouse.io/psiquantum/jobs/${listing.id}`,
             location,
+            ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
             description: listing.content
               ? stripHtmlTags(decodeHtmlEntities(listing.content))
               : null,
             datePosted: listing.updated_at ?? null,
-            isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+            isRemote: (locationStr?.toLowerCase().includes('remote') ?? false) || locationParsed.remoteMentioned,
             department,
           }),
         );

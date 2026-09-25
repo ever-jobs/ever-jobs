@@ -1,4 +1,5 @@
 import { JobsController } from '../../src/jobs/jobs.controller';
+import type { JobsService } from '../../src/jobs/jobs.service';
 import { LegitimacyDetectorService } from '@ever-jobs/legitimacy-detector';
 import type { JobPostDto, ScraperInputDto } from '@ever-jobs/models';
 
@@ -6,6 +7,31 @@ import type { JobPostDto, ScraperInputDto } from '@ever-jobs/models';
  * Spec 740 — controller enrichment: liveness + legitimacy are opt-in (query flags) and absent on
  * the default path. Uses the real (pure) legitimacy detector and a stub liveness checker.
  */
+
+/**
+ * JobsService stub on the CURRENT contract. `POST /api/jobs/search` fans out
+ * through `searchJobsWithDiagnostics` (Spec 1679 / 5082 — it also returns the
+ * per-source breakdown); `searchJobs` is kept for the `/analyze` path. The stub
+ * used to provide only `searchJobs`, so every case here threw
+ * `searchJobsWithDiagnostics is not a function` (Spec 1689). Typing it as a
+ * `Pick` of the real service makes the next contract change a type error in
+ * `tsc --project tsconfig.typecheck.json` instead of a silent runtime break.
+ */
+type JobsServiceStub = Pick<JobsService, 'searchJobs' | 'searchJobsWithDiagnostics'>;
+
+function makeJobsServiceStub(corpus: () => JobPostDto[]): JobsServiceStub & {
+  diagnosticsCalls: number;
+} {
+  const stub = {
+    diagnosticsCalls: 0,
+    searchJobs: async () => corpus(),
+    searchJobsWithDiagnostics: async () => {
+      stub.diagnosticsCalls += 1;
+      return { jobs: corpus(), perSource: [] };
+    },
+  };
+  return stub;
+}
 
 function makeRawJobs(): JobPostDto[] {
   return [
@@ -20,8 +46,7 @@ function makeRawJobs(): JobPostDto[] {
   ];
 }
 
-function makeController(): JobsController {
-  const jobsService = { searchJobs: async () => makeRawJobs() } as never;
+function makeController(jobsService: JobsServiceStub = makeJobsServiceStub(makeRawJobs)): JobsController {
   const aggregator = {
     aggregateRaw: async (jobs: JobPostDto[]) => ({
       jobs,
@@ -42,7 +67,7 @@ function makeController(): JobsController {
   // historical `persist: true` behaviour these cases were written against.
   const config = { get: (_key: string, def?: unknown) => def } as never;
   return new JobsController(
-    jobsService,
+    jobsService as never,
     aggregator,
     analytics,
     cache,
@@ -55,6 +80,18 @@ function makeController(): JobsController {
 const INPUT = { searchTerm: 'engineer' } as ScraperInputDto;
 
 describe('JobsController — corpus signals (Spec 740)', () => {
+  it('fans out through searchJobsWithDiagnostics (Spec 1679 / 5082 contract)', async () => {
+    const jobsService = makeJobsServiceStub(makeRawJobs);
+    const result = (await makeController(jobsService).searchJobs(INPUT)) as {
+      jobs: JobPostDto[];
+      per_source: unknown[];
+    };
+    expect(jobsService.diagnosticsCalls).toBe(1);
+    expect(result.jobs).toHaveLength(1);
+    // The stub reports no per-source rows, and diagnostics are opt-in anyway.
+    expect(result.per_source).toEqual([]);
+  });
+
   it('does NOT attach liveness/legitimacy on the default path', async () => {
     const result = (await makeController().searchJobs(INPUT)) as { jobs: JobPostDto[] };
     expect(result.jobs[0]!.liveness == null).toBe(true);
@@ -115,7 +152,7 @@ describe('JobsController — corpus signals (Spec 740)', () => {
           }) as unknown as JobPostDto,
       );
       const probed: string[] = [];
-      const jobsService = { searchJobs: async () => corpus } as never;
+      const jobsService = makeJobsServiceStub(() => corpus);
       const aggregator = {
         aggregateRaw: async (jobs: JobPostDto[]) => ({
           jobs,
@@ -148,7 +185,7 @@ describe('JobsController — corpus signals (Spec 740)', () => {
       // `store.persistSearch` at `true`, which is what these cases assume.
       const config = { get: (_key: string, def?: unknown) => def } as never;
       const controller = new JobsController(
-        jobsService,
+        jobsService as never,
         aggregator,
         analytics,
         cache,

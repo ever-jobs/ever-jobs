@@ -91,7 +91,7 @@ describe('QuanataService — Spec 166 / T04', () => {
       expect(sa?.jobUrl).toContain('job-boards.greenhouse.io/quanata/jobs/');
       // D-11 clean dept pass-through.
       expect(sa?.department).toBe('Finance');
-      expect(sa?.location?.city).toBe('Remote, US');
+      expect(sa?.location?.city).toBeUndefined();
       expect(sa?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(sa?.description).not.toContain('&lt;');
@@ -104,7 +104,7 @@ describe('QuanataService — Spec 166 / T04', () => {
       expect(ac).toBeDefined();
       expect(ac?.title).toBe('Actuary [Remote-US]');
       expect(ac?.companyName).toBe('Quanata');
-      expect(ac?.location?.city).toBe('Remote, US');
+      expect(ac?.location?.city).toBeUndefined();
       expect(ac?.isRemote).toBe(true);
       // D-11 clean dept pass-through (long internal-whitespace
       // multi-token form preserved byte-for-byte).

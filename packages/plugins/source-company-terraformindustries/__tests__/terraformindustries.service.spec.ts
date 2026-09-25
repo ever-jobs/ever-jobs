@@ -165,7 +165,7 @@ describe('TerraformIndustriesService', () => {
       (job) => job.title === 'Direct Air Capture Technician',
     );
     expect(tech?.isRemote).toBe(true);
-    expect(tech?.location).toMatchObject({ city: 'Remote' });
+    expect(tech?.location).toBeNull();
   });
 
   it('still returns a role when its doc fetch fails, with null enrichment', async () => {

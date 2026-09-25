@@ -99,7 +99,7 @@ describe('AcommerceService — Spec 180 / T04', () => {
       expect(kam?.jobUrl).toContain('job-boards.greenhouse.io/acommerce/jobs/');
       // D-11 clean — dept flows through byte-for-byte.
       expect(kam?.department).toBe('Key Account Management');
-      expect(kam?.location?.city).toBe('Bangkok, Thailand');
+      expect(kam?.location?.city).toBe('Bangkok');
       expect(kam?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(kam?.description).not.toContain('&lt;');

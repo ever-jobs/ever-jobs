@@ -5,6 +5,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
 import { getRequestId } from '../context';
+import { describeUrlForLog, pinUrlToHosts } from '../utils/url-guard';
 
 const RETRYABLE_STATUSES = [429, 500, 502, 503, 504];
 
@@ -34,6 +35,37 @@ const SENSITIVE_PATH_SEGMENTS: Record<string, number> = {
 /** Scheme + authority of an absolute URL, e.g. `https://api.ceipal.com:443`. */
 const URL_AUTHORITY = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i;
 
+/**
+ * `false` turns {@link HttpClientOptions.allowedRedirectHosts} off process-wide
+ * (redirects are followed as axios does by default) — an escape hatch should a
+ * pinned site start redirecting somewhere legitimate. Default on.
+ */
+export const HTTP_PIN_REDIRECTS_ENV = 'EVER_JOBS_HTTP_PIN_REDIRECTS';
+
+function redirectPinningEnabled(): boolean {
+  const raw = process.env[HTTP_PIN_REDIRECTS_ENV]?.trim().toLowerCase();
+  return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
+}
+
+/**
+ * The `beforeRedirect` hook for a pinned client: every hop must itself be an
+ * https URL on `allowedHosts` (or a subdomain), checked by the same
+ * {@link pinUrlToHosts} the plugin ran on the first URL. Throwing aborts the
+ * redirect, so the request rejects instead of following it.
+ */
+export function redirectPinGuard(
+  allowedHosts: readonly string[],
+): (redirectOptions: Record<string, unknown>) => void {
+  return (redirectOptions) => {
+    const href = typeof redirectOptions.href === 'string' ? redirectOptions.href : '';
+    if (!pinUrlToHosts(href, allowedHosts)) {
+      throw new Error(
+        `Refused redirect to ${describeUrlForLog(href)}: not an https URL on ${allowedHosts.join(', ')}`,
+      );
+    }
+  };
+}
+
 export interface HttpClientOptions {
   proxies?: string[];
   caCert?: string;
@@ -59,6 +91,16 @@ export interface HttpClientOptions {
    * this client. Pass a `CookieJar` instance to share state across requests.
    */
   cookies?: boolean | CookieJar;
+  /**
+   * Pin every redirect hop to these hosts (Spec 1689). Unset (the default),
+   * axios follows up to 21 redirects to any host and scheme, so a pinned
+   * first URL on an allowlisted host with an open redirect could still land
+   * on loopback, a private range or cloud metadata. Set, each hop must pass
+   * `pinUrlToHosts(hop, allowedRedirectHosts)` — https only, same hosts or
+   * their subdomains, no credentials or explicit port — or the request
+   * rejects. `EVER_JOBS_HTTP_PIN_REDIRECTS=false` turns it off process-wide.
+   */
+  allowedRedirectHosts?: readonly string[];
 }
 
 /**
@@ -99,6 +141,9 @@ export class HttpClient {
       // Accept self-signed certs if caCert is configured
       ...(options.caCert
         ? { httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }) }
+        : {}),
+      ...(options.allowedRedirectHosts?.length && redirectPinningEnabled()
+        ? { beforeRedirect: redirectPinGuard(options.allowedRedirectHosts) }
         : {}),
     });
 
@@ -387,6 +432,7 @@ export function createHttpClient(options?: HttpClientOptions | any): HttpClient 
       rateDelayMin: options.rateDelayMin,
       rateDelayMax: options.rateDelayMax,
       cookies: options.cookies,
+      allowedRedirectHosts: options.allowedRedirectHosts,
     });
   }
   return new HttpClient(options as HttpClientOptions);

@@ -116,7 +116,7 @@ describe('PelotonService — Spec 086 / T04', () => {
       expect(marketing?.department).toBe('Marketing');
       expect(marketing?.department).toBe(JOBS_PAGE_RAW.jobs[0].departments[0].name);
       // Location — Peloton's NYC HQ.
-      expect(marketing?.location?.city).toBe('New York, New York');
+      expect(marketing?.location?.city).toBe('New York');
       expect(marketing?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(marketing?.description).not.toContain('&lt;');
@@ -147,7 +147,7 @@ describe('PelotonService — Spec 086 / T04', () => {
       // D-11 second-listing pass-through guard.
       expect(device?.department).toBe('Software');
       expect(device?.department).toBe(JOBS_PAGE_RAW.jobs[1].departments[0].name);
-      expect(device?.location?.city).toBe('Remote - United States');
+      expect(device?.location?.city).toBeUndefined();
       expect(device?.isRemote).toBe(true);
       // Variant-21 lock for second listing.
       expect(device?.jobUrl).toBe(

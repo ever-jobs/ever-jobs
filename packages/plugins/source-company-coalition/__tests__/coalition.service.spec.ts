@@ -118,7 +118,7 @@ describe('CoalitionService — Spec 095 / T04', () => {
       expect(ir?.jobUrl).not.toContain('/careers/');
       expect(ir?.jobUrl).not.toContain('/job?');
       expect(ir?.department).toBe('Incident Response (CIR)');
-      expect(ir?.location?.city).toBe('Any location, United States');
+      expect(ir?.location?.city).toBe('Any location');
       expect(ir?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ir?.description).not.toContain('&lt;');
@@ -131,7 +131,7 @@ describe('CoalitionService — Spec 095 / T04', () => {
       expect(as).toBeDefined();
       expect(as?.title).toBe('Applied Scientist II');
       expect(as?.companyName).toBe('Coalition, Inc.');
-      expect(as?.location?.city).toBe('Remote, United States');
+      expect(as?.location?.city).toBeUndefined();
       expect(as?.isRemote).toBe(true);
       expect(as?.department).toBe('Data');
       expect(as?.jobUrl).toBe(

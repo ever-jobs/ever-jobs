@@ -96,7 +96,7 @@ describe('AciLearningService — Spec 176 / T04', () => {
       expect(aa?.jobUrl).toContain('job-boards.greenhouse.io/acilearning/jobs/');
       // D-11 clean dept on this listing.
       expect(aa?.department).toBe('Tech Academy Admissions');
-      expect(aa?.location?.city).toBe('Dallas, TX');
+      expect(aa?.location?.city).toBe('Dallas');
       expect(aa?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(aa?.description).not.toContain('&lt;');
@@ -108,7 +108,7 @@ describe('AciLearningService — Spec 176 / T04', () => {
       expect(dr).toBeDefined();
       expect(dr?.title).toBe('Director of Revenue Operations');
       expect(dr?.companyName).toBe('ACI Learning');
-      expect(dr?.location?.city).toBe('Remote, US');
+      expect(dr?.location?.city).toBeUndefined();
       expect(dr?.isRemote).toBe(true);
       expect(dr?.department).toBe('Rev Ops');
       expect(dr?.jobUrl).toBe(
@@ -119,7 +119,7 @@ describe('AciLearningService — Spec 176 / T04', () => {
       expect(ti).toBeDefined();
       expect(ti?.title).toBe('Technical Instructor I - San Antonio (Part Time)');
       expect(ti?.companyName).toBe('ACI Learning');
-      expect(ti?.location?.city).toBe('San Antonio, TX');
+      expect(ti?.location?.city).toBe('San Antonio');
       expect(ti?.isRemote).toBe(false);
       expect(ti?.department).toBe('Tech Academy Instructors');
 

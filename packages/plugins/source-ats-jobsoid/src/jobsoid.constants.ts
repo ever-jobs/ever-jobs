@@ -76,3 +76,17 @@ export const JOBSOID_HEADERS: Record<string, string> = {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Accept-Language': 'en-US,en;q=0.9',
 };
+
+/**
+ * Env toggle for Jobsoid location heuristics (Spec 1689), layered on top of
+ * the shared parser: a free-text "City - State" label ("Pune - Maharashtra",
+ * "Milan - Milan") keeps its region as the state — the pre-5125 behaviour; the
+ * shared parser keeps only the city and drops the region. `false` / `0` /
+ * `off` / `no` → shared-parser output only; unset or anything else → on.
+ */
+export const JOBSOID_LOCATION_HEURISTICS_ENV = 'JOBSOID_LOCATION_HEURISTICS';
+
+export function jobsoidLocationHeuristicsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = (env[JOBSOID_LOCATION_HEURISTICS_ENV] ?? '').trim().toLowerCase();
+  return !(v === 'false' || v === '0' || v === 'off' || v === 'no');
+}

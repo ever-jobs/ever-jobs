@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employment Opportunities at Thermwood</title>
+    <style>
+        /* Smooth Scrolling for Anchor Links */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Basic Body Styling */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            margin: 0;
+            padding: 0;
+            background-color: rgb(244, 246, 248);
+            color: #333;
+        }
+
+        /* Page Container */
+        .page-container {
+            max-width: 960px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Main Header Image */
+        .header-image {
+            width: 100%;
+            height: auto;
+            max-height: 400px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            background-color: #e0e0e0;
+        }
+        
+        /* Introductory Header Section */
+        .intro-header {
+            text-align: center;
+            margin-bottom: 50px;
+            padding: 40px 20px;
+            background-color: rgb(210, 210, 210); 
+            border-radius: 8px;
+            border: 1px solid rgb(225, 225, 225);
+            border-top: 4px solid rgb(181, 0, 0); 
+        }
+
+        .intro-header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: bold;
+            color: rgb(181, 0, 0); 
+        }
+
+        /* Accent Divider Under Headline */
+        .intro-divider {
+            width: 80px;
+            height: 4px;
+            background-color: rgb(222, 0, 0); 
+            margin: 20px auto;
+            border-radius: 2px;
+        }
+
+        .intro-header p {
+            margin: 0;
+            font-size: 1.15em;
+            color: rgb(82, 82, 82); 
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+
+        /* Standard Section Styling */
+        .section {
+            margin-bottom: 50px;
+        }
+
+        .section-title {
+            font-size: 2em;
+            font-weight: 600;
+            color: rgb(181, 0, 0); 
+            margin-bottom: 25px;
+            border-bottom: 3px solid rgb(225, 225, 225); 
+            padding-bottom: 10px;
+        }
+
+        /* Highlighted Openings Section Container */
+        .openings-section {
+            background-color: rgb(118, 118, 118); /* Slightly lighter gray */
+            padding: 20px 35px 40px 35px;
+            border-radius: 12px;
+            border: 1px solid rgb(225, 225, 225); 
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.015);
+        }
+
+        .openings-section .section-title {
+            margin-bottom: 10px;
+            border-bottom: 3px solid rgb(175, 175, 175); 
+            color: rgb(225, 225, 225);
+        }
+
+        .openings-subtitle {
+            color: rgb(225, 225, 225); 
+            font-size: 1.1em;
+            margin-top: 0;
+            margin-bottom: 30px;
+        }
+
+        /* Job Cards Container */
+        .job-listings {
+            display: grid;
+            gap: 20px;
+            grid-template-columns: 1fr;
+        }
+
+        /* Individual Job Card Styling */
+        .job-card {
+            border: 1px solid rgb(175, 175, 175); 
+            border-left: 5px solid rgb(181, 0, 0); 
+            border-radius: 8px;
+            padding: 25px;
+            background-color: #f9f9f9; 
+            box-shadow: 0 4px 8px rgba(0,0,0,0.04);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .job-card:hover {
+            box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+            transform: translateY(-3px);
+        }
+        
+        .job-card.active {
+            border-color: rgb(181, 0, 0); 
+            border-left-width: 8px;
+        }
+
+        .job-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .job-card-title {
+            font-size: 1.5em;
+            font-weight: 600;
+            margin: 0;
+            color: rgb(82, 82, 82); 
+        }
+
+        .job-card-meta {
+            font-size: 0.9em;
+            margin-top: 5px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            white-space: nowrap;
+        }
+        
+        .job-card-date {
+            font-weight: 500;
+            color: rgb(82, 82, 82); 
+            background-color: rgb(225, 225, 225); 
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+        
+        .job-card-location {
+            font-weight: 500;
+            color: rgb(82, 82, 82); 
+        }
+        
+        .job-card-expand-icon {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: rgb(82, 82, 82); 
+            margin-left: auto;
+            padding-left: 20px;
+            transition: transform 0.3s ease;
+        }
+        
+        .job-card.active .job-card-expand-icon {
+            transform: rotate(45deg);
+        }
+
+        /* Collapsible Details Section */
+        .job-card-details {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out, margin-top 0.4s ease-out;
+            line-height: 1.7;
+            color: #444;
+        }
+        
+        .job-card.active .job-card-details {
+            max-height: 1500px;
+            margin-top: 25px;
+            transition: max-height 0.6s ease-in, margin-top 0.6s ease-in;
+        }
+
+        .job-card-details h4 {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #333;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .job-card-details ul {
+            padding-left: 20px;
+            margin: 0;
+        }
+        
+        .job-card-details li {
+            margin-bottom: 8px;
+        }
+
+        /* Job Card With Flyer: text left, flyer right (stacks on mobile) */
+        .job-card.active .job-card-details.has-flyer {
+            max-height: 3000px;
+        }
+
+        .job-with-flyer {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 30px;
+            align-items: start;
+        }
+
+        .job-flyer a {
+            display: block;
+        }
+
+        .job-flyer img {
+            width: 100%;
+            height: auto;
+            border: 1px solid rgb(175, 175, 175);
+            border-radius: 6px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+        }
+
+        .job-flyer-caption {
+            font-size: 0.85em;
+            color: rgb(82, 82, 82);
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        .job-contact-note {
+            margin-top: 20px;
+            font-size: 0.95em;
+        }
+
+        .job-contact-note a {
+            color: rgb(181, 0, 0);
+            font-weight: 600;
+        }
+
+        /* Apply Button Styling */
+        .apply-btn-container {
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+
+        .apply-btn {
+            display: inline-block;
+            background-color: rgb(181, 0, 0); 
+            color: #ffffff;
+            padding: 12px 24px;
+            text-decoration: none;
+            font-weight: bold;
+            border-radius: 6px;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .apply-btn:hover {
+            background-color: rgb(120, 0, 0); 
+            transform: translateY(-2px);
+        }
+
+        /* Benefits Section Styling */
+        .benefits-section .section-title {
+            border-bottom: 3px solid rgb(225, 225, 225); 
+        }
+
+        .benefits-intro {
+            font-size: 1.15em;
+            color: rgb(82, 82, 82); 
+            margin-bottom: 25px;
+        }
+
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        
+        .benefit-item { 
+            background-color: #f9f9f9; 
+            padding: 25px 20px; 
+            border-radius: 8px; 
+            border-top: 4px solid rgb(181, 0, 0); 
+            box-shadow: 0 3px 10px rgba(0,0,0,0.06);
+            transition: transform 0.2s ease;
+        }
+        
+        .benefit-item:hover {
+            transform: translateY(-3px);
+        }
+
+        .benefit-icon {
+            width: 44px;
+            height: 44px;
+            background-color: #e3f2fd; 
+            color: #1976d2; 
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        
+        /* Updated to target imgs as well as any future svgs */
+        .benefit-icon svg,
+        .benefit-icon img {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        .benefit-item-title { 
+            font-size: 1.15em;
+            font-weight: 600; 
+            margin-bottom: 12px; 
+            color: rgb(82, 82, 82); 
+        }
+
+        .benefit-list {
+            padding-left: 20px;
+            margin: 0;
+            color: rgb(82, 82, 82); 
+            line-height: 1.6;
+            font-size: 0.95em;
+        }
+
+        .benefit-list li {
+            margin-bottom: 6px;
+        }
+
+        /* Form Section */
+        .form-section { 
+            text-align: center; 
+            background-color: rgb(225, 225, 225); 
+            padding: 20px 30px 40px 30px;
+            border-radius: 8px; 
+            margin-top: 40px; 
+            border: 1px solid rgb(225, 225, 225); 
+        }
+        
+        @media (max-width: 768px) {
+            .openings-section { padding: 20px 15px; } 
+            .job-card-header { flex-direction: column; align-items: flex-start; }
+            .job-card-expand-icon { margin-left: 0; margin-top: 10px; align-self: flex-end; }
+            .job-with-flyer { grid-template-columns: 1fr; }
+            .job-flyer { max-width: 400px; margin: 0 auto; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="page-container">
+
+        <!-- 1. HEADER IMAGE -->
+        <img src="https://www.thermwood.com/images/2017_site/site_images/thermwood-employment-cover-image-2026.jpg" alt="Join the Thermwood Team" class="header-image">
+
+        <!-- 2. INTRODUCTORY HEADER SECTION -->
+        <div class="intro-header">
+            <h1>FORGE YOUR FUTURE WITH US</h1>
+            <div class="intro-divider"></div>
+            <p>Explore our open positions and take the next step with Thermwood.</p>
+        </div>
+
+        <!-- 3. CURRENT JOB LISTINGS SECTION -->
+        <div class="section openings-section">
+            <h2 class="section-title">CAREER OPPORTUNITIES</h2>
+            <p class="openings-subtitle">Join a team built on innovation, skill, and purpose. Click on a position below to view details and apply.</p>
+            
+            <div class="job-listings">
+
+                <!-- JOB CARD 1: Paint Prep (EXPANDABLE) -->
+               <!-- <div class="job-card">
+                    <div class="job-card-header">
+                        <div>
+                            <h3 class="job-card-title">Paint/Prep</h3>
+                            <div class="job-card-meta">
+                                <span class="job-card-date">Posted: 03-18-2026</span>
+                                <span class="job-card-location">Dale, IN &bullet; Full-time</span>
+                            </div>
+                        </div>
+                        <div class="job-card-expand-icon">+</div>
+                    </div>
+                    <div class="job-card-details">
+                        <h4>Responsibilities:</h4>
+                        <ul>
+                            <li>Prepare surfaces for painting by cleaning, sanding, and masking as needed.</li>
+                            <li>Apply paint and finishes to various components safely and efficiently.</li>
+                            <li>Read and interpret blueprints and technical drawings to ensure accurate application.</li>
+                            <li>Utilize hand tools and power tools effectively while adhering to safety protocols.</li>
+							<li>Collaborate with team members to meet project deadlines and maintain high standards of quality.</li>
+                        </ul>
+                        <h4>Requirements:</h4>
+                        <ul>
+                            <li>Ability to work safely and efficiently with hand and power tools.</li>
+                            <li>Proficiency in reading blueprints.</li>
+                            <li>Excellent problem-solving and communication skills.</li>
+                            <li>Previous experience in industrial or automotive painting is preferred; however, we welcome candidates who are eager to learn and grow in this field.</li>
+                            
+                        </ul>
+                        <!-- Apply Button placed inside the details -->
+                       <!-- <div class="apply-btn-container">
+                            <a href="#application-form" class="apply-btn">Apply For This Position</a>
+                        </div>
+                    </div>
+                </div>-->
+
+                <!-- JOB CARD 2: Machine Alignment Technician (EXPANDABLE) -->
+              <!--  <div class="job-card">
+                    <div class="job-card-header">
+                         <div>
+                            <h3 class="job-card-title">Machine Alignment Technician</h3>
+                            <div class="job-card-meta">
+                                <span class="job-card-date">Posted: 04-17-2026</span>
+                                <span class="job-card-location">Dale, IN &bullet; Full-time</span>
+                            </div>
+                        </div>
+                        <div class="job-card-expand-icon">+</div>
+                    </div>-->
+                 <!--  <div class="job-card-details">
+                        <h4>Responsibilities:</h4>
+                        <ul>
+                            <li>Machine Assembly</li>
+                            <li>Final Machine Alignments and Test</li>
+                            <li>Perform basic machine testing</li>
+                            <li>Utilize precision measuring instruments.</li>
+                            <li>Master the use of an alignment laser</li>
+                        </ul>
+                        <h4>Requirements:</h4>
+                        <ul>
+                            <li>Strong math skills</li>
+                            <li>Knowledge of precision measuring instruments</li>
+                            <li>Basic knowledge of machine operations</li>
+                            <li>Safely use hand and power tools</li>
+                            <li>Willingness to learn</li>
+                            <li>Great attendance</li>
+                            <li>Can-do approach to work</li>
+                            <li>Previous experience preferred; however, we welcome candidates who are eager to learn and grow with Thermwood</li>
+                        </ul>
+                        <!-- Apply Button placed inside the details -->
+                     <!--   <div class="apply-btn-container">
+                            <a href="#application-form" class="apply-btn">Apply For This Position</a>
+                        </div>
+                    </div>
+                </div>-->
+                
+                <!-- JOB CARD: Manufacturing Technician (EXPANDABLE, WITH FLYER) -->
+                <div class="job-card">
+                    <div class="job-card-header">
+                        <div>
+                            <h3 class="job-card-title">Manufacturing Technician</h3>
+                            <div class="job-card-meta">
+                                <span class="job-card-date">Posted: 09-23-2026</span>
+                                <span class="job-card-location">Dale, IN &bullet; Full-time</span>
+                            </div>
+                        </div>
+                        <div class="job-card-expand-icon">+</div>
+                    </div>
+                    <div class="job-card-details has-flyer">
+                        <div class="job-with-flyer">
+                            <div class="job-text">
+                                <p>Join the Production team at Thermwood.  We're looking for dependable, motivated individuals to join our production floor team.  If you enjoy hands-on work, problem solving, and being part of a team, we want to hear from you!</p>
+                                <h4>Schedule:</h4>
+                                <ul>
+                                    <li>Day Shift / Full Time (Monday&ndash;Friday)</li>
+                                </ul>
+                                <h4>Qualifications:</h4>
+                                <ul>
+                                    <li>Blueprint reading</li>
+                                    <li>Mechanical knowledge</li>
+                                    <li>Basic computer knowledge</li>
+                                    <li>Caliper and micrometer experience</li>
+                                    <li>Hand tool experience</li>
+                                    <li>Drill and tapping experience</li>
+                                </ul>
+                                <h4>What We Offer:</h4>
+                                <ul>
+                                    <li>Competitive pay</li>
+                                    <li>Best benefits package around</li>
+                                    <li>Supportive team environment</li>
+                                    <li>Opportunity for growth</li>
+                                </ul>
+                                <p class="job-contact-note">Prefer to send a resume?  Email Mrs. Susan Miller at <a href="mailto:semiller@thermwood.com">semiller@thermwood.com</a>.</p>
+                                <!-- Apply Button placed inside the details -->
+                                <div class="apply-btn-container">
+                                    <a href="#application-form" class="apply-btn">Apply For This Position</a>
+                                </div>
+                            </div>
+                            <div class="job-flyer">
+                                <a href="https://www.thermwood.com/images/thermwood-production-employment-2026.png" target="_blank" rel="noopener">
+                                    <img src="https://www.thermwood.com/images/thermwood-production-employment-2026.png" alt="Thermwood is hiring a Manufacturing Technician. Day shift, full time, Monday through Friday, in Dale, Indiana." loading="lazy">
+                                </a>
+                                <div class="job-flyer-caption">Click to view full-size flyer</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- JOB CARD 3: General Production (EXPANDABLE) -->
+                <div class="job-card">
+                    <div class="job-card-header">
+                         <div>
+                            <h3 class="job-card-title">General Application - Production</h3>
+                            <div class="job-card-meta">
+                                <span class="job-card-date">Ongoing</span>
+                                <span class="job-card-location">Dale, IN &bullet; Full-time</span>
+                            </div>
+                        </div>
+                        <div class="job-card-expand-icon">+</div>
+                    </div>
+                    <div class="job-card-details">
+                         <p>Don't see the perfect role? Submit your information and we will contact you if something becomes available.</p>
+                         <!-- Apply Button placed inside the details -->
+                         <div class="apply-btn-container">
+                            <a href="#application-form" class="apply-btn">Apply For This Position</a>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 4. BENEFITS SECTION -->
+        <div class="section benefits-section">
+            <h2 class="section-title">THE THERMWOOD DIFFERENCE</h2>
+            <p class="benefits-intro">As part of the Thermwood team, you'll have access to the following benefits:</p>
+            
+            <div class="benefits-grid">
+                
+                <!-- Compensation -->
+                <div class="benefit-item">
+                    <div class="benefit-icon">
+                        <img src="https://www.thermwood.com/images/2017_site/site_images/employment-icons/comp.svg" alt="Total Compensation Opportunity">
+                    </div>
+                    <div class="benefit-item-title">Total Compensation Opportunity</div>
+                    <ul class="benefit-list">
+                        <li>Competitive Base Salary</li>
+                        <li>Bonus Program</li>
+                    </ul>
+                </div>
+                
+                <!-- Health & Wellness -->
+                <div class="benefit-item">
+                    <div class="benefit-icon">
+                        <img src="images/2017_site/site_images/employment-icons/health.svg" alt="Health and Wellness Benefits">
+                    </div>
+                    <div class="benefit-item-title">Health and Wellness Benefits</div>
+                    <ul class="benefit-list">
+                        <li>Medical - Low Premiums & Deductible</li>
+                        <li>Prescription Drug Coverage</li>
+                        <li>No Cost Mail Order Prescriptions</li>
+                        <li>Flexible Spending Accounts</li>
+                        <li>Free Diabetic Supplies</li>
+                        <li>Dental & Vision</li>
+                        <li>Telehealth</li>
+                        <li>Short-Term Disability</li>
+                        <li>Life Insurance</li>
+                        <li>Optional Supplemental Insurance</li>
+                    </ul>
+                </div>
+
+                <!-- Career Growth -->
+                <div class="benefit-item">
+                    <div class="benefit-icon">
+                        <img src="https://www.thermwood.com/images/2017_site/site_images/employment-icons/build.svg" alt="Build Your Career">
+                    </div>
+                    <div class="benefit-item-title">Build Your Career</div>
+                    <ul class="benefit-list">
+                        <li>Tuition Refund Plan</li>
+                        <li>Dependent Post Secondary Scholarships</li>
+                        <li>Succession Planning</li>
+                    </ul>
+                </div>
+
+                <!-- Time Off -->
+                <div class="benefit-item">
+                    <div class="benefit-icon">
+                        <img src="https://www.thermwood.com/images/2017_site/site_images/employment-icons/vaca.svg" alt="Your Time Off">
+                    </div>
+                    <div class="benefit-item-title">Your Time Off</div>
+                    <ul class="benefit-list">
+                        <li>Paid Holidays - After 7 days of Employment</li>
+                        <li>Paid Vacations - After 60 days of Employment</li>
+                        <li>Unpaid Time Off - Upon Hire</li>
+                    </ul>
+                </div>
+
+                <!-- Retirement -->
+                <div class="benefit-item">
+                    <div class="benefit-icon">
+                        <img src="https://www.thermwood.com/images/2017_site/site_images/employment-icons/build.svg" alt="Retirement and Financial Benefits">
+                    </div>
+                    <div class="benefit-item-title">Retirement and Financial Benefits</div>
+                    <ul class="benefit-list">
+                        <li>401(k) Savings Plan with Company Match</li>
+                        <li>Rollover and Personal Loan Opportunities</li>
+                    </ul>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 5. APPLICATION FORM SECTION -->
+        <div id="application-form" class="section form-section">
+            <h2 class="section-title" style="text-align: center; border-bottom: none; margin-top: 0;">Submit Your Application</h2>
+            <p style="max-width: 600px; margin: -15px auto 30px auto;">Apply for an open position or submit your information and we will contact you if a suitable role becomes available.</p>
+            
+            <!-- FIX: Removed "defer" attribute from the HubSpot script tag below.
+                 "defer" was preventing the script from reliably initializing the form,
+                 causing submissions not to be tracked in HubSpot and notifications not to fire. -->
+            <script src="https://js.hsforms.net/forms/embed/41868.js"></script>
+            <div class="hs-form-frame" data-region="na1" data-form-id="9a2ca880-cb52-42fe-8579-41b1d40af992" data-portal-id="41868"></div>
+        </div>
+
+    </div>
+
+    <!-- JAVASCRIPT FOR EXPANDABLE CARDS & BUTTONS -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const jobCards = document.querySelectorAll('.job-card');
+            const applyButtons = document.querySelectorAll('.apply-btn, .job-flyer a, .job-contact-note a');
+
+            // Toggle the active class to open/close the job details
+            jobCards.forEach(function (card) {
+                card.addEventListener('click', function () {
+                    this.classList.toggle('active');
+                });
+            });
+
+            // Prevent the job card from closing when someone clicks the Apply button
+            applyButtons.forEach(function (button) {
+                button.addEventListener('click', function (event) {
+                    event.stopPropagation();
+                });
+            });
+        });
+    </script>
+
+</body>
+</html>

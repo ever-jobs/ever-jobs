@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, decodeHtmlEntities, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, decodeHtmlEntities, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 /**
  * DataCamp — operator of the dominant data-and-AI-skills online-
@@ -160,9 +160,8 @@ export class DatacampService implements IScraper {
         const id = `datacamp-${jobId}`;
 
         const locationStr = listing.location?.name ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const locationParsed = parseLocationList([locationStr]);
+        const location = locationStr ? locationParsed.location : null;
 
         if (input.location && locationStr) {
           if (!locationStr.toLowerCase().includes(input.location.toLowerCase())) continue;
@@ -189,11 +188,12 @@ export class DatacampService implements IScraper {
               listing.absolute_url ??
               `https://job-boards.greenhouse.io/datacamp/jobs/${listing.id}`,
             location,
+            ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
             description: listing.content
               ? stripHtmlTags(decodeHtmlEntities(listing.content))
               : null,
             datePosted: listing.updated_at ?? null,
-            isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+            isRemote: (locationStr?.toLowerCase().includes('remote') ?? false) || locationParsed.remoteMentioned,
             // D-11 applied (leading-pad form): trimmed wire
             // department; the wire pad bytes (1 of 41 listings
             // have a leading-space pad — `' IT'`) are stripped

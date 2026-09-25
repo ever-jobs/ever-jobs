@@ -87,7 +87,7 @@ describe('FigmaService — Spec 032 / T04', () => {
       expect(tooling?.jobUrl).toBe(
         'https://boards.greenhouse.io/figma/jobs/9101234',
       );
-      expect(tooling?.location?.city).toBe('San Francisco, CA');
+      expect(tooling?.location?.city).toBe('San Francisco');
       expect(tooling?.department).toBe('Engineering');
       expect(tooling?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

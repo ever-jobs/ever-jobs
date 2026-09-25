@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -524,19 +525,7 @@ export class DigitalRecruitersService implements IScraper {
 
     const raw = (detail?.formatted_address ?? item.location ?? detail?.location)?.trim();
     if (!raw) return null;
-    const parts = raw
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    return new LocationDto({
-      city: parts[0] || null,
-      state: null,
-      country: parts[parts.length - 1] || null,
-    });
+    return parseLocationText(raw).location;
   }
 
   /** Department from the listing `job` label or the detail's first job-function entry. */

@@ -113,7 +113,7 @@ describe('CircleCIService — Spec 051 / T04', () => {
       expect(ai?.jobUrl?.startsWith('https://')).toBe(false);
       // D-04 regression guard: trailing slash before query is preserved.
       expect(ai?.jobUrl).toContain('/8481915002/?gh_jid=');
-      expect(ai?.location?.city).toBe('San Francisco, CA');
+      expect(ai?.location?.city).toBe('San Francisco');
       expect(ai?.department).toBe('Engineering');
       expect(ai?.isRemote).toBe(false);
       // D-08 regression guard: the description-cleanup pipeline must

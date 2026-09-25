@@ -107,6 +107,7 @@ export class BreezyHRService implements IScraper {
     const parsedLocations = parseLocationList(this.locationLabels(listing));
     const location =
       parsedLocations.location ?? this.fallbackLocation(listing.location);
+    const locations = parsedLocations.locations;
 
     const isRemote =
       (listing.location?.is_remote ?? false) || parsedLocations.remoteMentioned;
@@ -143,6 +144,7 @@ export class BreezyHRService implements IScraper {
         listing.url ??
         `https://${company}.breezy.hr/p/${listing.friendly_id ?? jobId}`,
       location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       ...(compensation ? { compensation, salarySource } : {}),
       datePosted: listing.published_date ?? listing.creation_date ?? null,

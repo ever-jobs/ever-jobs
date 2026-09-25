@@ -99,7 +99,7 @@ describe('AcurussolutionsService — Spec 186 / T04', () => {
       expect(hr?.jobUrl).toContain('job-boards.greenhouse.io/acurussolutions/jobs/');
       // D-11 clean dept pass-through.
       expect(hr?.department).toBe('People');
-      expect(hr?.location?.city).toBe('Bengaluru, Karnataka, India');
+      expect(hr?.location?.city).toBe('Bengaluru');
       expect(hr?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(hr?.description).not.toContain('&lt;');

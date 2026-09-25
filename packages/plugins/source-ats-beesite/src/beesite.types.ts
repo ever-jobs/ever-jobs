@@ -126,6 +126,9 @@ export interface BeeSiteJob {
   /** Raw single-line location string, used for remote detection. */
   locationText?: string | null;
 
+  /** Per-site location triples (one entry per usable `PositionLocation` record). */
+  locationEntries?: { city: string | null; state: string | null; country: string | null }[] | null;
+
   /** HTML job-ad body (the richest description available), when present. */
   descriptionHtml?: string | null;
 

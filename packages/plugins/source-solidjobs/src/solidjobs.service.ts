@@ -20,6 +20,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationList,
 } from '@ever-jobs/common';
 import {
   SOLIDJOBS_API_URL,
@@ -170,9 +171,8 @@ export class SolidJobsService implements IScraper {
     const compensation = this.parseCompensation(offer);
     const jobType = this.parseJobType(offer.contractTime);
 
-    const location = new LocationDto({
-      city: offer.locations?.[0] ?? null,
-    });
+    const parsedLocations = parseLocationList(offer.locations ?? []);
+    const location = parsedLocations.location;
 
     return new JobPostDto({
       id: `solidjobs-${offer.jobOfferKey}`,
@@ -180,6 +180,9 @@ export class SolidJobsService implements IScraper {
       companyName: offer.company ?? null,
       jobUrl: offer.url,
       location,
+      ...(parsedLocations.locations.length > 0
+        ? { locations: parsedLocations.locations }
+        : {}),
       description,
       compensation: compensation ?? undefined,
       jobType: jobType ?? undefined,

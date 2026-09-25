@@ -123,3 +123,17 @@ export const WORKSTREAM_HEADERS: Record<string, string> = {
  */
 export const WORKSTREAM_JOB_HREF_REGEX =
   /\/j\/[0-9a-f_-]+\/[^/]+\/([a-z0-9-]+)\/([a-z0-9-]+)-([0-9a-f]{8})/;
+
+/**
+ * Env toggle for Workstream's country inference (Spec 1689), layered on top of
+ * the shared parser: a US address shape ("San Jose, CA 95130") fills a missing
+ * country with `US` — the stamp Spec 5125 removed. `false` / `0` / `off` /
+ * `no` → shared-parser output only (literal-only country); unset or anything
+ * else → inference on.
+ */
+export const WORKSTREAM_LOCATION_HEURISTICS_ENV = 'WORKSTREAM_LOCATION_HEURISTICS';
+
+export function workstreamLocationHeuristicsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = (env[WORKSTREAM_LOCATION_HEURISTICS_ENV] ?? '').trim().toLowerCase();
+  return !(v === 'false' || v === '0' || v === 'off' || v === 'no');
+}

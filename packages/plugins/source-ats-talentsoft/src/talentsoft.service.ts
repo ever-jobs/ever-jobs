@@ -11,13 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationText, toDateOnly } from '@ever-jobs/common';
 import {
   TALENTSOFT_CAREERS_HOST_TEMPLATE,
   TALENTSOFT_ROOT_DOMAIN,
@@ -211,12 +205,14 @@ export class TalentsoftService implements IScraper {
     const rawHtml = offer.description ?? null;
     const description = this.formatDescription(rawHtml, format);
 
+    const location = this.extractLocation(offer);
     return new JobPostDto({
       id: `talentsoft-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(offer),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(offer.pubDate ?? offer.pubdate),
       isRemote: this.detectRemote(offer),
@@ -345,7 +341,7 @@ export class TalentsoftService implements IScraper {
       if (v.includes('/')) continue;
       // Heuristic: a short, capitalised token is more likely a place than a role.
       if (v.length <= 40 && /^[A-ZÀ-Ÿ]/.test(v) && !/\s(h\/f|f\/h)\b/i.test(v)) {
-        return new LocationDto({ city: v });
+        return parseLocationText(v).location;
       }
     }
     return null;

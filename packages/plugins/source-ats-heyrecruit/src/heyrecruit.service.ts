@@ -263,12 +263,14 @@ export class HeyrecruitService implements IScraper {
       }
     }
 
+    const location = this.extractLocation(locationJob);
     return new JobPostDto({
       id: `heyrecruit-${atsId}`,
       title,
       companyName: fallbackCompanyName,
       jobUrl,
-      location: this.extractLocation(locationJob),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(this.resolveDate(job, locationJob)),
       isRemote: this.detectRemote(str, locationJob),

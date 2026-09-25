@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, decodeHtmlEntities, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, decodeHtmlEntities, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 /**
  * Ursa Major — Ursa Major designs and manufactures advanced rocket engines and propulsion systems for space launch, hypersonics, and missile/defense applications..
@@ -94,9 +94,8 @@ export class UrsaMajorService implements IScraper {
         const id = `ursamajor-${jobId}`;
 
         const locationStr = listing.location?.name ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const locationParsed = parseLocationList([locationStr]);
+        const location = locationStr ? locationParsed.location : null;
 
         if (input.location && locationStr) {
           if (!locationStr.toLowerCase().includes(input.location.toLowerCase())) continue;
@@ -118,11 +117,12 @@ export class UrsaMajorService implements IScraper {
               listing.absolute_url ??
               `https://job-boards.greenhouse.io/ursamajor/jobs/${listing.id}`,
             location,
+            ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
             description: listing.content
               ? stripHtmlTags(decodeHtmlEntities(listing.content))
               : null,
             datePosted: listing.updated_at ?? null,
-            isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+            isRemote: (locationStr?.toLowerCase().includes('remote') ?? false) || locationParsed.remoteMentioned,
             department,
           }),
         );

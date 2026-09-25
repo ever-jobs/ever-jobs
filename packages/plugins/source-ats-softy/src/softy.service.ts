@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
 } from '@ever-jobs/common';
 import {
   SOFTY_ROOT_DOMAIN,
@@ -352,13 +353,15 @@ export class SoftyService implements IScraper {
     // Prefer the detail-page body as the description; fall back to the location line.
     const source = job.description ?? job.locationText ?? null;
     const description = this.formatDescription(source, format);
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `softy-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -486,15 +489,12 @@ export class SoftyService implements IScraper {
     if (!text || this.isRemoteToken(text)) {
       return { city: null, state: null, country: null };
     }
-    const parts = text
-      .split(',')
-      .map((p) => this.cleanText(p))
-      .filter((p): p is string => !!p);
-    if (parts.length === 0) return { city: null, state: null, country: null };
-    if (parts.length === 1) return { city: parts[0], state: null, country: null };
-    const country = parts[parts.length - 1];
-    const city = parts.slice(0, parts.length - 1).join(', ');
-    return { city: city || null, state: null, country: country || null };
+    const parsed = parseLocationText(text).location;
+    return {
+      city: parsed?.city ?? null,
+      state: parsed?.state ?? null,
+      country: parsed?.country ?? null,
+    };
   }
 
   /** Detect remote / télétravail roles from the title, location, or contract text. */

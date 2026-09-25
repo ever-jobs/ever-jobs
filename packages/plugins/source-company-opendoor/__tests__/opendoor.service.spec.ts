@@ -101,7 +101,7 @@ describe('OpendoorService — Spec 132 / T04', () => {
       expect(ces?.jobUrl).toContain('?gh_jid=4644592006');
       expect(ces?.jobUrl).not.toContain('greenhouse.io');
       expect(ces?.department).toBe('Sales & Support');
-      expect(ces?.location?.city).toBe('Phoenix, AZ');
+      expect(ces?.location?.city).toBe('Phoenix');
       expect(ces?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ces?.description).not.toContain('&lt;');
@@ -114,7 +114,7 @@ describe('OpendoorService — Spec 132 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, Marketplace');
       expect(sse?.companyName).toBe('Opendoor');
-      expect(sse?.location?.city).toBe('San Francisco, CA');
+      expect(sse?.location?.city).toBe('San Francisco');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('Engineering');
       expect(sse?.jobUrl).toBe(

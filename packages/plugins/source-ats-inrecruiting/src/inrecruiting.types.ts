@@ -60,6 +60,15 @@ export interface InRecruitingJsonLd {
   industry?: string | null;
 }
 
+/** A per-site location entry derived from one JSON-LD `jobLocation` Place. */
+export interface LocationEntry {
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  streetAddress?: string | null;
+  postalCode?: string | null;
+}
+
 /** A schema.org `Place` with a `PostalAddress`, as embedded under `jobLocation`. */
 export interface InRecruitingJsonLdPlace {
   '@type'?: string;
@@ -93,6 +102,9 @@ export interface InRecruitingJob {
   city?: string | null;
   state?: string | null;
   country?: string | null;
+
+  /** One entry per JSON-LD `jobLocation` Place, when present. */
+  locationEntries?: LocationEntry[] | null;
 
   /** Raw single-line location string (used for the remote signal). */
   locationText?: string | null;

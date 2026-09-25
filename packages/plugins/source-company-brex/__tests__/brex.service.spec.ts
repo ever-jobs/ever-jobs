@@ -99,7 +99,7 @@ describe('BrexService — Spec 047 / T04', () => {
       expect(sales?.jobUrl).toBe(
         'https://www.brex.com/careers/8379353002?gh_jid=8379353002',
       );
-      expect(sales?.location?.city).toBe('Vancouver, British Columbia, Canada');
+      expect(sales?.location?.city).toBe('Vancouver');
       expect(sales?.department).toBe('Sales');
       expect(sales?.isRemote).toBe(false);
       // D-08 regression guard: the description-cleanup pipeline must
@@ -115,7 +115,7 @@ describe('BrexService — Spec 047 / T04', () => {
       const eng = dto.jobs.find((j) => j.id === 'brex-8379350002');
       expect(eng?.isRemote).toBe(true);
       expect(eng?.department).toBe('Engineering');
-      expect(eng?.location?.city).toBe('Remote, US');
+      expect(eng?.location?.city).toBeUndefined();
       // Named entity (&rsquo;) decoded to a real right-single-quote.
       expect(eng?.description).toContain('Brex’s');
 

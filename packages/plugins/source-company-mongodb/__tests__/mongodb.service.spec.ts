@@ -87,7 +87,7 @@ describe('MongoDbService — Spec 037 / T04', () => {
       expect(atlas?.jobUrl).toBe(
         'https://boards.greenhouse.io/mongodb/jobs/9601234',
       );
-      expect(atlas?.location?.city).toBe('New York, NY');
+      expect(atlas?.location?.city).toBe('New York');
       expect(atlas?.department).toBe('Engineering');
       expect(atlas?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

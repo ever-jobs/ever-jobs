@@ -25,6 +25,7 @@ import {
   createHttpClient,
   randomSleep,
   extractSalary,
+  parseLocationList,
 } from '@ever-jobs/common';
 import { BrowserPool } from '@ever-jobs/common';
 import {
@@ -150,10 +151,14 @@ export class DiceService implements IScraper, OnModuleDestroy {
 
       // Build location
       const locationStr = job.formattedLocation ?? job.jobLocation?.displayName ?? null;
-      const location = locationStr ? new LocationDto({ city: locationStr }) : null;
+      const locationParsed = parseLocationList([locationStr]);
+      const location = locationStr ? locationParsed.location : null;
 
       // Check remote
-      const isRemote = job.isRemote ?? (locationStr?.toLowerCase().includes('remote') ?? false);
+      const isRemote =
+        job.isRemote ??
+        ((locationStr?.toLowerCase().includes('remote') ?? false) ||
+          locationParsed.remoteMentioned);
 
       // Build compensation
       let compensation = null;
@@ -182,6 +187,9 @@ export class DiceService implements IScraper, OnModuleDestroy {
         companyName: job.companyName ?? null,
         jobUrl,
         location,
+        ...(locationParsed.locations.length > 0
+          ? { locations: locationParsed.locations }
+          : {}),
         description: job.summary ?? null,
         compensation: compensation as any,
         datePosted: job.postedDate ?? job.modifiedDate ?? null,
@@ -324,6 +332,7 @@ export class DiceService implements IScraper, OnModuleDestroy {
 
         const company = card.find('[data-cy="search-result-company-name"], .card-company').text().trim() || null;
         const location = card.find('[data-cy="search-result-location"], .card-location').text().trim() || null;
+        const locationParsed = parseLocationList([location]);
         const salaryText = card.find('[data-cy="search-result-salary"], .card-salary').text().trim() || null;
         const dateText = card.find('[data-cy="card-posted-date"], .card-posted-date').text().trim() || null;
 
@@ -348,7 +357,10 @@ export class DiceService implements IScraper, OnModuleDestroy {
           title,
           companyName: company,
           jobUrl: href,
-          location: location ? new LocationDto({ city: location }) : null,
+          location: location ? locationParsed.location : null,
+          ...(locationParsed.locations.length > 0
+            ? { locations: locationParsed.locations }
+            : {}),
           compensation: compensation as any,
           datePosted: dateText,
           site: Site.DICE,

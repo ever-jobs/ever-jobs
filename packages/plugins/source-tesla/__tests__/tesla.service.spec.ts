@@ -250,7 +250,7 @@ describe('TeslaService (Spec 013 / T07 + T08 — pure-HTTP board + detail)', () 
       expect(first.atsId).toBe('200001');
       expect(first.atsType).toBe('tesla');
       expect(first.site).toBe(Site.TESLA);
-      expect(first.location?.city).toBe('Palo Alto, CA');
+      expect(first.location?.city).toBe('Palo Alto');
       expect(first.isRemote).toBe(false);
       expect(first.department).toBe('Software & IT');
       expect(first.jobUrl).toBe(
@@ -259,7 +259,7 @@ describe('TeslaService (Spec 013 / T07 + T08 — pure-HTTP board + detail)', () 
 
       // Remote-detection branch on listing 200002 (`Remote, United States`).
       const second = result.jobs[1];
-      expect(second.location?.city).toBe('Remote, United States');
+      expect(second.location?.city).toBeUndefined();
       expect(second.isRemote).toBe(true);
       expect(second.department).toBe('Software & IT');
 
@@ -414,7 +414,7 @@ describe('TeslaService (Spec 013 / T07 + T08 — pure-HTTP board + detail)', () 
       const noDeptRow = result.jobs.find((j) => j.id === 'tesla-200049');
       expect(noDeptRow).toBeDefined();
       expect(noDeptRow?.department).toBeNull();
-      expect(noDeptRow?.location?.city).toBe('Palo Alto, CA');
+      expect(noDeptRow?.location?.city).toBe('Palo Alto');
       expect(noDeptRow?.isRemote).toBe(false);
 
       // Listing 200050 has `l: null` ⇒ location === null AND isRemote === false.

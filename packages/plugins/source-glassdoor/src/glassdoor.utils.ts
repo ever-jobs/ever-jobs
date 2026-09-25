@@ -1,4 +1,5 @@
 import { CompensationDto, CompensationInterval, LocationDto, JobType, getJobTypeFromString } from '@ever-jobs/models';
+import { parseLocationText } from '@ever-jobs/common';
 
 /**
  * Parse compensation from Glassdoor payPeriodAdjustedPay data.
@@ -34,11 +35,7 @@ export function getCursorForPage(paginationCursors: { cursor: string; pageNumber
  */
 export function parseLocation(header: any): LocationDto {
   const locationName = header.locationName ?? '';
-  const parts = locationName.split(', ');
-  return new LocationDto({
-    city: parts[0] || null,
-    state: parts.length > 1 ? parts[parts.length - 1] : null,
-  });
+  return parseLocationText(locationName).location ?? new LocationDto({});
 }
 
 /**

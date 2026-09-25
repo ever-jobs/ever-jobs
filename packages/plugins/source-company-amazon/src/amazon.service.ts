@@ -6,9 +6,10 @@ import {
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
 import { createHttpClient } from '@ever-jobs/common';
-import { stripHtmlTags } from '@ever-jobs/common';
+import { normalizeUsState, parseLocationText, stripHtmlTags } from '@ever-jobs/common';
 import {
   AMAZON_API_URL, AMAZON_HEADERS, AMAZON_PAGE_SIZE, AMAZON_REQUEST_DELAY_MS,
+  amazonLocationHeuristicsEnabled,
 } from './amazon.constants';
 import { AmazonSearchResponse, AmazonSearchHit } from './amazon.types';
 
@@ -101,7 +102,7 @@ export class AmazonService implements IScraper {
     if (prefQuals) descParts.push(`\nPreferred Qualifications:\n${stripHtmlTags(prefQuals)}`);
 
     const locationStr = first(f.location);
-    const locationParts = locationStr?.split(',').map((s) => s.trim()) ?? [];
+    const location = locationStr ? this.parseLocation(locationStr) : null;
 
     return new JobPostDto({
       id: first(f.urlNextStep) ?? undefined,
@@ -109,14 +110,30 @@ export class AmazonService implements IScraper {
       title,
       companyName: 'Amazon',
       jobUrl: first(f.urlNextStep) ?? undefined,
-      location: new LocationDto({
-        city: locationParts[0] ?? null,
-        state: locationParts[1] ?? null,
-        country: locationParts[2] ?? 'US',
-      }),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description: descParts.join('\n') || null,
       datePosted: first(f.createdDate) ?? undefined,
     });
+  }
+
+  /**
+   * Parse an Amazon location label. With AMAZON_LOCATION_HEURISTICS on
+   * (default — Spec 1689 restores the pre-5125 `?? 'US'` default) a label
+   * whose state is a US state code and that names no country gets `US`.
+   */
+  private parseLocation(label: string): LocationDto | null {
+    const location = parseLocationText(label).location;
+    if (
+      location &&
+      !location.country &&
+      location.state &&
+      normalizeUsState(location.state) &&
+      amazonLocationHeuristicsEnabled()
+    ) {
+      location.country = 'US';
+    }
+    return location;
   }
 
   private delay(ms: number): Promise<void> {

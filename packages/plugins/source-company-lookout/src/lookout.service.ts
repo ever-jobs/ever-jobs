@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, decodeHtmlEntities, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, decodeHtmlEntities, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 /**
  * Lookout, Inc. — operator of the mobile-endpoint security
@@ -143,9 +143,8 @@ export class LookoutService implements IScraper {
         const id = `lookout-${jobId}`;
 
         const locationStr = listing.location?.name ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const locationParsed = parseLocationList([locationStr]);
+        const location = locationStr ? locationParsed.location : null;
 
         if (input.location && locationStr) {
           if (!locationStr.toLowerCase().includes(input.location.toLowerCase())) continue;
@@ -177,11 +176,12 @@ export class LookoutService implements IScraper {
               listing.absolute_url ??
               `https://job-boards.greenhouse.io/lookout/jobs/${listing.id}`,
             location,
+            ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
             description: listing.content
               ? stripHtmlTags(decodeHtmlEntities(listing.content))
               : null,
             datePosted: listing.updated_at ?? null,
-            isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+            isRemote: (locationStr?.toLowerCase().includes('remote') ?? false) || locationParsed.remoteMentioned,
             // D-11 omitted: 0/6 populated wire department names
             // padded in run-293 probe; pass through byte-for-byte.
             // Lookout's wire departments are bare role-domain

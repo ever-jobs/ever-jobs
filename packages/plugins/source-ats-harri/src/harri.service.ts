@@ -16,6 +16,9 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  findUsAddressSnippet,
+  normalizeUsState,
+  parseLocationText,
   randomSleep,
 } from '@ever-jobs/common';
 import {
@@ -26,6 +29,7 @@ import {
   HARRI_REQUEST_DELAY_MS,
   HARRI_DEFAULT_RESULTS,
   HARRI_HEADERS,
+  harriLocationHeuristicsEnabled,
 } from './harri.constants';
 import { HarriListJob, HarriDetailJob } from './harri.types';
 
@@ -330,6 +334,7 @@ export class HarriService implements IScraper {
       companyName: detail?.companyName ?? fallbackCompanyName,
       jobUrl: listJob.jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: null, // Not available in the public HTML surface.
       isRemote: detail?.isRemote ?? this.detectRemoteFromSlug(listJob.titleSlug),
@@ -488,22 +493,34 @@ export class HarriService implements IScraper {
     const usAddrRe = /([A-Za-z][A-Za-z\s]+),\s+([A-Z]{2})\s+\d{5}/;
     const usMatch = usAddrRe.exec(html);
     if (usMatch) {
-      return {
-        city: usMatch[1].trim(),
-        state: usMatch[2].trim(),
-        country: 'US',
-        raw: usMatch[0],
-      };
+      const parsed = parseLocationText(usMatch[0]).location;
+      if (parsed) {
+        return {
+          city: parsed.city ?? null,
+          state: parsed.state ?? null,
+          country: this.inferCountry(parsed.state ?? null, parsed.country ?? null, 'US'),
+          raw: usMatch[0],
+        };
+      }
     }
 
     // UK postcode pattern fallback (Harri is heavily used in the UK hospitality sector).
     const ukAddrRe = /([A-Za-z][A-Za-z\s,.-]+),\s+([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})/i;
     const ukMatch = ukAddrRe.exec(html);
     if (ukMatch) {
+      const parsed = parseLocationText(ukMatch[0]).location;
+      if (parsed) {
+        return {
+          city: parsed.city ?? null,
+          state: parsed.state ?? null,
+          country: this.inferCountry(parsed.state ?? null, parsed.country ?? null, 'GB'),
+          raw: ukMatch[0],
+        };
+      }
       return {
         city: ukMatch[1].replace(/,\s*$/, '').trim(),
         state: null,
-        country: 'GB',
+        country: this.inferCountry(null, null, 'GB'),
         raw: ukMatch[0],
       };
     }
@@ -518,21 +535,33 @@ export class HarriService implements IScraper {
   private parseAddressString(
     raw: string,
   ): { city: string | null; state: string | null; country: string | null } {
-    // US: "San Jose, CA 95130" or "1030 El Paseo, San Jose, CA 95130".
-    const usRe = /([A-Za-z][A-Za-z\s]+),\s+([A-Z]{2})(?:\s+\d{5})?/;
-    const usMatch = usRe.exec(raw);
-    if (usMatch) {
-      return { city: usMatch[1].trim(), state: usMatch[2].trim(), country: 'US' };
-    }
-    // Generic comma-split.
-    const parts = raw
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length >= 2) {
-      return { city: parts[0], state: parts[1], country: null };
-    }
-    return { city: null, state: null, country: null };
+    // US: "San Jose, CA 95130" or "1030 El Paseo, San Jose, CA 95130" — pull the
+    // address-shaped substring out of prose before parsing (linear — the
+    // former unanchored regex was quadratic on long prose, Spec 1689).
+    const usMatch = findUsAddressSnippet(raw, 'optional');
+    const candidate = usMatch ? usMatch.trim() : raw;
+    const parsed = parseLocationText(candidate).location;
+    const state = parsed?.state ?? null;
+    const country = parsed?.country ?? null;
+    return {
+      city: parsed?.city ?? null,
+      state,
+      country: usMatch ? this.inferCountry(state, country, 'US') : country,
+    };
+  }
+
+  /**
+   * Country inference from the address shape (Spec 1689 — restores the
+   * `US` / `GB` stamps Spec 5125 removed; HARRI_LOCATION_HEURISTICS=false
+   * keeps the shared parser's literal-only country). A parsed country always
+   * wins. A `US` stamp additionally needs a real US state code, so a
+   * "City, XX" label whose 2-letter token is not a US state is never
+   * mislabelled.
+   */
+  private inferCountry(state: string | null, country: string | null, shape: 'US' | 'GB'): string | null {
+    if (country || !harriLocationHeuristicsEnabled()) return country;
+    if (shape === 'US') return state && normalizeUsState(state) ? 'US' : null;
+    return 'GB';
   }
 
   /** Build a LocationDto from the detail data. */

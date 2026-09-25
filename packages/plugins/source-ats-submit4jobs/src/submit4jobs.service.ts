@@ -319,6 +319,7 @@ export class Submit4jobsService implements IScraper {
       companyName: this.cleanText(job.companyname) ?? this.deriveCompanyName(slug),
       jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description: this.formatDescription(descriptionHtml, format),
       datePosted: job.postingdate ? toDateOnly(job.postingdate) : null,
       isRemote,
@@ -351,28 +352,21 @@ export class Submit4jobsService implements IScraper {
     job: Submit4jobsJob,
     title: string,
   ): { location: LocationDto | null; isRemote: boolean } {
-    const composed = [
-      this.cleanText(job.city),
-      this.cleanText(job.state),
-      this.cleanText(job.fullCountryName) ?? this.cleanText(job.country),
-    ]
-      .filter((p): p is string => Boolean(p))
-      .join(', ');
+    const city = this.cleanText(job.city);
+    const state = this.cleanText(job.state);
+    const country = this.cleanText(job.fullCountryName) ?? this.cleanText(job.country);
+    const isRemote = /\bremote\b/i.test(
+      [job.location, title].filter(Boolean).join(' '),
+    );
 
-    const parsed = parseLocationList([composed || this.cleanText(job.location) || null]);
-    const isRemote = parsed.remoteMentioned || /\bremote\b/i.test(title);
-
-    if (parsed.location) return { location: parsed.location, isRemote };
-    if (job.city || job.state) {
-      return {
-        location: new LocationDto({
-          city: this.cleanText(job.city),
-          state: this.cleanText(job.state),
-        }),
-        isRemote,
-      };
+    if (city || state || country) {
+      return { location: new LocationDto({ city, state, country }), isRemote };
     }
-    return { location: isRemote ? new LocationDto({ city: 'Remote' }) : null, isRemote };
+    const parsed = parseLocationList([this.cleanText(job.location)]);
+    return {
+      location: parsed.location ?? (isRemote ? new LocationDto({ city: 'Remote' }) : null),
+      isRemote: isRemote || parsed.remoteMentioned,
+    };
   }
 
   /** Build CompensationDto from salary / salaryrange + salarytype. */

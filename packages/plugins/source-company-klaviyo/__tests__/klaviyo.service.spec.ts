@@ -93,7 +93,7 @@ describe('KlaviyoService — Spec 045 / T04', () => {
       expect(eng?.jobUrl).toBe(
         'https://www.klaviyo.com/careers/jobs?gh_jid=7694808003',
       );
-      expect(eng?.location?.city).toBe('Remote, US');
+      expect(eng?.location?.city).toBeUndefined();
       expect(eng?.department).toBe('Engineering');
       expect(eng?.isRemote).toBe(true);
       // D-08 regression guard: the description-cleanup pipeline must
@@ -109,7 +109,7 @@ describe('KlaviyoService — Spec 045 / T04', () => {
       const sales = dto.jobs.find((j) => j.id === 'klaviyo-7529251003');
       expect(sales?.isRemote).toBe(false);
       expect(sales?.department).toBe('Sales');
-      expect(sales?.location?.city).toBe('New York, NY');
+      expect(sales?.location?.city).toBe('New York');
       // Named entity (&rsquo;) decoded to a real right-single-quote.
       expect(sales?.description).toContain('Klaviyo’s');
 

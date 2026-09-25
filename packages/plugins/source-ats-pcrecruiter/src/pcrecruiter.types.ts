@@ -81,6 +81,14 @@ export interface PCRecruiterJobDetail {
   state?: string | null;
   postalCode?: string | null;
   country?: string | null;
+  /** One entry per JSON-LD `jobLocation` Place, when present. */
+  locationEntries?: Array<{
+    city: string | null;
+    state: string | null;
+    postalCode: string | null;
+    streetAddress: string | null;
+    country: string | null;
+  }> | null;
   /** Apply URL (the detail page with `?apply=y`, or the registration link). */
   applyUrl?: string | null;
 }

@@ -11,12 +11,7 @@ import {
   LocationDto,
   Site,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  randomSleep,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, parseLocationList, randomSleep, toDateOnly } from '@ever-jobs/common';
 import {
   TALEO_HEADERS,
   TALEO_PAGE_SIZE,
@@ -147,9 +142,8 @@ export class TaleoService implements IScraper {
 
     // Location
     const locationStr = listing.primaryLocation ?? null;
-    const location = locationStr
-      ? new LocationDto({ city: locationStr })
-      : null;
+    const locationParsed = parseLocationList([locationStr]);
+    const location = locationStr ? locationParsed.location : null;
 
     // Remote detection
     const isRemote =
@@ -173,6 +167,7 @@ export class TaleoService implements IScraper {
       companyName: listing.organization ?? company,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       datePosted,
       isRemote,
       site: Site.TALEO,

@@ -93,7 +93,7 @@ describe('FoxService — Spec 149 / T04', () => {
       expect(ext?.jobUrl).toContain('job-boards.greenhouse.io/fox/jobs/');
       // D-11 clean dept pass-through.
       expect(ext?.department).toBe('Externships');
-      expect(ext?.location?.city).toBe('Wildwood, MO');
+      expect(ext?.location?.city).toBe('Wildwood');
       expect(ext?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ext?.description).not.toContain('&lt;');
@@ -104,7 +104,7 @@ describe('FoxService — Spec 149 / T04', () => {
       expect(rec).toBeDefined();
       expect(rec?.title).toBe('Veterinary Receptionist');
       expect(rec?.companyName).toBe('Fox Creek Veterinary Hospital - Wildwood');
-      expect(rec?.location?.city).toBe('Wildwood, MO');
+      expect(rec?.location?.city).toBe('Wildwood');
       expect(rec?.isRemote).toBe(false);
       expect(rec?.department).toBe('Reception');
       expect(rec?.jobUrl).toBe(

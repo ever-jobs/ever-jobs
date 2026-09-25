@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -353,12 +354,15 @@ export class BrassRingService implements IScraper {
     const companyName = this.deriveCompanyName(job.companyName, tenant);
     const description = this.formatDescription(job.descriptionHtml ?? null, job.description ?? null, format);
 
+    const location = this.extractLocation(job);
+
     return new JobPostDto({
       id: `brassring-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -568,15 +572,13 @@ export class BrassRingService implements IScraper {
   /** Pull a leading city token out of a free-text "City, State[, Country]" label. */
   private cityFromText(location: string | null): string | null {
     if (!location) return null;
-    const parts = location.split(',').map((p) => p.trim()).filter(Boolean);
-    return parts.length > 0 ? parts[0] : null;
+    return parseLocationText(location).location?.city ?? null;
   }
 
   /** Pull a trailing region token out of a free-text "City, State[, Country]" label. */
   private stateFromText(location: string | null): string | null {
     if (!location) return null;
-    const parts = location.split(',').map((p) => p.trim()).filter(Boolean);
-    return parts.length > 1 ? parts[1] : null;
+    return parseLocationText(location).location?.state ?? null;
   }
 
   /** Coerce a `JobsCount` value (number or numeric string) into a number. */

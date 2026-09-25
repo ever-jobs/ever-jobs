@@ -118,7 +118,7 @@ describe('HelloFreshService — Spec 097 / T04', () => {
         JOBS_PAGE_RAW.jobs[0].departments[0].name,
       );
       expect(ap?.department).not.toMatch(/\s$/);
-      expect(ap?.location?.city).toBe('UK ');
+      expect(ap?.location?.city).toBeUndefined();
       expect(ap?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ap?.description).not.toContain('&lt;');
@@ -131,7 +131,7 @@ describe('HelloFreshService — Spec 097 / T04', () => {
       expect(cmo).toBeDefined();
       expect(cmo?.title).toBe('Chief Marketing Officer - DACH');
       expect(cmo?.companyName).toBe('HelloFresh');
-      expect(cmo?.location?.city).toBe('Berlin, Germany');
+      expect(cmo?.location?.city).toBe('Berlin');
       expect(cmo?.isRemote).toBe(false);
       expect(cmo?.department).toBe('Marketing');
       expect(cmo?.jobUrl).toBe(

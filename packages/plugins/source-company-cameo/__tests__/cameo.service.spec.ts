@@ -134,7 +134,7 @@ describe('CameoService — Spec 065 / T04', () => {
       expect(eng?.jobUrl).toContain('job-boards.greenhouse.io');
       expect(eng?.jobUrl).toContain('/cameo/jobs/');
       expect(eng?.jobUrl).not.toContain('?gh_jid=');
-      expect(eng?.location?.city).toBe('Chicago, IL');
+      expect(eng?.location?.city).toBe('Chicago');
       // D-11 first-listing regression guard: the emitted `department`
       // for the first fixture listing is the single-token clean
       // string `'Engineering'` byte-for-byte AND matches the wire
@@ -169,7 +169,7 @@ describe('CameoService — Spec 065 / T04', () => {
       // D-10 omission: this fixture title is already trim-clean.
       expect(bdr?.title).toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(bdr?.companyName).toBe('Cameo');
-      expect(bdr?.location?.city).toBe('Remote, United States');
+      expect(bdr?.location?.city).toBeUndefined();
       // The fixture location string contains "Remote" so isRemote
       // should be true.
       expect(bdr?.isRemote).toBe(true);

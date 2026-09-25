@@ -88,7 +88,7 @@ describe('VonageService — Spec 119 / T04', () => {
       );
       expect(em?.jobUrl).toContain('job-boards.greenhouse.io/vonage/jobs/');
       expect(em?.department).toBe('API BU Engineering');
-      expect(em?.location?.city).toBe('London, UK');
+      expect(em?.location?.city).toBe('London');
       expect(em?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(em?.description).not.toContain('&lt;');
@@ -101,7 +101,7 @@ describe('VonageService — Spec 119 / T04', () => {
       expect(sbe).toBeDefined();
       expect(sbe?.title).toBe('Senior Backend Engineer, Communications APIs');
       expect(sbe?.companyName).toBe('Vonage');
-      expect(sbe?.location?.city).toBe('Wrocław, Poland');
+      expect(sbe?.location?.city).toBe('Wrocław');
       expect(sbe?.isRemote).toBe(false);
       expect(sbe?.department).toBe('Apps BU Engineering');
       expect(sbe?.jobUrl).toBe(

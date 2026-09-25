@@ -12,14 +12,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  randomSleep,
-  BrowserPool,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { BrowserPool, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, randomSleep, toDateOnly } from '@ever-jobs/common';
 import { WELLFOUND_JOBS_URL, WELLFOUND_DELAY_MIN, WELLFOUND_DELAY_MAX } from './wellfound.constants';
 import { WellfoundNextData, WellfoundListing } from './wellfound.types';
 
@@ -177,7 +170,8 @@ export class WellfoundService implements IScraper, OnModuleDestroy {
     }
 
     const locationStr = listing.locations?.[0] ?? null;
-    const location = locationStr ? new LocationDto({ city: locationStr }) : null;
+    const locationParsed = parseLocationList(listing.locations ?? []);
+    const location = locationStr ? locationParsed.location : null;
 
     let compensation: CompensationDto | null = null;
     if (listing.compensation?.min != null || listing.compensation?.max != null) {
@@ -200,10 +194,11 @@ export class WellfoundService implements IScraper, OnModuleDestroy {
       companyLogo: listing.company?.logoUrl ?? null,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,
-      isRemote: listing.remote ?? false,
+      isRemote: (listing.remote ?? false) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       site: Site.WELLFOUND,
       skills: listing.skills?.length ? listing.skills : null,

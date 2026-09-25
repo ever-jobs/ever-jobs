@@ -13,13 +13,7 @@ import {
   DescriptionFormat,
   Site,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { DEVITJOBS_FEED_URL, DEVITJOBS_DEFAULT_RESULTS, DEVITJOBS_MAX_RESULTS, DEVITJOBS_HEADERS } from './devitjobs.constants';
 import { DevITJobsXmlItem } from './devitjobs.types';
 
@@ -160,9 +154,8 @@ export class DevITJobsService implements IScraper {
 
     const compensation = this.parseSalary(item.salary);
 
-    const location = new LocationDto({
-      city: item.location ?? null,
-    });
+    const locationParsed = parseLocationList([item.location ?? null]);
+    const location = locationParsed.location;
 
     let datePosted: string | undefined;
     if (item.pubDate) {
@@ -184,6 +177,7 @@ export class DevITJobsService implements IScraper {
       companyName: item.company ?? null,
       jobUrl: item.link,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation: compensation ?? undefined,
       datePosted,

@@ -139,7 +139,7 @@ describe('BitwardenService — Spec 079 / T04', () => {
       expect(backend?.jobUrl).toContain('/?gh_jid=');
       expect(backend?.jobUrl).not.toContain('job-boards.greenhouse.io');
       // Location — Bitwarden's USA remote on the first listing.
-      expect(backend?.location?.city).toBe('Remote, USA');
+      expect(backend?.location?.city).toBeUndefined();
       expect(backend?.isRemote).toBe(true);
       // D-11 first-listing regression guard: the emitted
       // `department` for the first fixture listing matches the wire
@@ -177,7 +177,7 @@ describe('BitwardenService — Spec 079 / T04', () => {
       expect(fullstack?.title.endsWith(' ')).toBe(false);
       expect(fullstack?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 1);
       expect(fullstack?.companyName).toBe('Bitwarden');
-      expect(fullstack?.location?.city).toBe('Remote, EU');
+      expect(fullstack?.location?.city).toBeUndefined();
       expect(fullstack?.isRemote).toBe(true);
       // D-11 second-listing regression guard: the emitted
       // `department` for the second fixture listing matches the

@@ -11,13 +11,7 @@ import {
   DescriptionFormat,
   LocationDto,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { TECHCAREERS_SEARCH_URL, TECHCAREERS_HEADERS } from './techcareers.constants';
 import { TechcareersJob } from './techcareers.types';
 
@@ -128,6 +122,7 @@ export class TechcareersService implements IScraper {
           url: url ? (url.startsWith('http') ? url : `https://www.techcareers.com${url}`) : null,
           company,
           location,
+          ...(location ? { locations: [location] } : {}),
           datePosted,
           description,
         });
@@ -199,12 +194,16 @@ export class TechcareersService implements IScraper {
     // Generate ID from URL
     const jobId = item.url ? this.extractIdFromUrl(item.url) : this.hashString(item.title);
 
+    const locationParsed = parseLocationList([item.location]);
     return new JobPostDto({
       id: `techcareers-${jobId}`,
       title: item.title,
       jobUrl: item.url ?? `https://www.techcareers.com/jobs?q=${encodeURIComponent(item.title)}`,
       companyName: item.company ?? null,
-      location: item.location ? new LocationDto({ city: item.location }) : null,
+      location: item.location ? locationParsed.location : null,
+      ...(locationParsed.locations.length > 0
+        ? { locations: locationParsed.locations }
+        : {}),
       description,
       compensation: null,
       datePosted,

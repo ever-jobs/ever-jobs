@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
 } from '@ever-jobs/common';
 import {
@@ -441,7 +442,7 @@ export class FactorialService implements IScraper {
 
     // Prefer the finer-grained detail location; fall back to office label.
     const locationLabel = detail?.locationLabel ?? indexJob.officeLabel ?? null;
-    const location = locationLabel ? this.locationFromLabel(locationLabel) : null;
+    const location = locationLabel ? parseLocationText(locationLabel).location : null;
 
     // Department: prefer detail team name, then index team id lookup is done
     // externally so we just use what we have.
@@ -455,6 +456,7 @@ export class FactorialService implements IScraper {
       companyName,
       jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: lastmod ?? null,
       isRemote: remote,
@@ -528,26 +530,6 @@ export class FactorialService implements IScraper {
     );
     const m = pattern.exec(html);
     return m ? m[1] : null;
-  }
-
-  /** Convert a "City, State, Country" label into a LocationDto. */
-  private locationFromLabel(label: string): LocationDto | null {
-    const parts = label
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    const city = parts[0];
-    const state = parts.length >= 3 ? parts[1] : null;
-    const country = parts[parts.length - 1];
-    return new LocationDto({
-      city: city ?? null,
-      state: state ?? null,
-      country: country ?? null,
-    });
   }
 
   /** Derive a display company name from the slug (kebab-case → Title Case). */

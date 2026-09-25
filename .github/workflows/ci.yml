@@ -31,7 +31,13 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       - name: Run docs-lint
         run: npm run lint:docs
@@ -69,10 +75,21 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       - name: Type-check
         run: npx tsc --project apps/api/tsconfig.build.json --noEmit
+
+      # Specs are no longer type-checked at test time (swc transpiles only) —
+      # this keeps the coverage, earlier in the pipeline.
+      - name: Type-check sources and specs
+        run: npx tsc --project tsconfig.typecheck.json --noEmit
 
       - name: Build API
         run: npx nest build
@@ -110,10 +127,64 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       - name: Run health endpoint tests
         run: npx jest --testPathPatterns 'apps/api/__tests__/health' --verbose
+
+  # Hermetic core suites (Spec 1689): packages/{common,plugin,models,analytics},
+  # apps/api/src, apps/api/__tests__/{jobs,integration} and apps/mcp. None of
+  # them ran in any job before — `test-fast` covers only the apps/api health
+  # spec and `test-e2e` the live search/analyze/CLI specs — so two apps/api
+  # suites sat red unnoticed (a stale JobsService stub, and a Gem call count
+  # from before Spec 5035). BLOCKING: no continue-on-error.
+  #
+  # The path list lives in the `test:core` npm script so a local
+  # `npm run test:core` and this job cannot drift. `*.e2e-spec.ts` is excluded,
+  # and every suite in the set was run with outbound sockets blocked and opened
+  # none. The worker count is a repo variable sized to the runner's cgroup CPU
+  # limit — never a `%`, which jest resolves against the HOST's CPUs.
+  test-core:
+    name: Test (Core)
+    runs-on: ${{ vars.RUNNER_LINUX_X64_4 || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Configure Registry
+        uses: ever-co/ever-gauzy/.github/actions/configure-registry@aa4ee19926fabcf820aa1294385a76aec6bdb548
+        with:
+          verdaccio-registry: ${{ vars.VERDACCIO_REGISTRY }}
+          verdaccio-token: ${{ secrets.VERDACCIO_TOKEN }}
+          force-public: ${{ vars.VERDACCIO_FORCE_PUBLIC }}
+          expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
+
+      - name: Install dependencies
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
+
+      - name: Run core unit & hermetic integration tests
+        run: npm run test:core -- --maxWorkers=${{ vars.JEST_CORE_MAX_WORKERS || '3' }} --verbose --reporters=default --reporters=github-actions
 
   test-e2e:
     name: Test (E2E - Live APIs)
@@ -141,7 +212,13 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_8 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       - name: Run API search & analyze E2E tests
         run: npx jest --testPathPatterns 'apps/api/__tests__/(search|analyze)' --verbose
@@ -151,27 +228,70 @@ jobs:
         run: npx jest --testPathPatterns 'apps/cli/__tests__' --verbose
         continue-on-error: true
 
-  # Sharded because the source-plugin corpus outgrew a single job. `jest
-  # --listTests` reports 1,815 suites under `packages/plugins/source-`, and at
-  # roughly 17 s of wall-clock apiece that is ~8.5 h — past GitHub's 360-minute
-  # job ceiling. It was NOT hanging: the last unsharded run logged PASS lines
-  # continuously from 11:32 to 17:25 and was killed mid-flight having completed
-  # 1,221 suites, so the remainder were never exercised and the job could never
-  # report a result at all.
+  # Source-plugin tests split by kind: `test-sources` runs the ~1,600 mocked
+  # unit suites in 3 parallelized shards; `test-source-e2e` runs the ~250 live
+  # `*.e2e-spec.ts` suites in 6 serial shards (jest.config.js globals
+  # maxWorkers:1 / testTimeout:120s exist for them — live-network flakes now
+  # red only the e2e legs, never the unit legs).
   #
-  # Six shards put each at ~300 suites for the same total runner time, and no
-  # single job can squat a pool slot for 6 h again. Verified locally that the
-  # shards partition cleanly: 303+303+303+302+302+302 = 1,815, no overlap and
-  # nothing dropped.
+  # Why sharded at all: the corpus outgrew a single job. Unsharded, it ran past
+  # GitHub's 360-minute ceiling (killed mid-flight after 1,221 suites, so the
+  # rest never ran and the job could never report). The 180 min per-shard
+  # ceiling is from observation, not estimate: identical shards took 1h23m-1h43m
+  # on a quiet pool but 2h+ on a busy one, and a 120 min ceiling cancelled the
+  # contended legs — killing the suites it exists to run.
   #
-  # The 180 min ceiling is set from observation, not estimate. Two runs of the
-  # identical six-way split came in very differently: 1h23m-1h43m across all six
-  # when the pool was quiet, but 2h+ for three of them when it was busy. Same
-  # shard count, so that spread is runner contention rather than the split, and
-  # a 120 min ceiling cancelled those three — killing the suites it exists to
-  # run. 180 min covers the contended case and is still half the platform's 6 h.
+  # Unit-shard sizing (Spec 1689): our self-hosted ARC runners are
+  # cgroup-limited (6 CPU on the x64-8 pool) while jest sizes a `%` against the
+  # HOST's CPUs, so `--maxWorkers=75%` meant up to ~27 workers throttled onto 6
+  # CPUs with 30 s per-test timeouts. Both knobs are repo variables instead:
+  #   JEST_SOURCE_UNIT_MAX_WORKERS — worker count per shard (default 5, one
+  #     under the 6-CPU limit);
+  #   RUNNER_SOURCE_UNIT — runner for the unit shards, so they can move pools
+  #     without a workflow edit (default: RUNNER_LINUX_X64_8, then ubuntu-latest).
   test-sources:
-    name: Test (Source Scrapers ${{ matrix.shard }}/6)
+    name: Test (Source Scrapers unit ${{ matrix.shard }}/3)
+    runs-on: ${{ vars.RUNNER_SOURCE_UNIT || vars.RUNNER_LINUX_X64_8 || 'ubuntu-latest' }}
+    needs: build
+    continue-on-error: true
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Configure Registry
+        uses: ever-co/ever-gauzy/.github/actions/configure-registry@aa4ee19926fabcf820aa1294385a76aec6bdb548
+        with:
+          verdaccio-registry: ${{ vars.VERDACCIO_REGISTRY }}
+          verdaccio-token: ${{ secrets.VERDACCIO_TOKEN }}
+          force-public: ${{ vars.VERDACCIO_FORCE_PUBLIC }}
+          expect-vip: ${{ (vars.RUNNER_SOURCE_UNIT || vars.RUNNER_LINUX_X64_8) != '' }}
+
+      - name: Install dependencies
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
+
+      - name: Run source scraper unit tests
+        run: npx jest --testPathPatterns 'packages/plugins/source-' --testPathIgnorePatterns 'e2e-spec' --shard=${{ matrix.shard }}/3 --maxWorkers=${{ vars.JEST_SOURCE_UNIT_MAX_WORKERS || '5' }} --testTimeout=30000 --passWithNoTests --verbose --reporters=default --reporters=github-actions
+
+  test-source-e2e:
+    name: Test (Source Scrapers e2e ${{ matrix.shard }}/6)
     runs-on: ${{ vars.RUNNER_LINUX_X64_4 || 'ubuntu-latest' }}
     needs: build
     continue-on-error: true
@@ -200,10 +320,16 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
-      - name: Run source scraper tests
-        run: npx jest --testPathPatterns 'packages/plugins/source-' --shard=${{ matrix.shard }}/6 --passWithNoTests --verbose
+      - name: Run source scraper e2e tests
+        run: npx jest --testPathPatterns 'source-.*e2e-spec' --shard=${{ matrix.shard }}/6 --passWithNoTests --verbose --reporters=default --reporters=github-actions
         env:
           EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
 
@@ -232,7 +358,13 @@ jobs:
           expect-vip: ${{ vars.RUNNER_LINUX_X64_4 != '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # node-gyp gets the headers setup-node already installed, so a native
+          # module with no prebuilt binary (better-sqlite3) compiles offline. The
+          # headers download from nodejs.org times out from the ARC runners and
+          # was failing whole jobs (Spec 1689).
+          export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
+          npm ci
 
       # Hermetic offline suites (no live APIs) — these gate the build.
       # Perf budgets are relaxed for shared-runner variance via the suites'
@@ -250,8 +382,10 @@ jobs:
       #     gating job on warm-up rather than on a regression. 4 000 ms leaves ~2.7x
       #     headroom over the worst observation while still catching a gross
       #     regression. Sharing one knob would force the real gate loose.
+      # legitimacy-detector (pure, hermetic) joined in Spec 1689 — it ran in no
+      # job before, although corpus-signals uses it for real.
       - name: Run feature plugin tests
-        run: npx jest --testPathPatterns 'packages/plugins/(dedup-hybrid|merge-default|store-memory|liveness-http)/' --verbose
+        run: npx jest --testPathPatterns 'packages/plugins/(dedup-hybrid|merge-default|store-memory|liveness-http|legitimacy-detector)/' --verbose
         env:
           DEDUP_PERF_NFR1_MS: '1000'
           DEDUP_PERF_NFR2_MS: '8000'

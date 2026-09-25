@@ -19,8 +19,10 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { DoverService } from '../src/dover.service';
+import { parseDoverJobUrlStyle } from '../src/dover.constants';
 import {
   DoverJobDetail,
+  DoverJobGroup,
   DoverJobsResponse,
   DoverListJob,
 } from '../src/dover.types';
@@ -30,6 +32,7 @@ const CLIENT_ID = '08fa6161-f59a-43eb-8035-0b8acebac5af';
 const SLUG_RE = /\/api\/v1\/careers-page-slug\/([^/?]+)$/;
 const PAGE_RE = /\/api\/v1\/careers-page\/([^/?]+)$/;
 const JOBS_RE = /\/api\/v1\/careers-page\/[^/?]+\/jobs/;
+const JOB_GROUPS_RE = /\/api\/v1\/job-groups\/[^/?]+\/job-groups/;
 const DETAIL_RE = /\/api\/v1\/inbound\/application-portal-job\/([^/?]+)$/;
 
 function listJob(over: Partial<DoverListJob> = {}): DoverListJob {
@@ -76,6 +79,12 @@ function routeGet(opts: {
   pages?: Record<string, { id?: string; name?: string; slug?: string } | null>;
   jobs?: DoverJobsResponse | Record<string, DoverJobsResponse>;
   details?: Record<string, DoverJobDetail | null>;
+  /** undefined → empty feed; null → 404; array → feed. */
+  groups?: DoverJobGroup[] | null;
+  /** When set, the job-groups call rejects with this error instead. */
+  groupsError?: unknown;
+  /** When set, the job-groups call resolves with this raw body instead. */
+  groupsBody?: unknown;
 }): void {
   mockGet.mockImplementation(async (url: string) => {
     const notFound = () => {
@@ -90,6 +99,13 @@ function routeGet(opts: {
       const page = opts.pages?.[key];
       if (!page) return notFound();
       return { data: page };
+    }
+
+    if (JOB_GROUPS_RE.test(url)) {
+      if (opts.groupsError !== undefined) throw opts.groupsError;
+      if (opts.groupsBody !== undefined) return { data: opts.groupsBody };
+      if (opts.groups === null) return notFound();
+      return { data: opts.groups ?? [] };
     }
 
     if (JOBS_RE.test(url)) {
@@ -150,7 +166,8 @@ describe('DoverService (unit)', () => {
     expect(job.atsType).toBe('dover');
     expect(job.atsId).toBe('job-1');
     expect(job.id).toBe('dover-job-1');
-    expect(job.jobUrl).toBe('https://app.dover.com/jobs/gradientrobotics');
+    expect(job.jobUrl).toBe('https://app.dover.com/apply/gradientrobotics/job-1');
+    expect(job.applyUrl).toBe('https://app.dover.com/apply/gradientrobotics/job-1');
     expect(job.description).toBe('Build robots.');
     expect(job.datePosted).toBe('2026-06-20');
     expect(job.isRemote).toBe(false);
@@ -264,6 +281,63 @@ describe('DoverService (unit)', () => {
     expect(mockGet).not.toHaveBeenCalled();
   });
 
+  it('maps each role to its job-group name as department', async () => {
+    routeGet({
+      pages: { acme: { id: CLIENT_ID, name: 'Acme', slug: 'acme' } },
+      jobs: {
+        results: [listJob({ id: 'j1', title: 'Eng A' }), listJob({ id: 'j2', title: 'Eng B' })],
+        next: null,
+      },
+      details: {
+        j1: detail({ id: 'j1', title: 'Eng A', client_name: 'Acme' }),
+        j2: detail({ id: 'j2', title: 'Eng B', client_name: 'Acme' }),
+      },
+      groups: [
+        { id: 'g1', name: 'Hardware', jobs: [{ id: 'j1' }] },
+        { id: 'g2', name: 'Software', jobs: [{ id: 'other' }] },
+      ],
+    });
+
+    const res = await service.scrape(
+      new ScraperInputDto({ siteType: [Site.DOVER], companySlug: 'acme' }),
+    );
+
+    expect(res.jobs).toHaveLength(2);
+    expect(res.jobs[0].department).toBe('Hardware');
+    expect(res.jobs[1].department).toBeNull();   // absent from every group
+  });
+
+  it('still emits roles with department unset when the job-groups feed 404s', async () => {
+    routeGet({
+      pages: { acme: { id: CLIENT_ID, name: 'Acme', slug: 'acme' } },
+      jobs: { results: [listJob()], next: null },
+      details: { 'job-1': detail() },
+      groups: null,
+    });
+
+    const res = await service.scrape(
+      new ScraperInputDto({ siteType: [Site.DOVER], companySlug: 'acme' }),
+    );
+
+    expect(res.jobs).toHaveLength(1);
+    expect(res.jobs[0].department).toBeNull();
+  });
+
+  it('falls back to the careers URL when the careers page has no slug', async () => {
+    routeGet({
+      pages: { [CLIENT_ID]: { id: CLIENT_ID, name: 'Acme' } },
+      jobs: { results: [listJob()], next: null },
+      details: { 'job-1': detail() },
+    });
+
+    const res = await service.scrape(
+      new ScraperInputDto({ siteType: [Site.DOVER], companySlug: CLIENT_ID }),
+    );
+
+    expect(res.jobs).toHaveLength(1);
+    expect(res.jobs[0].jobUrl).toBe(`https://app.dover.com/careers/${CLIENT_ID}`);
+  });
+
   it('parses the board slug out of a /jobs/{slug} companyUrl', async () => {
     routeGet({
       pages: { gradientrobotics: { id: CLIENT_ID, name: 'Gradient Robotics', slug: 'gradientrobotics' } },
@@ -280,5 +354,158 @@ describe('DoverService (unit)', () => {
 
     expect(res.jobs).toHaveLength(1);
     expect(res.jobs[0].companyName).toBe('Gradient Robotics');
+  });
+});
+
+/**
+ * Spec 1689 (fork-sync hardening): the job-groups feed is enrichment only, so
+ * NO failure of it may fail the board scrape.
+ */
+describe('DoverService job-groups enrichment never fails the scrape', () => {
+  let service: DoverService;
+
+  const acme = {
+    pages: { acme: { id: CLIENT_ID, name: 'Acme', slug: 'acme' } },
+    jobs: { results: [listJob()], next: null },
+    details: { 'job-1': detail() },
+  };
+  const scrapeAcme = () =>
+    service.scrape(new ScraperInputDto({ siteType: [Site.DOVER], companySlug: 'acme' }));
+
+  const httpError = (status: number) =>
+    Object.assign(new Error(`Request failed with status code ${status}`), { response: { status } });
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    service = new DoverService();
+  });
+
+  it.each([
+    ['HTTP 500', httpError(500)],
+    ['HTTP 503', httpError(503)],
+    ['a timeout', Object.assign(new Error('timeout of 30000ms exceeded'), { code: 'ECONNABORTED' })],
+    ['a network error', Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })],
+    ['a non-Error rejection', 'boom'],
+  ])('still emits every role when job-groups fails with %s', async (_label, error) => {
+    routeGet({ ...acme, groupsError: error });
+
+    const res = await scrapeAcme();
+
+    expect(res.jobs).toHaveLength(1);
+    expect(res.jobs[0].atsId).toBe('job-1');
+    expect(res.jobs[0].department).toBeNull();
+    // A complete board, not a failed/partial scrape.
+    expect(res.diagnostics).toBeUndefined();
+  });
+
+  it.each([
+    ['an object instead of an array', { detail: 'nope' }],
+    ['an HTML shell', '<!DOCTYPE html><html></html>'],
+    ['groups with non-array jobs and null entries', [null, { name: 'Hardware', jobs: 42 }, { name: 'Ops', jobs: [{ id: 'job-1' }] }]],
+  ])('tolerates a malformed job-groups payload (%s)', async (_label, body) => {
+    routeGet({ ...acme, groupsBody: body });
+
+    const res = await scrapeAcme();
+
+    expect(res.jobs).toHaveLength(1);
+    expect(res.diagnostics).toBeUndefined();
+  });
+
+  it('still maps departments from the usable groups of a partly malformed payload', async () => {
+    routeGet({
+      ...acme,
+      groupsBody: [null, { name: 'Hardware', jobs: 42 }, { name: 'Ops', jobs: [{ id: 'job-1' }] }],
+    });
+
+    const res = await scrapeAcme();
+
+    expect(res.jobs[0].department).toBe('Ops');
+  });
+});
+
+/**
+ * Spec 1689: the fork moved `jobUrl` from the board URL to the per-role apply
+ * form. `apply` stays the default; `DOVER_JOB_URL_STYLE=board` restores the old
+ * `/jobs/{slug}` identity for URL-keyed dedup / history.
+ */
+describe('DoverService DOVER_JOB_URL_STYLE', () => {
+  let service: DoverService;
+  const saved = process.env.DOVER_JOB_URL_STYLE;
+
+  const gradient = {
+    pages: { gradientrobotics: { id: CLIENT_ID, name: 'Gradient Robotics', slug: 'gradientrobotics' } },
+    jobs: { results: [listJob()], next: null },
+    details: { 'job-1': detail() },
+  };
+  const scrape = (companySlug = 'gradientrobotics') =>
+    service.scrape(new ScraperInputDto({ siteType: [Site.DOVER], companySlug }));
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    service = new DoverService();
+    delete process.env.DOVER_JOB_URL_STYLE;
+  });
+
+  afterAll(() => {
+    if (saved === undefined) delete process.env.DOVER_JOB_URL_STYLE;
+    else process.env.DOVER_JOB_URL_STYLE = saved;
+  });
+
+  it('defaults to the per-role apply URL when unset', async () => {
+    routeGet(gradient);
+
+    const res = await scrape();
+
+    expect(res.jobs[0].jobUrl).toBe('https://app.dover.com/apply/gradientrobotics/job-1');
+    expect(res.jobs[0].applyUrl).toBe('https://app.dover.com/apply/gradientrobotics/job-1');
+  });
+
+  it('uses the per-role apply URL for an explicit "apply"', async () => {
+    process.env.DOVER_JOB_URL_STYLE = 'apply';
+    routeGet(gradient);
+
+    const res = await scrape();
+
+    expect(res.jobs[0].jobUrl).toBe('https://app.dover.com/apply/gradientrobotics/job-1');
+  });
+
+  it('restores the /jobs/{slug} board jobUrl for "board" and keeps applyUrl per role', async () => {
+    process.env.DOVER_JOB_URL_STYLE = ' Board ';
+    routeGet(gradient);
+
+    const res = await scrape();
+
+    expect(res.jobs[0].jobUrl).toBe('https://app.dover.com/jobs/gradientrobotics');
+    expect(res.jobs[0].applyUrl).toBe('https://app.dover.com/apply/gradientrobotics/job-1');
+  });
+
+  it('falls back to the careers URL in "board" style when the page has no slug', async () => {
+    process.env.DOVER_JOB_URL_STYLE = 'board';
+    routeGet({
+      pages: { [CLIENT_ID]: { id: CLIENT_ID, name: 'Acme' } },
+      jobs: { results: [listJob()], next: null },
+      details: { 'job-1': detail() },
+    });
+
+    const res = await scrape(CLIENT_ID);
+
+    expect(res.jobs[0].jobUrl).toBe(`https://app.dover.com/careers/${CLIENT_ID}`);
+  });
+
+  it('ignores an unrecognised value and uses the apply default', async () => {
+    process.env.DOVER_JOB_URL_STYLE = 'permalink';
+    routeGet(gradient);
+
+    const res = await scrape();
+
+    expect(res.jobs[0].jobUrl).toBe('https://app.dover.com/apply/gradientrobotics/job-1');
+  });
+
+  it('parseDoverJobUrlStyle normalises values and rejects unknown ones', () => {
+    expect(parseDoverJobUrlStyle(undefined)).toBe('apply');
+    expect(parseDoverJobUrlStyle('')).toBe('apply');
+    expect(parseDoverJobUrlStyle('APPLY')).toBe('apply');
+    expect(parseDoverJobUrlStyle(' board ')).toBe('board');
+    expect(parseDoverJobUrlStyle('jobs')).toBeNull();
   });
 });

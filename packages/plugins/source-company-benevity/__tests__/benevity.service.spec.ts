@@ -93,7 +93,7 @@ describe('BenevityService — Spec 091 / T04', () => {
       expect(arch?.jobUrl).not.toContain('job-boards.greenhouse.io');
       expect(arch?.jobUrl).not.toContain('/careers/');
       expect(arch?.department).toBe('Engineering');
-      expect(arch?.location?.city).toBe('Calgary, Alberta, Canada');
+      expect(arch?.location?.city).toBe('Calgary');
       expect(arch?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(arch?.description).not.toContain('&lt;');
@@ -106,7 +106,7 @@ describe('BenevityService — Spec 091 / T04', () => {
       expect(ae).toBeDefined();
       expect(ae?.title).toBe('Enterprise Account Executive');
       expect(ae?.companyName).toBe('Benevity');
-      expect(ae?.location?.city).toBe('Remote, USA');
+      expect(ae?.location?.city).toBeUndefined();
       expect(ae?.isRemote).toBe(true);
       expect(ae?.department).toBe('Sales');
       expect(ae?.jobUrl).toBe(

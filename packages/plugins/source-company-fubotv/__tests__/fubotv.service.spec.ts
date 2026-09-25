@@ -147,14 +147,12 @@ describe('FubotvService — Spec 071 / T04', () => {
       // the D-12 application against a future refactor that drops
       // the location-side `.trim()`. **First cohort plugin to
       // apply D-12.**
-      expect(mbd?.location?.city).toBe('New York, NY');
+      expect(mbd?.location?.city).toBe('New York');
       expect(mbd?.location?.city).not.toBe(JOBS_PAGE_RAW.jobs[0].location.name);
       expect(JOBS_PAGE_RAW.jobs[0].location.name).toBe('New York, NY ');
       expect(JOBS_PAGE_RAW.jobs[0].location.name.endsWith(' ')).toBe(true);
       expect((mbd?.location?.city ?? '').endsWith(' ')).toBe(false);
-      expect((mbd?.location?.city ?? '').length).toBe(
-        JOBS_PAGE_RAW.jobs[0].location.name.length - 1,
-      );
+      expect((mbd?.location?.city ?? '').length).toBe('New York'.length);
       // D-11 first-listing regression guard: the emitted `department`
       // for the first fixture listing matches the wire
       // `departments[0].name === 'Business Development'`
@@ -198,13 +196,11 @@ describe('FubotvService — Spec 071 / T04', () => {
       expect(sse?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 1);
       expect(sse?.companyName).toBe('Fubo');
       // D-12 second-listing application lock.
-      expect(sse?.location?.city).toBe('Denver, CO');
+      expect(sse?.location?.city).toBe('Denver');
       expect(sse?.location?.city).not.toBe(JOBS_PAGE_RAW.jobs[1].location.name);
       expect(JOBS_PAGE_RAW.jobs[1].location.name).toBe('Denver, CO ');
       expect((sse?.location?.city ?? '').endsWith(' ')).toBe(false);
-      expect((sse?.location?.city ?? '').length).toBe(
-        JOBS_PAGE_RAW.jobs[1].location.name.length - 1,
-      );
+      expect((sse?.location?.city ?? '').length).toBe('Denver'.length);
       expect(sse?.isRemote).toBe(false);
       // D-11 second-listing regression guard.
       expect(sse?.department).toBe('Technology');

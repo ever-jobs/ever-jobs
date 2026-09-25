@@ -96,7 +96,7 @@ describe('TypeformService — Spec 089 / T04', () => {
       // First-listing dept clean — D-11 trim is a no-op on clean wire.
       expect(ae?.department).toBe('Sales');
       expect(ae?.department).toBe(JOBS_PAGE_RAW.jobs[0].departments[0].name);
-      expect(ae?.location?.city).toBe('Barcelona, Spain');
+      expect(ae?.location?.city).toBe('Barcelona');
       expect(ae?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ae?.description).not.toContain('&lt;');
@@ -114,7 +114,7 @@ describe('TypeformService — Spec 089 / T04', () => {
       expect(designer?.title).toBe('Senior Product Designer');
       expect(designer?.title).toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(designer?.companyName).toBe('Typeform');
-      expect(designer?.location?.city).toBe('Remote - Europe');
+      expect(designer?.location?.city).toBe('Europe');
       expect(designer?.isRemote).toBe(true);
       // D-11 application lock — single-trailing-pad form: emitted
       // `department` for the second listing equals trimmed form

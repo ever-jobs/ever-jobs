@@ -170,7 +170,7 @@ describe('AshbyService — Spec 719', () => {
         (j) => j.id === `ashby-${BOARD_RAW.jobs[0].id}`,
       );
       expect(job?.location).toMatchObject({
-        city: 'Mountain View, CA; Seattle, WA',
+        city: 'Mountain View, California; Seattle, WA',
         country: 'United States',
       });
       expect(job?.isRemote).toBe(true);
@@ -545,6 +545,157 @@ describe('AshbyService — Spec 719', () => {
       expect(mockPost).toHaveBeenCalledTimes(1);
       expect(mockGet).toHaveBeenCalledTimes(1);
       expect(result.jobs).toHaveLength(3);
+    });
+  });
+
+  // Spec 5121 — structured per-site locations with `text` verbatim.
+  describe('per-site locations[] (Spec 5121)', () => {
+    async function mapFirstJob(mutate: (job: any) => void) {
+      const raw = clone(BOARD_RAW) as any;
+      const target = raw.jobs[0];
+      target.isRemote = false;
+      target.workplaceType = 'OnSite';
+      mutate(target);
+      mockGet.mockResolvedValueOnce({ data: raw });
+      const result = await new AshbyService().scrape({
+        siteType: [Site.ASHBY],
+        companySlug: SLUG,
+      } as ScraperInputDto);
+      return result.jobs.find((j) => j.id === `ashby-${target.id}`);
+    }
+
+    it('maps postalAddress to fields and keeps the raw label in text', async () => {
+      const job = await mapFirstJob((j) => {
+        j.location = 'Bellevue, WA - US';
+        j.address = {
+          postalAddress: {
+            addressLocality: 'Seattle',
+            addressRegion: 'WA',
+            addressCountry: 'United States',
+          },
+        };
+        j.secondaryLocations = null;
+      });
+      expect(job?.locations).toMatchObject([
+        {
+          city: 'Seattle',
+          state: 'WA',
+          country: 'United States',
+          text: 'Bellevue, WA - US',
+        },
+      ]);
+    });
+
+    it('emits one entry per secondary location', async () => {
+      const job = await mapFirstJob((j) => {
+        j.location = 'Austin, TX';
+        j.address = {
+          postalAddress: {
+            addressLocality: 'Austin',
+            addressRegion: 'Texas',
+            addressCountry: 'United States',
+          },
+        };
+        j.secondaryLocations = [
+          {
+            location: 'Denver, CO',
+            address: {
+              postalAddress: {
+                addressLocality: 'Denver',
+                addressRegion: 'Colorado',
+                addressCountry: 'United States',
+              },
+            },
+          },
+        ];
+      });
+      expect(job?.locations).toMatchObject([
+        { city: 'Austin', state: 'TX', country: 'United States', text: 'Austin, TX' },
+        { city: 'Denver', state: 'CO', country: 'United States', text: 'Denver, CO' },
+      ]);
+    });
+
+    it('keeps office geography on remote-labelled postings', async () => {
+      const job = await mapFirstJob((j) => {
+        j.location = 'Remote';
+        j.workplaceType = 'Remote';
+        j.address = {
+          postalAddress: {
+            addressLocality: 'San Francisco',
+            addressRegion: 'California',
+            addressCountry: 'United States',
+          },
+        };
+        j.secondaryLocations = null;
+      });
+      expect(job?.isRemote).toBe(true);
+      expect(job?.locations).toMatchObject([
+        {
+          city: 'San Francisco',
+          state: 'CA',
+          country: 'United States',
+          text: 'Remote',
+        },
+      ]);
+    });
+
+    it('routes a digit-bearing locality to streetAddress and parses city from text', async () => {
+      const job = await mapFirstJob((j) => {
+        j.location = 'Oxnard';
+        j.address = {
+          postalAddress: {
+            addressLocality: '2889 W. 5th ST',
+            addressRegion: 'California',
+            addressCountry: 'United States',
+            postalCode: '93030',
+          },
+        };
+        j.secondaryLocations = null;
+      });
+      expect(job?.locations).toMatchObject([
+        {
+          city: 'Oxnard',
+          state: 'CA',
+          country: 'United States',
+          streetAddress: '2889 W. 5th ST',
+          postalCode: '93030',
+          text: 'Oxnard',
+        },
+      ]);
+    });
+
+    it('sets name when the label carries a site-name keyword', async () => {
+      const job = await mapFirstJob((j) => {
+        j.location = 'Robot Ranch (Austin,TX)';
+        j.address = {
+          postalAddress: {
+            addressLocality: 'Austin',
+            addressRegion: 'Texas',
+            addressCountry: 'United States',
+          },
+        };
+        j.secondaryLocations = null;
+      });
+      expect(job?.locations).toMatchObject([
+        {
+          name: 'Robot Ranch (Austin,TX)',
+          city: 'Austin',
+          state: 'TX',
+          country: 'United States',
+          text: 'Robot Ranch (Austin,TX)',
+        },
+      ]);
+    });
+
+    it('falls back to the parser when postalAddress is absent', async () => {
+      const job = await mapFirstJob((j) => {
+        j.location = 'Austin, TX';
+        j.address = null;
+        j.secondaryLocations = null;
+      });
+      expect(job?.locations).toMatchObject([
+        { city: 'Austin', state: 'TX', text: 'Austin, TX' },
+      ]);
     });
   });
 });

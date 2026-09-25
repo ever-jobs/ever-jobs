@@ -303,12 +303,14 @@ export class SymphonyTalentService implements IScraper {
     const companyName = job.companyName ?? this.deriveOrgName(orgId);
     const description = this.formatDescription(job.descriptionHtml ?? null, format);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `symphonytalent-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
