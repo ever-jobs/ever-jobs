@@ -480,6 +480,12 @@ describe('classifyCareerLevel — rules (Spec 1730)', () => {
       }
     });
 
+    it('reads only the first ~300 title characters, cut at a word boundary', () => {
+      // Without a word-boundary cut the tail would end in "... manager i" and read as numeral I.
+      expect(level('intern program manager '.repeat(40))).toBe('unknown');
+      expect(level(`${'x '.repeat(200)}Senior Engineer`)).toBe('unknown');
+    });
+
     it('unknown is low confidence and says so', () => {
       const v = classifyCareerLevel({ title: 'Barista' });
       expect(v).toMatchObject({ level: 'unknown', confidence: 'low' });

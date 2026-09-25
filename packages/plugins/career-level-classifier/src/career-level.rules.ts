@@ -22,6 +22,8 @@ import type {
 export const MAX_DESCRIPTION_CHARS = 3000;
 /** Upper bound on `reasons.length`. */
 export const MAX_REASONS = 5;
+/** Titles longer than this are junk (keyword stuffing, scraped page text); read only the start. */
+export const MAX_TITLE_CHARS = 300;
 
 type Level = Exclude<CareerLevel, 'unknown'>;
 type Source = 'title' | 'jobType' | 'employmentType' | 'jobLevel' | 'experienceRange' | 'description';
@@ -1225,7 +1227,12 @@ export function classifyCareerLevel(input: CareerLevelInput | null | undefined):
 }
 
 function classifyInternal(input: CareerLevelInput): CareerLevelVerdict {
-  const title = typeof input.title === 'string' ? input.title : '';
+  const rawTitle = typeof input.title === 'string' ? input.title : '';
+  // Cut an over-long title at a word boundary so the truncation cannot mint a token ("… manager i").
+  const title =
+    rawTitle.length > MAX_TITLE_CHARS
+      ? rawTitle.slice(0, MAX_TITLE_CHARS + 1).replace(/\s+\S*$/, '')
+      : rawTitle;
   const t = analyzeTitle(title, 'title');
   const titleResolved = resolve(t.signals);
   const structured = structuredSignals(input);
