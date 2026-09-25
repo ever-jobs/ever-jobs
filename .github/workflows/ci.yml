@@ -389,8 +389,14 @@ jobs:
       # in-process on :memory: (better-sqlite3 compiles against the headers above)
       # and the Postgres suite uses a structural fake client; its real-database
       # block stays gated on RUN_PG_TESTS=1. They ran in no job before.
+      # career-level-classifier (Spec 1730): the fixture precision / recall thresholds, the
+      # misclassification regression gate and the cost tripwires. Its throughput gate is a
+      # ratio against a same-process reference workload, so it needs no runner override.
+      # Its API wiring (the careerLevels filter through the production ValidationPipe on
+      # REST and GraphQL, aggregator, resolver, NDJSON) is hermetic and lives under
+      # apps/api/src and apps/api/__tests__/integration, so Test (Core) runs it.
       - name: Run feature plugin tests
-        run: npx jest --testPathPatterns 'packages/plugins/(dedup-hybrid|merge-default|store-memory|store-sqlite-drizzle|store-postgres-prisma|liveness-http|legitimacy-detector)/' --verbose
+        run: npx jest --testPathPatterns 'packages/plugins/(dedup-hybrid|merge-default|store-memory|store-sqlite-drizzle|store-postgres-prisma|liveness-http|legitimacy-detector|career-level-classifier)/' --verbose
         env:
           DEDUP_PERF_NFR1_MS: '1000'
           DEDUP_PERF_NFR2_MS: '8000'
