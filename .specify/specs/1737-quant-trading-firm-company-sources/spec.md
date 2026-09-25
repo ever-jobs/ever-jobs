@@ -7,7 +7,7 @@
 | Status | implemented |
 | Owner | agent (lane ej-sources) |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-24 |
+| Last updated | 2026-09-25 |
 | Related specs | 1735 (pipeline), 1736 (Workday company sources) |
 
 ## 1. Problem statement
@@ -57,6 +57,16 @@ adapter can read (Q-109).
   `gravitonresearch.com` → `gravitonresearchcapital`).
 - Delegation, id rewrite (`gh-` / `lever-` / `ashby-` / `wd-{tenant}-` /
   `icims-careers-sig-` → `<key>-`), diagnostics and tags as Spec 1735.
+- **SIG is explicit-only** (Spec 1735 §3.1, §4.7): `careers-sig.icims.com/robots.txt`
+  disallows every crawler (`User-agent: *`, `Disallow: /`, checked 2026-09-25),
+  so the plugin never runs in the default fan-out. It scrapes only when a
+  caller selects it (`siteType: ['sig']` or `companyDomain: ['sig.com']`);
+  otherwise it returns an empty result with an `empty` diagnostic naming the
+  reason, without a request. Decision recorded in Q-109.
+- No caller credential is forwarded (`auth: undefined`, Spec 1735 §4.5), and
+  `source-ats-greenhouse` uses the env Harvest key only for the board named by
+  `GREENHOUSE_HARVEST_BOARD`, so the 26 Greenhouse plugins always read their
+  own public board — never the operator's Harvest account.
 - Greenhouse boards return the whole board in one request (the adapter asks
   for `content=true`), so these plugins cost one request per call; the Workday
   ones cost what Spec 1736 describes; iCIMS pages at 20 per request.

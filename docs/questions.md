@@ -44,6 +44,24 @@ board found). Boeing and NVIDIA already have company plugins.
 **Default:** A. B and C are listed as follow-up tasks in Specs 1736 T7 and
 1737 T5.
 
+**Addendum (2026-09-25) — a covered board whose host disallows crawling.**
+The robots.txt review (Spec 1735 §3.1) found `careers-sig.icims.com` serving
+`User-agent: *` / `Disallow: /`; SIG is the only plugin on that host. The
+other host families allow the endpoints the adapters call.
+
+- **A. Keep SIG in the default fan-out** and leave robots handling to the
+  crawl-policy lane (Spec 1690 `robotsTxt: 'respect'`, off by default).
+- **B. Explicit-only SIG (default — proceeding).** The generated plugin runs
+  only when a caller selects it (`siteType` contains `sig`, or `companyDomain`
+  contains `sig.com`); in the default fan-out it makes no request and returns
+  an `empty` diagnostic naming the reason (Spec 1735 §4.7). Reversible by
+  dropping `explicitOnly` from the seed and re-scaffolding.
+- **C. Drop SIG** (not taken — no-removal rule; the owner asked for the firm).
+
+**Default:** B: the default fan-out never contacts a host that disallows all
+crawlers, while an explicit request still works. Revisit when Spec 1690's
+robots mode lands or if SIG publishes a crawlable board.
+
 ---
 
 ## Q-108 — Where do company-tier / industry tags live? (Specs 1735–1737)
@@ -96,6 +114,47 @@ Lever and Ashby boards are one request each; iCIMS pages at 20.
 
 **Default:** A, with C recommended as the follow-up (Spec 1736 T6). Operators
 can drop the batch from the default fan-out with `EVER_JOBS_DISABLED_SOURCES`.
+
+**Review outcome (2026-09-25) — C adopted, plus sequential details.** Review
+found that 55 plugins (56 boards) now bring Workday into every default search
+and, with detail enrichment 5 in flight per board, one search could open ~280
+concurrent requests to `*.myworkdayjobs.com` (tenants share the `wd1`/`wd5`/
+`wd12` clusters) from one egress IP. Done in this lane (Spec 1735 §4.6, Spec
+1736 T6/T8): the adapter sends the trimmed `searchTerm` as `searchText` (`''`
+in list mode), so a keyword search is filtered by Workday and only matches are
+enriched; detail enrichment is 1 request in flight with a 250–500 ms pause
+(worst case ~56 concurrent Workday requests per search, one per board).
+
+Follow-ups and constraints recorded here:
+
+1. **Merge/deploy gate (Spec 1736 §7, T10).** `JobsService` sorts results by
+   site name and `3m` now sorts first (~700 postings). The ever-hust consumer
+   still keeps only page 1 (80) of a site-sorted response, so this batch must
+   not reach the deployment before the consumer's full-result ingestion
+   (NDJSON or all pages) is live — or it ships with the 55 Workday-backed site
+   tokens in `EVER_JOBS_DISABLED_SOURCES` (the exact list is in Spec 1736 §7)
+   until then.
+2. **Fan-out deadline order.** The plugins are registered at the tail of
+   `Site` / `ALL_SOURCE_MODULES`, so once a real fan-out deadline applies
+   (contract C4) they are the first sources the deadline skips. Today the
+   deadline never applies: `configuration.ts` parses
+   `EVER_JOBS_SEARCH_DEADLINE_MS` and `EVER_JOBS_SEARCH_CONCURRENCY` with
+   `parseInt(env, 120_000)` / `parseInt(env, 64)` — the second argument is the
+   radix, so both are always `NaN` (no deadline; concurrency silently 64). The
+   same pattern breaks `CACHE_EXPIRY` and `CACHE_MAX_ITEMS`. Handed to the
+   list-mode / C4 lane, which owns `configuration.ts`.
+3. **Per-host limits** for the shared Workday clusters and Lever's
+   `Crawl-delay: 1`, and whether the adapters keep a desktop-Chrome
+   User-Agent, are open items for the crawl-policy lane (Spec 1690; Spec 1735
+   §3.1, T12).
+4. **Credential isolation (Spec 1735 §4.5).** Generated plugins now delegate
+   with `auth: undefined`, and `source-ats-greenhouse` uses the env Harvest key
+   only when `GREENHOUSE_HARVEST_BOARD` names the requested board — before,
+   `GREENHOUSE_API_KEY` made every Greenhouse-delegating plugin return the
+   operator's own (incl. confidential) Harvest jobs under the firm's name.
+   Behaviour change for forks that set `GREENHOUSE_API_KEY`: set
+   `GREENHOUSE_HARVEST_BOARD` to your own board token to keep using Harvest
+   for it (a per-request `auth.greenhouse.apiKey` is still honoured).
 
 ---
 

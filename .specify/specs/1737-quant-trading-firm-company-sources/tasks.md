@@ -5,3 +5,5 @@
 - [x] T3 — Seed, scaffold and tail-wire the 31 plugins, tagged `segment=quant-trading`.
 - [x] T4 — Generated suites green against the real adapters; `tsc` clean.
 - [ ] T5 — Follow-up (Q-109): configurable Avature listing path (Two Sigma); bespoke HTML scrapers for Citadel, Citadel Securities and D. E. Shaw if their listings prove simple and public.
+- [x] T6 — Review follow-up (Spec 1735 §3.1, §4.7): robots.txt review; SIG explicit-only (its iCIMS host disallows all crawlers).
+- [x] T7 — Review follow-up (Spec 1735 §4.5): Greenhouse plugins never reach the Harvest API; generated regression test with `GREENHOUSE_API_KEY` set.

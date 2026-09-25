@@ -4,7 +4,7 @@
 | --- | --- |
 | Spec | spec.md |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-24 |
+| Last updated | 2026-09-25 |
 
 ## Approach
 
@@ -39,7 +39,9 @@
 | Risk | Mitigation |
 | --- | --- |
 | A Workday tenant migrates cluster (`wd5` → `wd504`) or renames its site | Plugin returns a classified `bad_input`/`fetch_error` diagnostic; re-run the probe and bump the slug in the seed, then re-scaffold. Walmart, Comcast and Expedia were found mid-migration during verification (`wd5` 422 → `wd504`/`wd115`/`wd108`). |
-| Load on large Workday tenants | Inherited from the adapter (page sleep 1–2 s, detail concurrency 5, capped by `resultsWanted`); per-host pacing is the politeness lane's crawl policy. Boards scraped sequentially within a plugin. See Q-107. |
+| Load on large Workday tenants | Review follow-up (spec §4.6): the adapter now sends the keyword as `searchText` and enriches details one at a time, 250–500 ms apart (was 5 in flight); pages still sleep 1–2 s. Boards scraped sequentially within a plugin. Per-host / per-cluster pacing is the crawl-policy lane (Spec 1690). See Q-107. |
+| A caller's or operator's ATS credential reaching another company's board | Spec §4.5: `auth: undefined` in every delegation; the Greenhouse env Harvest key is scoped to `GREENHOUSE_HARVEST_BOARD`. |
+| A host whose robots.txt disallows crawling | Spec §3.1 review; such a plugin is generated explicit-only (§4.7). |
 | Concurrent registration edits | Tail append; rebase is keep-both. |
 | A recorded fixture drifting from live data | Fixtures are frozen recordings; the suites assert mapping, not live content. |
 

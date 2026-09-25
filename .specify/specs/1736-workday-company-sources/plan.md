@@ -4,7 +4,7 @@
 | --- | --- |
 | Spec | spec.md |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-24 |
+| Last updated | 2026-09-25 |
 
 ## Approach
 
@@ -32,3 +32,17 @@
 
 - `npx jest --runTestsByPath packages/plugins/source-company-<key>/__tests__/<key>.service.spec.ts …`
 - `npx tsc --project tsconfig.typecheck.json --noEmit`
+
+## Review follow-ups (2026-09-25)
+
+1. Adapter (`source-ats-workday`): trimmed `searchTerm` → `searchText`
+   (T6); detail enrichment 1 in flight with a 250–500 ms pause (T8). Adapter
+   suite first (red), then the change.
+2. Generator: Workday company-name rule (T9) and `auth: undefined`
+   (Spec 1735 §4.5); re-scaffold all generated packages (fixtures unchanged),
+   re-run every generated suite.
+3. **Release ordering (T10, spec §7):** this batch merges only after — or
+   together with — the ever-hust full-result consumer (NDJSON / all pages).
+   Until that consumer is live in production, the deployment must carry the
+   batch in `EVER_JOBS_DISABLED_SOURCES` (list in spec §7), otherwise the
+   consumer's page 1 of a site-sorted response leads with `3m`.

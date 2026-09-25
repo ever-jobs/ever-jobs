@@ -7,7 +7,7 @@
 | Status | implemented |
 | Owner | agent (lane ej-sources) |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-24 |
+| Last updated | 2026-09-25 |
 | Related specs | 1735 (pipeline), 5004 (Workday detail enrichment), 5084 (Workday pagination guard), 5025 (Workday remote locations), 1737 (quant firms) |
 
 ## 1. Problem statement
@@ -31,10 +31,11 @@ plugin (Visa) delegates to two boards, early careers first.
 
 ## 3. Non-goals
 
-- No Workday adapter change. Keyword handling (`searchText: ''`), pagination
-  (20 per page, 1–2 s between pages) and detail enrichment (one detail request
-  per posting, 5 in flight) are inherited unchanged — see Q-107 for the cost
-  and the recommended follow-up.
+- No Workday adapter change beyond the review follow-ups (T6, T8; Spec 1735
+  §4.6): the keyword now reaches Workday as `searchText` (`''` in list mode)
+  and detail enrichment is sequential (1 in flight, 250–500 ms apart).
+  Pagination (20 per page, 1–2 s between pages) and one detail request per
+  enriched posting are inherited unchanged — see Q-107 for the cost.
 - Companies whose careers are not on Workday are out of scope here (Q-109):
   Dell (Workday site answers HTTP 422; careers appear to have moved to
   Oracle HCM), Qualcomm (left Workday; its old site answers 0
@@ -58,9 +59,13 @@ plugin (Visa) delegates to two boards, early careers first.
 - Delegation contract, id rewrite (`wd-{tenant}-` → `<key>-`), diagnostics and
   tags exactly as Spec 1735 §4.2–4.3; tags `segment=workday-enterprise` plus
   the industry.
-- Every caller input passes through, so list mode (no keyword) and keyword
-  mode both return what the Workday adapter returns today, up to
-  `resultsWanted` per plugin.
+- Every caller input except `auth` passes through (Spec 1735 §4.5), so list
+  mode (no keyword) returns the board's newest postings and keyword mode
+  returns Workday's own keyword matches, up to `resultsWanted` per plugin.
+- `companyName`: a posting's own Workday hiring organisation is kept when it
+  names a business unit (RTX → Collins Aerospace, Pratt & Whitney, Raytheon);
+  empty, tenant-token and legal-form names are re-stamped to the display name
+  (Spec 1735 §4.2.1).
 
 ## 5. Verified boards
 
@@ -154,3 +159,35 @@ Workday adapter** with mocked HTTP serving the recorded listings:
   classified;
 - Visa only: boards in order with the remaining budget, stop once filled,
   cross-board de-duplication, partial outage keeps the healthy board's jobs.
+- review follow-ups (Spec 1735 §4.2.1, §4.5): a caller's `auth` is never
+  forwarded; a posting whose Workday hiring organisation names a business
+  unit keeps that name through the real adapter; empty, tenant-token and
+  legal-form names read as the display name.
+
+The adapter suite (`source-ats-workday`) pins the politeness contract: never
+more than one detail request in flight, a paced sleep before each detail
+request, and `searchText` = the trimmed `searchTerm` (`''` in list mode).
+
+## 7. Release and deploy ordering (merge gate)
+
+The consumer (ever-hust) currently keeps only page 1 (80 jobs) of a response
+that `JobsService` sorts **by site name**. `3m` sorts before every existing
+site (`4earth_tech`, `abbvie`, …) and its board lists ~700 postings, so if
+this batch reaches the deployment before the consumer ingests full results,
+the consumer's page 1 fills with 3M postings first (today it is 66% AbbVie).
+Sending the keyword to Workday (T6) narrows keyword searches to 3M's own
+matches, but a keyword-less call would still lead with 3M.
+
+**Gate:** deploy this batch only after the consumer's full-result ingestion
+(NDJSON stream or all pages) is live. If it must ship earlier, hold the batch
+out of the deployment with the existing kill switch — no code change, one env
+line — and remove the line once the consumer is live:
+
+```
+EVER_JOBS_DISABLED_SOURCES=salesforce,adobe,intel,hp,hpe,mastercard,paypal,capitalone,walmart,target,northropgrumman,boozallen,caci,gdit,leidos,blueorigin,redhat,motorolasolutions,stryker,jnj,philips,mckesson,workdayinc,micron,analogdevices,tmobile,comcast,disney,nike,fidelity,statestreet,blackrock,autodesk,zillow,expediagroup,3m,rtx,humana,cvshealth,chevron,visa,geaerospace,wellsfargo,snap,morganstanley,copart,coxenterprises,broadcom,pfizer,marvell,generalmotors,warnerbrosdiscovery,moderna,gresearch,arrowstreetcapital
+```
+
+(the 53 plugins here plus the two Workday-backed quant plugins of Spec 1737;
+append to any existing value). Fan-out order also matters once a real
+fan-out deadline applies (contract C4): these plugins are registered at the
+tail, so they are the first sources a deadline skips (Q-107).
