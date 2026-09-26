@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "gravitonresearchcapital"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/gravitonresearchcapital/jobs": {
+      "jobs": [
+        {
+          "id": 8559378002,
+          "title": "Accountant",
+          "updated_at": "2026-09-23T15:09:31.000Z",
+          "location": {
+            "name": "Singapore"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/gravitonresearchcapital/jobs/8559378002",
+          "content": "&lt;p&gt;Accountant at Graviton Research Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "gravitonresearchcapital"
+        },
+        {
+          "id": 8781321002,
+          "title": "Application Reliability Engineer",
+          "updated_at": "2026-09-23T15:09:31.000Z",
+          "location": {
+            "name": "Gurugram, Haryana, India"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/gravitonresearchcapital/jobs/8781321002",
+          "content": "&lt;p&gt;Application Reliability Engineer at Graviton Research Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "gravitonresearchcapital"
+        },
+        {
+          "id": 8156976002,
+          "title": "Central Execution Trader",
+          "updated_at": "2026-09-23T15:09:31.000Z",
+          "location": {
+            "name": "Singapore"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/gravitonresearchcapital/jobs/8156976002",
+          "content": "&lt;p&gt;Central Execution Trader at Graviton Research Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "gravitonresearchcapital"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "gravitonresearchcapital-8559378002",
+      "title": "Accountant"
+    },
+    {
+      "id": "gravitonresearchcapital-8781321002",
+      "title": "Application Reliability Engineer"
+    },
+    {
+      "id": "gravitonresearchcapital-8156976002",
+      "title": "Central Execution Trader"
+    }
+  ]
+}

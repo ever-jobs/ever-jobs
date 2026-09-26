@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/oxfamamerica2/744000135588199",
+      "ref": "https://api.smartrecruiters.com/v1/companies/oxfamamerica2/postings/744000135588199",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/oxfamamerica2/744000135588079",
+      "ref": "https://api.smartrecruiters.com/v1/companies/oxfamamerica2/postings/744000135588079",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/oxfamamerica2/744000135587187",
+      "ref": "https://api.smartrecruiters.com/v1/companies/oxfamamerica2/postings/744000135587187",
       "jobAd": {
         "sections": {
           "jobDescription": {

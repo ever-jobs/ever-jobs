@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "marvell:1:MarvellCareers"
+      },
+      "atsIdPrefix": "wd-marvell-"
+    }
+  ],
+  "responses": {
+    "https://marvell.wd1.myworkdayjobs.com/wday/cxs/marvell/MarvellCareers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Principal Signal/Power integrity Engineer",
+          "externalPath": "/job/Yokneam/Principal-Signal-Power-integrity-Engineer_2603478",
+          "locationsText": "Yokneam",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "2603478"
+          ]
+        },
+        {
+          "title": "Hardware Board Design Senior Staff Engineer",
+          "externalPath": "/job/Yokneam/Hardware-Board-Design-Senior-Staff-Engineer_2603477",
+          "locationsText": "Yokneam",
+          "postedOn": "Posted 7 Days Ago",
+          "bulletFields": [
+            "2603477"
+          ]
+        },
+        {
+          "title": "Director of IT - Legal, Compliance & Workplace Applications",
+          "externalPath": "/job/Santa-Clara-CA/Director-of-IT---Legal--Compliance---Workplace-Applications_2604737",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted 10 Days Ago",
+          "bulletFields": [
+            "2604737"
+          ]
+        }
+      ]
+    },
+    "https://marvell.wd1.myworkdayjobs.com/wday/cxs/marvell/MarvellCareers/job/Yokneam/Principal-Signal-Power-integrity-Engineer_2603478": {
+      "jobPostingInfo": {
+        "title": "Principal Signal/Power integrity Engineer",
+        "jobDescription": "<p>Principal Signal/Power integrity Engineer at Marvell Technology.</p>",
+        "location": "Yokneam",
+        "jobReqId": "2603478",
+        "externalUrl": "https://marvell.wd1.myworkdayjobs.com/MarvellCareers/job/Yokneam/Principal-Signal-Power-integrity-Engineer_2603478",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "marvell"
+      }
+    },
+    "https://marvell.wd1.myworkdayjobs.com/wday/cxs/marvell/MarvellCareers/job/Yokneam/Hardware-Board-Design-Senior-Staff-Engineer_2603477": {
+      "jobPostingInfo": {
+        "title": "Hardware Board Design Senior Staff Engineer",
+        "jobDescription": "<p>Hardware Board Design Senior Staff Engineer at Marvell Technology.</p>",
+        "location": "Yokneam",
+        "jobReqId": "2603477",
+        "externalUrl": "https://marvell.wd1.myworkdayjobs.com/MarvellCareers/job/Yokneam/Hardware-Board-Design-Senior-Staff-Engineer_2603477",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "marvell"
+      }
+    },
+    "https://marvell.wd1.myworkdayjobs.com/wday/cxs/marvell/MarvellCareers/job/Santa-Clara-CA/Director-of-IT---Legal--Compliance---Workplace-Applications_2604737": {
+      "jobPostingInfo": {
+        "title": "Director of IT - Legal, Compliance & Workplace Applications",
+        "jobDescription": "<p>Director of IT - Legal, Compliance &amp; Workplace Applications at Marvell Technology.</p>",
+        "location": "2 Locations",
+        "jobReqId": "2604737",
+        "externalUrl": "https://marvell.wd1.myworkdayjobs.com/MarvellCareers/job/Santa-Clara-CA/Director-of-IT---Legal--Compliance---Workplace-Applications_2604737",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "marvell"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "marvell-2603478",
+      "title": "Principal Signal/Power integrity Engineer"
+    },
+    {
+      "id": "marvell-2603477",
+      "title": "Hardware Board Design Senior Staff Engineer"
+    },
+    {
+      "id": "marvell-2604737",
+      "title": "Director of IT - Legal, Compliance & Workplace Applications"
+    }
+  ]
+}

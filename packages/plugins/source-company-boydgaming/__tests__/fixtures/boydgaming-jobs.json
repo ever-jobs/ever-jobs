@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BoydGaming/3743990013928216",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BoydGaming/postings/3743990013928216",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BoydGaming/3743990013927476",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BoydGaming/postings/3743990013927476",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BoydGaming/3743990013927356",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BoydGaming/postings/3743990013927356",
       "jobAd": {
         "sections": {
           "jobDescription": {

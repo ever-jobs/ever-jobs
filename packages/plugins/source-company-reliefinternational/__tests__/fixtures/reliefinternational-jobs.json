@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ReliefInternational/743999766402506",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ReliefInternational/postings/743999766402506",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ReliefInternational/743999687077560",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ReliefInternational/postings/743999687077560",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ReliefInternational/743999686071892",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ReliefInternational/postings/743999686071892",
       "jobAd": {
         "sections": {
           "jobDescription": {

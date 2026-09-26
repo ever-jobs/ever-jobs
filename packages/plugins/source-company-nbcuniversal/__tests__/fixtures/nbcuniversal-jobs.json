@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NBCUniversal3/744000135779179",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NBCUniversal3/postings/744000135779179",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NBCUniversal3/744000135778519",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NBCUniversal3/postings/744000135778519",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NBCUniversal3/744000135770099",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NBCUniversal3/postings/744000135770099",
       "jobAd": {
         "sections": {
           "jobDescription": {

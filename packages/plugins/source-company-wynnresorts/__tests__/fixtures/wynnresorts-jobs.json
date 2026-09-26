@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WynnResorts/744000135605400",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WynnResorts/postings/744000135605400",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WynnResorts/744000135603204",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WynnResorts/postings/744000135603204",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WynnResorts/744000135590249",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WynnResorts/postings/744000135590249",
       "jobAd": {
         "sections": {
           "jobDescription": {

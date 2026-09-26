@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LGCGroup/744000135727129",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LGCGroup/postings/744000135727129",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LGCGroup/744000135723841",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LGCGroup/postings/744000135723841",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LGCGroup/744000135704638",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LGCGroup/postings/744000135704638",
       "jobAd": {
         "sections": {
           "jobDescription": {

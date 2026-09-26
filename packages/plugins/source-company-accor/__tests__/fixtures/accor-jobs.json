@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Accor/744000135781619",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Accor/postings/744000135781619",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Accor/744000135745578",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Accor/postings/744000135745578",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Accor/744000135741414",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Accor/postings/744000135741414",
       "jobAd": {
         "sections": {
           "jobDescription": {

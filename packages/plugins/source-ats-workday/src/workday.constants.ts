@@ -5,13 +5,172 @@
  * The company slug format for Workday is: {company}:{wd_number}:{site}
  * e.g., "tesla:5:Tesla" or "microsoft:1:External"
  */
-import { toDateOnly } from '@ever-jobs/common';
+import { normalizeUsState, parseLocationList, toDateOnly } from '@ever-jobs/common';
 
 /** Default page size for Workday pagination */
 export const WORKDAY_PAGE_SIZE = 20;
 
-/** Maximum number of public CXS detail requests in flight at once. */
-export const WORKDAY_DETAIL_CONCURRENCY = 5;
+/**
+ * Maximum number of public CXS detail requests in flight at once, per board.
+ *
+ * One (Spec 1736 T8 / Spec 1735 §4.6): ~55 company plugins delegate to this
+ * adapter in the default fan-out, and their tenants share a handful of Workday
+ * clusters (wd1/wd5/wd12), so five per board meant ~280 concurrent requests to
+ * `*.myworkdayjobs.com` per search from one egress IP.
+ */
+export const WORKDAY_DETAIL_CONCURRENCY = 1;
+
+/** Pause before each detail request, milliseconds (random in [min, max]). */
+export const WORKDAY_DETAIL_DELAY_MIN_MS = 250;
+export const WORKDAY_DETAIL_DELAY_MAX_MS = 500;
+
+/**
+ * Env var capping detail requests per scrape (Spec 1736 T11).
+ *
+ * Detail enrichment is sequential and paced (one request in flight, 250–500 ms
+ * apart), so it costs roughly 0.5–1 s per posting: one board at
+ * `resultsWanted = 1000` would spend ~10 minutes enriching, long past the
+ * fan-out deadline. Only the first N postings that have a detail path are
+ * enriched; the rest are returned at list level (title, URL, location, posted
+ * date, requisition id — no description or compensation; Spec 1736 §8.1).
+ *
+ * Unset, blank or not a non-negative integer → {@link DEFAULT_WORKDAY_MAX_DETAIL_FETCHES}.
+ * `0` = no detail requests at all. There is no "unlimited" value: set a number
+ * at least as large as `resultsWanted` to enrich every posting.
+ */
+export const WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR = 'WORKDAY_MAX_DETAIL_FETCHES';
+export const DEFAULT_WORKDAY_MAX_DETAIL_FETCHES = 50;
+
+/**
+ * Env var: wall-clock budget for one Workday scrape, milliseconds (Spec 1736 T11).
+ *
+ * Measured from the start of THIS `scrape()` and covering both phases — not
+ * from the start of the fan-out, and independent of the fan-out deadline. Once
+ * spent, no further listing page and no further detail request is started (the
+ * one in flight finishes; at most one pause and one request past the budget).
+ * Postings already listed are returned; the ones not yet enriched at list
+ * level. The first listing page is always requested.
+ *
+ * The plugin contract carries no fan-out deadline (Spec 5026 T11), so this is
+ * the adapter's own bound: without it a board abandoned by the fan-out deadline
+ * keeps paging and enriching, detached, until it has everything. The fan-out
+ * deadline is `EVER_JOBS_FANOUT_DEADLINE_MS` (preferred, Spec 1721), with
+ * `EVER_JOBS_SEARCH_DEADLINE_MS` (Spec 5026) as the fallback name; 120 s by
+ * default. Keep this budget below the deadline the deployment sets. Because the
+ * two clocks start at different times, a board the fan-out starts late (behind
+ * other sources, or the second board of a multi-board plugin) can still run
+ * past the deadline; the budget bounds how long it runs on, not when it ends.
+ *
+ * Deadline hint (Spec 1736 T15): the adapter reads the fan-out deadline from
+ * the same env vars and caps its budget at
+ * {@link WORKDAY_BUDGET_SHARE_OF_FANOUT_DEADLINE} of it (90 s of the default
+ * 120 s), so a deployment that lowers the deadline without lowering this budget
+ * still stops a board that starts with the fan-out before the fan-out gives up
+ * on it. See {@link resolveWorkdayScrapeTimeBudget}.
+ *
+ * Unset, blank or not an integer → {@link DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS};
+ * `0` or negative disables the budget, the deadline cap included (the same
+ * convention as the fan-out deadline).
+ */
+export const WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR = 'WORKDAY_SCRAPE_TIME_BUDGET_MS';
+export const DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS = 90_000;
+
+/** The fan-out deadline, preferred name (Spec 1721 contract C4). Read as a hint only. */
+export const FANOUT_DEADLINE_ENV_VAR = 'EVER_JOBS_FANOUT_DEADLINE_MS';
+/** The fan-out deadline, fallback name (Spec 5026). Read as a hint only. */
+export const LEGACY_FANOUT_DEADLINE_ENV_VAR = 'EVER_JOBS_SEARCH_DEADLINE_MS';
+/** The API's fan-out deadline when neither variable is set (Spec 5026). */
+export const DEFAULT_FANOUT_DEADLINE_MS = 120_000;
+/**
+ * Share of the fan-out deadline a Workday scrape may spend (Spec 1736 T15).
+ * The last quarter covers the request in flight when the budget runs out (one
+ * pause plus one request timeout) and a board that starts a little after the
+ * fan-out.
+ */
+export const WORKDAY_BUDGET_SHARE_OF_FANOUT_DEADLINE = 0.75;
+
+const INTEGER_RE = /^[+-]?\d+$/;
+
+/** Read {@link WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR}: a non-negative integer. */
+export function readWorkdayMaxDetailFetches(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR]?.trim();
+  if (!raw || !INTEGER_RE.test(raw)) return DEFAULT_WORKDAY_MAX_DETAIL_FETCHES;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value >= 0 ? value : DEFAULT_WORKDAY_MAX_DETAIL_FETCHES;
+}
+
+/**
+ * Read {@link WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}. Returns the budget in
+ * milliseconds; `0` means no budget (a `0` or negative setting).
+ */
+export function readWorkdayScrapeTimeBudgetMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR]?.trim();
+  if (!raw || !INTEGER_RE.test(raw)) return DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) return DEFAULT_WORKDAY_SCRAPE_TIME_BUDGET_MS;
+  return value > 0 ? value : 0;
+}
+
+/** A finite number from a non-blank string, else undefined (the API's own parsing). */
+function finiteNumber(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const value = Number(raw.trim());
+  return Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * The fan-out deadline as the API resolves it (Spec 1721):
+ * {@link FANOUT_DEADLINE_ENV_VAR}, else {@link LEGACY_FANOUT_DEADLINE_ENV_VAR},
+ * else {@link DEFAULT_FANOUT_DEADLINE_MS}; a blank or non-numeric value falls
+ * through to the next. `0` or negative = no deadline (returned as `0`).
+ */
+export function readFanoutDeadlineHintMs(env: NodeJS.ProcessEnv = process.env): number {
+  const value =
+    finiteNumber(env[FANOUT_DEADLINE_ENV_VAR]) ??
+    finiteNumber(env[LEGACY_FANOUT_DEADLINE_ENV_VAR]) ??
+    DEFAULT_FANOUT_DEADLINE_MS;
+  return value > 0 ? Math.floor(value) : 0;
+}
+
+/** The time budget one scrape runs under, and where it came from. */
+export interface WorkdayScrapeTimeBudget {
+  /** Budget in ms; `0` = none. */
+  readonly budgetMs: number;
+  /** {@link WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR} as read; `0` = none. */
+  readonly configuredMs: number;
+  /** The fan-out deadline hint that lowered the budget, or null when it did not. */
+  readonly cappedByDeadlineMs: number | null;
+}
+
+/**
+ * The budget for one Workday scrape (Spec 1736 T11, T15): the configured
+ * {@link WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}, capped at
+ * {@link WORKDAY_BUDGET_SHARE_OF_FANOUT_DEADLINE} of the fan-out deadline hint
+ * ({@link readFanoutDeadlineHintMs}) when that deadline is on. A budget of `0`
+ * stays `0` (the operator turned it off); a cap never drops below 1 ms, since
+ * `0` would mean "no budget".
+ */
+export function resolveWorkdayScrapeTimeBudget(env: NodeJS.ProcessEnv = process.env): WorkdayScrapeTimeBudget {
+  const configuredMs = readWorkdayScrapeTimeBudgetMs(env);
+  if (configuredMs <= 0) return { budgetMs: 0, configuredMs: 0, cappedByDeadlineMs: null };
+  const deadlineMs = readFanoutDeadlineHintMs(env);
+  if (deadlineMs <= 0) return { budgetMs: configuredMs, configuredMs, cappedByDeadlineMs: null };
+  const capMs = Math.max(1, Math.floor(deadlineMs * WORKDAY_BUDGET_SHARE_OF_FANOUT_DEADLINE));
+  return capMs < configuredMs
+    ? { budgetMs: capMs, configuredMs, cappedByDeadlineMs: deadlineMs }
+    : { budgetMs: configuredMs, configuredMs, cappedByDeadlineMs: null };
+}
+
+/**
+ * The `searchText` sent to Workday's job search (Spec 1736 T6): the trimmed
+ * search term, or `''` in list mode (term absent, null, empty or whitespace —
+ * contract C1). Workday filters server-side, so a keyword search only pages
+ * and enriches matching postings. A non-string never becomes `"undefined"` /
+ * `"null"` / `"[object Object]"` text.
+ */
+export function workdaySearchText(searchTerm: string | null | undefined): string {
+  return typeof searchTerm === 'string' ? searchTerm.trim() : '';
+}
 
 /** Default headers for Workday API requests */
 export const WORKDAY_HEADERS: Record<string, string> = {
@@ -69,6 +228,179 @@ export function workdayListingKey(listing: {
   return listing.externalPath?.trim() || listing.title?.trim() || null;
 }
 
+/** A single token containing a digit: the shape of a Workday requisition id. */
+const REQUISITION_TOKEN_RE = /^[A-Za-z0-9_-]*\d[A-Za-z0-9_-]*$/;
+
+/**
+ * True when `token` occurs in `path` with no letter or digit directly before
+ * or after it (case-insensitive): `R19827` is in `…/Maintenance_R19827`, but
+ * `R1000` is not in `…/Role_JR1000`.
+ */
+function pathHasToken(path: string, token: string): boolean {
+  if (!path || !token) return false;
+  const haystack = path.toLowerCase();
+  const needle = token.toLowerCase();
+  for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + 1)) {
+    const before = at === 0 ? '' : haystack[at - 1];
+    const after = haystack[at + needle.length] ?? '';
+    if (!/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after)) return true;
+  }
+  return false;
+}
+
+/**
+ * Requisition id of a search-result row, for postings returned without a detail
+ * response (Spec 1736 T11: past the detail cap or the time budget, or a failed
+ * detail request).
+ *
+ * The detail response's `jobReqId` is what an enriched posting's id is built
+ * from; this recovers the same value from the list row so a posting keeps one
+ * id whether or not it was enriched. `bulletFields` mixes the id with
+ * tenant-specific badges ("Spotlight Job", "Exempt", a location, "Posting End
+ * Date: 09/30/2026"), so the id is the first bullet that is a single token
+ * containing a digit AND appears in the detail path as a whole token (Spec
+ * 1736 T14: a badge such as "2026" or a stray code must never become the id);
+ * failing that, the detail path's trailing `_<id>` suffix when it contains a
+ * digit (`…/Software-Engineer_JR0271234` → `JR0271234`). The Spec 1735
+ * verifier recorded fixtures with the same rule minus the path check; every
+ * one of its 168 recorded rows passes the check, so the two agree on them.
+ */
+export function workdayListingRequisitionId(listing: {
+  bulletFields?: ReadonlyArray<unknown> | null;
+  externalPath?: string | null;
+}): string | null {
+  const path = (listing.externalPath ?? '').split(/[?#]/)[0];
+  for (const bullet of listing.bulletFields ?? []) {
+    if (typeof bullet !== 'string') continue;
+    const token = bullet.trim();
+    if (REQUISITION_TOKEN_RE.test(token) && pathHasToken(path, token)) return token;
+  }
+  const lastSegment = path.split('/').pop() ?? '';
+  const underscore = lastSegment.lastIndexOf('_');
+  if (underscore < 0) return null;
+  const tail = lastSegment.slice(underscore + 1);
+  return REQUISITION_TOKEN_RE.test(tail) ? tail : null;
+}
+
+/**
+ * A Workday location label as the shared parser should see it: Workday
+ * sometimes slugifies labels with underscores ("Remote_USA"), which defeats the
+ * parser's `\bremote\b` boundary, so "_" becomes a space (Spec 5025).
+ */
+export function normalizeWorkdayLocationLabel(label: string | null | undefined): string | null {
+  if (typeof label !== 'string') return null;
+  return label.replace(/_/g, ' ').replace(/\s+/g, ' ').trim() || null;
+}
+
+/**
+ * UK nations the shared parser does not read as countries: in
+ * "Oxford - England" it keeps "England" as a site name.
+ */
+const UK_NATIONS: ReadonlySet<string> = new Set(['england', 'scotland', 'wales', 'northern ireland']);
+
+/**
+ * True when a label looks like a place (Spec 1736 T12), judged by the shared
+ * location parser: it mentions remote work, or yields a state or a country
+ * ("Norwood, Massachusetts", "Warsaw - Poland", "Hong Kong", "Remote - US").
+ * A part the parser leaves as a site name also counts when it is a US state
+ * ("Austin - TX", Q-096) or a UK nation ("Oxford - England").
+ *
+ * A bare word or phrase has no location shape — "Drug Manufacturing",
+ * "Technical Development", "Spotlight Job", "2 Locations" — and neither does a
+ * bare city ("Norwood", "Bengaluru"): the parser has no gazetteer, so a city
+ * alone cannot be told from a department.
+ */
+export function hasWorkdayLocationShape(label: string | null | undefined): boolean {
+  const text = normalizeWorkdayLocationLabel(label);
+  if (!text) return false;
+  const parsed = parseLocationList([text]);
+  if (parsed.remoteMentioned) return true;
+  if (parsed.location?.state || parsed.location?.country) return true;
+  return text
+    .split(/\s+[-–]\s+|\s*,\s*/)
+    .some((part) => UK_NATIONS.has(part.toLowerCase()) || normalizeUsState(part) !== null);
+}
+
+/**
+ * Split a detail response's `additionalLocations` into places and the rest
+ * (Spec 1736 T12). Some tenants put a department there — Moderna's detail for
+ * "Sr. Specialist, Maintenance" lists `["Drug Manufacturing"]` next to the
+ * primary "Norwood, Massachusetts" — which the parser would turn into a second
+ * site, "Norwood, Massachusetts; Drug Manufacturing".
+ *
+ * An entry is kept when it has a location shape ({@link hasWorkdayLocationShape}).
+ * When the primary location itself has none (a tenant that names sites by a
+ * bare city, "Bengaluru" + "Hyderabad"), shapeless entries are kept too: there
+ * is nothing to tell them from, and dropping a real site would be worse.
+ */
+export function splitWorkdayAdditionalLocations(
+  primary: string | null | undefined,
+  additional: ReadonlyArray<unknown> | null | undefined,
+): { locations: string[]; rejected: string[] } {
+  const primaryText = normalizeWorkdayLocationLabel(primary);
+  const bareSiteTenant = primaryText !== null && !hasWorkdayLocationShape(primaryText);
+  const locations: string[] = [];
+  const rejected: string[] = [];
+  for (const entry of additional ?? []) {
+    const text = normalizeWorkdayLocationLabel(typeof entry === 'string' ? entry : null);
+    if (!text) continue;
+    if (bareSiteTenant || hasWorkdayLocationShape(text)) locations.push(text);
+    else rejected.push(text);
+  }
+  return { locations, rejected };
+}
+
+/**
+ * The search row's own location label (Spec 1736 T13): `locationsText`, or —
+ * when the tenant leaves it out, as Moderna does — the first `bulletFields`
+ * entry that is not the row's requisition id and has a location shape
+ * ({@link hasWorkdayLocationShape}). Moderna's row is
+ * `["Norwood, Massachusetts", "Drug Manufacturing", "R19827"]`: the department
+ * has no location shape, so it is never taken for the place.
+ *
+ * `locationsText` is returned as given, a bare "N Locations" count included;
+ * the caller drops the count. The label joins an enriched posting's detail
+ * locations too, so both levels see the same row label.
+ */
+export function workdayListingLocationLabel(listing: {
+  locationsText?: string | null;
+  bulletFields?: ReadonlyArray<unknown> | null;
+  externalPath?: string | null;
+}): string | null {
+  const text = typeof listing.locationsText === 'string' ? listing.locationsText.trim() : '';
+  if (text) return text;
+  const requisitionId = workdayListingRequisitionId(listing);
+  for (const bullet of listing.bulletFields ?? []) {
+    if (typeof bullet !== 'string') continue;
+    const label = bullet.trim();
+    if (!label || label === requisitionId) continue;
+    if (hasWorkdayLocationShape(label)) return label;
+  }
+  return null;
+}
+
+/** The 50 US states and DC (territories excluded: "MH", "PR" … are also country-like codes). */
+const US_STATES_AND_DC: ReadonlySet<string> = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS',
+  'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC',
+  'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+]);
+
+/**
+ * `'US'` when a parsed site names a US state (or DC) and no country (Spec 1736
+ * T13). A list-level posting has no requisition country for the Spec 1689
+ * overlay to fold in, so without this its "Norwood, MA" would key differently
+ * from the enriched copy's "Norwood, MA, United States". For a US requisition
+ * it is the value the overlay adds anyway.
+ */
+export function workdayImpliedCountryCode(
+  site: { state?: string | null; country?: string | null } | null | undefined,
+): 'US' | null {
+  if (!site || site.country) return null;
+  const state = typeof site.state === 'string' ? site.state.trim().toUpperCase() : '';
+  return US_STATES_AND_DC.has(state) ? 'US' : null;
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
@@ -106,6 +438,37 @@ function isRealUtcDate(year: number, month: number, day: number): boolean {
 }
 
 /**
+ * An ISO-shaped absolute date as the epoch ms of that calendar date's UTC
+ * midnight, the date taken as written (any time part and zone ignored).
+ * Null for anything else or an impossible date. TZ-independent.
+ */
+function isoCalendarDateMs(value: string | null | undefined): number | null {
+  if (typeof value !== 'string') return null;
+  const isoMatch = value.trim().match(ISO_DATE_RE);
+  if (!isoMatch) return null;
+  const [year, month, day] = isoMatch.slice(1, 4).map(Number);
+  return isRealUtcDate(year, month, day) ? Date.UTC(year, month - 1, day) : null;
+}
+
+/**
+ * How many days before the board's "today" a relative Workday `postedOn`
+ * label counts: "Posted Today" -> 0, "Posted Yesterday" -> 1, "Posted N Day(s)
+ * Ago" -> N. Null for the open "Posted N+ Days Ago" (a lower bound only), an
+ * absolute date, any other text, and nullish input. Case-insensitive and
+ * tolerant of irregular whitespace. Never throws.
+ */
+export function workdayPostedOnDaysAgo(postedOn?: string | null): number | null {
+  if (typeof postedOn !== 'string') return null;
+  const normalized = postedOn.trim().replace(/\s+/g, ' ').toLowerCase();
+  if (normalized === 'posted today') return 0;
+  if (normalized === 'posted yesterday') return 1;
+  const relativeMatch = normalized.match(/^posted (\d+)(\+)? days? ago$/);
+  if (!relativeMatch || relativeMatch[2]) return null;
+  const days = Number(relativeMatch[1]);
+  return Number.isSafeInteger(days) ? days : null;
+}
+
+/**
  * Parse Workday's `postedOn` field into an ISO calendar date (YYYY-MM-DD).
  *
  * The job-list endpoint returns relative human-readable labels rather than
@@ -114,6 +477,13 @@ function isRealUtcDate(year: number, month: number, day: number): boolean {
  * "Posted 30+ Days Ago". Matching is case-insensitive and tolerant of
  * irregular whitespace. Day arithmetic is UTC-based off `now` (defaults to
  * the current time) so results do not drift with the host timezone.
+ *
+ * `now` is the day the label counts back from. Workday counts on the board's
+ * own calendar, which is not UTC's for part of every day (Moderna, on US
+ * Eastern time, is a day behind UTC from 00:00 to 04:00 UTC): pass the
+ * board's date from {@link resolveWorkdayBoardToday} when there is one
+ * (Spec 1736 T17). The default, the UTC date of the current time, is right
+ * only while the board's calendar and UTC's agree.
  *
  * - "Posted Today"        -> ISO date of `now`
  * - "Posted Yesterday"    -> `now` minus 1 day
@@ -135,34 +505,86 @@ export function parseWorkdayPostedOn(
 ): string | null {
   if (!postedOn) return null;
 
-  const normalized = postedOn.trim().replace(/\s+/g, ' ').toLowerCase();
-  if (!normalized) return null;
-
-  if (normalized === 'posted today') {
-    return toIsoDate(now);
+  const daysAgo = workdayPostedOnDaysAgo(postedOn);
+  if (daysAgo !== null) {
+    return toIsoDate(new Date(now.getTime() - daysAgo * MS_PER_DAY));
   }
 
-  if (normalized === 'posted yesterday') {
-    return toIsoDate(new Date(now.getTime() - MS_PER_DAY));
-  }
+  const absolute = isoCalendarDateMs(postedOn);
+  return absolute === null ? null : toIsoDate(new Date(absolute));
+}
 
-  const relativeMatch = normalized.match(/^posted (\d+)(\+)? days? ago$/);
-  if (relativeMatch) {
-    // "N+ Days Ago" is a lower bound only — no exact date can be derived.
-    if (relativeMatch[2]) return null;
-    const days = parseInt(relativeMatch[1], 10);
-    return toIsoDate(new Date(now.getTime() - days * MS_PER_DAY));
-  }
+/** One enriched posting's evidence for its board's calendar (Spec 1736 T17). */
+export interface WorkdayBoardDateSample {
+  /** The relative label, preferably the search row's (the list-level labels count from the same day). */
+  readonly postedOn?: string | null;
+  /** The detail's absolute `startDate`. */
+  readonly startDate?: string | null;
+}
 
-  const isoMatch = postedOn.trim().match(ISO_DATE_RE);
-  if (isoMatch) {
-    const [, year, month, day] = isoMatch;
-    if (isRealUtcDate(Number(year), Number(month), Number(day))) {
-      return `${year}-${month}-${day}`;
-    }
-  }
+/** The board's calendar date that its relative `postedOn` labels count back from. */
+export interface WorkdayBoardToday {
+  /** The board's date, `YYYY-MM-DD`. */
+  readonly date: string;
+  /** UTC midnight of {@link date}: the `now` to hand {@link parseWorkdayPostedOn}. */
+  readonly reference: Date;
+  /** {@link date} minus the UTC date of `now`: -1, 0 or +1. */
+  readonly offsetDays: number;
+  /** Samples that dated the board to {@link date}. */
+  readonly votes: number;
+  /** Samples that dated the board at all (a day-count label and a valid `startDate`, within a day of UTC). */
+  readonly samples: number;
+}
 
-  return null;
+/**
+ * Date a Workday board's calendar from its enriched postings (Spec 1736 T17).
+ *
+ * Workday resolves "Posted Today / Yesterday / N Days Ago" on the board's own
+ * calendar, not UTC's. The recorded Moderna board (US Eastern) at 01:33 UTC on
+ * 2026-09-26 labelled a posting whose detail `startDate` is 2026-09-25
+ * "Posted Today", and its Madrid and Oxford postings the same way, so the
+ * calendar is the tenant's, not the posting's location's. Counting the list
+ * labels back from the UTC date put every list-level posting one day late
+ * while the enriched copy (from `startDate`) was right.
+ *
+ * Each enriched posting whose label names a day count and whose detail has an
+ * ISO `startDate` dates the board: `startDate + N days` is the board's today.
+ * A board's calendar is at most one day off UTC's (UTC−12 … UTC+14), so a
+ * sample further off is a repost or other oddity and is ignored. The date most
+ * samples give wins; a tie goes to the one closest to UTC's date, then the
+ * earlier. Returns null when no sample dates the board — the caller then keeps
+ * the UTC date. `now` only bounds and ranks the samples; the result is
+ * independent of the host time zone. Never throws.
+ */
+export function resolveWorkdayBoardToday(
+  samples: ReadonlyArray<WorkdayBoardDateSample>,
+  now: Date = new Date(),
+): WorkdayBoardToday | null {
+  const utcToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  if (Number.isNaN(utcToday)) return null;
+
+  const votes = new Map<number, number>();
+  let usable = 0;
+  for (const sample of samples) {
+    const daysAgo = workdayPostedOnDaysAgo(sample.postedOn);
+    if (daysAgo === null) continue;
+    const start = isoCalendarDateMs(sample.startDate);
+    if (start === null) continue;
+    const offsetDays = Math.round((start + daysAgo * MS_PER_DAY - utcToday) / MS_PER_DAY);
+    if (!(offsetDays >= -1 && offsetDays <= 1)) continue;
+    usable++;
+    votes.set(offsetDays, (votes.get(offsetDays) ?? 0) + 1);
+  }
+  if (usable === 0) return null;
+
+  const [offsetDays, count] = [...votes.entries()].sort(
+    ([offsetA, votesA], [offsetB, votesB]) =>
+      votesB - votesA || Math.abs(offsetA) - Math.abs(offsetB) || offsetA - offsetB,
+  )[0];
+  const reference = new Date(utcToday + offsetDays * MS_PER_DAY);
+  const date = toIsoDate(reference);
+  if (date === null) return null;
+  return { date, reference, offsetDays, votes: count, samples: usable };
 }
 
 /**

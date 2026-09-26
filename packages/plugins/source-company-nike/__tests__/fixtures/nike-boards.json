@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "nike:1:nke"
+      },
+      "atsIdPrefix": "wd-nike-"
+    }
+  ],
+  "responses": {
+    "https://nike.wd1.myworkdayjobs.com/wday/cxs/nike/nke/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Senior Administrative Assistant - Speed, Running, & Training",
+          "externalPath": "/job/Beaverton-Oregon/Senior-Administrative-Assistant---Speed--Running----Training_R-92076-1",
+          "locationsText": "Beaverton, Oregon",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-92076"
+          ]
+        },
+        {
+          "title": "Lead, Creative Concept & Styling Design Project Manager, Global Jordan",
+          "externalPath": "/job/Beaverton-Oregon/Lead--Creative-Concept---Styling-Design-Project-Manager--Global-Jordan_R-92424",
+          "locationsText": "Beaverton, Oregon",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-92424"
+          ]
+        },
+        {
+          "title": "Nike Retail Associate (Athlete) - NIKE ZARAGOZA - Contrato Permanente - Part Time 16h/semana",
+          "externalPath": "/job/Zaragoza-Spain/Nike-Retail-Associate--Athlete--NIKE-UNITE-ZARAGOZA---Contrato-Permanente---Part-Time--16h-_R-91184",
+          "locationsText": "Zaragoza, Spain",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-91184"
+          ]
+        }
+      ]
+    },
+    "https://nike.wd1.myworkdayjobs.com/wday/cxs/nike/nke/job/Beaverton-Oregon/Senior-Administrative-Assistant---Speed--Running----Training_R-92076-1": {
+      "jobPostingInfo": {
+        "title": "Senior Administrative Assistant - Speed, Running, & Training",
+        "jobDescription": "<p>Senior Administrative Assistant - Speed, Running, &amp; Training at Nike.</p>",
+        "location": "Beaverton, Oregon",
+        "jobReqId": "R-92076",
+        "externalUrl": "https://nike.wd1.myworkdayjobs.com/nke/job/Beaverton-Oregon/Senior-Administrative-Assistant---Speed--Running----Training_R-92076-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "nike"
+      }
+    },
+    "https://nike.wd1.myworkdayjobs.com/wday/cxs/nike/nke/job/Beaverton-Oregon/Lead--Creative-Concept---Styling-Design-Project-Manager--Global-Jordan_R-92424": {
+      "jobPostingInfo": {
+        "title": "Lead, Creative Concept & Styling Design Project Manager, Global Jordan",
+        "jobDescription": "<p>Lead, Creative Concept &amp; Styling Design Project Manager, Global Jordan at Nike.</p>",
+        "location": "Beaverton, Oregon",
+        "jobReqId": "R-92424",
+        "externalUrl": "https://nike.wd1.myworkdayjobs.com/nke/job/Beaverton-Oregon/Lead--Creative-Concept---Styling-Design-Project-Manager--Global-Jordan_R-92424",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "nike"
+      }
+    },
+    "https://nike.wd1.myworkdayjobs.com/wday/cxs/nike/nke/job/Zaragoza-Spain/Nike-Retail-Associate--Athlete--NIKE-UNITE-ZARAGOZA---Contrato-Permanente---Part-Time--16h-_R-91184": {
+      "jobPostingInfo": {
+        "title": "Nike Retail Associate (Athlete) - NIKE ZARAGOZA - Contrato Permanente - Part Time 16h/semana",
+        "jobDescription": "<p>Nike Retail Associate (Athlete) - NIKE ZARAGOZA - Contrato Permanente - Part Time 16h/semana at Nike.</p>",
+        "location": "Zaragoza, Spain",
+        "jobReqId": "R-91184",
+        "externalUrl": "https://nike.wd1.myworkdayjobs.com/nke/job/Zaragoza-Spain/Nike-Retail-Associate--Athlete--NIKE-UNITE-ZARAGOZA---Contrato-Permanente---Part-Time--16h-_R-91184",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "nike"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "nike-R-92076",
+      "title": "Senior Administrative Assistant - Speed, Running, & Training"
+    },
+    {
+      "id": "nike-R-92424",
+      "title": "Lead, Creative Concept & Styling Design Project Manager, Global Jordan"
+    },
+    {
+      "id": "nike-R-91184",
+      "title": "Nike Retail Associate (Athlete) - NIKE ZARAGOZA - Contrato Permanente - Part Time 16h/semana"
+    }
+  ]
+}

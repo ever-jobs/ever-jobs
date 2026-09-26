@@ -116,6 +116,36 @@ every source. Red control: the cap set back to 200 fails 3 of them.
 
 ---
 
+## 2026-09-26 — Spec 1736 — review round 2: one identity per Workday posting, departments out of the location, budget vs fan-out deadline, batch shipped enabled; list-level dates on the board's calendar (T17)
+
+**PR #99 review (T18):** when no enriched posting dates a board's calendar (`WORKDAY_MAX_DETAIL_FETCHES=0`, every detail failed or without a `startDate`), a list-level relative label now stays undated instead of counting from UTC's date, which put Moderna's "Posted Today" a day late at 01:33 UTC. Absolute labels are still parsed; enriched postings keep their `startDate`. Spec §8.1 "Date" and T18 updated; 146/146 Workday tests, 107 changed-plugin suites (1992 tests) green; the new cases fail on the previous adapter.
+
+**Change:** A second review of the sources branch found that a Workday posting did not keep one identity across the detail cap (T11): the same posting is enriched while it is among a board's newest 50 and returned at list level once newer postings push it down, and the two copies differed in fields the dedup key reads. Fixed in `source-ats-workday` (Spec 1736 §8.1): **company** — every posting is named by its tenant; the detail-only `hiringOrganization.name` made a posting read `ModernaTX, Inc.` enriched and `Moderna` at list level (after the plugin's re-stamp), or `Collins Aerospace` and `RTX`; the generator now re-stamps the display name for Workday like every other backend (Spec 1735 §4.2.1; the round-1 business-unit rule, T9 / 1735 T10, is withdrawn) and the 55 Workday plugins were re-scaffolded (service + suite only, fixtures unchanged) (T13). **Place** — Moderna's rows have no `locationsText`; the row label now falls back to the first `bulletFields` entry that is not the requisition id and has a location shape, and with no requisition country a single site in a US state (50 + DC) takes `United States`, the value the Spec 1689 overlay adds for a US requisition (T13). **Departments in `additionalLocations`** — Moderna's detail lists `["Drug Manufacturing"]` next to "Norwood, Massachusetts", which became `city: "Norwood, Massachusetts; Drug Manufacturing"`; an additional entry is now a site only when the shared parser finds remote work, a state or a country (or a part is a US state / UK nation), and a rejected one becomes the department when there is none (T12). **Requisition id** — a bullet is taken as the list-level id only when the detail path carries it as a whole token (T14). `datePosted` stays absolute (detail `startDate`, else the row label resolved at scrape time). Consumers are told to key Workday postings on `id` (spec §8.1, `docs/DEPLOYMENT.md`, `docs/ATS_INTEGRATIONS.md`). **Time budget vs fan-out deadline** (T15, spec §8.2): documented that `WORKDAY_SCRAPE_TIME_BUDGET_MS` runs from each board's own scrape start, independent of the fan-out deadline, which is now named `EVER_JOBS_FANOUT_DEADLINE_MS` (preferred) with `EVER_JOBS_SEARCH_DEADLINE_MS` as fallback everywhere we document it; as a cheap hint the adapter reads that deadline (same precedence and parsing as the API) and caps its budget at 3/4 of it (defaults unchanged, 90 s of 120 s). **Owner decision** (T16, spec §7, Q-107): the Workday and quant plugins ship enabled; the 55-token `EVER_JOBS_DISABLED_SOURCES` line is an optional emergency switch, not a deploy gate (T10 withdrawn).
+
+**Files:** `packages/plugins/source-ats-workday/{src/workday.service.ts,src/workday.constants.ts,__tests__/workday.service.spec.ts,__tests__/workday.constants.spec.ts,__tests__/fixtures/moderna-list.json,__tests__/fixtures/moderna-detail.json}` (recorded from Moderna's public board 2026-09-25; the description body is a stand-in), `scripts/scaffold-ats-delegate-company-source.ts`, `scripts/__tests__/scaffold-ats-delegate-company-source.spec.ts`, `packages/plugins/source-company-*/{src/*.service.ts,__tests__/*.service.spec.ts}` (the 55 Workday plugins), `.specify/specs/1735-ats-delegate-company-source-pipeline/{spec,tasks}.md`, `.specify/specs/1736-workday-company-sources/{spec,plan,tasks}.md`, `docs/DEPLOYMENT.md`, `docs/ATS_INTEGRATIONS.md`, `.env.example`, `docs/questions.md` (Q-107), `docs/index.md`, `docs/log.md`.
+
+**Validation:** `source-ats-workday` 2 suites, 126 tests; `source-ats-greenhouse` (non-e2e) 2 suites, 28; `apps/api/__tests__/jobs` 2 suites, 12; `scripts/__tests__` 18 suites, 290; all 84 generated company suites 1,520 (was 1,630: the Workday business-unit block's 3 cases per plugin became 1 enriched/list-level case). Mutation checks, each restored after: naming postings after `hiringOrganization` again turns 4 adapter cases red; feeding every `additionalLocations` entry to the parser again, 3; dropping the bullet location fallback, 3, and the implied US country, 3 (both include the enriched/list-level identity case on the recorded Moderna posting); dropping the path check on the bullet id, 2; ignoring the deadline hint, 2. `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. No `*.e2e-spec.ts` run.
+
+**Follow-up — list-level dates on the board's calendar (Spec 1736 T17, live retest):** A live retest of the sources branch (Moderna, 00:42 UTC on 2026-09-26, detail cap 10) found every list-level Workday posting one day later than its enriched copy: 20 of 20, e.g. R19715 `2026-09-25` at list level against `2026-09-24` from its detail's `startDate`. Cause: Workday counts "Posted Today / Yesterday / N Days Ago" on the board's own calendar, and `parseWorkdayPostedOn` counted back from the UTC date. Moderna is on US Eastern time, so from 00:00 to 04:00 UTC its "today" is UTC's yesterday; the enriched copy was right because it reads the absolute `startDate`. A recording at 01:33 UTC (first listing page and the detail of all 20 rows) confirms it: every label counts from 2026-09-25, including the Madrid and Oxford postings, so the calendar is the tenant's, not the posting's location's. Fix in `source-ats-workday` (spec §8.1, "Date — the board's calendar"): after enrichment the adapter dates the board from its enriched postings (`resolveWorkdayBoardToday`: row label + detail `startDate` gives the board's today; samples more than a day off UTC's date, e.g. reposts, are ignored; majority wins, a tie goes to UTC's date, then the earlier) and every relative label of the scrape counts back from that date; the row's label is used, not the detail's, so a board midnight between listing and enrichment does not shift the list labels. A board off UTC's date is logged once per scrape. With no enriched sample (`WORKDAY_MAX_DETAIL_FETCHES=0`, budget spent before the first detail, every detail failed or without `startDate`, only "30+ Days Ago" rows) the UTC date is kept, as before: the tenant's time zone is not in the CXS responses. `workdayPostedOnDaysAgo` is the label parser both paths share.
+
+**T17 files:** `packages/plugins/source-ats-workday/{src/workday.constants.ts,src/workday.service.ts,__tests__/workday.constants.spec.ts,__tests__/workday.service.spec.ts,__tests__/support/workday-dates-in-time-zones.ts,__tests__/fixtures/moderna-list-after-utc-midnight.json,__tests__/fixtures/moderna-detail-dates-after-utc-midnight.json}` (recorded from Moderna's public board 2026-09-26 01:33 UTC: the listing page as served, and per row the detail's `postedOn` and `startDate`), `.specify/specs/1736-workday-company-sources/{spec,plan,tasks}.md`, `docs/index.md`, `docs/log.md`.
+
+**T17 validation:** `source-ats-workday` 2 suites, 145 tests (19 new): on the recording at a fixed 01:33 UTC every one of the 15 list-level postings has its detail's `startDate`; enriched vs capped scrapes agree at 23:59:59, 00:00:01, 00:42:22 and 03:59:59 UTC; a board ahead of UTC (Tokyo); the board's midnight during enrichment; a repost; the undated fallback; the pure helpers either side of UTC midnight. Host time zone: Jest gives a test a copy of `process.env`, so the suite runs the helpers in a ts-node child process across six zones (UTC−7 … UTC+14) with each zone's UTC offset asserted as the control; the whole Workday suite also passes with the Jest process itself in `America/New_York` and `Pacific/Kiritimati`. Red first: against the unfixed adapter 5 of the 7 new service cases fail (the recording one day late on all 15 list-level rows); the other two, the recording's own consistency check and the undated fallback, pass on both by design. Mutation checks, each restored after: counting list labels from the UTC date again (the pre-fix behaviour), those 5 red; calibrating from the detail's label, 1; no ±1-day bound, 1; the tie going to the later date, 1; the board's date from host-local fields, 3 (incl. the child-process case). All 55 Workday-backed company suites 994/994. Live read-only check at 01:55 UTC (1 listing request, 5 details): 20 of 20 postings, 15 at list level, match their recorded `startDate`, and the adapter logged the board one day behind UTC. `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. No `*.e2e-spec.ts` run.
+
+---
+
+## 2026-09-26 — Spec 1752 — PR #100 review: plain ReliefWeb text from Markdown; guard exceptions excuse only their documented findings
+
+- **ReliefWeb (Spec 1752).** With no `body-html`, `descriptionFormat: plain` now converts the Markdown `body` with a new `markdownToPlainText` (`@ever-jobs/common`, next to `htmlToPlainText`): headings, emphasis, inline code, quotes and rules lose their markers, links and images keep their text. `htmlToPlainText` alone left `##`, `**` and `[text](url)` in place.
+- **Guard (Spec 1751).** `KNOWN_EXCEPTIONS` now lists, per plugin, the exact findings it excuses (file, sink, API host fragment). Any other finding in an excused plugin fails the tree check, and an excused finding that disappears fails the staleness check. Before, one excused finding hid every other API link in the same plugin.
+- New tests fail on the previous code; guard 20/20, ReliefWeb + helper 19/19.
+
+## 2026-09-26 — Spec 1751 — guard: boolean URL tests and fetched URL records are not links
+
+- After merging develop (Specs 1690-1713) the tree check failed on three helpers in the new plugins, none a link: `source-jobsbylevel` `isAllowedJobsByLevelUrl()` (a `: boolean` robots/host test whose disallowed-prefix list contains `/api/`), and `source-simplifyjobs` `feedUrl()` / `resolveFeedUrls()` (the raw GitHub feed, returned as a `{ newgrad, internships }` record and fetched by key).
+- The guard now skips URL-named helpers declared `: boolean` or as a type predicate; follows a helper result through a record literal (`{ newgrad: feedUrl(…) }`) and through an element read (`urls[feed]`); and treats a predicate call (`is*`/`has*`/`can*`/`should*`) as an inert use, like a truth test.
+- Exemption still needs at least one request use and no other use, so a record of URLs copied into `jobUrl` stays judged: a new control case (`urls[feed]` → `jobUrl`) flags the helpers and the field. Before the change the new fixture failed (both feed helpers judged); after it the suite passes 19/19 on the merged tree.
+
 ## 2026-09-26 — Spec 1690 — merge review fixup: pacing floors, User-Agent switches, memo waiter abort
 
 **Change:** Three semantic merge breaks fixed without removing anything. (1) Pacing floors: since Spec 1690 a client's `rateDelayMin` is only the crawl policy's plugin layer, which a search caller's `rateDelayMin` (caller layer, `EVER_JOBS_CRAWL_CALLER_OVERRIDES=any`) replaces, so RemoteOK's `Crawl-delay` (1 s), Welcome to the Jungle's board pacing (0.5 s; 2 s between credential pages) and Simplify's feed spacing (2 s) could be shortened to 50 ms. New additive `HttpClientOptions.minIntervalFloorMs` (milliseconds, copied by `createHttpClient`'s input-shaped branch): the limiter spaces that client's requests by max(policy `minIntervalMs`, robots.txt `Crawl-delay`, floor), like a `Crawl-delay`; the three plugins set it to the spacing they already computed, so a caller may again only lengthen it. (2) User-Agent switches: `WTTJ_USER_AGENT_MODE=browser` and `EVER_JOBS_REMOTEOK_LEGACY=ua` only declared a UA, which the default `identify` mode never sends; while a switch is on, the plugin now passes `crawl: { userAgentMode: 'plugin', userAgentReason }` (`WTTJ_BROWSER_UA_CRAWL_POLICY`, `REMOTEOK_LEGACY_UA_CRAWL_POLICY`), so the browser UA reaches the wire again; `strict` (env, preset) and a caller `userAgent` still win. ZipRecruiter: its header UA is likewise only declared, so the honest configured UA now goes out by default (checked on the wire; the operator opt-in `sites.zip_recruiter.userAgentMode: "plugin"` sends the desktop one); recorded in Q-099, Spec 1713 Q1 and `ziprecruiter.constants.ts` rather than decided in code. (3) A request parked on an identical in-flight request in a Spec 1700 memo scope now rejects on its own abort signal (`memoisedRequest(…, signal)`) instead of waiting for the first request; the first keeps the entry.
@@ -513,6 +543,162 @@ Q-103 (`dedupKey` derivation), Q-104 (JSON result order).
 
 **Validation:** see the four specs' tasks; real PostgreSQL 16 (throwaway `initdb` cluster):
 `store:postgres:migrate` applied `0_init`, boot-path test 4/4, conformance suite 46/46.
+
+## 2026-09-25 — Spec 1737 — Q-107 correction (Specs 1735–1737 review): the fan-out deadline applies today
+
+**Change:** The entry below, Q-107 follow-up 2 and Spec 1736 §7 repeated a review claim that `configuration.ts` parses `EVER_JOBS_SEARCH_DEADLINE_MS` / `EVER_JOBS_SEARCH_CONCURRENCY` with a radix (`parseInt(env, 120_000)`), so the deadline is always `NaN` and never applies. That is wrong: `configuration.ts` shadows `parseInt` with a local `(value, fallback)` helper, so the defaults are 120 000 ms / 64 and both variables (and `CACHE_EXPIRY` / `CACHE_MAX_ITEMS`) take effect. Consequence corrected in Q-107 and Spec 1736 §7: the tail-registered company plugins are the first sources the 120 s deadline skips or abandons **today**, and sequential Workday enrichment makes each Workday board slower; a full sync that needs them should select them or raise the deadline. Nothing is handed to the C4 lane. Spec 1736 §7 now also records that the 55-token `EVER_JOBS_DISABLED_SOURCES` list was checked against the source (exactly the plugins delegating to `Site.WORKDAY`).
+
+**Files:** `apps/api/__tests__/jobs/fanout-config.spec.ts` (new), `docs/questions.md`, `.specify/specs/1736-workday-company-sources/spec.md`, `docs/log.md`.
+
+**Validation:** new suite 4/4 green; red control: renaming the local helper so the calls reach the global `parseInt` turns all 4 red with `NaN`, which is exactly the reviewer's hypothesis, so the suite would catch that bug and shows it is not present.
+
+---
+
+## 2026-09-25 — Spec 1736 — review follow-ups (Specs 1735–1737): Workday politeness, credential isolation, business-unit names, explicit-only SIG, deploy gate, per-scrape bound (T11)
+
+**Change:** Review of Specs 1735–1737 found the batch unsafe to ship as-is; fixed in the lane. **Workday adapter** (Spec 1736 T6/T8, Spec 1735 §4.6): `searchText` is now the trimmed `searchTerm` (`''` in list mode, never `"undefined"` text), and detail enrichment runs 1 request in flight with a 250–500 ms pause before each (was 5 in flight, no pause — with 55 Workday-backed plugins in the default fan-out one search could open ~280 concurrent `*.myworkdayjobs.com` requests). **Greenhouse adapter** (§4.5): `GREENHOUSE_API_KEY` is used only when `GREENHOUSE_HARVEST_BOARD` names the requested board — Harvest lists the key owner's jobs (confidential included) for any board, so every Greenhouse-delegating plugin returned the operator's jobs under the firm's name; a per-request key is still honoured. **Generator** (re-scaffolded into all 84 plugins; fixtures unchanged): `auth: undefined` in every delegation; Workday plugins keep a posting's own hiring organisation when it names a business unit (RTX → Collins Aerospace …) and re-stamp only empty / tenant-token / legal-form names (§4.2.1); seed flag `explicitOnly` keeps a plugin out of the default fan-out (§4.7) — set for SIG, whose `careers-sig.icims.com/robots.txt` disallows every crawler. **Docs:** Spec 1735 §3.1 robots.txt + terms review of the five host families (Workday `/wday/cxs/` not disallowed but undocumented; Lever `Crawl-delay: 1`; adapters send a desktop-Chrome UA — open items for Spec 1690, T12); Spec 1736 §7 merge/deploy gate (deploy only after ever-hust's full-result consumer is live, or with the exact 55-token `EVER_JOBS_DISABLED_SOURCES` list, because `3m` now sorts first); Q-107 review outcome (incl. the `parseInt(env, 120_000)` / `parseInt(env, 64)` radix bug that disables the fan-out deadline, handed to the C4 lane) and Q-109 addendum (SIG explicit-only). `.env.example` documents `GREENHOUSE_API_KEY` / `GREENHOUSE_HARVEST_BOARD`.
+
+**Files:** `packages/plugins/source-ats-workday/{src/workday.constants.ts,src/workday.service.ts,__tests__/*}`, `packages/plugins/source-ats-greenhouse/{src/greenhouse.constants.ts,src/greenhouse.service.ts,__tests__/greenhouse.harvest-scope.spec.ts}`, `scripts/scaffold-ats-delegate-company-source.ts`, `scripts/__tests__/scaffold-ats-delegate-company-source.spec.ts`, `scripts/seeds/ats-delegate-companies.json` (SIG `explicitOnly`), `packages/plugins/source-company-*/{src/*.service.ts,__tests__/*.service.spec.ts}` (84 plugins), `.env.example`, `.specify/specs/{1735,1736,1737}-*/*`, `docs/questions.md`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** Workday adapter 2 suites / 58 tests (new: at most 1 detail request in flight, one paced sleep per detail request, `searchText` per page and `''` for list mode; red first on the old adapter); Greenhouse 2 suites / 25 tests (new `greenhouse.harvest-scope` suite, red first); pipeline scripts 3 suites / 48 tests (generator suite red first on the old generator); all 84 generated suites / 1,630 tests (was 1,352); sabotage: restoring 2 detail requests in flight, the unscoped Harvest key, the forwarded `auth` or the unconditional re-stamp each turns the matching test red; `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean.
+
+**Follow-up — per-scrape bound (Spec 1736 T11, integration review F8):** An integration review of the three ever-jobs branches found a deploy risk here: Workday detail enrichment is sequential and paced (T8), so one board at `resultsWanted = 1000` spent ~10 minutes fetching details, and because the plugin contract carries no deadline, a board the fan-out deadline abandoned kept running, detached, until done. `source-ats-workday` now bounds each scrape (Spec 1736 §8): at most `WORKDAY_MAX_DETAIL_FETCHES` detail requests (default 50; `0` = none; the first postings in list order), and a `WORKDAY_SCRAPE_TIME_BUDGET_MS` wall-clock budget over listing and enrichment (default 90 000, `0` = off; the first page is always requested; no new page or detail request after it is spent). Postings past either limit are returned at list level (title, URL, location, posted date, department, requisition id; no description). A listing cut short by the budget resolves with a `partial` diagnostic naming the budget, the count and the board total; the cap, and a budget spent during enrichment, set none (every listed posting is returned). Two fixes the list-level path needed: a posting without a detail response now takes the list row's requisition id (`workdayListingRequisitionId`: first single-token bullet with a digit, else the path's `_<id>` suffix) before the whole path, so it keeps the id an enriched copy gets; and the list-level `jobUrl` carries the career-site segment (`…myworkdayjobs.com/{site}/job/…`, the `externalUrl` shape; it was `…myworkdayjobs.com/job/…`). Paging no longer pauses after a page that already filled `resultsWanted`. Operator docs: `.env.example` and a new `docs/DEPLOYMENT.md` section with the Spec 1736 §7 / T10 `EVER_JOBS_DISABLED_SOURCES` deploy gate (re-checked: exactly the 55 plugins whose service delegates to `Site.WORKDAY`, and no other company plugin in the repo does). Q-107 follow-up 5 records the defaults. Also in this branch after its rebase onto develop `42f3ad08`: `fanout-config.spec.ts` moved from `apps/api/__tests__/config/` to `apps/api/__tests__/jobs/`, because develop's Spec 1689 CI gate (`scripts/__tests__/ci-workflow.spec.ts`) requires every non-e2e spec under `apps/` to be on the `test:core` path list, which `config/` is not.
+
+**T11 files:** `packages/plugins/source-ats-workday/src/workday.{service,constants}.ts`, `packages/plugins/source-ats-workday/__tests__/workday.{service,constants}.spec.ts`, `.specify/specs/1736-workday-company-sources/{spec,plan,tasks}.md`, `.specify/specs/1735-ats-delegate-company-source-pipeline/spec.md` (§4.6, test plan, rollback), `.env.example`, `docs/DEPLOYMENT.md`, `docs/ATS_INTEGRATIONS.md`, `docs/questions.md` (Q-107), `docs/index.md`, `docs/log.md`.
+
+**T11 validation:** `source-ats-workday` 2 suites, 91 tests (23 new: 11 adapter cases driven by a fake `Date.now`, 12 for the env readers and the row requisition id); red control: against the pre-T11 service 10 of the 11 new adapter cases fail, as does the updated list-level URL case (the 11th, "`0` disables the budget", is the control that passes on both). All 84 generated company suites (53 Workday + 31 quant, real adapters over the recorded fixtures) 1,630/1,630; `source-ats-greenhouse` (non-e2e) 2 suites, 28 tests; `scripts/__tests__` 18 suites, 289 tests (incl. `ci-workflow`, red before the spec move); plugin registry/disabled-sources, `fanout-config`, `dedup-hybrid`, `merge-default`, `jobs.service` green; `JEST_TRANSFORMER=ts-jest` run of the Workday suites green; `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean.
+
+---
+
+## 2026-09-25 — Spec 1735 — ATS-delegating Workday and quant-firm company sources (Specs 1735–1737)
+
+**Change:** Three specs. **1735** — a verify → scaffold → tail-wire pipeline for company plugins that delegate to an existing ATS adapter through the `PluginRegistry`: `scripts/probe-ats-delegate-company-source.ts` (serial, >= 1.1 s between requests, <= 3 requests per company, first listing page only, identifying `EverJobs-SourceVerifier` UA; pure request/gate/extract helpers incl. a Workday requisition-id heuristic that skips badges such as "Spotlight Job"), `scripts/scaffold-ats-delegate-company-source.ts` (one generator for Workday, Greenhouse, Lever, Ashby, SmartRecruiters and iCIMS; refuses unverified boards; multi-board plugins scraped sequentially, early-career first, with the remaining `resultsWanted` budget, cross-board de-dup, actionable diagnostics kept, thrown errors classified; per-plugin suites run the real adapter over fixtures built from the recorded listings; batch specs instead of per-plugin spec dirs; `Tags: segment=…; industry=…` in the description) and `scripts/wire-company-source-tail.ts` (append-at-tail registration in the four shared files). Seeds: `scripts/seeds/ats-delegate-companies.json` (naming, domains, tags, boards) and `scripts/seeds/ats-delegate-company-verification.json` (the 2026-09-24 record: 98 requests, 86 verified boards, 12 rejected). **1736** — 53 Workday company plugins (Salesforce … Moderna; Visa with its early-careers site first). **1737** — 31 quant/trading-firm plugins (26 Greenhouse, 2 Workday, Lever, Ashby, iCIMS; Chicago Trading Company with campus + lateral boards). Decision log: Q-107 (keyword/detail cost inherited from the Workday adapter), Q-108 (tags in the description until `IPluginMetadata` has a field), Q-109 (companies and firms not coverable through a supported public board).
+
+**Files:** `scripts/{probe,scaffold}-ats-delegate-company-source.ts`, `scripts/wire-company-source-tail.ts`, `scripts/__tests__/{probe,scaffold}-ats-delegate-company-source.spec.ts`, `scripts/__tests__/wire-company-source-tail.spec.ts`, `scripts/seeds/ats-delegate-*.json`, `packages/plugins/source-company-*` (84 new packages), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js` (tail additions only), `.specify/specs/{1735,1736,1737}-*/*`, `docs/index.md`, `docs/questions.md`, `docs/log.md`.
+
+**Validation:** `npx jest --runTestsByPath` over the 84 generated suites — 84 suites, 1,352 tests green, each running the real Workday/Greenhouse/Lever/Ashby/iCIMS adapter over the recorded fixtures (no network); `npx jest scripts/__tests__ packages/plugins/source-ats-{workday,greenhouse,lever,ashby,icims}` — 22 suites, 360 tests green (the three new script suites included); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Sabotage check: dropping the company-name re-stamp from a generated service fails its suite. The suites also caught a real fixture bug before commit: Intel and Moderna put a badge or location first in Workday `bulletFields`, so taking `bulletFields[0]` as the requisition id collapsed their recorded postings onto one id (now the first single token containing a digit).
+
+## 2026-09-25 — Spec 1752 (with Spec 1751 T11–T12) — guard follows record links; NAV id proved; ReliefWeb on API v2
+
+**Change:**
+
+- **Guard gap (Spec 1751 T11).** Mutant M7 — Carerix `buildJobUrl()` returning
+  `https://api.carerix.com/v1/jobs/<id>` — passed `scripts/__tests__/plugin-job-url-hosts.spec.ts`:
+  the link is stored as `{ url: … }` in a record and copied later as `jobUrl: job.url`, where
+  `job` is a parameter. The guard now also judges (3) every value under a record key `url` /
+  `link` / `href` (request configs excepted) and (4) every return of a same-plugin helper whose
+  name contains `url`, unless every call site only hands the result to a request (followed
+  through locals, templates, `new URL()`, string methods and returning helpers; logs, truth
+  tests and member reads are neutral). Tree on 2026-09-25: 197 record links, 348 URL-named link
+  helpers, 93 fetch helpers exempted, zero false positives. Zwayam — whose
+  `api.zwayam.com/job_preview/` link the old guard could not see — is the fifth named exception
+  (Q-110). Mutants M7 (method helper), M8 (BreatheHR arrow helper), M9 (CVWarehouse template in
+  a `Map`), M10 (Carerix inline record template) each pass the old guard and fail the new one;
+  every file restored with `git checkout`. New runtime suite `carerix.job-url.spec.ts`.
+- **NAV (Spec 1751 T12).** NAV's own feed source (navikt/pam-stilling-feed `45cc8c49`) sets a
+  list line's `id` and `_feed_entry.uuid` to the ad uuid and publishes
+  `ad_content.link = https://arbeidsplassen.nav.no/stillinger/stilling/<ad uuid>`; one live GET of
+  such a page answered 200 HTML with the uuid as *Stillingsnummer*. The fallback is exactly NAV's
+  link — pinned by two new cases, no code change.
+- **SmartRecruiters doc.** `smartrecruiters.types.ts`: `ref` is on list postings only; the
+  detail response has none.
+- **ReliefWeb (Spec 1752).** v1 answers 410 "The API version 'v1' has been decommissioned"
+  (live), so the source returned nothing. Moved to `https://api.reliefweb.int/v2/jobs`. v2 serves
+  only pre-approved appnames (since 2025-11-01): `ever-jobs` gets 403 "You are not using an
+  approved appname" (live). The appname is now `RELIEFWEB_APPNAME` (default `ever-jobs`, start-up
+  warning), and that 403 becomes a `bad_input` diagnostic naming the variable and the request
+  form. Links `url_alias` → `url` → `reliefweb.int/node/<id>` (live: 301 to the alias; a closed
+  job 410 HTML), never `href`; description per format from `body` / `body-html`. README section
+  and `.env.example` entry added. **Owner action:** request an appname and set
+  `RELIEFWEB_APPNAME` (Spec 1752 T6).
+
+**Live requests used:** api.reliefweb.int 2 of 3 (v2 → 403, v1 → 410), reliefweb.int 2 of 2
+(`/node/4228316` → 410, `/node/4231248` → 301), arbeidsplassen.nav.no 1 of 1 (200).
+
+**Verification:** guard 17/17; reliefweb 13/13 (6 red against the old code); navjobs 5/5;
+carerix 3/3 (2 red under M7); smartrecruiters 10/10; `packages/common` 601/601 in 16 suites;
+`tsc` clean for `tsconfig.typecheck.json` and `apps/api/tsconfig.build.json`.
+
+**Docs:** [1751 spec](../.specify/specs/1751-plugin-job-link-guard/spec.md) (D-04, D-06, D-07),
+[plan](../.specify/specs/1751-plugin-job-link-guard/plan.md),
+[tasks](../.specify/specs/1751-plugin-job-link-guard/tasks.md) (T11–T13),
+[notes](../.specify/specs/1751-plugin-job-link-guard/notes.md);
+[1752 spec](../.specify/specs/1752-reliefweb-api-v2/spec.md),
+[plan](../.specify/specs/1752-reliefweb-api-v2/plan.md),
+[tasks](../.specify/specs/1752-reliefweb-api-v2/tasks.md); `docs/index.md`; **Q-110**.
+
+---
+
+## 2026-09-25 — Spec 1751 — Plugin job-link audit and API-URL guard
+
+**Change:** audited every `jobUrl` / `jobUrlDirect` / `applyUrl` assignment in
+`packages/plugins/*/src/**/*.ts` from the TypeScript AST — 1,791 sites in 1,164 plugins (the
+text search `rg '\b(jobUrl|jobUrlDirect|applyUrl)\s*[:=]'` finds 1,618 lines) — and bucketed each
+by where its value comes from ([notes.md](../.specify/specs/1751-plugin-job-link-guard/notes.md)).
+Besides SmartRecruiters (Spec 1750):
+
+- **Fixed:** `source-reliefweb` fell back to `entry.href` (`https://api.reliefweb.int/v1/jobs/<id>`)
+  and now falls back to `https://reliefweb.int/node/<id>`; `source-navjobs` fell back to the
+  feed item's `/api/v1/feedentry/<uuid>` (and used non-URL `applicationUrl` text verbatim) and
+  now falls back to `https://arbeidsplassen.nav.no/stillinger/stilling/<uuid>`, with `applyUrl`.
+- **Partly fixed (Q-110):** `source-ats-bullhorn` (always a REST entity URL), `source-ats-ceipal`
+  (JSON detail resource; `applyUrl` copied it), `source-ats-hiringthing`, `source-ats-loxo`
+  choose the first public candidate and the caller's `companyUrl` before the old API link,
+  which remains only as a last resort; Ceipal/Loxo `applyUrl` is public-only.
+- **Shared helper:** `packages/common/src/utils/public-url.ts` — `API_URL_PATTERN`,
+  `isApiLikeUrl`, `firstPublicUrl`.
+- **Guard:** `scripts/__tests__/plugin-job-url-hosts.spec.ts` parses every plugin and fails on
+  an API host or API reference field (`.ref`, `.self`, `.apiUrl`, …) wired into a link field,
+  through locals (lexically), constants, helpers, `TEMPLATE.replace()` and `URL` accessors; the
+  four last-resort plugins are named exceptions that fail when no longer needed.
+- Reported only (another session owns them): `linkedin`, `glassdoor`, `ziprecruiter`,
+  `naukri` — all link human pages. Left for later: Zwayam's documented
+  `api.zwayam.com/job_preview/` link, HiBob's unverified API `url`, Workday's site-less and
+  Oracle's `/careers/job/` fallbacks (tasks T9–T10).
+
+**Verification:** `public-url.spec.ts` 28/28; six new `*.job-url.spec.ts` suites 22/22 (13 of 22
+fail against the pre-fix services); guard 12/12 over 1,165 plugins / 1,520 valued assignments,
+red with SmartRecruiters' `job.ref` put back.
+
+**Docs:** [spec](../.specify/specs/1751-plugin-job-link-guard/spec.md),
+[plan](../.specify/specs/1751-plugin-job-link-guard/plan.md),
+[tasks](../.specify/specs/1751-plugin-job-link-guard/tasks.md), `docs/index.md`, **Q-110**.
+
+---
+
+## 2026-09-25 — Spec 1750 — SmartRecruiters `jobUrl` is the public posting page, not the API `ref`
+
+**Change:** `source-ats-smartrecruiters` mapped `jobUrl = job.ref ?? <public pattern>`. `ref` is
+the posting's API resource (`https://api.smartrecruiters.com/v1/companies/<Co>/postings/<id>`)
+and is on every list posting, so every SmartRecruiters job — and every job of the 217 company
+plugins that delegate to it — linked to raw JSON (5,032 rows in a downstream app). Three live
+GETs (AbbVie list, one detail, the id-only public page) confirmed: the list has `ref` but no
+`postingUrl`/`applyUrl`/`jobAd`; the detail has `postingUrl`/`applyUrl`;
+`https://jobs.smartrecruiters.com/AbbVie/<id>` serves the page.
+
+- `jobUrl` = `postingUrl` (public-only) else
+  `https://jobs.smartrecruiters.com/<company.identifier>/<id>` — the API's case-sensitive
+  identifier, then the `ref` segment, then the caller's slug. `applyUrl` only from the API's
+  `applyUrl`. `ref` is parsed for the id/identifier, never linked (`JobPostDto` has no raw
+  field to keep it in). `id`, `atsId` and the URL share one posting id; an id-less posting is
+  skipped instead of linking `…/undefined`.
+- The 217 delegating plugins' fixtures had fabricated a public `ref` and asserted
+  `jobUrl === ref`, which is why nothing was red: 651 fixture `ref`s now carry the real API
+  form, the 217 assertions check the public pattern, and
+  `scripts/scaffold-smartrecruiters-company-source.ts` generates both.
+- New unit suite + fixtures cut from the live responses (custom fields and body trimmed).
+
+**Verification:** `smartrecruiters.service.spec.ts` 10/10; the 217 delegating suites green;
+with `job.ref ??` reintroduced, the plugin suite, the AbbVie suite and the Spec 1751 guard fail
+(10 of 31), restored 31/31. Downstream stores keyed on `jobUrl` see new URLs for existing
+postings (deterministic rewrite: `api…/v1/companies/<Co>/postings/<id>` →
+`jobs.smartrecruiters.com/<Co>/<id>`).
+
+**Docs:** [spec](../.specify/specs/1750-smartrecruiters-public-job-url/spec.md),
+[plan](../.specify/specs/1750-smartrecruiters-public-job-url/plan.md),
+[tasks](../.specify/specs/1750-smartrecruiters-public-job-url/tasks.md), `docs/index.md`,
+**Q-111** (the list endpoint carries no description).
+
 
 ## 2026-09-25 — Review fixup — Specs 1692-1713: salary benefit guard, multi-location memo, stop on refusal, opt-in identity changes
 

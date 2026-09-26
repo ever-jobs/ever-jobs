@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "copart:12:Copart"
+      },
+      "atsIdPrefix": "wd-copart-"
+    }
+  ],
+  "responses": {
+    "https://copart.wd12.myworkdayjobs.com/wday/cxs/copart/Copart/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "National Account Manager - Government & Public Sector",
+          "externalPath": "/job/Dallas-TX---Headquarters/National-account-manger---Government---Public-Sector_JR111393",
+          "locationsText": "Dallas, TX - Headquarters",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR111393"
+          ]
+        },
+        {
+          "title": "BluCar Sales Account Manager",
+          "externalPath": "/job/Dallas-TX---Headquarters/BluCar-Sales-Account-Manager_JR111470",
+          "locationsText": "Dallas, TX - Headquarters",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR111470"
+          ]
+        },
+        {
+          "title": "Inventory Specialist",
+          "externalPath": "/job/Denver-Central-CO/Inventory-Specialist_JR111692",
+          "locationsText": "Denver Central, CO",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR111692"
+          ]
+        }
+      ]
+    },
+    "https://copart.wd12.myworkdayjobs.com/wday/cxs/copart/Copart/job/Dallas-TX---Headquarters/National-account-manger---Government---Public-Sector_JR111393": {
+      "jobPostingInfo": {
+        "title": "National Account Manager - Government & Public Sector",
+        "jobDescription": "<p>National Account Manager - Government &amp; Public Sector at Copart.</p>",
+        "location": "Dallas, TX - Headquarters",
+        "jobReqId": "JR111393",
+        "externalUrl": "https://copart.wd12.myworkdayjobs.com/Copart/job/Dallas-TX---Headquarters/National-account-manger---Government---Public-Sector_JR111393",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "copart"
+      }
+    },
+    "https://copart.wd12.myworkdayjobs.com/wday/cxs/copart/Copart/job/Dallas-TX---Headquarters/BluCar-Sales-Account-Manager_JR111470": {
+      "jobPostingInfo": {
+        "title": "BluCar Sales Account Manager",
+        "jobDescription": "<p>BluCar Sales Account Manager at Copart.</p>",
+        "location": "Dallas, TX - Headquarters",
+        "jobReqId": "JR111470",
+        "externalUrl": "https://copart.wd12.myworkdayjobs.com/Copart/job/Dallas-TX---Headquarters/BluCar-Sales-Account-Manager_JR111470",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "copart"
+      }
+    },
+    "https://copart.wd12.myworkdayjobs.com/wday/cxs/copart/Copart/job/Denver-Central-CO/Inventory-Specialist_JR111692": {
+      "jobPostingInfo": {
+        "title": "Inventory Specialist",
+        "jobDescription": "<p>Inventory Specialist at Copart.</p>",
+        "location": "Denver Central, CO",
+        "jobReqId": "JR111692",
+        "externalUrl": "https://copart.wd12.myworkdayjobs.com/Copart/job/Denver-Central-CO/Inventory-Specialist_JR111692",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "copart"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "copart-JR111393",
+      "title": "National Account Manager - Government & Public Sector"
+    },
+    {
+      "id": "copart-JR111470",
+      "title": "BluCar Sales Account Manager"
+    },
+    {
+      "id": "copart-JR111692",
+      "title": "Inventory Specialist"
+    }
+  ]
+}

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Entain/744000135769299",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Entain/postings/744000135769299",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Entain/744000135766789",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Entain/postings/744000135766789",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Entain/744000135766409",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Entain/postings/744000135766409",
       "jobAd": {
         "sections": {
           "jobDescription": {

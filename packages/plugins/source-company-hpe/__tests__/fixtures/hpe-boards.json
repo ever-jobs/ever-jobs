@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "hpe:5:Jobsathpe"
+      },
+      "atsIdPrefix": "wd-hpe-"
+    }
+  ],
+  "responses": {
+    "https://hpe.wd5.myworkdayjobs.com/wday/cxs/hpe/Jobsathpe/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Manufacturing Operations Associate",
+          "externalPath": "/job/Aguadilla-Puerto-Rico-Puerto-Rico/Manufacturing-Operations-Associate_1210285-1",
+          "locationsText": "Aguadilla, Puerto Rico, Puerto Rico",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "1210285"
+          ]
+        },
+        {
+          "title": "PCAI Specialist",
+          "externalPath": "/job/Mexico-City-Distrito-Federal/PCAI-Specialist_1215675-2",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "1215675"
+          ]
+        },
+        {
+          "title": "Manufacturing Operations Associate",
+          "externalPath": "/job/Aguadilla-Puerto-Rico-Puerto-Rico/Manufacturing-Operations-Associate_1210320-3",
+          "locationsText": "Aguadilla, Puerto Rico, Puerto Rico",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "1210320"
+          ]
+        }
+      ]
+    },
+    "https://hpe.wd5.myworkdayjobs.com/wday/cxs/hpe/Jobsathpe/job/Aguadilla-Puerto-Rico-Puerto-Rico/Manufacturing-Operations-Associate_1210285-1": {
+      "jobPostingInfo": {
+        "title": "Manufacturing Operations Associate",
+        "jobDescription": "<p>Manufacturing Operations Associate at Hewlett Packard Enterprise.</p>",
+        "location": "Aguadilla, Puerto Rico, Puerto Rico",
+        "jobReqId": "1210285",
+        "externalUrl": "https://hpe.wd5.myworkdayjobs.com/Jobsathpe/job/Aguadilla-Puerto-Rico-Puerto-Rico/Manufacturing-Operations-Associate_1210285-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "hpe"
+      }
+    },
+    "https://hpe.wd5.myworkdayjobs.com/wday/cxs/hpe/Jobsathpe/job/Mexico-City-Distrito-Federal/PCAI-Specialist_1215675-2": {
+      "jobPostingInfo": {
+        "title": "PCAI Specialist",
+        "jobDescription": "<p>PCAI Specialist at Hewlett Packard Enterprise.</p>",
+        "location": "2 Locations",
+        "jobReqId": "1215675",
+        "externalUrl": "https://hpe.wd5.myworkdayjobs.com/Jobsathpe/job/Mexico-City-Distrito-Federal/PCAI-Specialist_1215675-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "hpe"
+      }
+    },
+    "https://hpe.wd5.myworkdayjobs.com/wday/cxs/hpe/Jobsathpe/job/Aguadilla-Puerto-Rico-Puerto-Rico/Manufacturing-Operations-Associate_1210320-3": {
+      "jobPostingInfo": {
+        "title": "Manufacturing Operations Associate",
+        "jobDescription": "<p>Manufacturing Operations Associate at Hewlett Packard Enterprise.</p>",
+        "location": "Aguadilla, Puerto Rico, Puerto Rico",
+        "jobReqId": "1210320",
+        "externalUrl": "https://hpe.wd5.myworkdayjobs.com/Jobsathpe/job/Aguadilla-Puerto-Rico-Puerto-Rico/Manufacturing-Operations-Associate_1210320-3",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "hpe"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "hpe-1210285",
+      "title": "Manufacturing Operations Associate"
+    },
+    {
+      "id": "hpe-1215675",
+      "title": "PCAI Specialist"
+    },
+    {
+      "id": "hpe-1210320",
+      "title": "Manufacturing Operations Associate"
+    }
+  ]
+}

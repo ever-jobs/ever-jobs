@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BoschGroup/744000135786859",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BoschGroup/postings/744000135786859",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BoschGroup/744000135782029",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BoschGroup/postings/744000135782029",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BoschGroup/744000135777989",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BoschGroup/postings/744000135777989",
       "jobAd": {
         "sections": {
           "jobDescription": {

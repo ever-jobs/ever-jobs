@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeliveryHero/744000135777629",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeliveryHero/postings/744000135777629",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeliveryHero/744000135771539",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeliveryHero/postings/744000135771539",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeliveryHero/744000135763719",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeliveryHero/postings/744000135763719",
       "jobAd": {
         "sections": {
           "jobDescription": {

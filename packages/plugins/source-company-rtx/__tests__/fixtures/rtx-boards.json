@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "globalhr:5:REC_RTX_Ext_Gateway"
+      },
+      "atsIdPrefix": "wd-globalhr-"
+    }
+  ],
+  "responses": {
+    "https://globalhr.wd5.myworkdayjobs.com/wday/cxs/globalhr/REC_RTX_Ext_Gateway/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Staff Tech, Logistics - Huntsville, AL",
+          "externalPath": "/job/US-AL-HUNTSVILLE-7745--7745-Eagle-Rd--EAGLE/Staff-Tech--Logistics---Huntsville--AL_01877539-1",
+          "locationsText": "US-AL-HUNTSVILLE-7745 ~ 7745 Eagle Rd ~ EAGLE",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "01877539"
+          ]
+        },
+        {
+          "title": "Operations Manager, Aftermarket Tooling (Onsite)",
+          "externalPath": "/job/US-CT-EAST-HARTFORD-OBG--400-Main-St--BLDG-OBG/Operations-Manager--Aftermarket-Tooling--Onsite-_01876806",
+          "locationsText": "US-CT-EAST HARTFORD-OBG ~ 400 Main St ~ BLDG OBG",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "01876806"
+          ]
+        },
+        {
+          "title": "Head-up Guidance Systems Engineering Co-op (Spring/Summer 2027) - Onsite",
+          "externalPath": "/job/US-OR-WILSONVILLE-596--27500-SW-Parkway-Ave--BLDG-596/Head-up-Guidance-Systems-Engineering-Co-op--Spring-Summer-2027----Onsite_01872666",
+          "locationsText": "US-OR-WILSONVILLE-596 ~ 27500 SW Parkway Ave ~ BLDG 596",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "01872666"
+          ]
+        }
+      ]
+    },
+    "https://globalhr.wd5.myworkdayjobs.com/wday/cxs/globalhr/REC_RTX_Ext_Gateway/job/US-AL-HUNTSVILLE-7745--7745-Eagle-Rd--EAGLE/Staff-Tech--Logistics---Huntsville--AL_01877539-1": {
+      "jobPostingInfo": {
+        "title": "Staff Tech, Logistics - Huntsville, AL",
+        "jobDescription": "<p>Staff Tech, Logistics - Huntsville, AL at RTX.</p>",
+        "location": "US-AL-HUNTSVILLE-7745 ~ 7745 Eagle Rd ~ EAGLE",
+        "jobReqId": "01877539",
+        "externalUrl": "https://globalhr.wd5.myworkdayjobs.com/REC_RTX_Ext_Gateway/job/US-AL-HUNTSVILLE-7745--7745-Eagle-Rd--EAGLE/Staff-Tech--Logistics---Huntsville--AL_01877539-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "globalhr"
+      }
+    },
+    "https://globalhr.wd5.myworkdayjobs.com/wday/cxs/globalhr/REC_RTX_Ext_Gateway/job/US-CT-EAST-HARTFORD-OBG--400-Main-St--BLDG-OBG/Operations-Manager--Aftermarket-Tooling--Onsite-_01876806": {
+      "jobPostingInfo": {
+        "title": "Operations Manager, Aftermarket Tooling (Onsite)",
+        "jobDescription": "<p>Operations Manager, Aftermarket Tooling (Onsite) at RTX.</p>",
+        "location": "US-CT-EAST HARTFORD-OBG ~ 400 Main St ~ BLDG OBG",
+        "jobReqId": "01876806",
+        "externalUrl": "https://globalhr.wd5.myworkdayjobs.com/REC_RTX_Ext_Gateway/job/US-CT-EAST-HARTFORD-OBG--400-Main-St--BLDG-OBG/Operations-Manager--Aftermarket-Tooling--Onsite-_01876806",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "globalhr"
+      }
+    },
+    "https://globalhr.wd5.myworkdayjobs.com/wday/cxs/globalhr/REC_RTX_Ext_Gateway/job/US-OR-WILSONVILLE-596--27500-SW-Parkway-Ave--BLDG-596/Head-up-Guidance-Systems-Engineering-Co-op--Spring-Summer-2027----Onsite_01872666": {
+      "jobPostingInfo": {
+        "title": "Head-up Guidance Systems Engineering Co-op (Spring/Summer 2027) - Onsite",
+        "jobDescription": "<p>Head-up Guidance Systems Engineering Co-op (Spring/Summer 2027) - Onsite at RTX.</p>",
+        "location": "US-OR-WILSONVILLE-596 ~ 27500 SW Parkway Ave ~ BLDG 596",
+        "jobReqId": "01872666",
+        "externalUrl": "https://globalhr.wd5.myworkdayjobs.com/REC_RTX_Ext_Gateway/job/US-OR-WILSONVILLE-596--27500-SW-Parkway-Ave--BLDG-596/Head-up-Guidance-Systems-Engineering-Co-op--Spring-Summer-2027----Onsite_01872666",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "globalhr"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "rtx-01877539",
+      "title": "Staff Tech, Logistics - Huntsville, AL"
+    },
+    {
+      "id": "rtx-01876806",
+      "title": "Operations Manager, Aftermarket Tooling (Onsite)"
+    },
+    {
+      "id": "rtx-01872666",
+      "title": "Head-up Guidance Systems Engineering Co-op (Spring/Summer 2027) - Onsite"
+    }
+  ]
+}

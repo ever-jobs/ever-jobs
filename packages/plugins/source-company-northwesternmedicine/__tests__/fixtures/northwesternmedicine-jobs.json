@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/northwesternmedicine/744000135634999",
+      "ref": "https://api.smartrecruiters.com/v1/companies/northwesternmedicine/postings/744000135634999",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/northwesternmedicine/744000135592510",
+      "ref": "https://api.smartrecruiters.com/v1/companies/northwesternmedicine/postings/744000135592510",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/northwesternmedicine/744000135590529",
+      "ref": "https://api.smartrecruiters.com/v1/companies/northwesternmedicine/postings/744000135590529",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -10,6 +10,236 @@
 
 ---
 
+## Q-111 — SmartRecruiters: the list endpoint has no description or apply link — fetch each posting's detail? (Spec 1750)
+
+**Context:** `source-ats-smartrecruiters` reads only
+`GET /v1/companies/<Co>/postings`. Captured live on 2026-09-25 (AbbVie), a list posting has
+`ref`, `company`, `location`, `department`, … but **no `jobAd`, `postingUrl` or `applyUrl`**;
+those come only from `GET /v1/companies/<Co>/postings/<id>`. So every SmartRecruiters posting
+(and every one of the 217 delegating company plugins) ships `description: null` and
+`applyUrl: null`, although `processJob` has always parsed `jobAd.sections`. The delegating
+plugins' fixtures hide this: the scaffold fabricates a `jobAd` on list postings. Spec 1750
+fixed the link (`jobUrl` is now the public page) without adding requests.
+
+**Options:**
+
+- **A. Fetch the detail for every posting** (bounded `Promise.allSettled`, e.g. 5 at a time,
+  polite delay): full description, `postingUrl`, `applyUrl`, compensation. Cost: one extra
+  request per posting — AbbVie alone lists hundreds.
+- **B. Opt-in detail fetch** (`SMARTRECRUITERS_FETCH_DETAIL=true` or a per-request flag),
+  list-only by default.
+- **C. Keep list-only** and document that SmartRecruiters postings carry no description.
+
+**Default:** **C (default — proceeding)** — no change in request volume in this branch; B is the
+likely end state, and the scaffold should stop fabricating a list `jobAd` when it lands.
+
+---
+
+## Q-110 — A posting with no known public page: keep the API link, drop the posting, or link the board? (Spec 1751)
+
+**Context:** The Spec 1751 audit of every `jobUrl` / `jobUrlDirect` / `applyUrl` assignment
+found four ATS plugins that fall back to an API URL when no public posting page is known:
+`source-ats-bullhorn` (always — Bullhorn exposes no public posting page for a corp token),
+`source-ats-ceipal` (a bare portal key names no page), `source-ats-hiringthing` and
+`source-ats-loxo` (only when the API omits the posting's own URL). Each now prefers every
+public candidate and the caller's `companyUrl` (`firstPublicUrl`), but with neither the old
+API link remains, so a downstream Apply button can still open JSON for these. Separately,
+`source-ats-zwayam` links `https://api.zwayam.com/job_preview/…`, which the plugin documents
+as the platform's public share page; nobody has re-checked that it serves HTML. Since Spec 1751
+T11 the guard follows links built into intermediate records, so it now sees Zwayam's link too:
+Zwayam is the fifth named exception ("by design, unverified"), expiring like the others.
+
+**Options:**
+
+- **A. Keep the API link as the last resort** (no data loss; the four — plus Zwayam — are named
+  exceptions in `scripts/__tests__/plugin-job-url-hosts.spec.ts`, which fails if one stops
+  needing it).
+- **B. Drop postings with no public link** (a link that opens JSON is worse than no posting)
+  — Bullhorn would return nothing unless the caller passes `companyUrl`.
+- **C. Emit them with a board-level page only** — requires a per-tenant careers URL (e.g. a
+  required `companyUrl` for Bullhorn/Ceipal), otherwise same as B.
+- **D. Add a `linkIsPublic: false` (or similar) flag on `JobPostDto`** so consumers can hide
+  the button while keeping the posting.
+
+**Default:** **A (default — proceeding)** — behaviour for tenants without a public page is
+unchanged from before Spec 1751; the guard keeps the list from growing. Zwayam: verify its
+preview URL live before deciding whether it joins the list.
+## Q-109 — Company sources the lane could not cover through a supported public board (Specs 1736, 1737)
+
+**Context:** Specs 1736/1737 only generate plugins for boards verified live on
+an ATS Ever Jobs already supports. Of the owner's lists, these were not
+coverable that way on 2026-09-24: **Workday list** — Dell (its Workday site
+`dell:1:External` answers HTTP 422; careers appear to have moved to Oracle HCM
+at `enterpriseplatform.dell.com`), Qualcomm (its Workday site answers
+0 postings; careers moved to `careers.qualcomm.com`), NetApp (site name not
+found, HTTP 422), Lockheed Martin, L3Harris, UnitedHealth Group, Citi, AMD,
+Texas Instruments, Honeywell, ExxonMobil (no public Workday site found), and
+Adobe's university site (HTTP 403 to anonymous requests). **Quant list** —
+Citadel, Citadel Securities, D. E. Shaw (own careers sites), Two Sigma (Avature
+portal at `/careers/OpenRoles`; the Avature adapter's fixed
+`/careers/SearchJobs/` path answers 404 there), Millennium (Workday site
+empty; moved to `career.mlp.com`), AQR (Workday answers 401), Balyasny
+(Salesforce Experience Cloud site), PEAK6, Wolverine, Man Group (no public
+board found). Boeing and NVIDIA already have company plugins.
+
+**Options:**
+
+- **A. Record the gaps, cover nothing else in this lane (default — proceeding).**
+  Every generated plugin rests on a live verification record; nothing is
+  guessed.
+- **B. Bespoke scrapers** for the own-site firms (Citadel, Citadel Securities,
+  D. E. Shaw), only if each exposes a simple public JSON/HTML listing with no
+  login, captcha or bot wall. Needs one spec per firm and a fresh politeness
+  review.
+- **C. Adapter work**: a configurable listing path in `source-ats-avature`
+  (Two Sigma), and company plugins on `source-ats-oracle` for Dell and other
+  Oracle-HCM employers.
+
+**Default:** A. B and C are listed as follow-up tasks in Specs 1736 T7 and
+1737 T5.
+
+**Addendum (2026-09-25) — a covered board whose host disallows crawling.**
+The robots.txt review (Spec 1735 §3.1) found `careers-sig.icims.com` serving
+`User-agent: *` / `Disallow: /`; SIG is the only plugin on that host. The
+other host families allow the endpoints the adapters call.
+
+- **A. Keep SIG in the default fan-out** and leave robots handling to the
+  crawl-policy lane (Spec 1690 `robotsTxt: 'respect'`, off by default).
+- **B. Explicit-only SIG (default — proceeding).** The generated plugin runs
+  only when a caller selects it (`siteType` contains `sig`, or `companyDomain`
+  contains `sig.com`); in the default fan-out it makes no request and returns
+  an `empty` diagnostic naming the reason (Spec 1735 §4.7). Reversible by
+  dropping `explicitOnly` from the seed and re-scaffolding.
+- **C. Drop SIG** (not taken — no-removal rule; the owner asked for the firm).
+
+**Default:** B: the default fan-out never contacts a host that disallows all
+crawlers, while an explicit request still works. Revisit when Spec 1690's
+robots mode lands or if SIG publishes a crawlable board.
+
+---
+
+## Q-108 — Where do company-tier / industry tags live? (Specs 1735–1737)
+
+**Context:** The owner wants the Workday employers and the quant firms tagged
+so a later company-tier feature can select them. `IPluginMetadata` has no tag
+or tier field. The crawl-policy lane (Spec 1690) is editing the same interface
+in parallel, so adding a field here would collide.
+
+**Options:**
+
+- **A. New optional `tags?: string[]` on `IPluginMetadata`**, surfaced by
+  `/api/sources`. Cleanest, but a concurrent edit of a core interface.
+- **B. Machine-greppable suffix in `description`** —
+  `Tags: segment=<segment>; industry=<industry-slug>.` — plus the committed
+  seed `scripts/seeds/ats-delegate-companies.json` as the machine-readable
+  source of the same tags, HQ and domains (default — proceeding).
+- **C. A separate tier registry** in `@ever-jobs/models` keyed by `Site`.
+
+**Default:** B now (segments `workday-enterprise`, `quant-trading`); migrate to
+A once Spec 1690 has landed — every tagged plugin is generated, so the move is
+a re-scaffold (Spec 1735 T8).
+
+---
+
+## Q-107 — Should delegating company plugins filter by keyword, given the Workday adapter ignores `searchTerm`? (Specs 1735, 1736)
+
+**Context:** The new plugins pass every caller input to the ATS adapter
+untouched. `source-ats-workday` sends `searchText: ''` whatever the
+`searchTerm`, pages 20 postings at a time with a 1–2 s sleep, and fetches one
+detail per posting (5 in flight) up to `resultsWanted`. So each of the 56
+Workday boards added here returns its newest postings regardless of the
+keyword and costs about `resultsWanted / 20 + resultsWanted` requests per
+search that includes it (e.g. ~105 for `resultsWanted = 100`). Greenhouse,
+Lever and Ashby boards are one request each; iCIMS pages at 20.
+
+**Options:**
+
+- **A. Pure delegation (default — proceeding).** Same behaviour as the ~700
+  existing delegating plugins; list mode (no keyword) returns the board, which
+  is what the consumer's full sync wants; per-host pacing is the crawl-policy
+  lane's job (Spec 1690).
+- **B. Post-filter in each plugin** by title/department. Correct results for
+  keyword searches but no saving: the adapter has already fetched and enriched
+  every posting.
+- **C. Pass `searchTerm` to Workday's `searchText` in the adapter**, so a
+  keyword search is filtered server-side and only matching postings are
+  enriched. Fixes relevance and cost for every Workday tenant at once; an
+  adapter change, outside this lane.
+
+**Default:** A, with C recommended as the follow-up (Spec 1736 T6). Operators
+can drop the batch from the default fan-out with `EVER_JOBS_DISABLED_SOURCES`.
+
+**Review outcome (2026-09-25) — C adopted, plus sequential details.** Review
+found that 55 plugins (56 boards) now bring Workday into every default search
+and, with detail enrichment 5 in flight per board, one search could open ~280
+concurrent requests to `*.myworkdayjobs.com` (tenants share the `wd1`/`wd5`/
+`wd12` clusters) from one egress IP. Done in this lane (Spec 1735 §4.6, Spec
+1736 T6/T8): the adapter sends the trimmed `searchTerm` as `searchText` (`''`
+in list mode), so a keyword search is filtered by Workday and only matches are
+enriched; detail enrichment is 1 request in flight with a 250–500 ms pause
+(worst case ~56 concurrent Workday requests per search, one per board).
+
+Follow-ups and constraints recorded here:
+
+1. **Merge/deploy gate (Spec 1736 §7, T10) — withdrawn.** **Decision (owner,
+   2026-09-26; Spec 1736 T16): the new Workday and quant plugins ship enabled
+   by default**; the per-board detail cap and time budget (follow-up 5, Spec
+   1736 §8/§8.2) bound their cost, and `EVER_JOBS_DISABLED_SOURCES` with the
+   55 tokens is an optional emergency switch, not a deploy prerequisite
+   (`docs/DEPLOYMENT.md`). The original gate, for the record: `JobsService` sorts results by
+   site name and `3m` now sorts first (~700 postings). The ever-hust consumer
+   still keeps only page 1 (80) of a site-sorted response, so this batch must
+   not reach the deployment before the consumer's full-result ingestion
+   (NDJSON or all pages) is live — or it ships with the 55 Workday-backed site
+   tokens in `EVER_JOBS_DISABLED_SOURCES` (the exact list is in Spec 1736 §7)
+   until then.
+2. **Fan-out deadline order — live today.** The plugins are registered at the
+   tail of `Site` / `ALL_SOURCE_MODULES`, and the fan-out deadline already
+   applies: `search.deadlineMs` is 120 000 ms by default
+   (`EVER_JOBS_FANOUT_DEADLINE_MS`, preferred since Spec 1721, with
+   `EVER_JOBS_SEARCH_DEADLINE_MS` as the fallback name; `0` disables) and `search.concurrency` is
+   64 (`EVER_JOBS_SEARCH_CONCURRENCY`). So in a default fan-out that overruns
+   120 s these are the first sources `JobsService` skips (`deadline_skipped`)
+   or abandons mid-flight. Sequential Workday enrichment (above) makes each
+   Workday board slower: up to `resultsWanted` detail requests, each after a
+   250–500 ms pause, plus 1–2 s between listing pages (for `resultsWanted = 80`,
+   at least ~20–40 s of pauses alone). Callers that need these boards in a
+   full sync should select them (`siteType`, or `siteCategories` once contract
+   C2 lands) or raise the deadline (contract C4). Correction (2026-09-25): an
+   earlier version of this item, following the review, said the deadline never
+   applies because `parseInt(env, 120_000)` / `parseInt(env, 64)` pass a radix.
+   That is wrong: `configuration.ts` shadows `parseInt` with a local
+   `(value, fallback)` helper, so both variables (and `CACHE_EXPIRY` /
+   `CACHE_MAX_ITEMS`) take effect. Pinned by
+   `apps/api/__tests__/jobs/fanout-config.spec.ts`; nothing to hand to the
+   C4 lane.
+3. **Per-host limits** for the shared Workday clusters and Lever's
+   `Crawl-delay: 1`, and whether the adapters keep a desktop-Chrome
+   User-Agent, are open items for the crawl-policy lane (Spec 1690; Spec 1735
+   §3.1, T12).
+4. **Credential isolation (Spec 1735 §4.5).** Generated plugins now delegate
+   with `auth: undefined`, and `source-ats-greenhouse` uses the env Harvest key
+   only when `GREENHOUSE_HARVEST_BOARD` names the requested board — before,
+   `GREENHOUSE_API_KEY` made every Greenhouse-delegating plugin return the
+   operator's own (incl. confidential) Harvest jobs under the firm's name.
+   Behaviour change for forks that set `GREENHOUSE_API_KEY`: set
+   `GREENHOUSE_HARVEST_BOARD` to your own board token to keep using Harvest
+   for it (a per-request `auth.greenhouse.apiKey` is still honoured).
+5. **Per-scrape bound (integration review F8, Spec 1736 §8 / T11).** Sequential
+   enrichment made one board at `resultsWanted = 1000` cost ~10 minutes, and
+   the scrape ran on, detached, after the fan-out deadline abandoned it (the
+   plugin contract has no deadline or `AbortSignal`). The adapter now makes at
+   most `WORKDAY_MAX_DETAIL_FETCHES` (default 50) detail requests per scrape
+   and stops starting work once `WORKDAY_SCRAPE_TIME_BUDGET_MS` (default
+   90 000; `0` = off) is spent, over listing and enrichment; the rest is
+   returned at list level (no description), and a listing cut short is a
+   `partial` diagnostic. Defaults chosen here (no owner decision needed): 50
+   detail requests cost ~13–25 s of pauses plus request time and cover a
+   board's newest postings (the Tesla plugin's `detail-25` budget is the
+   precedent); 90 s stays under the 120 s fan-out deadline. A full sync that wants every
+   description raises both limits together with the fan-out deadline and
+   selects the boards explicitly. A list-level posting keeps the id an
+   enriched one gets (the list row's requisition id).
 ## Q-106 — `careerLevels` filter semantics when classification is switched off; is `unknown` filterable? (Spec 1730)
 
 **Context:** `EVER_JOBS_CLASSIFY_CAREER_LEVEL=false` is the operator kill-switch that removes

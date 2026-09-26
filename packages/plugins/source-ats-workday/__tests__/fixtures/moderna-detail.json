@@ -1,0 +1,41 @@
+{
+  "jobPostingInfo": {
+    "id": "a2739e3ea26d1001f2a81e27d2360000",
+    "title": "Sr. Specialist, Maintenance",
+    "jobDescription": "<p>Stand-in body: the recorded description text is not kept in the fixture.</p>",
+    "location": "Norwood, Massachusetts",
+    "additionalLocations": [
+      "Drug Manufacturing"
+    ],
+    "postedOn": "Posted Today",
+    "startDate": "2026-09-25",
+    "timeType": "Full time",
+    "jobReqId": "R19827",
+    "jobPostingId": "Sr-Specialist--Maintenance_R19827",
+    "jobPostingSiteId": "M_tx",
+    "country": {
+      "descriptor": "United States of America",
+      "id": "bc33aa3152ec42d4995f4791a106ed09"
+    },
+    "canApply": true,
+    "posted": true,
+    "includeResumeParsing": true,
+    "jobRequisitionLocation": {
+      "descriptor": "MTC South - Norwood - USA - MA",
+      "country": {
+        "descriptor": "United States of America",
+        "id": "bc33aa3152ec42d4995f4791a106ed09",
+        "alpha2Code": "US"
+      }
+    },
+    "externalUrl": "https://modernatx.wd1.myworkdayjobs.com/M_tx/job/Norwood-Massachusetts/Sr-Specialist--Maintenance_R19827",
+    "questionnaireId": "3e18adb20b4d10012afd9f7242a90000",
+    "secondaryQuestionnaireId": "f254e21c2f1a1001a71b71059b420000"
+  },
+  "hiringOrganization": {
+    "name": "ModernaTX, Inc.",
+    "url": ""
+  },
+  "similarJobs": [],
+  "userAuthenticated": false
+}

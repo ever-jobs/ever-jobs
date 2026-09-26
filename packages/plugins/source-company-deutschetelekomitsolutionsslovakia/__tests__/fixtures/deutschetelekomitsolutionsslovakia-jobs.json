@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeutscheTelekomITSolutionsSlovakia/744000135733329",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeutscheTelekomITSolutionsSlovakia/postings/744000135733329",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeutscheTelekomITSolutionsSlovakia/744000135685449",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeutscheTelekomITSolutionsSlovakia/postings/744000135685449",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeutscheTelekomITSolutionsSlovakia/744000135653020",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeutscheTelekomITSolutionsSlovakia/postings/744000135653020",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RelaisChateaux/744000135786429",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RelaisChateaux/postings/744000135786429",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RelaisChateaux/744000135783269",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RelaisChateaux/postings/744000135783269",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RelaisChateaux/744000135781579",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RelaisChateaux/postings/744000135781579",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WSHGroup/744000135778049",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WSHGroup/postings/744000135778049",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WSHGroup/744000135777869",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WSHGroup/postings/744000135777869",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WSHGroup/744000135759779",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WSHGroup/postings/744000135759779",
       "jobAd": {
         "sections": {
           "jobDescription": {

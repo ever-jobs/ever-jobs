@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/natixisinportugal/744000135699455",
+      "ref": "https://api.smartrecruiters.com/v1/companies/natixisinportugal/postings/744000135699455",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/natixisinportugal/744000135686237",
+      "ref": "https://api.smartrecruiters.com/v1/companies/natixisinportugal/postings/744000135686237",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/natixisinportugal/744000135671271",
+      "ref": "https://api.smartrecruiters.com/v1/companies/natixisinportugal/postings/744000135671271",
       "jobAd": {
         "sections": {
           "jobDescription": {

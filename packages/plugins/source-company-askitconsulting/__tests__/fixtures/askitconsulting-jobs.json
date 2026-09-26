@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AskITConsulting/743999659846158",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AskITConsulting/postings/743999659846158",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AskITConsulting/743999659834250",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AskITConsulting/postings/743999659834250",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AskITConsulting/743999659816691",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AskITConsulting/postings/743999659816691",
       "jobAd": {
         "sections": {
           "jobDescription": {

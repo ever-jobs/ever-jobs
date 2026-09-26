@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "chevron:5:jobs"
+      },
+      "atsIdPrefix": "wd-chevron-"
+    }
+  ],
+  "responses": {
+    "https://chevron.wd5.myworkdayjobs.com/wday/cxs/chevron/jobs/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Senior Drilling Engineer",
+          "externalPath": "/job/El-Tigre-Anzoategui-Venezuela/Senior-Drilling-Engineer_R000073867",
+          "locationsText": "El Tigre, Anzoategui, Venezuela",
+          "postedOn": "Posted 3 Days Ago",
+          "bulletFields": [
+            "R000073867"
+          ]
+        },
+        {
+          "title": "COCO Business Performance & Finance (BPF) Lead",
+          "externalPath": "/job/Houston-Texas-United-States-of-America/COCO-Business-Performance---Finance--BPF--Lead_R000073878",
+          "locationsText": "Houston, Texas, United States of America",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R000073878"
+          ]
+        },
+        {
+          "title": "Operations Trainee",
+          "externalPath": "/job/Pascagoula-Mississippi-United-States-of-America/Operations-Trainee_R000074025",
+          "locationsText": "Pascagoula, Mississippi, United States of America",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R000074025"
+          ]
+        }
+      ]
+    },
+    "https://chevron.wd5.myworkdayjobs.com/wday/cxs/chevron/jobs/job/El-Tigre-Anzoategui-Venezuela/Senior-Drilling-Engineer_R000073867": {
+      "jobPostingInfo": {
+        "title": "Senior Drilling Engineer",
+        "jobDescription": "<p>Senior Drilling Engineer at Chevron.</p>",
+        "location": "El Tigre, Anzoategui, Venezuela",
+        "jobReqId": "R000073867",
+        "externalUrl": "https://chevron.wd5.myworkdayjobs.com/jobs/job/El-Tigre-Anzoategui-Venezuela/Senior-Drilling-Engineer_R000073867",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "chevron"
+      }
+    },
+    "https://chevron.wd5.myworkdayjobs.com/wday/cxs/chevron/jobs/job/Houston-Texas-United-States-of-America/COCO-Business-Performance---Finance--BPF--Lead_R000073878": {
+      "jobPostingInfo": {
+        "title": "COCO Business Performance & Finance (BPF) Lead",
+        "jobDescription": "<p>COCO Business Performance &amp; Finance (BPF) Lead at Chevron.</p>",
+        "location": "Houston, Texas, United States of America",
+        "jobReqId": "R000073878",
+        "externalUrl": "https://chevron.wd5.myworkdayjobs.com/jobs/job/Houston-Texas-United-States-of-America/COCO-Business-Performance---Finance--BPF--Lead_R000073878",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "chevron"
+      }
+    },
+    "https://chevron.wd5.myworkdayjobs.com/wday/cxs/chevron/jobs/job/Pascagoula-Mississippi-United-States-of-America/Operations-Trainee_R000074025": {
+      "jobPostingInfo": {
+        "title": "Operations Trainee",
+        "jobDescription": "<p>Operations Trainee at Chevron.</p>",
+        "location": "Pascagoula, Mississippi, United States of America",
+        "jobReqId": "R000074025",
+        "externalUrl": "https://chevron.wd5.myworkdayjobs.com/jobs/job/Pascagoula-Mississippi-United-States-of-America/Operations-Trainee_R000074025",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "chevron"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "chevron-R000073867",
+      "title": "Senior Drilling Engineer"
+    },
+    {
+      "id": "chevron-R000073878",
+      "title": "COCO Business Performance & Finance (BPF) Lead"
+    },
+    {
+      "id": "chevron-R000074025",
+      "title": "Operations Trainee"
+    }
+  ]
+}

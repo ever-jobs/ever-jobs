@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AditiStaffing1/743999659678581",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AditiStaffing1/postings/743999659678581",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AditiStaffing1/743999659678481",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AditiStaffing1/postings/743999659678481",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AditiStaffing1/743999659678459",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AditiStaffing1/postings/743999659678459",
       "jobAd": {
         "sections": {
           "jobDescription": {

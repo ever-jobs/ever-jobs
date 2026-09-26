@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Securitas/744000135753070",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Securitas/postings/744000135753070",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Securitas/744000135752068",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Securitas/postings/744000135752068",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Securitas/744000135748296",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Securitas/postings/744000135748296",
       "jobAd": {
         "sections": {
           "jobDescription": {

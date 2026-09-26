@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SmithsGroup2/744000135698139",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SmithsGroup2/postings/744000135698139",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SmithsGroup2/744000135662241",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SmithsGroup2/postings/744000135662241",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SmithsGroup2/744000135632280",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SmithsGroup2/postings/744000135632280",
       "jobAd": {
         "sections": {
           "jobDescription": {

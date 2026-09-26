@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "wehrtyou"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/wehrtyou/jobs": {
+      "jobs": [
+        {
+          "id": 7972593,
+          "title": "AI Research Engineer, Inference",
+          "updated_at": "2026-09-18T17:46:42.000Z",
+          "location": {
+            "name": "London, United Kingdom; New York, NY, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/wehrtyou/jobs/7972593",
+          "content": "&lt;p&gt;AI Research Engineer, Inference at Hudson River Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "wehrtyou"
+        },
+        {
+          "id": 7972584,
+          "title": "AI Research Engineer, Pre-Training",
+          "updated_at": "2026-09-18T17:46:42.000Z",
+          "location": {
+            "name": "London, United Kingdom; New York, NY, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/wehrtyou/jobs/7972584",
+          "content": "&lt;p&gt;AI Research Engineer, Pre-Training at Hudson River Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "wehrtyou"
+        },
+        {
+          "id": 8161767,
+          "title": "AI Researcher",
+          "updated_at": "2026-09-18T17:46:42.000Z",
+          "location": {
+            "name": "London, United Kingdom; New York, NY, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/wehrtyou/jobs/8161767",
+          "content": "&lt;p&gt;AI Researcher at Hudson River Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "wehrtyou"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "hudsonrivertrading-7972593",
+      "title": "AI Research Engineer, Inference"
+    },
+    {
+      "id": "hudsonrivertrading-7972584",
+      "title": "AI Research Engineer, Pre-Training"
+    },
+    {
+      "id": "hudsonrivertrading-8161767",
+      "title": "AI Researcher"
+    }
+  ]
+}

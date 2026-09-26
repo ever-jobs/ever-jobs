@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/KorsailEnergy/743999767537589",
+      "ref": "https://api.smartrecruiters.com/v1/companies/KorsailEnergy/postings/743999767537589",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/KorsailEnergy/743999766152232",
+      "ref": "https://api.smartrecruiters.com/v1/companies/KorsailEnergy/postings/743999766152232",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/KorsailEnergy/743999766149453",
+      "ref": "https://api.smartrecruiters.com/v1/companies/KorsailEnergy/postings/743999766149453",
       "jobAd": {
         "sections": {
           "jobDescription": {

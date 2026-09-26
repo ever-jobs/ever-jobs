@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/FrontierTechnologiesLLC1/743999655680642",
+      "ref": "https://api.smartrecruiters.com/v1/companies/FrontierTechnologiesLLC1/postings/743999655680642",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/FrontierTechnologiesLLC1/743999655331218",
+      "ref": "https://api.smartrecruiters.com/v1/companies/FrontierTechnologiesLLC1/postings/743999655331218",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/FrontierTechnologiesLLC1/106234568",
+      "ref": "https://api.smartrecruiters.com/v1/companies/FrontierTechnologiesLLC1/postings/106234568",
       "jobAd": {
         "sections": {
           "jobDescription": {

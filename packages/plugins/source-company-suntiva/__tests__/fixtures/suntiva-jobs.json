@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SuntivaLLC/84105773",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SuntivaLLC/postings/84105773",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SuntivaLLC/82889768",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SuntivaLLC/postings/82889768",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SuntivaLLC/82467921",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SuntivaLLC/postings/82467921",
       "jobAd": {
         "sections": {
           "jobDescription": {

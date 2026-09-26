@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Nagarro1/744000135786390",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Nagarro1/postings/744000135786390",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Nagarro1/744000135765395",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Nagarro1/postings/744000135765395",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Nagarro1/744000135752410",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Nagarro1/postings/744000135752410",
       "jobAd": {
         "sections": {
           "jobDescription": {

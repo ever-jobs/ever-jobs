@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SEAKREngineering/744000135597600",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SEAKREngineering/postings/744000135597600",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SEAKREngineering/744000135593827",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SEAKREngineering/postings/744000135593827",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SEAKREngineering/744000135593689",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SEAKREngineering/postings/744000135593689",
       "jobAd": {
         "sections": {
           "jobDescription": {

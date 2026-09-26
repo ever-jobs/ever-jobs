@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MATHoldings/744000135548239",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MATHoldings/postings/744000135548239",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MATHoldings/744000135536934",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MATHoldings/postings/744000135536934",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MATHoldings/744000134506629",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MATHoldings/postings/744000134506629",
       "jobAd": {
         "sections": {
           "jobDescription": {

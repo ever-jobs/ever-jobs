@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ConstanceHospitalityManagement/744000135652277",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ConstanceHospitalityManagement/postings/744000135652277",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ConstanceHospitalityManagement/744000135649070",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ConstanceHospitalityManagement/postings/744000135649070",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ConstanceHospitalityManagement/744000135643019",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ConstanceHospitalityManagement/postings/744000135643019",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "akunacapital"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/akunacapital/jobs": {
+      "jobs": [
+        {
+          "id": 8109370,
+          "title": "Accounting Intern (Term-Time, Part-Time)",
+          "updated_at": "2026-09-23T22:06:29.000Z",
+          "location": {
+            "name": "Chicago, IL"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/akunacapital/jobs/8109370",
+          "content": "&lt;p&gt;Accounting Intern (Term-Time, Part-Time) at Akuna Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "akunacapital"
+        },
+        {
+          "id": 8021124,
+          "title": "Akuna Capital's Talent Community",
+          "updated_at": "2026-06-22T16:57:24.000Z",
+          "location": {
+            "name": "Virtual"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/akunacapital/jobs/8021124",
+          "content": "&lt;p&gt;Akuna Capital's Talent Community at Akuna Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "akunacapital"
+        },
+        {
+          "id": 7496425,
+          "title": "Experienced Options Trader",
+          "updated_at": "2026-07-27T13:34:24.000Z",
+          "location": {
+            "name": "Chicago, IL"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/akunacapital/jobs/7496425",
+          "content": "&lt;p&gt;Experienced Options Trader at Akuna Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "akunacapital"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "akunacapital-8109370",
+      "title": "Accounting Intern (Term-Time, Part-Time)"
+    },
+    {
+      "id": "akunacapital-8021124",
+      "title": "Akuna Capital's Talent Community"
+    },
+    {
+      "id": "akunacapital-7496425",
+      "title": "Experienced Options Trader"
+    }
+  ]
+}
