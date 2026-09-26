@@ -463,7 +463,7 @@ export function assembleDescriptors(
 ): AtsDelegateDescriptor[] {
   const wanted = only?.length ? new Set(only) : null;
   const seen = new Set<string>();
-  const out: AtsDelegateDescriptor[] = [];
+  let out: AtsDelegateDescriptor[] = [];
   for (const s of seeds) {
     if (wanted && !wanted.has(s.key)) continue;
     if (!/^[a-z0-9][a-z0-9_]*$/.test(s.key)) throw new Error(`bad key: ${s.key}`);
