@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/KIPP/744000135577542",
+      "ref": "https://api.smartrecruiters.com/v1/companies/KIPP/postings/744000135577542",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/KIPP/744000135353569",
+      "ref": "https://api.smartrecruiters.com/v1/companies/KIPP/postings/744000135353569",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/KIPP/744000135350350",
+      "ref": "https://api.smartrecruiters.com/v1/companies/KIPP/postings/744000135350350",
       "jobAd": {
         "sections": {
           "jobDescription": {

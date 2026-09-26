@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ETalent/743999666941613",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ETalent/postings/743999666941613",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ETalent/743999666941365",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ETalent/postings/743999666941365",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ETalent/743999665695072",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ETalent/postings/743999665695072",
       "jobAd": {
         "sections": {
           "jobDescription": {

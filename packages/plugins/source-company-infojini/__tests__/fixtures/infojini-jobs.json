@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/InfojiniInc1/743999659846886",
+      "ref": "https://api.smartrecruiters.com/v1/companies/InfojiniInc1/postings/743999659846886",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/InfojiniInc1/743999659752375",
+      "ref": "https://api.smartrecruiters.com/v1/companies/InfojiniInc1/postings/743999659752375",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/InfojiniInc1/743999659748608",
+      "ref": "https://api.smartrecruiters.com/v1/companies/InfojiniInc1/postings/743999659748608",
       "jobAd": {
         "sections": {
           "jobDescription": {

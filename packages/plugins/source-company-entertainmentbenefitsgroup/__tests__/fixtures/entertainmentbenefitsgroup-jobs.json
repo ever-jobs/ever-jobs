@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EntertainmentBenefitsGroup/744000134873789",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EntertainmentBenefitsGroup/postings/744000134873789",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EntertainmentBenefitsGroup/744000134864363",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EntertainmentBenefitsGroup/postings/744000134864363",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EntertainmentBenefitsGroup/744000134850483",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EntertainmentBenefitsGroup/postings/744000134850483",
       "jobAd": {
         "sections": {
           "jobDescription": {

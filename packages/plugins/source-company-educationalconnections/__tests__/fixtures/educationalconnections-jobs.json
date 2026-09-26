@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EducationalConnections/112422574",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EducationalConnections/postings/112422574",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EducationalConnections/86315085",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EducationalConnections/postings/86315085",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EducationalConnections/82388648",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EducationalConnections/postings/82388648",
       "jobAd": {
         "sections": {
           "jobDescription": {

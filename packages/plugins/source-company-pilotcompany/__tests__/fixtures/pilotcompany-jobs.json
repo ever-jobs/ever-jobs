@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PilotCompany/744000135810659",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PilotCompany/postings/744000135810659",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PilotCompany/744000135805887",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PilotCompany/postings/744000135805887",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PilotCompany/744000135801323",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PilotCompany/postings/744000135801323",
       "jobAd": {
         "sections": {
           "jobDescription": {

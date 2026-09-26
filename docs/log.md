@@ -23,6 +23,19 @@
 
 ---
 
+## 2026-09-26 — Spec 1752 — PR #100 review: plain ReliefWeb text from Markdown; guard exceptions excuse only their documented findings
+
+- **ReliefWeb (Spec 1752).** With no `body-html`, `descriptionFormat: plain` now converts the Markdown `body` with a new `markdownToPlainText` (`@ever-jobs/common`, next to `htmlToPlainText`): headings, emphasis, inline code, quotes and rules lose their markers, links and images keep their text. `htmlToPlainText` alone left `##`, `**` and `[text](url)` in place.
+- **Guard (Spec 1751).** `KNOWN_EXCEPTIONS` now lists, per plugin, the exact findings it excuses (file, sink, API host fragment). Any other finding in an excused plugin fails the tree check, and an excused finding that disappears fails the staleness check. Before, one excused finding hid every other API link in the same plugin.
+- New tests fail on the previous code; guard 20/20, ReliefWeb + helper 19/19.
+
+## 2026-09-26 — Spec 1751 — guard: boolean URL tests and fetched URL records are not links
+
+- After merging develop (Specs 1690-1713) the tree check failed on three helpers in the new plugins, none a link: `source-jobsbylevel` `isAllowedJobsByLevelUrl()` (a `: boolean` robots/host test whose disallowed-prefix list contains `/api/`), and `source-simplifyjobs` `feedUrl()` / `resolveFeedUrls()` (the raw GitHub feed, returned as a `{ newgrad, internships }` record and fetched by key).
+- The guard now skips URL-named helpers declared `: boolean` or as a type predicate; follows a helper result through a record literal (`{ newgrad: feedUrl(…) }`) and through an element read (`urls[feed]`); and treats a predicate call (`is*`/`has*`/`can*`/`should*`) as an inert use, like a truth test.
+- Exemption still needs at least one request use and no other use, so a record of URLs copied into `jobUrl` stays judged: a new control case (`urls[feed]` → `jobUrl`) flags the helpers and the field. Before the change the new fixture failed (both feed helpers judged); after it the suite passes 19/19 on the merged tree.
+
+
 ## 2026-09-26 — Spec 1690 — merge review fixup: pacing floors, User-Agent switches, memo waiter abort
 
 **Change:** Three semantic merge breaks fixed without removing anything. (1) Pacing floors: since Spec 1690 a client's `rateDelayMin` is only the crawl policy's plugin layer, which a search caller's `rateDelayMin` (caller layer, `EVER_JOBS_CRAWL_CALLER_OVERRIDES=any`) replaces, so RemoteOK's `Crawl-delay` (1 s), Welcome to the Jungle's board pacing (0.5 s; 2 s between credential pages) and Simplify's feed spacing (2 s) could be shortened to 50 ms. New additive `HttpClientOptions.minIntervalFloorMs` (milliseconds, copied by `createHttpClient`'s input-shaped branch): the limiter spaces that client's requests by max(policy `minIntervalMs`, robots.txt `Crawl-delay`, floor), like a `Crawl-delay`; the three plugins set it to the spacing they already computed, so a caller may again only lengthen it. (2) User-Agent switches: `WTTJ_USER_AGENT_MODE=browser` and `EVER_JOBS_REMOTEOK_LEGACY=ua` only declared a UA, which the default `identify` mode never sends; while a switch is on, the plugin now passes `crawl: { userAgentMode: 'plugin', userAgentReason }` (`WTTJ_BROWSER_UA_CRAWL_POLICY`, `REMOTEOK_LEGACY_UA_CRAWL_POLICY`), so the browser UA reaches the wire again; `strict` (env, preset) and a caller `userAgent` still win. ZipRecruiter: its header UA is likewise only declared, so the honest configured UA now goes out by default (checked on the wire; the operator opt-in `sites.zip_recruiter.userAgentMode: "plugin"` sends the desktop one); recorded in Q-099, Spec 1713 Q1 and `ziprecruiter.constants.ts` rather than decided in code. (3) A request parked on an identical in-flight request in a Spec 1700 memo scope now rejects on its own abort signal (`memoisedRequest(…, signal)`) instead of waiting for the first request; the first keeps the entry.
@@ -74,6 +87,128 @@
 **Files:** `scripts/{probe,scaffold}-ats-delegate-company-source.ts`, `scripts/wire-company-source-tail.ts`, `scripts/__tests__/{probe,scaffold}-ats-delegate-company-source.spec.ts`, `scripts/__tests__/wire-company-source-tail.spec.ts`, `scripts/seeds/ats-delegate-*.json`, `packages/plugins/source-company-*` (84 new packages), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js` (tail additions only), `.specify/specs/{1735,1736,1737}-*/*`, `docs/index.md`, `docs/questions.md`, `docs/log.md`.
 
 **Validation:** `npx jest --runTestsByPath` over the 84 generated suites — 84 suites, 1,352 tests green, each running the real Workday/Greenhouse/Lever/Ashby/iCIMS adapter over the recorded fixtures (no network); `npx jest scripts/__tests__ packages/plugins/source-ats-{workday,greenhouse,lever,ashby,icims}` — 22 suites, 360 tests green (the three new script suites included); `npx tsc --project tsconfig.typecheck.json --noEmit` clean; `npm run lint:docs` clean. Sabotage check: dropping the company-name re-stamp from a generated service fails its suite. The suites also caught a real fixture bug before commit: Intel and Moderna put a badge or location first in Workday `bulletFields`, so taking `bulletFields[0]` as the requisition id collapsed their recorded postings onto one id (now the first single token containing a digit).
+
+## 2026-09-25 — Spec 1752 (with Spec 1751 T11–T12) — guard follows record links; NAV id proved; ReliefWeb on API v2
+
+**Change:**
+
+- **Guard gap (Spec 1751 T11).** Mutant M7 — Carerix `buildJobUrl()` returning
+  `https://api.carerix.com/v1/jobs/<id>` — passed `scripts/__tests__/plugin-job-url-hosts.spec.ts`:
+  the link is stored as `{ url: … }` in a record and copied later as `jobUrl: job.url`, where
+  `job` is a parameter. The guard now also judges (3) every value under a record key `url` /
+  `link` / `href` (request configs excepted) and (4) every return of a same-plugin helper whose
+  name contains `url`, unless every call site only hands the result to a request (followed
+  through locals, templates, `new URL()`, string methods and returning helpers; logs, truth
+  tests and member reads are neutral). Tree on 2026-09-25: 197 record links, 348 URL-named link
+  helpers, 93 fetch helpers exempted, zero false positives. Zwayam — whose
+  `api.zwayam.com/job_preview/` link the old guard could not see — is the fifth named exception
+  (Q-110). Mutants M7 (method helper), M8 (BreatheHR arrow helper), M9 (CVWarehouse template in
+  a `Map`), M10 (Carerix inline record template) each pass the old guard and fail the new one;
+  every file restored with `git checkout`. New runtime suite `carerix.job-url.spec.ts`.
+- **NAV (Spec 1751 T12).** NAV's own feed source (navikt/pam-stilling-feed `45cc8c49`) sets a
+  list line's `id` and `_feed_entry.uuid` to the ad uuid and publishes
+  `ad_content.link = https://arbeidsplassen.nav.no/stillinger/stilling/<ad uuid>`; one live GET of
+  such a page answered 200 HTML with the uuid as *Stillingsnummer*. The fallback is exactly NAV's
+  link — pinned by two new cases, no code change.
+- **SmartRecruiters doc.** `smartrecruiters.types.ts`: `ref` is on list postings only; the
+  detail response has none.
+- **ReliefWeb (Spec 1752).** v1 answers 410 "The API version 'v1' has been decommissioned"
+  (live), so the source returned nothing. Moved to `https://api.reliefweb.int/v2/jobs`. v2 serves
+  only pre-approved appnames (since 2025-11-01): `ever-jobs` gets 403 "You are not using an
+  approved appname" (live). The appname is now `RELIEFWEB_APPNAME` (default `ever-jobs`, start-up
+  warning), and that 403 becomes a `bad_input` diagnostic naming the variable and the request
+  form. Links `url_alias` → `url` → `reliefweb.int/node/<id>` (live: 301 to the alias; a closed
+  job 410 HTML), never `href`; description per format from `body` / `body-html`. README section
+  and `.env.example` entry added. **Owner action:** request an appname and set
+  `RELIEFWEB_APPNAME` (Spec 1752 T6).
+
+**Live requests used:** api.reliefweb.int 2 of 3 (v2 → 403, v1 → 410), reliefweb.int 2 of 2
+(`/node/4228316` → 410, `/node/4231248` → 301), arbeidsplassen.nav.no 1 of 1 (200).
+
+**Verification:** guard 17/17; reliefweb 13/13 (6 red against the old code); navjobs 5/5;
+carerix 3/3 (2 red under M7); smartrecruiters 10/10; `packages/common` 601/601 in 16 suites;
+`tsc` clean for `tsconfig.typecheck.json` and `apps/api/tsconfig.build.json`.
+
+**Docs:** [1751 spec](../.specify/specs/1751-plugin-job-link-guard/spec.md) (D-04, D-06, D-07),
+[plan](../.specify/specs/1751-plugin-job-link-guard/plan.md),
+[tasks](../.specify/specs/1751-plugin-job-link-guard/tasks.md) (T11–T13),
+[notes](../.specify/specs/1751-plugin-job-link-guard/notes.md);
+[1752 spec](../.specify/specs/1752-reliefweb-api-v2/spec.md),
+[plan](../.specify/specs/1752-reliefweb-api-v2/plan.md),
+[tasks](../.specify/specs/1752-reliefweb-api-v2/tasks.md); `docs/index.md`; **Q-110**.
+
+---
+
+## 2026-09-25 — Spec 1751 — Plugin job-link audit and API-URL guard
+
+**Change:** audited every `jobUrl` / `jobUrlDirect` / `applyUrl` assignment in
+`packages/plugins/*/src/**/*.ts` from the TypeScript AST — 1,791 sites in 1,164 plugins (the
+text search `rg '\b(jobUrl|jobUrlDirect|applyUrl)\s*[:=]'` finds 1,618 lines) — and bucketed each
+by where its value comes from ([notes.md](../.specify/specs/1751-plugin-job-link-guard/notes.md)).
+Besides SmartRecruiters (Spec 1750):
+
+- **Fixed:** `source-reliefweb` fell back to `entry.href` (`https://api.reliefweb.int/v1/jobs/<id>`)
+  and now falls back to `https://reliefweb.int/node/<id>`; `source-navjobs` fell back to the
+  feed item's `/api/v1/feedentry/<uuid>` (and used non-URL `applicationUrl` text verbatim) and
+  now falls back to `https://arbeidsplassen.nav.no/stillinger/stilling/<uuid>`, with `applyUrl`.
+- **Partly fixed (Q-110):** `source-ats-bullhorn` (always a REST entity URL), `source-ats-ceipal`
+  (JSON detail resource; `applyUrl` copied it), `source-ats-hiringthing`, `source-ats-loxo`
+  choose the first public candidate and the caller's `companyUrl` before the old API link,
+  which remains only as a last resort; Ceipal/Loxo `applyUrl` is public-only.
+- **Shared helper:** `packages/common/src/utils/public-url.ts` — `API_URL_PATTERN`,
+  `isApiLikeUrl`, `firstPublicUrl`.
+- **Guard:** `scripts/__tests__/plugin-job-url-hosts.spec.ts` parses every plugin and fails on
+  an API host or API reference field (`.ref`, `.self`, `.apiUrl`, …) wired into a link field,
+  through locals (lexically), constants, helpers, `TEMPLATE.replace()` and `URL` accessors; the
+  four last-resort plugins are named exceptions that fail when no longer needed.
+- Reported only (another session owns them): `linkedin`, `glassdoor`, `ziprecruiter`,
+  `naukri` — all link human pages. Left for later: Zwayam's documented
+  `api.zwayam.com/job_preview/` link, HiBob's unverified API `url`, Workday's site-less and
+  Oracle's `/careers/job/` fallbacks (tasks T9–T10).
+
+**Verification:** `public-url.spec.ts` 28/28; six new `*.job-url.spec.ts` suites 22/22 (13 of 22
+fail against the pre-fix services); guard 12/12 over 1,165 plugins / 1,520 valued assignments,
+red with SmartRecruiters' `job.ref` put back.
+
+**Docs:** [spec](../.specify/specs/1751-plugin-job-link-guard/spec.md),
+[plan](../.specify/specs/1751-plugin-job-link-guard/plan.md),
+[tasks](../.specify/specs/1751-plugin-job-link-guard/tasks.md), `docs/index.md`, **Q-110**.
+
+---
+
+## 2026-09-25 — Spec 1750 — SmartRecruiters `jobUrl` is the public posting page, not the API `ref`
+
+**Change:** `source-ats-smartrecruiters` mapped `jobUrl = job.ref ?? <public pattern>`. `ref` is
+the posting's API resource (`https://api.smartrecruiters.com/v1/companies/<Co>/postings/<id>`)
+and is on every list posting, so every SmartRecruiters job — and every job of the 217 company
+plugins that delegate to it — linked to raw JSON (5,032 rows in a downstream app). Three live
+GETs (AbbVie list, one detail, the id-only public page) confirmed: the list has `ref` but no
+`postingUrl`/`applyUrl`/`jobAd`; the detail has `postingUrl`/`applyUrl`;
+`https://jobs.smartrecruiters.com/AbbVie/<id>` serves the page.
+
+- `jobUrl` = `postingUrl` (public-only) else
+  `https://jobs.smartrecruiters.com/<company.identifier>/<id>` — the API's case-sensitive
+  identifier, then the `ref` segment, then the caller's slug. `applyUrl` only from the API's
+  `applyUrl`. `ref` is parsed for the id/identifier, never linked (`JobPostDto` has no raw
+  field to keep it in). `id`, `atsId` and the URL share one posting id; an id-less posting is
+  skipped instead of linking `…/undefined`.
+- The 217 delegating plugins' fixtures had fabricated a public `ref` and asserted
+  `jobUrl === ref`, which is why nothing was red: 651 fixture `ref`s now carry the real API
+  form, the 217 assertions check the public pattern, and
+  `scripts/scaffold-smartrecruiters-company-source.ts` generates both.
+- New unit suite + fixtures cut from the live responses (custom fields and body trimmed).
+
+**Verification:** `smartrecruiters.service.spec.ts` 10/10; the 217 delegating suites green;
+with `job.ref ??` reintroduced, the plugin suite, the AbbVie suite and the Spec 1751 guard fail
+(10 of 31), restored 31/31. Downstream stores keyed on `jobUrl` see new URLs for existing
+postings (deterministic rewrite: `api…/v1/companies/<Co>/postings/<id>` →
+`jobs.smartrecruiters.com/<Co>/<id>`).
+
+**Docs:** [spec](../.specify/specs/1750-smartrecruiters-public-job-url/spec.md),
+[plan](../.specify/specs/1750-smartrecruiters-public-job-url/plan.md),
+[tasks](../.specify/specs/1750-smartrecruiters-public-job-url/tasks.md), `docs/index.md`,
+**Q-111** (the list endpoint carries no description).
+
 
 ## 2026-09-25 — Review fixup — Specs 1692-1713: salary benefit guard, multi-location memo, stop on refusal, opt-in identity changes
 

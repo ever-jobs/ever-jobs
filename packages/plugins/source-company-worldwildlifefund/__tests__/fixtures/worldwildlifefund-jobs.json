@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WorldWildlifeFundInc1/744000135338765",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WorldWildlifeFundInc1/postings/744000135338765",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WorldWildlifeFundInc1/744000135330254",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WorldWildlifeFundInc1/postings/744000135330254",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WorldWildlifeFundInc1/744000135320309",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WorldWildlifeFundInc1/postings/744000135320309",
       "jobAd": {
         "sections": {
           "jobDescription": {

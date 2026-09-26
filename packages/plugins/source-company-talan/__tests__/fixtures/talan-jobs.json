@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Talan/744000135767992",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Talan/postings/744000135767992",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Talan/744000135762324",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Talan/postings/744000135762324",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Talan/744000135751299",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Talan/postings/744000135751299",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CountyOfGrandePrairieNo1/744000132488849",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CountyOfGrandePrairieNo1/postings/744000132488849",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CountyOfGrandePrairieNo1/744000132488769",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CountyOfGrandePrairieNo1/postings/744000132488769",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CountyOfGrandePrairieNo1/744000128541110",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CountyOfGrandePrairieNo1/postings/744000128541110",
       "jobAd": {
         "sections": {
           "jobDescription": {

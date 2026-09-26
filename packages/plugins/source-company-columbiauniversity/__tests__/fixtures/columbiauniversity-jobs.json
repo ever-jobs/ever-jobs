@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ColumbiaUniversity1/744000135548226",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ColumbiaUniversity1/postings/744000135548226",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ColumbiaUniversity1/744000126332469",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ColumbiaUniversity1/postings/744000126332469",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ColumbiaUniversity1/744000121798456",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ColumbiaUniversity1/postings/744000121798456",
       "jobAd": {
         "sections": {
           "jobDescription": {

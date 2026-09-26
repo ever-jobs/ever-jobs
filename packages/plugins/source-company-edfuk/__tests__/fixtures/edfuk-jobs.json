@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EDF-UK/744000135732609",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EDF-UK/postings/744000135732609",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EDF-UK/744000135701280",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EDF-UK/postings/744000135701280",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EDF-UK/744000135679476",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EDF-UK/postings/744000135679476",
       "jobAd": {
         "sections": {
           "jobDescription": {

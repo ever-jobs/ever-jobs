@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SwissHospitality/743999967263154",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SwissHospitality/postings/743999967263154",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SwissHospitality/743999954375263",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SwissHospitality/postings/743999954375263",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SwissHospitality/743999938549619",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SwissHospitality/postings/743999938549619",
       "jobAd": {
         "sections": {
           "jobDescription": {

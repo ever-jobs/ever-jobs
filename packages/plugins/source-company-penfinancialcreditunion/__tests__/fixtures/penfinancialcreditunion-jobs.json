@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PenFinancialCreditUnion/744000133088773",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PenFinancialCreditUnion/postings/744000133088773",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PenFinancialCreditUnion/744000132202648",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PenFinancialCreditUnion/postings/744000132202648",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PenFinancialCreditUnion/744000131518529",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PenFinancialCreditUnion/postings/744000131518529",
       "jobAd": {
         "sections": {
           "jobDescription": {

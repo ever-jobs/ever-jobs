@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SeniorPlc1/3743990013928726",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SeniorPlc1/postings/3743990013928726",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SeniorPlc1/3743990013920046",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SeniorPlc1/postings/3743990013920046",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SeniorPlc1/3743990013920006",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SeniorPlc1/postings/3743990013920006",
       "jobAd": {
         "sections": {
           "jobDescription": {

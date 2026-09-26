@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeloitteNZ/6000000001205481",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeloitteNZ/postings/6000000001205481",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeloitteNZ/6000000001204915",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeloitteNZ/postings/6000000001204915",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeloitteNZ/6000000001204910",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeloitteNZ/postings/6000000001204910",
       "jobAd": {
         "sections": {
           "jobDescription": {

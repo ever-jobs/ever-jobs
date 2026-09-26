@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/lvmhperfumescosmetics/744000135406864",
+      "ref": "https://api.smartrecruiters.com/v1/companies/lvmhperfumescosmetics/postings/744000135406864",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/lvmhperfumescosmetics/744000135406329",
+      "ref": "https://api.smartrecruiters.com/v1/companies/lvmhperfumescosmetics/postings/744000135406329",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/lvmhperfumescosmetics/744000135405059",
+      "ref": "https://api.smartrecruiters.com/v1/companies/lvmhperfumescosmetics/postings/744000135405059",
       "jobAd": {
         "sections": {
           "jobDescription": {

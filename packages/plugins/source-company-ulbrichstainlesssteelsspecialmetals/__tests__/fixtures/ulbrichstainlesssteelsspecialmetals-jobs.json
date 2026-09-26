@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UlbrichSteel/744000133637261",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UlbrichSteel/postings/744000133637261",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UlbrichSteel/744000133100049",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UlbrichSteel/postings/744000133100049",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UlbrichSteel/744000132865120",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UlbrichSteel/postings/744000132865120",
       "jobAd": {
         "sections": {
           "jobDescription": {

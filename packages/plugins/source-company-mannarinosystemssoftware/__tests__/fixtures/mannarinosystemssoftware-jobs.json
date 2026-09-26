@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MannarinoSystemsSoftwareInc/743999741467980",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MannarinoSystemsSoftwareInc/postings/743999741467980",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MannarinoSystemsSoftwareInc/743999740898589",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MannarinoSystemsSoftwareInc/postings/743999740898589",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MannarinoSystemsSoftwareInc/743999731624244",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MannarinoSystemsSoftwareInc/postings/743999731624244",
       "jobAd": {
         "sections": {
           "jobDescription": {

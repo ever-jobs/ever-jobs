@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HoistGroup/743999814048773",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HoistGroup/postings/743999814048773",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HoistGroup/743999793850418",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HoistGroup/postings/743999793850418",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HoistGroup/743999787345622",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HoistGroup/postings/743999787345622",
       "jobAd": {
         "sections": {
           "jobDescription": {

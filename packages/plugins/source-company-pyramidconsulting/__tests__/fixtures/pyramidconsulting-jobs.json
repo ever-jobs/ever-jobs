@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PyramidIT1/105073703",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PyramidIT1/postings/105073703",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PyramidIT1/105073574",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PyramidIT1/postings/105073574",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PyramidIT1/105073546",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PyramidIT1/postings/105073546",
       "jobAd": {
         "sections": {
           "jobDescription": {

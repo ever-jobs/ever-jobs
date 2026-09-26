@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Ramboll3/744000135749182",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Ramboll3/postings/744000135749182",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Ramboll3/744000135749484",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Ramboll3/postings/744000135749484",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Ramboll3/744000135751479",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Ramboll3/postings/744000135751479",
       "jobAd": {
         "sections": {
           "jobDescription": {

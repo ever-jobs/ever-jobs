@@ -19,6 +19,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  firstPublicUrl,
 } from '@ever-jobs/common';
 import {
   BULLHORN_DEFAULT_FIELDS,
@@ -113,6 +114,7 @@ export class BullhornService implements IScraper {
             cls,
             effectiveCorpToken,
             input.descriptionFormat,
+            input.companyUrl,
           );
           if (post) {
             jobPosts.push(post);
@@ -138,6 +140,7 @@ export class BullhornService implements IScraper {
     cls: string,
     corpToken: string,
     format?: DescriptionFormat,
+    companyUrl?: string,
   ): JobPostDto | null {
     const title = order.title;
     if (!title) return null;
@@ -180,9 +183,14 @@ export class BullhornService implements IScraper {
       ? toDateOnly(order.dateAdded)
       : null;
 
-    // Job URL — Bullhorn does not expose a public careers page URL;
-    // construct a reference URL using the REST API pattern
-    const jobUrl = `https://public-rest${cls}.bullhornstaffing.com/rest-services/${corpToken}/entity/JobOrder/${order.id}`;
+    // Job URL (Spec 1751) — Bullhorn exposes no public posting page, so the
+    // caller's careers page (`companyUrl`) is the human link when given. The
+    // REST entity URL is a last resort kept only because nothing public is
+    // known for a corp token (Q-110); it is a documented exception in
+    // scripts/__tests__/plugin-job-url-hosts.spec.ts.
+    const jobUrl =
+      firstPublicUrl(companyUrl) ??
+      `https://public-rest${cls}.bullhornstaffing.com/rest-services/${corpToken}/entity/JobOrder/${order.id}`;
 
     return new JobPostDto({
       id: `bullhorn-${order.id}`,

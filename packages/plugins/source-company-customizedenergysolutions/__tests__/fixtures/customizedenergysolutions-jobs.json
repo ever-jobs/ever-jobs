@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CustomizedEnergySolutions/744000134694589",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CustomizedEnergySolutions/postings/744000134694589",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CustomizedEnergySolutions/744000130352607",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CustomizedEnergySolutions/postings/744000130352607",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CustomizedEnergySolutions/744000129159265",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CustomizedEnergySolutions/postings/744000129159265",
       "jobAd": {
         "sections": {
           "jobDescription": {
