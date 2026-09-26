@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -222,13 +223,15 @@ export class EployService implements IScraper {
 
     const resolvedCompanyName =
       item.Company?.trim() || companyName;
+    const location = this.extractLocation(item);
 
     return new JobPostDto({
       id: `eploy-${atsId}`,
       title,
       companyName: resolvedCompanyName,
       jobUrl,
-      location: this.extractLocation(item),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(item.DatePosted ?? item.DateCreated),
       isRemote: this.detectRemote(item),
@@ -318,23 +321,7 @@ export class EployService implements IScraper {
   private extractLocation(item: EployVacancyItem): LocationDto | null {
     const label = item.Location?.trim();
     if (!label) return null;
-    return this.locationFromLabel(label);
-  }
-
-  /** Split a free-text "City, Region, Country" label into a LocationDto. */
-  private locationFromLabel(label: string): LocationDto | null {
-    const parts = label
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    const city = parts[0];
-    const state = parts.length >= 3 ? parts[1] : parts[parts.length - 1];
-    const country = parts.length >= 3 ? parts[parts.length - 1] : null;
-    return new LocationDto({ city: city ?? null, state: state ?? null, country: country ?? null });
+    return parseLocationText(label).location;
   }
 
   /**

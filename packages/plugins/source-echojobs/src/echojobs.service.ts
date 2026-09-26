@@ -14,12 +14,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList } from '@ever-jobs/common';
 import { ECHOJOBS_API_URL, ECHOJOBS_HEADERS } from './echojobs.constants';
 import { EchoJobsResponse, EchoJob } from './echojobs.types';
 
@@ -126,9 +121,8 @@ export class EchoJobsService implements IScraper {
     }
 
     // Build location
-    const location = new LocationDto({
-      city: raw.location ?? null,
-    });
+    const locationParsed = parseLocationList([raw.location ?? null]);
+    const location = locationParsed.location;
 
     // Build compensation from salary fields
     let compensation: CompensationDto | null = null;
@@ -151,10 +145,11 @@ export class EchoJobsService implements IScraper {
       companyLogo: raw.company_logo ?? null,
       jobUrl: raw.url,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,
-      isRemote: raw.is_remote ?? raw.remote ?? false,
+      isRemote: (raw.is_remote ?? raw.remote ?? false) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       skills: raw.tags?.length ? raw.tags : null,
       site: Site.ECHOJOBS,

@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
 } from '@ever-jobs/common';
 import {
   RADANCY_HOST_SUFFIX,
@@ -326,13 +327,15 @@ export class RadancyService implements IScraper {
     // The list fragment carries no description body (it lives on the unfetched detail page);
     // surface a null description, still format-normalised for shape consistency.
     const description = this.formatDescription(null, format);
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `radancy-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: null,
       isRemote: job.isRemote ?? false,
@@ -440,12 +443,7 @@ export class RadancyService implements IScraper {
   private extractLocation(job: RadancyJob): LocationDto | null {
     const text = job.locationText;
     if (!text) return null;
-    const parts = text.split(',').map((p) => p.trim()).filter((p) => p.length > 0);
-    if (parts.length === 0) return null;
-    const city = parts[0] ?? null;
-    const state = parts.length > 1 ? parts[1] : null;
-    const country = parts.length > 2 ? parts[parts.length - 1] : null;
-    return new LocationDto({ city, state, country });
+    return parseLocationText(text).location;
   }
 
   /** Detect remote roles from the title or location text. */

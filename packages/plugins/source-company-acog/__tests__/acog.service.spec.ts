@@ -106,7 +106,7 @@ describe('AcogService — Spec 179 / T04', () => {
       expect(dirCgm?.jobUrl).toContain('job-boards.greenhouse.io/acog/jobs/');
       // D-11 clean — dept flows through byte-for-byte.
       expect(dirCgm?.department).toBe('Clinical Guidance');
-      expect(dirCgm?.location?.city).toBe('Washington, DC');
+      expect(dirCgm?.location?.city).toBe('Washington');
       expect(dirCgm?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(dirCgm?.description).not.toContain('&lt;');

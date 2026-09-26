@@ -95,7 +95,7 @@ describe('AccuWeatherService — Spec 175 / T04', () => {
       expect(ae?.jobUrl).toContain('job-boards.greenhouse.io/accuweather/jobs/');
       // D-11 clean dept on this listing (Ad Sales is unpadded).
       expect(ae?.department).toBe('Ad Sales');
-      expect(ae?.location?.city).toBe('State College, PA or Remote');
+      expect(ae?.location?.city).toBe('State College');
       expect(ae?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(ae?.description).not.toContain('&lt;');
@@ -107,7 +107,7 @@ describe('AccuWeatherService — Spec 175 / T04', () => {
       expect(fc).toBeDefined();
       expect(fc?.title).toBe('Facilities Coordinator');
       expect(fc?.companyName).toBe('AccuWeather Careers');
-      expect(fc?.location?.city).toBe('State College, PA');
+      expect(fc?.location?.city).toBe('State College');
       expect(fc?.isRemote).toBe(false);
       // D-11 lock — wire dept carries trailing-pad; emitted
       // dept trimmed.
@@ -122,7 +122,7 @@ describe('AccuWeatherService — Spec 175 / T04', () => {
       expect(fr).toBeDefined();
       expect(fr?.title).toBe('Senior Forecaster, Severe Weather');
       expect(fr?.companyName).toBe('AccuWeather Careers');
-      expect(fr?.location?.city).toBe('Remote, US');
+      expect(fr?.location?.city).toBeUndefined();
       expect(fr?.isRemote).toBe(true);
       expect(fr?.department).toBe('Forecasting');
 

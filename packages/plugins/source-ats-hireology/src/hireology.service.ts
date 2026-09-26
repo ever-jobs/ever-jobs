@@ -250,12 +250,14 @@ export class HireologyService implements IScraper {
     const family = job.job_family ?? job.jobFamily;
     const department = family?.name ?? null;
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `hireology-${atsId}`,
       title,
       companyName: job.organization?.name ?? companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.created_at ?? job.createdAt ?? job.updated_at),
       isRemote: this.detectRemote(job),

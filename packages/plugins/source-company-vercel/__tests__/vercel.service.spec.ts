@@ -90,7 +90,7 @@ describe('VercelService — Spec 043 / T04', () => {
         'https://job-boards.greenhouse.io/vercel/jobs/5624231004',
       );
       expect(eng?.location?.city).toBe(
-        'Hybrid - San Francisco, New York City, Austin',
+        'San Francisco, New York City, Austin',
       );
       expect(eng?.department).toBe('Engineering');
       expect(eng?.isRemote).toBe(false);

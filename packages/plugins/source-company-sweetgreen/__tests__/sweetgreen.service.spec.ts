@@ -109,7 +109,7 @@ describe('SweetgreenService — Spec 104 / T04', () => {
       expect(al?.jobUrl).not.toContain('/careers/jobs/');
       // D-11 omitted (clean store-location dept).
       expect(al?.department).toBe('Back Bay');
-      expect(al?.location?.city).toBe('Boston, MA');
+      expect(al?.location?.city).toBe('Boston');
       expect(al?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(al?.description).not.toContain('&lt;');
@@ -127,7 +127,7 @@ describe('SweetgreenService — Spec 104 / T04', () => {
       expect(fmm?.title).not.toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(fmm?.title).not.toMatch(/\s$/);
       expect(fmm?.companyName).toBe('sweetgreen');
-      expect(fmm?.location?.city).toBe('Los Angeles, CA');
+      expect(fmm?.location?.city).toBe('Los Angeles');
       expect(fmm?.isRemote).toBe(false);
       // D-11 store-location dept lock.
       expect(fmm?.department).toBe('16th + Market');

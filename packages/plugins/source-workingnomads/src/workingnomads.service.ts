@@ -18,6 +18,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
 } from '@ever-jobs/common';
 import { WORKINGNOMADS_API_URL, WORKINGNOMADS_HEADERS } from './workingnomads.constants';
 import { WorkingNomadsJob } from './workingnomads.types';
@@ -112,7 +113,7 @@ export class WorkingNomadsService implements IScraper {
     }
 
     // Build location
-    const location = this.parseLocation(entry.location);
+    const location = parseLocationText(entry.location).location ?? new LocationDto({});
 
     // Parse date (extract date part from ISO 8601)
     const datePosted = entry.pub_date
@@ -130,6 +131,9 @@ export class WorkingNomadsService implements IScraper {
       companyName: entry.company_name ?? null,
       jobUrl: entry.url,
       location,
+      ...(location.city || location.state || location.country
+        ? { locations: [location] }
+        : {}),
       description,
       compensation: null,
       datePosted,
@@ -140,20 +144,4 @@ export class WorkingNomadsService implements IScraper {
     });
   }
 
-  /**
-   * Parse location string into a LocationDto.
-   */
-  private parseLocation(locationStr: string | null | undefined): LocationDto {
-    if (!locationStr) {
-      return new LocationDto({});
-    }
-
-    const parts = locationStr.split(',').map((p) => p.trim());
-
-    return new LocationDto({
-      city: parts[0] ?? null,
-      state: parts[1] ?? null,
-      country: parts[2] ?? null,
-    });
-  }
 }

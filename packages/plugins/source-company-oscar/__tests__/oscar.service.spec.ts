@@ -108,7 +108,7 @@ describe('OscarService — Spec 133 / T04', () => {
       expect(mpe?.jobUrl).toContain('?gh_jid=7559119');
       expect(mpe?.jobUrl).not.toContain('greenhouse.io');
       expect(mpe?.department).toBe('Insurance Operations');
-      expect(mpe?.location?.city).toBe('Tempe, AZ');
+      expect(mpe?.location?.city).toBe('Tempe');
       expect(mpe?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(mpe?.description).not.toContain('&lt;');
@@ -124,7 +124,7 @@ describe('OscarService — Spec 133 / T04', () => {
       expect(sa?.title).toBe('Senior Analyst, Data Analytics, SIU');
       expect(sa?.title).not.toMatch(/\s$/);
       expect(sa?.companyName).toBe('Oscar Health');
-      expect(sa?.location?.city).toBe('New York, NY');
+      expect(sa?.location?.city).toBe('New York');
       expect(sa?.isRemote).toBe(false);
       expect(sa?.department).toBe('Data');
       expect(sa?.jobUrl).toBe(

@@ -13,13 +13,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { JOBICY_API_URL, JOBICY_HEADERS } from './jobicy.constants';
 import { JobicyJob, JobicyApiResponse } from './jobicy.types';
 
@@ -108,9 +102,8 @@ export class JobicyService implements IScraper {
     }
 
     // Build location
-    const location = new LocationDto({
-      city: raw.jobGeo ?? null,
-    });
+    const locationParsed = parseLocationList([raw.jobGeo ?? null]);
+    const location = locationParsed.location;
 
     // Parse date
     let datePosted: string | null = null;
@@ -129,10 +122,11 @@ export class JobicyService implements IScraper {
       companyLogo: raw.companyLogo ?? null,
       jobUrl: raw.url,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,
-      isRemote: true,
+      isRemote: (true) || locationParsed.remoteMentioned,
       jobLevel: raw.jobLevel ?? null,
       companyIndustry: raw.jobIndustry?.join(', ') ?? null,
       emails: extractEmails(description),

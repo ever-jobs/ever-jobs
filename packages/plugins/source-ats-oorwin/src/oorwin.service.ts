@@ -335,12 +335,14 @@ export class OorwinService implements IScraper {
 
     const department = item.job_type ?? detail?.job_type ?? null;
 
+    const location = this.extractLocation(item);
     return new JobPostDto({
       id: `oorwin-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(item),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(item.cp_published_on),
       isRemote: this.detectRemote(item),

@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -173,13 +174,15 @@ export class ClearCompanyService implements IScraper {
     }
 
     const department = job.DepartmentName ?? null;
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `clearcompany-${atsId}`,
       title,
       companyName: this.normalizeCompanyName(job.OrganizationName) ?? companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.OpenDate ?? job.openDate),
       isRemote: this.detectRemote(job),
@@ -243,19 +246,7 @@ export class ClearCompanyService implements IScraper {
   private extractLocation(job: ClearCompanyJob): LocationDto | null {
     const office = job.OfficeName;
     if (typeof office !== 'string' || !office.trim()) return null;
-    const parts = office
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    // Two-plus parts: treat last as state/region, first as city.
-    const city = parts[0];
-    const state = parts.length >= 3 ? parts[1] : parts[parts.length - 1];
-    const country = parts.length >= 3 ? parts[parts.length - 1] : null;
-    return new LocationDto({ city: city ?? null, state: state ?? null, country: country ?? null });
+    return parseLocationText(office).location;
   }
 
   /** Detect remote roles from the office/location label or the title. */

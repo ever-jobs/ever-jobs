@@ -96,7 +96,7 @@ describe('ShopmonkeyService — Spec 170 / T04', () => {
       expect(im?.jobUrl).toContain('?gh_jid=7681127003');
       expect(im?.jobUrl).not.toContain('job-boards.greenhouse.io');
       expect(im?.department).toBe('Implementation');
-      expect(im?.location?.city).toBe('Hybrid - Morgan Hill, California');
+      expect(im?.location?.city).toBe('Morgan Hill');
       expect(im?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(im?.description).not.toContain('&lt;');
@@ -112,7 +112,7 @@ describe('ShopmonkeyService — Spec 170 / T04', () => {
       expect(sse?.title).toBe('Senior Software Engineer, Platform');
       expect(sse?.title).toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(sse?.companyName).toBe('Shopmonkey');
-      expect(sse?.location?.city).toBe('Remote, US');
+      expect(sse?.location?.city).toBeUndefined();
       expect(sse?.isRemote).toBe(true);
       expect(sse?.department).toBe('Engineering');
       expect(sse?.jobUrl).toBe(

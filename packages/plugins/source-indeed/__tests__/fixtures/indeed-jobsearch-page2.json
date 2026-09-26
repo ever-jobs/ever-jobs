@@ -1,0 +1,54 @@
+{
+  "data": {
+    "jobSearch": {
+      "pageInfo": { "nextCursor": null },
+      "results": [
+        {
+          "trackingKey": "t2-dup",
+          "job": {
+            "source": { "name": "Globex" },
+            "key": "aaa0000000000002",
+            "title": "Senior Backend Engineer (duplicate key - must be dropped)",
+            "dateOnSite": null,
+            "datePublished": 1790121600000,
+            "description": { "html": "<p>dup</p>" },
+            "location": { "formatted": { "long": "Remote" }, "city": null, "state": null, "country": null, "countryCode": "US", "postalCode": null },
+            "attributes": [ { "key": "DSQF7", "label": "Remote" } ],
+            "compensation": null,
+            "employer": { "dpiUrl": null, "name": "Globex", "companyProfile": null, "relatedJobs": null }
+          }
+        },
+        {
+          "trackingKey": "t5",
+          "job": {
+            "source": { "name": "Hooli" },
+            "key": "aaa0000000000005",
+            "title": "Warehouse Associate",
+            "dateOnSite": null,
+            "datePublished": 1790280000000,
+            "description": { "html": "<p>Seasonal help.</p>" },
+            "location": { "formatted": { "long": "Temporarily Remote in Chicago, IL" }, "city": "Chicago", "state": "IL", "country": null, "countryCode": "US", "postalCode": null },
+            "attributes": [ { "key": "SYN05", "label": "Temporary" } ],
+            "compensation": null,
+            "employer": { "dpiUrl": null, "name": "Hooli", "companyProfile": null, "relatedJobs": null }
+          }
+        },
+        {
+          "trackingKey": "t6",
+          "job": {
+            "source": { "name": "Vandelay Industries" },
+            "key": "aaa0000000000006",
+            "title": "Engineering Intern",
+            "dateOnSite": null,
+            "datePublished": 1790280000000,
+            "description": { "html": "<p>Summer internship.</p>" },
+            "location": { "formatted": { "long": "Denver, CO 80202" }, "city": "Denver", "state": "CO", "country": "United States", "countryCode": "US", "postalCode": "80202" },
+            "attributes": [ { "key": "VDTG7", "label": "Internship" }, { "key": "SYN06", "label": "Contract management" } ],
+            "compensation": null,
+            "employer": { "dpiUrl": null, "name": "Vandelay Industries", "companyProfile": null, "relatedJobs": null }
+          }
+        }
+      ]
+    }
+  }
+}

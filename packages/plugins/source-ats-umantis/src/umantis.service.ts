@@ -16,6 +16,8 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  normalizeCountryOnly,
+  parseLocationText,
 } from '@ever-jobs/common';
 import {
   UMANTIS_ROOT_DOMAIN,
@@ -29,6 +31,7 @@ import {
   UMANTIS_VACANCY_LINK_REGEX,
   UMANTIS_DATE_REGEX,
   UMANTIS_REMOTE_REGEX,
+  umantisLocationHeuristicsEnabled,
 } from './umantis.constants';
 import { UmantisIndexJob, UmantisDetail, UmantisJob } from './umantis.types';
 
@@ -372,13 +375,15 @@ export class UmantisService implements IScraper {
     // Prefer the recovered job-ad body; fall back to the location line.
     const descriptionSource = job.description ?? job.locationText ?? null;
     const description = this.formatDescription(descriptionSource, format);
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `umantis-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -491,22 +496,56 @@ export class UmantisService implements IScraper {
     if (!text || this.isRemoteToken(text)) {
       return { city: null, state: null, country: null };
     }
-    // "Munich (Germany)" → city "Munich", country "Germany".
-    const paren = /^(.*?)\s*\(([^)]+)\)\s*$/.exec(text);
-    if (paren) {
-      const city = this.cleanText(paren[1]);
-      const country = this.cleanText(paren[2]);
-      return { city, state: null, country };
+    if (umantisLocationHeuristicsEnabled()) {
+      const cityCountry = this.cityWithParenCountry(text);
+      if (cityCountry) return cityCountry;
     }
-    const parts = text
-      .split(',')
-      .map((p) => this.cleanText(p))
-      .filter((p): p is string => !!p);
-    if (parts.length === 0) return { city: null, state: null, country: null };
-    if (parts.length === 1) return { city: parts[0], state: null, country: null };
-    const country = parts[parts.length - 1];
-    const city = parts.slice(0, parts.length - 1).join(', ');
-    return { city: city || null, state: null, country: country || null };
+    const parsed = parseLocationText(text).location;
+    return {
+      city: parsed?.city ?? null,
+      state: parsed?.state ?? null,
+      country: parsed?.country ?? null,
+    };
+  }
+
+  /**
+   * "Munich (Germany)" → city "Munich", country "Germany" (Spec 1689 restores
+   * this pre-5125 rule; UMANTIS_LOCATION_HEURISTICS=false turns it off). The
+   * country is normalised when recognisable ("(CH)" → "Switzerland") and kept
+   * verbatim otherwise, as before. Returns null — deferring to the shared
+   * parser — for labels without a single trailing parenthetical, or whose
+   * parenthetical is a workplace / numeric qualifier ("(Hybrid)", "(80%)").
+   */
+  private cityWithParenCountry(
+    text: string,
+  ): { city: string | null; state: string | null; country: string | null } | null {
+    const paren = this.splitTrailingParenthetical(text);
+    if (!paren) return null;
+    const city = this.cleanText(paren.head);
+    const token = this.cleanText(paren.inner);
+    if (!city || !token || city.includes(',')) return null;
+    if (/\d/.test(token) || /\b(?:remote|hybrid|on-?site|office|home|homeoffice)\b/i.test(token)) return null;
+    return { city, state: null, country: normalizeCountryOnly(token) ?? token };
+  }
+
+  /**
+   * 'Munich (Germany)' -> { head: 'Munich', inner: 'Germany' }: a paren-free
+   * head, ONE trailing '(…)' with no nested parens, then only whitespace —
+   * what `/^([^()]+?)\s*\(([^()]+)\)\s*$/` matched, found with indexOf
+   * (Spec 1689; the lazy head + `\s*` rescanned whitespace runs, quadratic).
+   * `head` is untrimmed at the start, as the regex group was.
+   */
+  private splitTrailingParenthetical(text: string): { head: string; inner: string } | null {
+    const open = text.indexOf('(');
+    if (open < 0) return null;
+    const close = text.indexOf(')', open + 1);
+    if (close < 0) return null;
+    const rawHead = text.slice(0, open);
+    const inner = text.slice(open + 1, close);
+    if (rawHead.includes(')') || !inner || inner.includes('(')) return null;
+    if (text.slice(close + 1).trim() !== '') return null;
+    const head = rawHead.trimEnd();
+    return head ? { head, inner } : null;
   }
 
   /** Detect remote roles from the title, location, or body text. */

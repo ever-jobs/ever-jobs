@@ -136,7 +136,7 @@ describe('CalendlyService — Spec 080 / T04', () => {
       expect(marketing?.jobUrl).not.toContain('/?gh_jid=');
       expect(marketing?.jobUrl).not.toContain('calendly.com/careers/');
       // Location — Calendly's US remote on the first listing.
-      expect(marketing?.location?.city).toBe('Remote - US');
+      expect(marketing?.location?.city).toBeUndefined();
       expect(marketing?.isRemote).toBe(true);
       // D-11 first-listing regression guard: the emitted
       // `department` for the first fixture listing matches the wire
@@ -178,7 +178,7 @@ describe('CalendlyService — Spec 080 / T04', () => {
       expect(eng?.title.endsWith(' ')).toBe(false);
       expect(eng?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 1);
       expect(eng?.companyName).toBe('Calendly');
-      expect(eng?.location?.city).toBe('Atlanta, GA');
+      expect(eng?.location?.city).toBe('Atlanta');
       expect(eng?.isRemote).toBe(false);
       // D-11 second-listing regression guard: the emitted
       // `department` for the second fixture listing matches the

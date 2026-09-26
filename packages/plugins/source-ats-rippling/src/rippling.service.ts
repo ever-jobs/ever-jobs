@@ -20,7 +20,10 @@ import {
   extractEmails,
   htmlToPlainText,
   markdownConverter,
+  normalizeUsState,
   parseLocationList,
+  parseLocationText,
+  regionNameFromCode,
   salaryToCompensation,
   aggregateCompensation,
 } from "@ever-jobs/common";
@@ -32,6 +35,7 @@ import {
 } from "./rippling.constants";
 import {
   RipplingJob,
+  RipplingLocation,
   RipplingNextData,
   RipplingPayRangeDetail,
 } from "./rippling.types";
@@ -326,19 +330,31 @@ export class RipplingService implements IScraper {
 
     const description = this.formatDescription(job.description, format);
 
-    const parsedLocations = parseLocationList(this.locationLabels(job));
-    const location = parsedLocations.location;
+    const companyName = this.nonEmptyString(job.companyName) ?? companySlug;
 
-    // Remote detection: explicit per-location workplaceType, the parsed
-    // location labels, or a free-text workLocation mentioning remote.
-    const isRemote =
-      this.hasRemoteWorkplaceType(job) ||
-      parsedLocations.remoteMentioned ||
-      false;
+    // Structured per-site locations are the primary source; the free-text
+    // workLocations/parseable pay-band labels are a fallback only when no
+    // structured entry carries geography.
+    const wire = this.locationsFromWire(job, companyName);
+    let locations = [...wire.sites, ...wire.named];
+    let location: LocationDto | null = null;
+    let remoteMentioned = wire.remoteMentioned;
+    let parsedWorkFromHomeType: string | null = null;
+
+    if (wire.sites.length > 0) {
+      location = this.mergeSites(wire.sites);
+    } else {
+      const fallback = parseLocationList(this.fallbackLocationLabels(job));
+      location = fallback.location;
+      locations = [...fallback.locations, ...wire.named];
+      remoteMentioned = remoteMentioned || fallback.remoteMentioned;
+      parsedWorkFromHomeType = fallback.workFromHomeType;
+    }
+
+    const isRemote = this.hasRemoteWorkplaceType(job) || remoteMentioned;
 
     const workFromHomeType =
-      this.workFromHomeTypeFromWorkplaceType(job) ??
-      parsedLocations.workFromHomeType;
+      this.workFromHomeTypeFromWorkplaceType(job) ?? parsedWorkFromHomeType;
 
     // Compensation: prefer the structured payRangeDetails, fall back to
     // parsing the description free text (pay-transparency ranges in the body).
@@ -353,11 +369,7 @@ export class RipplingService implements IScraper {
       ? getJobTypeFromString(employmentType)
       : null;
 
-    // Department
-    const dept = job.department;
-    const department = dept
-      ? ((dept as Record<string, string>).name ?? null)
-      : null;
+    const department = job.department?.name?.trim() || null;
 
     const jobUrl =
       job.url ?? `${RIPPLING_BASE_URL}/${companySlug}/jobs/${sourceId}`;
@@ -366,11 +378,12 @@ export class RipplingService implements IScraper {
     return new JobPostDto({
       id: `rippling-${sourceId}`,
       title: title!.trim(),
-      companyName: this.nonEmptyString(job.companyName) ?? companySlug,
+      companyName,
       companyUrl: `${RIPPLING_BASE_URL}/${encodeURIComponent(companySlug)}/jobs`,
       jobUrl,
       ...(applyUrl && applyUrl !== jobUrl ? { applyUrl } : {}),
       location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       compensation,
       datePosted: this.nonEmptyString(job.createdOn),
@@ -442,24 +455,122 @@ export class RipplingService implements IScraper {
     return hasJobUrl || hasDescription || hasStructuredJobFields;
   }
 
-  /** Location labels for {@link parseLocationList}: structured locations first, then free-text workLocations. */
-  private locationLabels(job: RipplingJob): string[] {
-    const labels: string[] = [];
+  /**
+   * Map each structured `locations[]` entry directly to a `LocationDto` — no
+   * text round-trip. Entries carrying geography (city/state/country) are
+   * `sites`; name-only entries are kept in `named` unless they are remote
+   * markers or merely restate `companyName` (the hiring entity).
+   */
+  private locationsFromWire(
+    job: RipplingJob,
+    companyName: string | null,
+  ): { sites: LocationDto[]; named: LocationDto[]; remoteMentioned: boolean } {
+    const sites: LocationDto[] = [];
+    const named: LocationDto[] = [];
+    const seen = new Set<string>();
+    let remoteMentioned = false;
 
     for (const loc of job.locations ?? []) {
-      const parts = [
-        loc.city ?? loc.name,
-        loc.state ?? loc.stateCode,
-        loc.country ?? loc.countryCode,
-      ]
-        .map((part) => part?.trim())
-        .filter((part): part is string => !!part);
-      if (parts.length > 0) labels.push(parts.join(", "));
+      const name = loc.name?.trim() || null;
+      const city = loc.city?.trim() || null;
+      const state =
+        loc.stateCode?.trim() ||
+        (loc.state ? normalizeUsState(loc.state) ?? loc.state.trim() : null) ||
+        null;
+      const country = this.wireCountry(loc);
+      const remote =
+        loc.workplaceType?.toUpperCase() === "REMOTE" ||
+        /\bremote\b/i.test(name ?? "");
+
+      if (!city && !state && !country) {
+        // No geography at all: a remote marker is consumed as a signal; a
+        // real company name adds nothing; anything else is kept as a
+        // name-only entry (e.g. a hiring entity or office label).
+        remoteMentioned = remoteMentioned || remote;
+        if (
+          !remote &&
+          name &&
+          name.toLowerCase() !== companyName?.toLowerCase()
+        ) {
+          named.push(new LocationDto({ name }));
+        }
+        continue;
+      }
+
+      remoteMentioned = remoteMentioned || remote;
+      const key = [name, city, state, country]
+        .filter(Boolean)
+        .join("|")
+        .toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      sites.push(new LocationDto({ name, city, state, country }));
     }
+
+    return { sites, named, remoteMentioned };
+  }
+
+  /** Resolve a wire entry's country display name from its alpha-2 code or literal name. */
+  private wireCountry(loc: RipplingLocation): string | null {
+    const code = loc.countryCode ?? loc.country;
+    return (
+      (code ? regionNameFromCode(code) ?? undefined : undefined) ??
+      loc.country?.trim() ??
+      null
+    );
+  }
+
+  /**
+   * Merge structured sites into the singular compat `location`: city is the
+   * semicolon-joined per-site labels (`City, ST` or `City, Country` when no
+   * state), country only when all sites share one.
+   */
+  private mergeSites(sites: LocationDto[]): LocationDto {
+    const countries = new Set(
+      sites
+        .map((site) => site.country)
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0,
+        ),
+    );
+    const commonCountry = countries.size === 1 ? [...countries][0] : null;
+
+    if (sites.length === 1) {
+      const site = sites[0];
+      return new LocationDto({
+        city: site.city,
+        state: site.state,
+        country: site.country ?? commonCountry,
+      });
+    }
+
+    const labels = sites.map((site) =>
+      [site.city, site.state ?? site.country]
+        .filter((part): part is string => !!part)
+        .join(", "),
+    );
+    return new LocationDto({ city: labels.join("; "), country: commonCountry });
+  }
+
+  /**
+   * Free-text labels for the parser fallback: `workLocations` strings plus
+   * `payRangeDetails[].location` values that actually parse as a place
+   * (rejects non-location band labels like "Manager").
+   */
+  private fallbackLocationLabels(job: RipplingJob): string[] {
+    const labels: string[] = [];
 
     for (const workLocation of job.workLocations ?? []) {
       if (typeof workLocation === "string" && workLocation.trim().length > 0) {
         labels.push(workLocation.trim());
+      }
+    }
+
+    for (const detail of job.payRangeDetails ?? []) {
+      const label = detail.location?.trim();
+      if (label && parseLocationText(label).location?.state) {
+        labels.push(label);
       }
     }
 
@@ -473,7 +584,8 @@ export class RipplingService implements IScraper {
       ) ||
       (job.workLocations ?? []).some((loc) =>
         loc.toLowerCase().includes("remote"),
-      )
+      ) ||
+      (job.payRangeDetails ?? []).some((detail) => detail.isRemote === true)
     );
   }
 

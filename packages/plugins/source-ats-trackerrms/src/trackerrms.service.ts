@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
 } from '@ever-jobs/common';
 import {
   TRACKERRMS_PORTAL_HOSTS,
@@ -244,12 +245,15 @@ export class TrackerRmsService implements IScraper {
     const companyName = job.companyName ?? this.deriveCompanyName(database);
     const description = this.formatDescription(job.descriptionHtml ?? null, format);
 
+    const location = this.extractLocation(job);
+
     return new JobPostDto({
       id: `trackerrms-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       isRemote: job.isRemote ?? false,
       emails: extractEmails(description ?? ''),
@@ -412,14 +416,12 @@ export class TrackerRmsService implements IScraper {
     if (!cleaned) return { city: null, state: null, country: null };
     if (this.isRemoteToken(cleaned)) return { city: null, state: null, country: null };
 
-    const parts = cleaned
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return { city: null, state: null, country: null };
-    if (parts.length === 1) return { city: parts[0], state: null, country: null };
-    if (parts.length === 2) return { city: parts[0], state: parts[1], country: null };
-    return { city: parts[0], state: parts[1], country: parts.slice(2).join(', ') };
+    const parsed = parseLocationText(cleaned).location;
+    return {
+      city: parsed?.city ?? null,
+      state: parsed?.state ?? null,
+      country: parsed?.country ?? null,
+    };
   }
 
   /** De-slugify + title-case the database name into a display company name. */

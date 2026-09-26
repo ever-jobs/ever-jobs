@@ -121,7 +121,7 @@ describe('CourseraService — Spec 068 / T04', () => {
       // against future refactors that might naively normalise to a
       // different variant.
       expect(cos?.jobUrl).toContain('job-boards.greenhouse.io/coursera/jobs/');
-      expect(cos?.location?.city).toBe('United States');
+      expect(cos?.location?.city).toBeUndefined();
       // D-11 first-listing regression guard: the emitted `department`
       // for the first fixture listing matches the wire
       // `departments[0].name === 'Chief of Staff'` byte-for-byte
@@ -157,7 +157,7 @@ describe('CourseraService — Spec 068 / T04', () => {
       expect(cit?.title).toBe('Content Ingestion & Transformation Specialist');
       expect(cit?.title).toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(cit?.companyName).toBe('Coursera');
-      expect(cit?.location?.city).toBe('India');
+      expect(cit?.location?.city).toBeUndefined();
       expect(cit?.isRemote).toBe(false);
       // D-11 second-listing regression guard: the emitted `department`
       // for the second fixture listing matches the wire

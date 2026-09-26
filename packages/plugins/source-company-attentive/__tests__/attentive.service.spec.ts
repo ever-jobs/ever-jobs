@@ -128,7 +128,7 @@ describe('AttentiveService — Spec 058 / T04', () => {
       expect(ae?.jobUrl).toContain('job-boards.greenhouse.io');
       expect(ae?.jobUrl).toContain('/attentive/jobs/');
       expect(ae?.jobUrl).not.toContain('?gh_jid=');
-      expect(ae?.location?.city).toBe('United States');
+      expect(ae?.location?.city).toBeUndefined();
       // D-11 regression guard: the emitted `department` for the first
       // fixture listing is the flat single-token string `'Finance'`
       // byte-for-byte AND matches the wire `departments[0].name`
@@ -167,7 +167,7 @@ describe('AttentiveService — Spec 058 / T04', () => {
       expect(dir?.title).toBe('Director of Engineering, Intelligent Messaging');
       expect(dir?.title).not.toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(dir?.companyName).toBe('Attentive');
-      expect(dir?.location?.city).toBe('New York, NY');
+      expect(dir?.location?.city).toBe('New York');
       // The fixture location string does NOT contain "Remote" (NYC
       // hybrid string, no remote keyword) so isRemote should be false.
       expect(dir?.isRemote).toBe(false);

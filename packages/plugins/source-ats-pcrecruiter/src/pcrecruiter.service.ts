@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -399,13 +400,13 @@ export class PCRecruiterService implements IScraper {
       detail.employmentType = this.clean(jsonLd.employmentType);
       detail.companyName = this.clean(jsonLd.hiringOrganization?.name);
 
-      const place = this.firstPlace(jsonLd.jobLocation);
-      const addr = place?.address;
+      detail.locationEntries = this.locationEntries(jsonLd.jobLocation);
+      const addr = detail.locationEntries[0] ?? null;
       if (addr) {
-        detail.city = this.clean(addr.addressLocality);
-        detail.state = this.clean(addr.addressRegion);
-        detail.postalCode = this.clean(addr.postalCode);
-        detail.country = this.clean(addr.addressCountry);
+        detail.city = addr.city;
+        detail.state = addr.state;
+        detail.postalCode = addr.postalCode;
+        detail.country = addr.country;
       }
     }
 
@@ -450,13 +451,37 @@ export class PCRecruiterService implements IScraper {
     return found;
   }
 
-  /** Normalise `jobLocation` (single Place or array) to its first Place. */
-  private firstPlace(
+  /** Map every `jobLocation` Place (single or array) to a structured location entry. */
+  private locationEntries(
     jobLocation: PCRecruiterJsonLdPlace | PCRecruiterJsonLdPlace[] | null | undefined,
-  ): PCRecruiterJsonLdPlace | null {
-    if (!jobLocation) return null;
-    if (Array.isArray(jobLocation)) return jobLocation[0] ?? null;
-    return jobLocation;
+  ): Array<{
+    city: string | null;
+    state: string | null;
+    postalCode: string | null;
+    streetAddress: string | null;
+    country: string | null;
+  }> {
+    if (!jobLocation) return [];
+    const places = Array.isArray(jobLocation) ? jobLocation : [jobLocation];
+    const out: Array<{
+      city: string | null;
+      state: string | null;
+      postalCode: string | null;
+      streetAddress: string | null;
+      country: string | null;
+    }> = [];
+    for (const place of places) {
+      const addr = place?.address;
+      if (!addr || typeof addr !== 'object') continue;
+      out.push({
+        city: this.clean(addr.addressLocality),
+        state: this.clean(addr.addressRegion),
+        postalCode: this.clean(addr.postalCode),
+        streetAddress: this.clean(addr.streetAddress),
+        country: this.clean(addr.addressCountry),
+      });
+    }
+    return out;
   }
 
   /**
@@ -526,6 +551,7 @@ export class PCRecruiterService implements IScraper {
       companyName: resolvedCompanyName,
       jobUrl,
       location: this.extractLocation(job),
+      locations: this.extractLocations(job),
       description,
       datePosted: this.parseDate(job.datePosted),
       isRemote: this.detectRemote(job),
@@ -646,17 +672,25 @@ export class PCRecruiterService implements IScraper {
     // Fallback: free-text "City, ST ZIP" listing label.
     const raw = job.location?.trim();
     if (!raw) return null;
-    const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
+    return parseLocationText(raw).location;
+  }
+
+  /** Per-site LocationDto list — one per JSON-LD `jobLocation`, else the merged location. */
+  private extractLocations(job: PCRecruiterJob): LocationDto[] {
+    if (job.locationEntries && job.locationEntries.length > 0) {
+      return job.locationEntries.map(
+        (e) =>
+          new LocationDto({
+            city: e.city,
+            state: e.state,
+            postalCode: e.postalCode,
+            streetAddress: e.streetAddress,
+            country: this.normaliseCountry(e.country),
+          }),
+      );
     }
-    const city = parts[0];
-    // Second part is typically "ST ZIP" — take the leading state token.
-    const stateZip = parts[1];
-    const stateMatch = stateZip.match(/^([A-Za-z]{2,})\b/);
-    const state = stateMatch ? stateMatch[1] : stateZip;
-    return new LocationDto({ city: city ?? null, state: state ?? null, country: null });
+    const merged = this.extractLocation(job);
+    return merged ? [merged] : [];
   }
 
   /** Normalise a JSON-LD country to a short, consistent label. */

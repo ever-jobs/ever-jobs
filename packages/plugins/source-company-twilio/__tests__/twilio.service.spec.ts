@@ -87,7 +87,7 @@ describe('TwilioService — Spec 035 / T04', () => {
       expect(messaging?.jobUrl).toBe(
         'https://boards.greenhouse.io/twilio/jobs/9401234',
       );
-      expect(messaging?.location?.city).toBe('San Francisco, CA');
+      expect(messaging?.location?.city).toBe('San Francisco');
       expect(messaging?.department).toBe('Engineering');
       expect(messaging?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

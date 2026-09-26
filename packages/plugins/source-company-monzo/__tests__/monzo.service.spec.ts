@@ -103,7 +103,7 @@ describe('MonzoService — Spec 099 / T04', () => {
       expect(sm).toBeDefined();
       expect(sm?.title).toBe('Senior Brand Marketing Manager');
       expect(sm?.companyName).toBe('Monzo');
-      expect(sm?.location?.city).toBe('London, UK');
+      expect(sm?.location?.city).toBe('London');
       expect(sm?.isRemote).toBe(false);
       expect(sm?.department).toBe('Marketing & Community');
       expect(sm?.jobUrl).toBe(

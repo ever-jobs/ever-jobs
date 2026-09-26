@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -303,12 +304,15 @@ export class VincereService implements IScraper {
       job.employment_type ?? null,
     );
 
+    const location = this.extractLocation(job);
+
     return new JobPostDto({
       id: `vincere-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.published_date ?? job.open_date),
       isRemote: this.detectRemote(job),
@@ -395,20 +399,9 @@ export class VincereService implements IScraper {
     return null;
   }
 
-  /** Split a free-text "City, Country" label into a LocationDto. */
+  /** Parse a free-text "City, Country" label into a LocationDto. */
   private locationFromLabel(label: string): LocationDto | null {
-    const parts = label
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    const city = parts[0];
-    const state = parts.length >= 3 ? parts[1] : null;
-    const country = parts[parts.length - 1];
-    return new LocationDto({ city, state, country });
+    return parseLocationText(label).location;
   }
 
   /**

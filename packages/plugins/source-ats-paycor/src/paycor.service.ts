@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
 } from '@ever-jobs/common';
 import {
   PAYCOR_CAREERS_HOST,
@@ -275,13 +276,15 @@ export class PaycorService implements IScraper {
     if (!jobUrl) return null;
 
     const description = this.formatDescription(job.descriptionHtml ?? null, job.description ?? null, format);
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `paycor-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: null,
       isRemote: this.detectRemote(job),
@@ -400,11 +403,10 @@ export class PaycorService implements IScraper {
   private parseLocation(line: string | null): { city: string | null; region: string | null } {
     const cleaned = this.cleanText(line ? this.decodeEntities(line) : null);
     if (!cleaned) return { city: null, region: null };
-    const parts = cleaned.split(',').map((p) => p.trim()).filter(Boolean);
-    if (parts.length === 0) return { city: null, region: null };
+    const parsed = parseLocationText(cleaned).location;
     return {
-      city: parts[0] ?? null,
-      region: parts.length > 1 ? parts.slice(1).join(', ') : null,
+      city: parsed?.city ?? null,
+      region: parsed?.state ?? parsed?.country ?? null,
     };
   }
 

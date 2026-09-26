@@ -95,7 +95,7 @@ describe('BeamService — Spec 136 / T04', () => {
       );
       expect(ad?.jobUrl).toContain('job-boards.greenhouse.io/beam/jobs/');
       expect(ad?.department).toBe('Summer Programs');
-      expect(ad?.location?.city).toBe('New York, NY');
+      expect(ad?.location?.city).toBe('New York');
       expect(ad?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ad?.description).not.toContain('&lt;');
@@ -108,7 +108,7 @@ describe('BeamService — Spec 136 / T04', () => {
       expect(md).toBeDefined();
       expect(md?.title).toBe('Manager, Donor Engagement & Partnerships (Hybrid - NYC)');
       expect(md?.companyName).toBe('Bridge to Enter Advanced Mathematics (BEAM)');
-      expect(md?.location?.city).toBe('New York, NY');
+      expect(md?.location?.city).toBe('New York');
       expect(md?.isRemote).toBe(false);
       expect(md?.department).toBe('HQ Fundraising');
       expect(md?.jobUrl).toBe(

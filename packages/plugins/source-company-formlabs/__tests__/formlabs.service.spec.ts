@@ -91,7 +91,7 @@ describe('FormlabsService — Spec 147 / T04', () => {
       expect(sh?.jobUrl).toContain('?gh_jid=');
       // D-11 clean dept pass-through.
       expect(sh?.department).toBe('Manufacturing');
-      expect(sh?.location?.city).toBe('Somerville, MA');
+      expect(sh?.location?.city).toBe('Somerville');
       expect(sh?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(sh?.description).not.toContain('&lt;');
@@ -111,7 +111,7 @@ describe('FormlabsService — Spec 147 / T04', () => {
       expect(rs?.title).toBe('Robotic Systems Integration Engineer (SLA & SLS)');
       expect(rs?.title).not.toMatch(/\s$/);
       expect(rs?.companyName).toBe('Formlabs');
-      expect(rs?.location?.city).toBe('Remote, US');
+      expect(rs?.location?.city).toBeUndefined();
       expect(rs?.isRemote).toBe(true);
       expect(rs?.department).toBe('Hardware Engineering');
       expect(rs?.jobUrl).toBe(

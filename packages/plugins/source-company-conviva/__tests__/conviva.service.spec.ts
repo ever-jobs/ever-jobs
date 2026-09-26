@@ -90,7 +90,7 @@ describe('ConvivaService — Spec 142 / T04', () => {
       expect(acc?.jobUrl).toContain('?gh_jid=');
       // D-11 clean dept pass-through.
       expect(acc?.department).toBe('Finance');
-      expect(acc?.location?.city).toBe('Foster City, CA');
+      expect(acc?.location?.city).toBe('Foster City');
       expect(acc?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(acc?.description).not.toContain('&lt;');
@@ -102,7 +102,7 @@ describe('ConvivaService — Spec 142 / T04', () => {
       expect(eng).toBeDefined();
       expect(eng?.title).toBe('Senior Software Engineer, Streaming Analytics');
       expect(eng?.companyName).toBe('Conviva');
-      expect(eng?.location?.city).toBe('Remote, US');
+      expect(eng?.location?.city).toBeUndefined();
       expect(eng?.isRemote).toBe(true);
       expect(eng?.department).toBe('Technical Solutions');
       expect(eng?.jobUrl).toBe(

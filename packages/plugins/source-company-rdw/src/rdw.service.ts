@@ -238,7 +238,7 @@ export class RdwService implements IScraper, OnModuleDestroy {
     const timeout = timeoutMs ?? RDW_DEFAULT_TIMEOUT_SECONDS * 1000;
 
     if (page) {
-      await page.goto(url, {
+      await BrowserPool.navigate(page, url, {
         waitUntil: 'domcontentloaded',
         timeout,
       });
@@ -247,7 +247,7 @@ export class RdwService implements IScraper, OnModuleDestroy {
 
     const p = await BrowserPool.getPage({ stealth: true, headful: true });
     try {
-      await p.goto(url, {
+      await BrowserPool.navigate(p, url, {
         waitUntil: 'domcontentloaded',
         timeout,
       });
@@ -417,11 +417,8 @@ export class RdwService implements IScraper, OnModuleDestroy {
       prefixJobType ??
       (employmentType ? this.jobTypeFromEmploymentType(employmentType) : null);
 
-    const { location, isRemote, workFromHomeType } = this.buildLocation(
-      ld,
-      card,
-      prefixWorkFromHomeType,
-    );
+    const { location, locations, isRemote, workFromHomeType } =
+      this.buildLocation(ld, card, prefixWorkFromHomeType);
 
     const finalTitle = cleanTitle || title;
     const requisitionId = card.requisitionId || this.requisitionFromUrl(card.detailUrl);
@@ -444,6 +441,7 @@ export class RdwService implements IScraper, OnModuleDestroy {
       jobUrl: card.detailUrl,
       applyUrl: card.detailUrl,
       location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       isRemote,
       datePosted,
@@ -503,6 +501,7 @@ export class RdwService implements IScraper, OnModuleDestroy {
     prefixWorkFromHomeType: string | null,
   ): {
     location: LocationDto | null;
+    locations: LocationDto[];
     isRemote: boolean;
     workFromHomeType: string | null;
   } {
@@ -532,10 +531,27 @@ export class RdwService implements IScraper, OnModuleDestroy {
     const isRemote =
       /\bremote\b/i.test(workFromHomeType ?? '') || (ld?.remote ?? false);
 
-    const ldLocation = ld?.locations?.[0];
-    if (ldLocation) {
-      const location = this.locationFromLd(ldLocation, isRemote);
-      return { location, isRemote, workFromHomeType };
+    // Spec 5121: map every JSON-LD `jobLocation` entry, not just the first.
+    const ldLocations = ld?.locations ?? [];
+    if (ldLocations.length > 0) {
+      const locations: LocationDto[] = [];
+      for (const loc of ldLocations) {
+        const dto = this.locationFromLd(loc, isRemote);
+        if (!dto) continue;
+        locations.push(
+          new LocationDto({
+            ...dto,
+            text: dto.text ?? loc.label ?? null,
+            postalCode: dto.postalCode ?? loc.postalCode ?? null,
+          }),
+        );
+      }
+      return {
+        location: locations[0] ?? null,
+        locations,
+        isRemote,
+        workFromHomeType,
+      };
     }
 
     if (card.locationText) {
@@ -544,12 +560,13 @@ export class RdwService implements IScraper, OnModuleDestroy {
         workFromHomeType ?? (parsed.workFromHomeType || null);
       return {
         location: parsed.location,
+        locations: parsed.locations,
         isRemote: parsed.remoteMentioned || isRemote,
         workFromHomeType: parsedWfh,
       };
     }
 
-    return { location: null, isRemote, workFromHomeType };
+    return { location: null, locations: [], isRemote, workFromHomeType };
   }
 
   private locationFromLd(

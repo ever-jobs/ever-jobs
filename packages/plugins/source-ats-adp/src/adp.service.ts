@@ -21,16 +21,21 @@ import {
   markdownConverter,
   extractEmails,
   parseLocationList,
+  parseLocationText,
   resolveCompensation,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
+  ADP_DEFAULT_MAX_LIST_PAGES,
   ADP_DETAIL_CONCURRENCY,
   ADP_HEADERS,
   ADP_HOSTS,
+  ADP_MAX_LIST_PAGES_ENV,
+  ADP_PAGE_SIZE,
   adpCareersUrl,
   adpDetailUrl,
   adpListUrl,
+  parseAdpMaxListPages,
 } from './adp.constants';
 import { AdpResponse, AdpJob } from './adp.types';
 
@@ -40,6 +45,18 @@ type HttpClient = ReturnType<typeof createHttpClient>;
 interface AdpListing {
   host: string;
   jobs: AdpJob[];
+}
+
+/** How far one scrape may walk the paged requisition list. */
+interface AdpListLimits {
+  /**
+   * Stop paging once this many requisitions are held. ADP applies no
+   * post-list filter (no searchTerm/location filtering happens after the
+   * listing), so every requisition past `offset + resultsWanted` is never used.
+   */
+  budget: number;
+  /** Hard cap on list pages fetched, first page included (ADP_MAX_LIST_PAGES). */
+  maxPages: number;
 }
 
 @SourcePlugin({
@@ -69,7 +86,14 @@ export class AdpService implements IScraper {
     });
     client.setHeaders(ADP_HEADERS);
 
-    const listing = await this.fetchList(client, cid);
+    const resultsWanted = this.nonNegativeInt(input.resultsWanted ?? 100, 100);
+    const offset = this.nonNegativeInt(input.offset, 0);
+    const limits: AdpListLimits = {
+      budget: offset + resultsWanted,
+      maxPages: this.resolveMaxListPages(),
+    };
+
+    const listing = await this.fetchList(client, cid, limits);
     if (!listing) {
       this.logger.error(
         `ADP: no host resolved the requisition list for cid ${cid}`,
@@ -84,10 +108,11 @@ export class AdpService implements IScraper {
       `ADP: found ${listing.jobs.length} raw jobs for ${cid} on ${listing.host}`,
     );
 
-    const resultsWanted = input.resultsWanted ?? 100;
     // The list feed omits the posting body; `requisitionDescription` lives only
-    // on the per-requisition detail endpoint. Overlay the wanted slice.
-    const wanted = listing.jobs.slice(0, resultsWanted);
+    // on the per-requisition detail endpoint. Overlay the wanted slice — the
+    // requested window (offset .. offset + resultsWanted), so detail requests
+    // are only spent on rows the caller will receive.
+    const wanted = listing.jobs.slice(offset, offset + resultsWanted);
     const details = await this.fetchDetails(client, listing.host, cid, wanted);
 
     const jobPosts: JobPostDto[] = [];
@@ -122,13 +147,14 @@ export class AdpService implements IScraper {
   private async fetchList(
     client: HttpClient,
     cid: string,
+    limits: AdpListLimits,
   ): Promise<AdpListing | null> {
     for (const host of ADP_HOSTS) {
       try {
         const response = await client.get<AdpResponse>(adpListUrl(host, cid));
         const data = response.data;
         if (data && Array.isArray(data.jobRequisitions)) {
-          return { host, jobs: data.jobRequisitions };
+          return { host, jobs: await this.fetchAllPages(client, host, cid, data, limits) };
         }
         this.logger.warn(`ADP: unexpected payload from ${host} for ${cid}`);
       } catch (err: any) {
@@ -138,6 +164,80 @@ export class AdpService implements IScraper {
       }
     }
     return null;
+  }
+
+  /**
+   * Walk the remaining list pages: the API caps a response at `ADP_PAGE_SIZE`
+   * requisitions and reports the real total in `meta.totalNumber`. Pages are
+   * addressed by `$skip`/`$top`; the loop stops on the last page, once
+   * `limits.budget` requisitions are held (nothing past it is used), at the
+   * `limits.maxPages` cap, on an empty or fully-duplicate page, or on a page
+   * fetch failure (partial results kept — a truncated list beats none).
+   */
+  private async fetchAllPages(
+    client: HttpClient,
+    host: string,
+    cid: string,
+    first: AdpResponse,
+    limits: AdpListLimits,
+  ): Promise<AdpJob[]> {
+    const jobs = [...(first.jobRequisitions ?? [])];
+    const total = first.meta?.totalNumber ?? jobs.length;
+    const seen = new Set(jobs.map((job) => job.itemID));
+    let pagesFetched = 1;
+
+    for (let skip = ADP_PAGE_SIZE; jobs.length < total; skip += ADP_PAGE_SIZE) {
+      if (jobs.length >= limits.budget) break;
+      if (pagesFetched >= limits.maxPages) {
+        this.logger.warn(
+          `ADP: stopped at the ${limits.maxPages}-page list cap (${ADP_MAX_LIST_PAGES_ENV}) for ${cid}: ` +
+            `${jobs.length} of ${total} requisitions listed`,
+        );
+        break;
+      }
+      pagesFetched++;
+      let page: AdpJob[];
+      try {
+        const response = await client.get<AdpResponse>(
+          adpListUrl(host, cid, skip),
+        );
+        page = response.data?.jobRequisitions ?? [];
+      } catch (err: any) {
+        this.logger.warn(
+          `ADP: list page at $skip=${skip} failed for ${cid}: ${err.message}`,
+        );
+        break;
+      }
+      const fresh = page.filter((job) => !seen.has(job.itemID));
+      if (fresh.length === 0) break;
+      for (const job of fresh) {
+        seen.add(job.itemID);
+        jobs.push(job);
+      }
+    }
+    return jobs;
+  }
+
+  /**
+   * The list-page cap for this scrape, from `ADP_MAX_LIST_PAGES` (default
+   * 100). Read per scrape so a config change applies without a restart; an
+   * invalid value warns and uses the default.
+   */
+  private resolveMaxListPages(): number {
+    const raw = process.env[ADP_MAX_LIST_PAGES_ENV];
+    const parsed = parseAdpMaxListPages(raw);
+    if (parsed !== null) return parsed;
+    this.logger.warn(
+      `Ignoring invalid ${ADP_MAX_LIST_PAGES_ENV}="${raw}" (expected a positive integer); ` +
+        `using ${ADP_DEFAULT_MAX_LIST_PAGES}`,
+    );
+    return ADP_DEFAULT_MAX_LIST_PAGES;
+  }
+
+  private nonNegativeInt(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0
+      ? Math.floor(value)
+      : fallback;
   }
 
   /**
@@ -202,6 +302,9 @@ export class AdpService implements IScraper {
       job.requisitionLocations ?? detail?.requisitionLocations,
     );
     const parsedLocation = parseLocationList(labels);
+    const locations = this.siteLocations(
+      job.requisitionLocations ?? detail?.requisitionLocations,
+    );
     const location = parsedLocation.location ?? new LocationDto({});
     const isRemote = parsedLocation.remoteMentioned;
     const workFromHomeType = parsedLocation.workFromHomeType;
@@ -226,6 +329,7 @@ export class AdpService implements IScraper {
       companyName: null,
       jobUrl: adpCareersUrl(host, cid, itemId),
       location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       ...(compensation ? { compensation } : {}),
       datePosted: postDate ? toDateOnly(postDate) : null,
@@ -261,6 +365,47 @@ export class AdpService implements IScraper {
       if (composed) labels.push(composed);
     }
     return labels;
+  }
+
+  /**
+   * Per-site `locations[]` (Spec 5121): `requisitionLocations` entries carry
+   * a structured `address` (`cityName`, `countrySubdivisionLevel1.codeValue`,
+   * `countryCode`) plus a display `nameCode.shortName`. Map the structured
+   * fields directly instead of round-tripping a composed label through the
+   * parser; the display name is preserved verbatim in `text`. Entries
+   * without an address fall back to parsing the shortName.
+   */
+  private siteLocations(
+    locations: AdpJob['requisitionLocations'],
+  ): LocationDto[] {
+    const sites: LocationDto[] = [];
+    const seen = new Set<string>();
+    for (const loc of locations ?? []) {
+      const text = loc?.nameCode?.shortName?.trim() || null;
+      const city = loc?.address?.cityName?.trim() || null;
+      const state =
+        loc?.address?.countrySubdivisionLevel1?.codeValue?.trim() || null;
+      const country = loc?.address?.countryCode?.trim() || null;
+
+      let site: LocationDto | null = null;
+      if (city || state || country) {
+        site = new LocationDto({ city, state, country, text });
+      } else if (text) {
+        const parsed = parseLocationText(text);
+        if (parsed.location) {
+          site = new LocationDto({ ...parsed.location, text });
+        }
+      }
+      if (!site) continue;
+      const key = [site.city, site.state, site.country, site.text]
+        .filter((part): part is string => typeof part === 'string')
+        .join('|')
+        .toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      sites.push(site);
+    }
+    return sites;
   }
 
   /**

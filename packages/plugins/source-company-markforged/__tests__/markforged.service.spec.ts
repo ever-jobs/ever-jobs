@@ -87,7 +87,7 @@ describe('MarkforgedService — Spec 161 / T04', () => {
       expect(ae?.jobUrl).toContain('job-boards.greenhouse.io/markforged/jobs/');
       // D-11 clean dept pass-through.
       expect(ae?.department).toBe('Application Engineering');
-      expect(ae?.location?.city).toBe('Watertown, MA');
+      expect(ae?.location?.city).toBe('Watertown');
       expect(ae?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ae?.description).not.toContain('&lt;');
@@ -100,7 +100,7 @@ describe('MarkforgedService — Spec 161 / T04', () => {
       expect(dhe).toBeDefined();
       expect(dhe?.title).toBe('Director of Hardware Engineering');
       expect(dhe?.companyName).toBe('Markforged');
-      expect(dhe?.location?.city).toBe('Remote, US');
+      expect(dhe?.location?.city).toBeUndefined();
       expect(dhe?.isRemote).toBe(true);
       expect(dhe?.department).toBe('Engineering');
       expect(dhe?.jobUrl).toBe(

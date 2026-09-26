@@ -103,7 +103,7 @@ describe('BuildkiteService — Spec 050 / T04', () => {
       expect(sales?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/buildkite/jobs/4951727008',
       );
-      expect(sales?.location?.city).toBe('United States');
+      expect(sales?.location?.city).toBeUndefined();
       expect(sales?.department).toBe('Sales');
       expect(sales?.isRemote).toBe(false);
       // D-08 regression guard: the description-cleanup pipeline must
@@ -121,7 +121,7 @@ describe('BuildkiteService — Spec 050 / T04', () => {
       const eng = dto.jobs.find((j) => j.id === 'buildkite-5170976008');
       expect(eng?.isRemote).toBe(true);
       expect(eng?.department).toBe('Engineering');
-      expect(eng?.location?.city).toBe('ANZ Region, Remote');
+      expect(eng?.location?.city).toBe('ANZ Region');
       expect(eng?.companyName).toBe('Buildkite');
       // D-10 regression guard: the wire `title` is
       // `'Staff Engineer - Compute & Agents '` (trailing ASCII space);

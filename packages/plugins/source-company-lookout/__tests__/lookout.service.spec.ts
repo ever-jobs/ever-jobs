@@ -134,7 +134,7 @@ describe('LookoutService — Spec 083 / T04', () => {
       expect(eng?.department).toBe('Engineering');
       expect(eng?.department).toBe(JOBS_PAGE_RAW.jobs[0].departments[0].name);
       // Location — Lookout's San Francisco HQ.
-      expect(eng?.location?.city).toBe('San Francisco, CA');
+      expect(eng?.location?.city).toBe('San Francisco');
       expect(eng?.isRemote).toBe(false);
       // D-08 regression guard: decode-then-strip pipeline.
       expect(eng?.description).not.toContain('&lt;');
@@ -157,7 +157,7 @@ describe('LookoutService — Spec 083 / T04', () => {
       expect(JOBS_PAGE_RAW.jobs[1].company_name).toBe('Lookout');
       expect(ae?.companyName?.endsWith(' ')).toBe(false);
       expect(ae?.companyName?.startsWith(' ')).toBe(false);
-      expect(ae?.location?.city).toBe('Remote, USA');
+      expect(ae?.location?.city).toBeUndefined();
       expect(ae?.isRemote).toBe(true);
       expect(ae?.department).toBe('Sales');
       expect(ae?.department).toBe(JOBS_PAGE_RAW.jobs[1].departments[0].name);

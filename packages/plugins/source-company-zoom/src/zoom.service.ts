@@ -6,6 +6,7 @@ import {
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
 import { createHttpClient,
+  parseLocationList,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -85,8 +86,8 @@ export class ZoomService implements IScraper {
   private mapToJobPost(p: EightfoldPosition): JobPostDto | null {
     if (!p.name) return null;
 
-    const locStr = p.locations?.[0] ?? '';
-    const locParts = locStr.split(',').map((s) => s.trim());
+    const parsedLocations = parseLocationList(p.locations ?? []);
+    const location = parsedLocations.location ?? undefined;
 
     const url = p.positionUrl
       ? `${ZOOM_BASE_URL}${p.positionUrl}`
@@ -98,11 +99,10 @@ export class ZoomService implements IScraper {
       title: p.name,
       companyName: 'Zoom',
       jobUrl: url,
-      location: new LocationDto({
-        city: locParts[0] ?? null,
-        state: locParts[1] ?? null,
-        country: locParts[2] ?? null,
-      }),
+      location,
+      ...(parsedLocations.locations.length > 0
+        ? { locations: parsedLocations.locations }
+        : {}),
       department: p.department ?? undefined,
       datePosted: p.postedTs
         ? toDateOnly(p.postedTs * 1000)

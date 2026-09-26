@@ -92,7 +92,7 @@ describe('CriblService — Spec 143 / T04', () => {
       expect(ch?.jobUrl).toContain('?gh_jid=');
       // D-11 clean dept pass-through.
       expect(ch?.department).toBe('Sales');
-      expect(ch?.location?.city).toBe('Remote, US');
+      expect(ch?.location?.city).toBeUndefined();
       expect(ch?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(ch?.description).not.toContain('&lt;');
@@ -103,7 +103,7 @@ describe('CriblService — Spec 143 / T04', () => {
       expect(eng).toBeDefined();
       expect(eng?.title).toBe('Senior Software Engineer, Cribl Stream');
       expect(eng?.companyName).toBe('Cribl');
-      expect(eng?.location?.city).toBe('San Francisco, CA');
+      expect(eng?.location?.city).toBe('San Francisco');
       expect(eng?.isRemote).toBe(false);
       expect(eng?.department).toBe('Engineering');
       expect(eng?.jobUrl).toBe(

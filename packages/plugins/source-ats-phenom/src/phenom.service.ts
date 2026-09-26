@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -180,6 +181,7 @@ export class PhenomService implements IScraper {
       companyName: job.companyName ?? companySlug,
       jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted,
       isRemote,
@@ -209,12 +211,7 @@ export class PhenomService implements IScraper {
 
     // Fall back to parsing locationText
     if (job.locationText) {
-      const parts = job.locationText.split(',').map((p) => p.trim());
-      return new LocationDto({
-        city: parts[0] ?? null,
-        state: parts[1] ?? null,
-        country: parts[2] ?? null,
-      });
+      return parseLocationText(job.locationText).location;
     }
 
     return null;

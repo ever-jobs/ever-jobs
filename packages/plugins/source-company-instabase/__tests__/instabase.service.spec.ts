@@ -95,7 +95,7 @@ describe('InstabaseService — Spec 158 / T04', () => {
       expect(JOBS_PAGE_RAW.jobs[0].departments[0].name).toBe('Finance/Accounting ');
       expect(acct?.department).toBe('Finance/Accounting');
       expect(acct?.department).not.toMatch(/\s$/);
-      expect(acct?.location?.city).toBe('San Francisco, CA');
+      expect(acct?.location?.city).toBe('San Francisco');
       expect(acct?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(acct?.description).not.toContain('&lt;');
@@ -113,7 +113,7 @@ describe('InstabaseService — Spec 158 / T04', () => {
       expect(rec?.title).toBe('Senior Technical Recruiter');
       expect(rec?.title).not.toMatch(/^\s/);
       expect(rec?.companyName).toBe('Instabase');
-      expect(rec?.location?.city).toBe('Bengaluru, India');
+      expect(rec?.location?.city).toBe('Bengaluru');
       expect(rec?.isRemote).toBe(false);
       // **D-11 APPLIED lock** — wire dept `'Recruiting '`
       // padded; emitted dept trimmed.

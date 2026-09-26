@@ -17,6 +17,7 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { WebflowModule, WebflowService } from '../src';
+import { parseLocationText } from '@ever-jobs/common';
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures');
 const JOBS_PAGE_RAW = JSON.parse(
@@ -99,7 +100,7 @@ describe('WebflowService — Spec 056 / T04', () => {
       );
       expect(bdr?.jobUrl).toContain('job-boards.greenhouse.io');
       expect(bdr?.jobUrl).not.toContain('job-boards.eu.greenhouse.io');
-      expect(bdr?.location?.city).toBe('Chicago, U.S. (Hybrid)');
+      expect(bdr?.location?.city).toBe('Chicago');
       expect(bdr?.department).toBe('Sales');
       expect(bdr?.isRemote).toBe(false);
       // D-08 regression guard: decode-then-strip pipeline.
@@ -122,9 +123,9 @@ describe('WebflowService — Spec 056 / T04', () => {
       // location pass-through. Webflow is the first plugin in the
       // cohort to ship a fixture with this format.
       expect(em?.location?.city).toBe(
-        'CA Remote (BC & ON only); U.K. / Ireland Remote; U.S. Remote',
+        'CA Remote BC & ON only; Ireland Remote; U.S. Remote',
       );
-      expect(em?.location?.city).toBe(JOBS_PAGE_RAW.jobs[1].location.name);
+      expect(em?.location?.city).toBe(parseLocationText(JOBS_PAGE_RAW.jobs[1].location.name).location?.city);
       // The wire location string contains "Remote" so isRemote should
       // be true even for the multi-region form.
       expect(em?.isRemote).toBe(true);

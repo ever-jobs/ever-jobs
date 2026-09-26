@@ -1,0 +1,34 @@
+{
+  "tenantName": "Acme Brasil",
+  "about": "<p>A Acme &eacute; uma empresa <strong>fict&iacute;cia</strong> usada em testes.</p>",
+  "background": [
+    "https://files.inhire.app/pages/career/banner_acme-br.png"
+  ],
+  "logo": "https://files.inhire.app/pages/career/logo_acme-br.png",
+  "activeJobBoards": [
+    "linkedin"
+  ],
+  "careerPageId": "default",
+  "careerPageIds": [
+    "default"
+  ],
+  "contractType": [
+    "PJ"
+  ],
+  "createdAt": "2026-09-10T12:00:00.000Z",
+  "description": "<p>Na Acme, nossa miss&atilde;o &eacute; simplificar a gest&atilde;o.</p><ul><li>Node.js</li><li>PostgreSQL</li></ul><p>Contato: vagas@acme-br.example</p>",
+  "displayName": "Analista de Dados Pleno | Produto",
+  "lastPublishedAt": "2026-09-12T09:00:00.000Z",
+  "publishedAt": "2026-09-10T12:00:00.000Z",
+  "settings": {
+    "requiredFields": [
+      "curriculum"
+    ]
+  },
+  "status": "published",
+  "updatedAt": "2026-09-12T09:00:00.000Z",
+  "jobId": "22222222-2222-4222-8222-222222222222",
+  "workplaceType": "Hybrid",
+  "location": "São Paulo",
+  "locationComplement": "SP"
+}

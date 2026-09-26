@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -29,6 +30,7 @@ import {
   EMPLOYMENTHERO_REMOTE_TYPE,
   EMPLOYMENTHERO_REMOTE_REGEX,
   employmentHeroJobsUrl,
+  employmentHeroLocationHeuristicsEnabled,
   employmentHeroPositionUrl,
 } from './employmenthero.constants';
 import {
@@ -304,6 +306,7 @@ export class EmploymentHeroService implements IScraper {
 
     const companyName = job.companyName ?? this.deriveSlugName(slug);
     const description = this.formatDescription(job.descriptionHtml ?? null, format);
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `employmenthero-${atsId}`,
@@ -311,7 +314,8 @@ export class EmploymentHeroService implements IScraper {
       companyName,
       companyLogo: job.companyLogo ?? null,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -431,20 +435,27 @@ export class EmploymentHeroService implements IScraper {
   } {
     const cleaned = this.cleanText(value);
     if (!cleaned) return { city: null, state: null };
-    const parts = cleaned
-      .split(',')
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0);
-    if (parts.length === 0) return { city: null, state: null };
-    const city = parts[0] || null;
-    if (parts.length === 1) return { city, state: null };
-    // Strip a trailing postcode-like token from the region remainder.
-    const region = parts
-      .slice(1)
-      .join(', ')
-      .replace(/\s+[A-Z0-9]{2,8}$/i, '')
-      .trim();
-    return { city, state: region.length > 0 ? region : parts.slice(1).join(', ').trim() || null };
+    const parsed = parseLocationText(cleaned).location;
+    const state = parsed?.state ?? null;
+    return {
+      city: parsed?.city ?? null,
+      state: state && employmentHeroLocationHeuristicsEnabled() ? this.stripPostcode(state) : state,
+    };
+  }
+
+  /**
+   * Strip a trailing postcode token from a region ("NSW 2000" → "NSW",
+   * "SouthEast E1" → "SouthEast") — Spec 1689 restores this pre-5125 step,
+   * which the shared parser does not do (EMPLOYMENTHERO_LOCATION_HEURISTICS
+   * =false turns it off). A token only counts as a postcode when it carries a
+   * digit, so region words ("New South Wales") are never clipped; a region
+   * that is nothing but a postcode ("SW1A 1AA") is kept as-is.
+   */
+  private stripPostcode(region: string): string {
+    const postcodeToken = /^(?=[A-Z0-9]*\d)[A-Z0-9]{2,8}$/i;
+    const tokens = region.split(/\s+/).filter(Boolean);
+    while (tokens.length > 0 && postcodeToken.test(tokens[tokens.length - 1])) tokens.pop();
+    return tokens.length > 0 ? tokens.join(' ') : region;
   }
 
   /**

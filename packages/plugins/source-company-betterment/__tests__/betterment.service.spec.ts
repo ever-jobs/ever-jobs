@@ -104,7 +104,7 @@ describe('BettermentService — Spec 120 / T04', () => {
       expect(JOBS_PAGE_RAW.jobs[0].departments[0].name).toBe('Customer Experience ');
       expect(bdr?.department).toBe('Customer Experience');
       expect(bdr?.department).not.toMatch(/\s$/);
-      expect(bdr?.location?.city).toBe('New York, NY or Remote, US');
+      expect(bdr?.location?.city).toBe('New York, NY');
       expect(bdr?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(bdr?.description).not.toContain('&lt;');
@@ -117,7 +117,7 @@ describe('BettermentService — Spec 120 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer');
       expect(sse?.companyName).toBe('Betterment');
-      expect(sse?.location?.city).toBe('New York, NY');
+      expect(sse?.location?.city).toBe('New York');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('Engineering');
       expect(sse?.jobUrl).toBe(

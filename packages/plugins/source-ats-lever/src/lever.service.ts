@@ -22,7 +22,12 @@ import {
   resolveCompensation,
   toDateOnly,
 } from '@ever-jobs/common';
-import { LEVER_API_URL, LEVER_HEADERS, LEVER_DELAY_MS } from './lever.constants';
+import {
+  LEVER_API_URL,
+  LEVER_HEADERS,
+  LEVER_DELAY_MS,
+  readAtsCountryOverlay,
+} from './lever.constants';
 import { LeverJob } from './lever.types';
 
 @SourcePlugin({
@@ -190,7 +195,17 @@ export class LeverService implements IScraper {
     // `categories.location`, and normalize through the shared parser (handles
     // `City, ST` splitting, multi-site `; `-joining, and remote/hybrid hints).
     const parsedLocations = parseLocationList(this.locationLabels(job));
-    const location = this.applyCountry(parsedLocations.location, job.country);
+    // Spec 1689 — fold Lever's posting-level ISO-2 `country` into a parsed
+    // location that has none (the pre-5118 behaviour, default ON; opt out
+    // with EVER_JOBS_ATS_COUNTRY_OVERLAY=false). `countryCode` below always
+    // carries the raw code.
+    const overlayCountry = readAtsCountryOverlay();
+    const location = overlayCountry
+      ? this.applyCountry(parsedLocations.location, job.country)
+      : parsedLocations.location;
+    const locations = overlayCountry
+      ? this.applyCountryToSingleSite(parsedLocations.locations, job.country)
+      : parsedLocations.locations;
 
     // Remote status: trust the explicit workplaceType flag, otherwise fall back
     // to text mentioned in the location labels.
@@ -212,6 +227,7 @@ export class LeverService implements IScraper {
       companyName: companySlug,
       jobUrl: job.hostedUrl ?? `https://jobs.lever.co/${companySlug}/${job.id}`,
       location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       compensation: resolveCompensation({
         structured: this.extractCompensation(job),
@@ -225,6 +241,7 @@ export class LeverService implements IScraper {
       emails: extractEmails(description),
       site: Site.LEVER,
       // ATS-specific fields
+      countryCode: job.country ?? null,
       atsId: job.id ?? null,
       atsType: 'lever',
       department: job.categories?.department ?? null,
@@ -252,8 +269,10 @@ export class LeverService implements IScraper {
 
   /**
    * Fold Lever's ISO-2 `country` code into the parsed location when the parser
-   * did not already derive a country (e.g. non-US sites the US-only parser
-   * leaves bare). Uses the runtime CLDR table via `regionNameFromCode`.
+   * did not already derive a country (e.g. non-US sites the parser leaves
+   * bare). Uses the runtime CLDR table via `regionNameFromCode`; an
+   * unresolvable code leaves the location untouched. Restored by Spec 1689
+   * after Spec 5118 removed it — gated by `EVER_JOBS_ATS_COUNTRY_OVERLAY`.
    */
   private applyCountry(
     location: LocationDto | null,
@@ -264,6 +283,19 @@ export class LeverService implements IScraper {
     if (!location) return new LocationDto({ country });
     if (location.country) return location;
     return new LocationDto({ ...location, country });
+  }
+
+  /**
+   * Apply {@link applyCountry} to a single-site `locations[]` so it agrees with
+   * `location`. The code is posting-level, so a multi-site list is left as
+   * parsed: which of its sites the code describes is unknown.
+   */
+  private applyCountryToSingleSite(
+    locations: LocationDto[],
+    countryCode: string | null | undefined,
+  ): LocationDto[] {
+    if (locations.length !== 1) return locations;
+    return [this.applyCountry(locations[0], countryCode) ?? locations[0]];
   }
 
   private extractCompensation(job: LeverJob): CompensationDto | null {

@@ -14,13 +14,7 @@ import {
   DescriptionFormat,
   Site,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import {
   REED_API_URL,
   REED_HEADERS,
@@ -166,9 +160,8 @@ export class ReedService implements IScraper {
     }
 
     // Build location
-    const location = new LocationDto({
-      city: raw.locationName ?? null,
-    });
+    const locationParsed = parseLocationList([raw.locationName ?? null]);
+    const location = locationParsed.location;
 
     // Parse date
     let datePosted: string | null = null;
@@ -194,6 +187,7 @@ export class ReedService implements IScraper {
       companyUrl: null,
       jobUrl: raw.jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,

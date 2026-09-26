@@ -11,13 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { FRESHTEAM_HEADERS } from './freshteam.constants';
 import { FreshteamJobPosting } from './freshteam.types';
 
@@ -126,9 +120,8 @@ export class FreshteamService implements IScraper {
     }
 
     // Location from branch field (Freshteam uses "branch" for office/location)
-    const location = new LocationDto({
-      city: posting.branch ?? null,
-    });
+    const locationParsed = parseLocationList([posting.branch ?? null]);
+    const location = locationParsed.location;
 
     // Job URL from applicant_apply_link or constructed URL
     const jobUrl =
@@ -146,9 +139,10 @@ export class FreshteamService implements IScraper {
       companyName: companySlug,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       datePosted,
-      isRemote: posting.remote ?? false,
+      isRemote: (posting.remote ?? false) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       site: Site.FRESHTEAM,
       // ATS-specific fields

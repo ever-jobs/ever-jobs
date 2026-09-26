@@ -258,12 +258,14 @@ export class VarbiService implements IScraper {
     const rawText = job.description_text ?? job.descriptionText ?? null;
     const description = this.formatDescription(rawHtml, rawText, format);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `varbi-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.application_deadline ?? job.applicationDeadline),
       isRemote: this.detectRemote(job),

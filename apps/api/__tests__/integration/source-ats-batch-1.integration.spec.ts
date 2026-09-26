@@ -102,7 +102,19 @@ const PLUGIN_FIXTURES = (() => {
   };
 })();
 
-const httpCallLog: { method: 'GET' | 'POST'; url: string }[] = [];
+const httpCallLog: {
+  method: 'GET' | 'POST';
+  url: string;
+  // GraphQL `operationName`s carried by a POST body (batched or single).
+  operations?: string[];
+}[] = [];
+
+function graphqlOperations(body: unknown): string[] {
+  const ops = Array.isArray(body) ? body : [body];
+  return ops
+    .map((op) => (op as { operationName?: unknown } | null)?.operationName)
+    .filter((name): name is string => typeof name === 'string');
+}
 
 function routeGet(url: string): unknown {
   httpCallLog.push({ method: 'GET', url });
@@ -138,8 +150,8 @@ function routeGet(url: string): unknown {
   return null;
 }
 
-function routePost(url: string): unknown {
-  httpCallLog.push({ method: 'POST', url });
+function routePost(url: string, body?: unknown): unknown {
+  httpCallLog.push({ method: 'POST', url, operations: graphqlOperations(body) });
   if (url.includes('jobs.gem.com/api/public/graphql/batch')) {
     return PLUGIN_FIXTURES.gemBatch;
   }
@@ -173,8 +185,8 @@ jest.mock('@ever-jobs/common', () => {
         }
         return { data: routeGet(url) };
       }),
-      post: jest.fn(async (url: string, _body: unknown) => {
-        return { data: routePost(url) };
+      post: jest.fn(async (url: string, body: unknown) => {
+        return { data: routePost(url, body) };
       }),
       setHeaders: jest.fn(),
     })),
@@ -335,21 +347,42 @@ describe('Integration — Spec 006 / T09 (source-ats batch 1: avature × gem × 
   });
 
   describe('HTTP-client mock — wire-call shape', () => {
-    it('Gem issues exactly ONE POST to the GraphQL batch endpoint', async () => {
+    // Since Spec 5035 (eb0528dd, detail overlay for body/date/pay) Gem sends
+    // ONE batched list POST (JobBoardTheme + JobBoardList) and then ONE
+    // `ExternalJobPostingQuery` detail POST per kept posting, all to the same
+    // batch endpoint. This case was written against the list-only plugin and
+    // still expected a single POST (Spec 1689 updated it); it now pins both
+    // halves of the new shape instead of a bare total.
+    it('Gem issues ONE list POST plus one detail POST per kept posting (Spec 5035)', async () => {
       const jobsService = app.get(JobsService);
       const input = new ScraperInputDto({
         siteType: [Site.GEM],
         companySlug: 'acme-corp',
         resultsWanted: 50,
       });
-      await jobsService.searchJobs(input);
+      const rows = await jobsService.searchJobs(input);
+      const gemRows = rows.filter((j) => j.site === Site.GEM);
 
       const gemPosts = httpCallLog.filter(
         (c) =>
           c.method === 'POST' &&
           c.url.includes('jobs.gem.com/api/public/graphql/batch'),
       );
-      expect(gemPosts).toHaveLength(1);
+      const listPosts = gemPosts.filter((c) =>
+        c.operations?.includes('JobBoardList'),
+      );
+      const detailPosts = gemPosts.filter((c) =>
+        c.operations?.includes('ExternalJobPostingQuery'),
+      );
+
+      // The fixture carries 3 postings, each with an extId and a title, and
+      // resultsWanted=50 keeps them all — so 3 detail fetches, 4 POSTs total.
+      expect(gemRows).toHaveLength(3);
+      expect(listPosts).toHaveLength(1);
+      expect(detailPosts).toHaveLength(gemRows.length);
+      expect(gemPosts).toHaveLength(1 + gemRows.length);
+      // The list call is the first one out; details only follow it.
+      expect(gemPosts[0].operations).toContain('JobBoardList');
     });
 
     it('Join.com issues a Step-1 HTML GET before the Step-2 JSON GETs', async () => {

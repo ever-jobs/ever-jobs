@@ -89,7 +89,7 @@ describe('RobloxService — Spec 041 / T04', () => {
       expect(eng?.jobUrl).toBe(
         'https://careers.roblox.com/jobs/7142298?gh_jid=7142298',
       );
-      expect(eng?.location?.city).toBe('San Mateo, CA');
+      expect(eng?.location?.city).toBe('San Mateo');
       expect(eng?.department).toBe('Engineering');
       expect(eng?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

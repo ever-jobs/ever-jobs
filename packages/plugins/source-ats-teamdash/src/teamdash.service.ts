@@ -15,6 +15,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -337,12 +338,15 @@ export class TeamdashService implements IScraper {
 
     const department = this.cleanText(landing?.stage?.name) ?? null;
 
+    const location = this.extractLocation(item);
+
     return new JobPostDto({
       id: `teamdash-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(item),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(landing?.created_at ?? landing?.updated_at),
       isRemote: this.detectRemote(item, title, rawDescription),
@@ -496,22 +500,7 @@ export class TeamdashService implements IScraper {
   private extractLocation(item: TeamdashFeedItem): LocationDto | null {
     const label = this.cleanText(item.location);
     if (!label) return null;
-    const parts = label
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    const city = parts[0];
-    const state = parts.length >= 3 ? parts[1] : null;
-    const country = parts[parts.length - 1];
-    return new LocationDto({
-      city: city ?? null,
-      state: state ?? null,
-      country: country ?? null,
-    });
+    return parseLocationText(label).location;
   }
 
   /**

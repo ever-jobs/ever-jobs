@@ -123,7 +123,7 @@ describe('EpicgamesService — Spec 069 / T04', () => {
       // refactors that might naively normalise to the canonical
       // Greenhouse subdomain.
       expect(concept?.jobUrl).toContain('epicgames.com/careers/jobs/');
-      expect(concept?.location?.city).toBe('Cary,North Carolina,United States');
+      expect(concept?.location?.city).toBe('Cary');
       // D-11 first-listing regression guard: the emitted `department`
       // for the first fixture listing matches the wire
       // `departments[0].name === 'Art'` byte-for-byte (clean
@@ -163,7 +163,7 @@ describe('EpicgamesService — Spec 069 / T04', () => {
         JOBS_PAGE_RAW.jobs[1].title.length - 1,
       );
       expect(partnerships?.companyName).toBe('Epic Games');
-      expect(partnerships?.location?.city).toBe('Cary,North Carolina,United States');
+      expect(partnerships?.location?.city).toBe('Cary');
       expect(partnerships?.isRemote).toBe(false);
       // D-11 second-listing regression guard: the emitted `department`
       // for the second fixture listing matches the wire

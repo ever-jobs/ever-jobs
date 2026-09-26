@@ -87,7 +87,7 @@ describe('LyftService — Spec 029 / T04', () => {
       expect(marketplace?.jobUrl).toBe(
         'https://boards.greenhouse.io/lyft/jobs/7901234',
       );
-      expect(marketplace?.location?.city).toBe('San Francisco, CA');
+      expect(marketplace?.location?.city).toBe('San Francisco');
       expect(marketplace?.department).toBe('Engineering');
       expect(marketplace?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

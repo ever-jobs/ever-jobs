@@ -5,8 +5,27 @@
  * or blocked depending on your network/IP. Run sparingly.
  */
 import { Test, TestingModule } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { IndeedModule, IndeedService } from '@ever-jobs/source-indeed';
-import { ScraperInputDto, Site, Country, DescriptionFormat } from '@ever-jobs/models';
+import {
+  ScraperInputDto,
+  Site,
+  Country,
+  DescriptionFormat,
+  DatePostedPrecision,
+  JobResponseDto,
+} from '@ever-jobs/models';
+
+const logger = new Logger('IndeedE2E');
+
+/** The endpoint's edge blocks some egress outright; that must not fail CI. */
+function blocked(response: JobResponseDto): boolean {
+  if (response.jobs.length === 0 && response.diagnostics?.reason === 'blocked') {
+    logger.warn(`Indeed blocked this egress: ${response.diagnostics.detail ?? '(no detail)'}`);
+    return true;
+  }
+  return false;
+}
 
 describe('IndeedService (E2E)', () => {
   let service: IndeedService;
@@ -24,7 +43,7 @@ describe('IndeedService (E2E)', () => {
       siteType: [Site.INDEED],
       searchTerm: 'software engineer',
       location: 'New York',
-      resultsWanted: 5,
+      resultsWanted: 3,
       country: Country.USA,
       descriptionFormat: DescriptionFormat.MARKDOWN,
     });
@@ -39,6 +58,41 @@ describe('IndeedService (E2E)', () => {
       const job = response.jobs[0];
       expect(job.title).toBeDefined();
       expect(typeof job.title).toBe('string');
+    }
+  });
+
+  // Spec 1702: a zero-job answer always says why, and the mapped fields keep their contract.
+  it('never returns a silent empty result, and maps workplace and posted time', async () => {
+    const input = new ScraperInputDto({
+      siteType: [Site.INDEED],
+      searchTerm: 'software engineer',
+      isRemote: true,
+      resultsWanted: 3,
+      country: Country.USA,
+    });
+
+    const response = await service.scrape(input);
+    if (blocked(response)) return;
+
+    if (response.jobs.length === 0) {
+      logger.warn(`Indeed returned no jobs: ${JSON.stringify(response.diagnostics)}`);
+      expect(response.diagnostics?.reason).toBeDefined();
+      return;
+    }
+
+    for (const job of response.jobs) {
+      expect(typeof job.isRemote).toBe('boolean');
+      if (job.workFromHomeType !== undefined) {
+        expect(['Remote', 'Hybrid']).toContain(job.workFromHomeType);
+        expect(job.isRemote).toBe(job.workFromHomeType === 'Remote');
+      }
+      if (job.datePosted !== null && job.datePosted !== undefined) {
+        expect(String(job.datePosted)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      }
+      if (job.datePostedAt) {
+        expect(job.datePostedPrecision).toBe(DatePostedPrecision.EXACT);
+        expect(Number.isFinite(Date.parse(job.datePostedAt))).toBe(true);
+      }
     }
   });
 });

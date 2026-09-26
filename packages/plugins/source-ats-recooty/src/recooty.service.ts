@@ -183,12 +183,14 @@ export class RecootyService implements IScraper {
       }
     }
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `recooty-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.published_at ?? job.created_at),
       isRemote: this.detectRemote(job),

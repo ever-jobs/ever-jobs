@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 const API_URL = 'https://jobs.netflix.com/api/search';
 const CAREERS_BASE = 'https://jobs.netflix.com/jobs/';
@@ -50,9 +50,8 @@ export class NetflixService implements IScraper {
         const id = `netflix-${jobId || Math.abs(this.hashCode(title))}`;
 
         const locationStr = listing.location ?? listing.location_string ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const locationParsed = parseLocationList([locationStr]);
+        const location = locationStr ? locationParsed.location : null;
 
         jobs.push(
           new JobPostDto({
@@ -62,11 +61,12 @@ export class NetflixService implements IScraper {
             companyName: 'Netflix',
             jobUrl: listing.url ?? `${CAREERS_BASE}${jobId}`,
             location,
+            ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
             description: listing.description
               ? stripHtmlTags(listing.description)
               : null,
             datePosted: listing.created_at ?? listing.updated_at ?? null,
-            isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+            isRemote: (locationStr?.toLowerCase().includes('remote') ?? false) || locationParsed.remoteMentioned,
             department: listing.team ?? listing.organization ?? null,
           }),
         );

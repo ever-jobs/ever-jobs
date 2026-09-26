@@ -9,7 +9,7 @@ import {
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient, htmlToPlainText } from '@ever-jobs/common';
+import { createHttpClient, htmlToPlainText, parseLocationList } from '@ever-jobs/common';
 import {
   JOINCOM_API_BASE_URL,
   JOINCOM_BASE_URL,
@@ -233,9 +233,8 @@ export class JoinComService implements IScraper {
     const firstLocation = item.locations?.[0];
     const locationName =
       firstLocation?.name?.trim() ?? firstLocation?.city?.trim() ?? null;
-    const location = locationName
-      ? new LocationDto({ city: locationName })
-      : null;
+    const locationParsed = parseLocationList([locationName]);
+    const location = locationName ? locationParsed.location : null;
     const isRemote =
       firstLocation?.isRemote === true ||
       (locationName?.toLowerCase().includes('remote') ?? false) ||
@@ -257,6 +256,7 @@ export class JoinComService implements IScraper {
       companyName: tenant.companyName,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       isRemote,
       site: Site.JOIN_COM,
       atsId: String(id),

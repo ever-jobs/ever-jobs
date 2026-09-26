@@ -93,7 +93,7 @@ describe('PlanetScaleService — Spec 101 / T04', () => {
       );
       expect(bd?.jobUrl).not.toContain('planetscale.com');
       expect(bd?.department).toBe('Marketing');
-      expect(bd?.location?.city).toBe('Remote, US');
+      expect(bd?.location?.city).toBeUndefined();
       expect(bd?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(bd?.description).not.toContain('&lt;');
@@ -106,7 +106,7 @@ describe('PlanetScaleService — Spec 101 / T04', () => {
       expect(se).toBeDefined();
       expect(se?.title).toBe('Software Engineer - Infrastructure');
       expect(se?.companyName).toBe('PlanetScale');
-      expect(se?.location?.city).toBe('Remote, US');
+      expect(se?.location?.city).toBeUndefined();
       expect(se?.isRemote).toBe(true);
       expect(se?.department).toBe('Engineering');
       expect(se?.jobUrl).toBe(

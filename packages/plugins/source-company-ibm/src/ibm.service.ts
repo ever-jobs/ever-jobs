@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 import { IBM_CAREERS_URL, IBM_JOB_BASE_URL } from './ibm.constants';
 import { IbmJob } from './ibm.types';
 
@@ -48,11 +48,13 @@ export class IbmService implements IScraper {
             const jobId = listing.id ?? listing.req_id ?? '';
             const id = `ibm-${jobId || Math.abs(this.hashCode(title))}`;
 
-            const locationStr = listing.locations?.join(', ')
-              ?? listing.location ?? null;
-            const location = locationStr
-              ? new LocationDto({ city: locationStr })
-              : null;
+            const parsedLocations = parseLocationList(
+              listing.locations?.length
+                ? listing.locations
+                : [listing.location ?? null],
+            );
+            const location = parsedLocations.location;
+            const locations = parsedLocations.locations;
 
             jobs.push(
               new JobPostDto({
@@ -62,11 +64,12 @@ export class IbmService implements IScraper {
                 companyName: 'IBM',
                 jobUrl: listing.url ?? `${IBM_JOB_BASE_URL}/${jobId}`,
                 location,
+                ...(locations.length > 0 ? { locations } : {}),
                 description: listing.description
                   ? stripHtmlTags(listing.description)
                   : null,
                 datePosted: listing.posted_date ?? listing.date_posted ?? null,
-                isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+                isRemote: parsedLocations.remoteMentioned,
                 department: listing.team ?? listing.department ?? null,
               }),
             );

@@ -1,0 +1,105 @@
+{
+  "jobs": [
+    {
+      "jobOfferKey": "0b8f5d3e-1a11-4c7a-9e01-000000000001",
+      "title": "Senior Frontend Developer (React/TypeScript)",
+      "division": "IT",
+      "category": "Developer",
+      "subCategory": "React",
+      "company": "Acme Software",
+      "companyLogoUrl": "https://cdn.solid.jobs/companies/logos/00000000000000000000000000000001.png",
+      "salary": {
+        "from": 23500,
+        "to": 28600,
+        "currency": "PLN",
+        "period": "Month",
+        "employmentType": "UoP"
+      },
+      "contractTime": "full_time",
+      "locations": [
+        "Warszawa"
+      ],
+      "benefits": [
+        "Pakiet medyczny"
+      ],
+      "isRemote": false,
+      "isHybrid": true,
+      "url": "https://solid.jobs/o/acme0001/api",
+      "experienceLevel": "Senior",
+      "skills": [
+        {
+          "level": "Expert",
+          "name": "React"
+        },
+        {
+          "level": "Expert",
+          "name": "TypeScript"
+        },
+        {
+          "level": "Advanced",
+          "name": "react "
+        }
+      ],
+      "languages": [
+        {
+          "level": "Advanced",
+          "name": "Angielski"
+        }
+      ],
+      "description": "<div class=\"well job - description\"><p><strong>Czym będziesz się zajmować?</strong><br><br><ul><li>Rozwój aplikacji w React</li><li>Współpraca z zespołem produktowym</li></ul></p><h3>Wymagania:</h3><ul><li>Komunikatywność</li></ul><p>Kontakt: rekrutacja@example.com</p></div>",
+      "validFrom": "2026-09-24T15:53:51.3998022+02:00",
+      "validTo": "2026-10-25T15:53:51.3998022+02:00",
+      "updatedAt": "2026-09-24T14:26:07.8675932+02:00"
+    },
+    {
+      "jobOfferKey": "0b8f5d3e-1a11-4c7a-9e01-000000000002",
+      "title": "Java Developer",
+      "division": "IT",
+      "category": "Developer",
+      "subCategory": "Java",
+      "company": "Acme Software",
+      "companyLogoUrl": "/companies/logos/relative.png",
+      "salary": {
+        "from": 16800,
+        "to": 21000,
+        "currency": "PLN",
+        "period": "Month",
+        "employmentType": "B2B"
+      },
+      "contractTime": "full_time",
+      "locations": [
+        "Warszawa",
+        "Gdańsk"
+      ],
+      "benefits": [],
+      "isRemote": true,
+      "isHybrid": false,
+      "url": "https://solid.jobs/o/acme0002/api",
+      "experienceLevel": "Regular",
+      "skills": [
+        {
+          "level": "Expert",
+          "name": "Java"
+        },
+        {
+          "level": "Advanced",
+          "name": "Spring Boot"
+        }
+      ],
+      "languages": [
+        {
+          "level": "Advanced",
+          "name": "Angielski"
+        }
+      ],
+      "description": "<div class=\"well job - description\"><p><strong>Czym będziesz się zajmować?</strong><br><br><ul><li>Rozwój usług w Javie</li><li>Współpraca z zespołem produktowym</li></ul></p><h3>Wymagania:</h3><ul><li>Komunikatywność</li></ul><p>Kontakt: rekrutacja@example.com</p></div>",
+      "validFrom": "2026-09-24T00:30:00.1234567+02:00",
+      "validTo": "2026-10-25T00:30:00.1234567+02:00",
+      "updatedAt": "2026-09-23T23:10:00.5550000+02:00"
+    }
+  ],
+  "pageIndex": 0,
+  "pageSize": 2,
+  "totalCount": 3,
+  "totalPages": 2
+}

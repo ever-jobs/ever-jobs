@@ -89,7 +89,7 @@ describe('AffirmService — Spec 044 / T04', () => {
       expect(credit?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/affirm/jobs/7666190003',
       );
-      expect(credit?.location?.city).toBe('Remote US');
+      expect(credit?.location?.city).toBeUndefined();
       expect(credit?.department).toBe('Core Analytics');
       expect(credit?.isRemote).toBe(true);
       // The HTML stripper removes tags but preserves text content.
@@ -99,7 +99,7 @@ describe('AffirmService — Spec 044 / T04', () => {
       const eng = dto.jobs.find((j) => j.id === 'affirm-7666842004');
       expect(eng?.isRemote).toBe(false);
       expect(eng?.department).toBe('Engineering');
-      expect(eng?.location?.city).toBe('Hybrid - San Francisco');
+      expect(eng?.location?.city).toBe('San Francisco');
 
       // Regression guard: the slug must be `affirm` exactly.
       const calledUrls = mockGet.mock.calls.map((c) => c[0] as string);

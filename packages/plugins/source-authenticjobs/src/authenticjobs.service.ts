@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -152,18 +153,11 @@ export class AuthenticJobsService implements IScraper {
   private parseLocation(location: string): { city: string | null; state: string | null } {
     const trimmed = location.trim();
     if (!trimmed) return { city: null, state: null };
-
-    const parts = trimmed.split(',').map((p) => p.trim());
-
-    if (parts.length >= 2) {
-      return {
-        city: parts[0] || null,
-        state: parts[1] || null,
-      };
-    }
-
-    // Single value — treat as city
-    return { city: parts[0] || null, state: null };
+    const parsed = parseLocationText(trimmed).location;
+    return {
+      city: parsed?.city ?? null,
+      state: parsed?.state ?? null,
+    };
   }
 
   /**
@@ -237,6 +231,7 @@ export class AuthenticJobsService implements IScraper {
       companyName: listing.company?.name ?? null,
       jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       compensation: null,
       datePosted,

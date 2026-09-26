@@ -159,7 +159,7 @@ describe('OracleService (Spec 013 / T03 + T04 — REST + finder-string)', () => 
       expect(first.site).toBe(Site.ORACLE);
       expect(first.atsId).toBe('320918');
       expect(first.atsType).toBe('oracle');
-      expect(first.location?.city).toBe('Austin, TX, United States');
+      expect(first.location?.city).toBe('Austin');
       expect(first.datePosted).toBe('2025-12-19');
       expect(first.isRemote).toBe(false);
       // ExternalUrlSeo path used when ExternalUrl is null.

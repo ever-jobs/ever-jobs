@@ -15,13 +15,7 @@ import {
   JobType,
   getJobTypeFromString,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { ARBEITNOW_API_URL, ARBEITNOW_HEADERS } from './arbeitnow.constants';
 import { ArbeitnowJob, ArbeitnowApiResponse } from './arbeitnow.types';
 
@@ -139,9 +133,8 @@ export class ArbeitnowService implements IScraper {
     }
 
     // Build location
-    const location = new LocationDto({
-      city: raw.location ?? null,
-    });
+    const locationParsed = parseLocationList([raw.location ?? null]);
+    const location = locationParsed.location;
 
     // Parse date from Unix timestamp
     let datePosted: string | null = null;
@@ -167,11 +160,12 @@ export class ArbeitnowService implements IScraper {
       companyName: raw.company_name ?? null,
       jobUrl: raw.url,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation: null,
       datePosted,
       jobType,
-      isRemote: raw.remote ?? false,
+      isRemote: (raw.remote ?? false) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       site: Site.ARBEITNOW,
     });

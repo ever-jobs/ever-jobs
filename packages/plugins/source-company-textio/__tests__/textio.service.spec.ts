@@ -92,7 +92,7 @@ describe('TextioService — Spec 174 / T04', () => {
       expect(gmm?.jobUrl).toContain('&gh_jid=');
       // D-11 clean dept pass-through.
       expect(gmm?.department).toBe('Marketing');
-      expect(gmm?.location?.city).toBe('San Francisco, CA');
+      expect(gmm?.location?.city).toBe('San Francisco');
       expect(gmm?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(gmm?.description).not.toContain('&lt;');
@@ -104,7 +104,7 @@ describe('TextioService — Spec 174 / T04', () => {
       expect(ga).toBeDefined();
       expect(ga?.title).toBe("Textio's General Application");
       expect(ga?.companyName).toBe('Textio');
-      expect(ga?.location?.city).toBe('Remote, US');
+      expect(ga?.location?.city).toBeUndefined();
       expect(ga?.isRemote).toBe(true);
       expect(ga?.department).toBe('General Application');
       expect(ga?.jobUrl).toBe(

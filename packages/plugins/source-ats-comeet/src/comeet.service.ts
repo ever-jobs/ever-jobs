@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 @SourcePlugin({
   site: Site.COMEET,
@@ -50,9 +50,8 @@ export class ComeetService implements IScraper {
         const id = `comeet-${company}-${jobId}`;
 
         const locationStr = listing.location?.name ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const locationParsed = parseLocationList([locationStr]);
+        const location = locationStr ? locationParsed.location : null;
 
         jobs.push(
           new JobPostDto({
@@ -62,11 +61,12 @@ export class ComeetService implements IScraper {
             companyName: listing.company_name ?? company,
             jobUrl: listing.url_active_page ?? listing.url ?? '',
             location,
+            ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
             description: listing.details
               ? stripHtmlTags(listing.details.map((d: any) => d.value ?? '').join('\n'))
               : null,
             datePosted: listing.time_updated ?? null,
-            isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+            isRemote: (locationStr?.toLowerCase().includes('remote') ?? false) || locationParsed.remoteMentioned,
             department: listing.department ?? null,
             atsId: jobId,
             atsType: 'comeet',

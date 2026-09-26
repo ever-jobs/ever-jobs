@@ -292,12 +292,14 @@ export class OtysService implements IScraper {
     const companyName = this.cleanText(job.companyName) ?? this.deriveCompanyName(host);
     const description = this.formatDescription(job.description ?? null, format);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `otys-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,

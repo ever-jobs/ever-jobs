@@ -285,12 +285,14 @@ export class SympaService implements IScraper {
     // address when present (de-duplicated).
     const emails = this.collectEmails(description, job.mailboxEmail);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `sympa-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,

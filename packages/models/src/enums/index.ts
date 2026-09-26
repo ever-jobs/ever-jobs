@@ -4,3 +4,5 @@ export * from './compensation-interval.enum';
 export * from './description-format.enum';
 export * from './salary-source.enum';
 export * from './country.enum';
+export * from './date-posted.enum';
+export * from './exclusion-preset.enum';

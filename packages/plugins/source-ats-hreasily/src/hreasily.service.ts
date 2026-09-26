@@ -471,6 +471,7 @@ export class HReasilyService implements IScraper {
       city: loc.city,
       state: loc.state,
       country: loc.country,
+      locationEntries: this.resolveLocations(posting.jobLocation),
       locationText,
       descriptionHtml: this.cleanText(posting.description),
       department,
@@ -494,12 +495,15 @@ export class HReasilyService implements IScraper {
     const companyName = job.companyName ?? this.deriveSlugName(slug);
     const description = this.formatDescription(job.descriptionHtml ?? null, format);
 
+    const location = this.extractLocation(job);
+
     return new JobPostDto({
       id: `hreasily-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      locations: this.extractLocations(job),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,
@@ -596,6 +600,35 @@ export class HReasilyService implements IScraper {
       state: this.cleanText(address.addressRegion),
       country: this.resolveCountry(address.addressCountry),
     };
+  }
+
+  /**
+   * Resolve every `jobLocation` entry to a `{city,state,country}` triple — one per
+   * Place in a `jobLocation` array (single-element for a scalar Place). String
+   * `address` values keep their comma order as parsed by {@link resolveLocation}.
+   */
+  private resolveLocations(
+    jobLocation: HReasilyJobLocation | HReasilyJobLocation[] | null | undefined,
+  ): Array<{ city: string | null; state: string | null; country: string | null }> {
+    if (!jobLocation) return [];
+    const places = Array.isArray(jobLocation) ? jobLocation : [jobLocation];
+    const out: Array<{ city: string | null; state: string | null; country: string | null }> = [];
+    for (const place of places) {
+      const triple = this.resolveLocation(place ?? null);
+      if (triple.city || triple.state || triple.country) out.push(triple);
+    }
+    return out;
+  }
+
+  /** Per-site LocationDto list — one per `jobLocation` entry, else the merged location. */
+  private extractLocations(job: HReasilyJob): LocationDto[] {
+    if (job.locationEntries && job.locationEntries.length > 0) {
+      return job.locationEntries.map(
+        (e) => new LocationDto({ city: e.city, state: e.state, country: e.country }),
+      );
+    }
+    const merged = this.extractLocation(job);
+    return merged ? [merged] : [];
   }
 
   /** Resolve a country name from a string or a `{ name }` `Country` object. */

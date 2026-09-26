@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -271,13 +272,15 @@ export class PolymerService implements IScraper {
     }
 
     const department = this.normalizeText(job.department) ?? null;
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `polymer-${atsId}`,
       title,
       companyName: this.normalizeText(job.organization_name ?? job.organizationName) ?? companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(
         job.published_at ?? job.publishedAt ?? job.published_at_timestamp ?? job.created_at ?? job.createdAt ?? job.created_at_timestamp,
@@ -353,16 +356,7 @@ export class PolymerService implements IScraper {
     }
     const display = this.normalizeText(job.display_location ?? job.displayLocation);
     if (!display) return null;
-    const parts = display
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    return new LocationDto({
-      city: parts[0] ?? null,
-      state: parts[1] ?? null,
-      country: parts.length >= 3 ? parts[2] : null,
-    });
+    return parseLocationText(display).location;
   }
 
   /** Detect remote roles from `remoteness_pretty`, the location, or the title. */

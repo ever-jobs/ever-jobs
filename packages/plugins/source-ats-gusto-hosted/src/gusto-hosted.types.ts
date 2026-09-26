@@ -1,4 +1,4 @@
-import { CompensationDto } from '@ever-jobs/models';
+import { CompensationDto, LocationDto } from '@ever-jobs/models';
 
 /** A single posting enumerated from a tenant board page. */
 export interface GustoHostedListItem {
@@ -21,6 +21,8 @@ export interface GustoHostedDetailData {
   city: string | null;
   state: string | null;
   country: string | null;
+  /** Every site the posting lists, when it carries more than the merged one. */
+  locations: LocationDto[] | null;
   compensation: CompensationDto | null;
   workFromHomeType: string | null;
 }

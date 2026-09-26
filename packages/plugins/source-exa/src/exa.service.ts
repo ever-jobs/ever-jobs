@@ -174,6 +174,7 @@ export class ExaService implements IScraper {
       companyUrl: null,
       jobUrl: url,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       compensation: null,
       datePosted,

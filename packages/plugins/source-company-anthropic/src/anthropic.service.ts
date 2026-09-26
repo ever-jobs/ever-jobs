@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 /** Anthropic publishes its careers board through Greenhouse. */
 const API_URL = 'https://api.greenhouse.io/v1/boards/anthropic/jobs';
@@ -54,9 +54,8 @@ export class AnthropicService implements IScraper {
         const id = `anthropic-${jobId}`;
 
         const locationStr = listing.location?.name ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const locationParsed = parseLocationList([locationStr]);
+        const location = locationStr ? locationParsed.location : null;
 
         if (input.location && locationStr) {
           if (!locationStr.toLowerCase().includes(input.location.toLowerCase())) continue;
@@ -72,9 +71,10 @@ export class AnthropicService implements IScraper {
               listing.absolute_url ??
               `https://www.anthropic.com/jobs/${listing.id}`,
             location,
+            ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
             description: listing.content ? stripHtmlTags(listing.content) : null,
             datePosted: listing.updated_at ?? null,
-            isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+            isRemote: (locationStr?.toLowerCase().includes('remote') ?? false) || locationParsed.remoteMentioned,
             department: listing.departments?.[0]?.name ?? null,
           }),
         );

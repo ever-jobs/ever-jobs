@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -415,13 +416,15 @@ export class TribepadService implements IScraper {
     // Use the more precise detail-page closing date when available.
     const closingDateStr = job.closingDate ?? null;
     const datePosted = this.parseDate(closingDateStr);
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `tribepad-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted,
       isRemote: this.detectRemote(job),
@@ -476,25 +479,7 @@ export class TribepadService implements IScraper {
   private extractLocation(job: TribepadJob): LocationDto | null {
     const raw = job.location?.trim();
     if (!raw) return null;
-    const parts = raw
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    // Two-part: "City, Postcode" or "City, Country"
-    const city = parts[0];
-    const countryOrState = parts[parts.length - 1];
-    // If the last part looks like a postcode (UK: letters+digits), treat it
-    // as region/state; otherwise treat as country.
-    const isPostcode = /^[A-Z]{1,2}\d/.test(countryOrState.toUpperCase());
-    return new LocationDto({
-      city: city ?? null,
-      state: isPostcode ? countryOrState : null,
-      country: isPostcode ? null : countryOrState,
-    });
+    return parseLocationText(raw).location;
   }
 
   /** Detect remote roles from category, contract type, or title keywords. */

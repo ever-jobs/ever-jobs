@@ -88,7 +88,7 @@ describe('LabelboxService — Spec 160 / T04', () => {
       expect(eng?.jobUrl).toContain('job-boards.greenhouse.io/labelbox/jobs/');
       // D-11 clean dept pass-through.
       expect(eng?.department).toBe('Engineering');
-      expect(eng?.location?.city).toBe('San Francisco, CA');
+      expect(eng?.location?.city).toBe('San Francisco');
       expect(eng?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(eng?.description).not.toContain('&lt;');
@@ -101,7 +101,7 @@ describe('LabelboxService — Spec 160 / T04', () => {
       expect(fde).toBeDefined();
       expect(fde?.title).toBe('Forward Deployed Engineer');
       expect(fde?.companyName).toBe('Labelbox');
-      expect(fde?.location?.city).toBe('Remote, US');
+      expect(fde?.location?.city).toBeUndefined();
       expect(fde?.isRemote).toBe(true);
       // D-11 clean dept pass-through (multi-token internal-
       // whitespace dept name).

@@ -39,7 +39,7 @@ export interface RipplingJob {
   description?: RipplingDescription | null;
   workLocations?: string[] | null;
   locations?: RipplingLocation[] | null;
-  department?: Record<string, unknown> | null;
+  department?: { name?: string | null } | null;
   employmentType?: Record<string, string> | null;
   createdOn?: string | null;
   companyName?: string | null;

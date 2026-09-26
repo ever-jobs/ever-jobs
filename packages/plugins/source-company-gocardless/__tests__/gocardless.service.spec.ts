@@ -92,7 +92,7 @@ describe('GocardlessService — Spec 150 / T04', () => {
       expect(lod?.jobUrl).toContain('job-boards.greenhouse.io/gocardless/jobs/');
       // D-11 clean dept pass-through.
       expect(lod?.department).toBe('Risk');
-      expect(lod?.location?.city).toBe('London, UK');
+      expect(lod?.location?.city).toBe('London');
       expect(lod?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(lod?.description).not.toContain('&lt;');
@@ -108,7 +108,7 @@ describe('GocardlessService — Spec 150 / T04', () => {
       expect(sre?.title).toBe('Site Reliability Engineer');
       expect(sre?.title).not.toMatch(/\s$/);
       expect(sre?.companyName).toBe('GoCardless');
-      expect(sre?.location?.city).toBe('Remote, UK');
+      expect(sre?.location?.city).toBeUndefined();
       expect(sre?.isRemote).toBe(true);
       expect(sre?.department).toBe('Product Development');
       expect(sre?.jobUrl).toBe(

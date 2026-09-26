@@ -41,7 +41,11 @@ function detailPage(opts: {
   datePosted: string;
   hiringOrganization: string;
   descriptionHtml: string;
+  department?: string;
 }): string {
+  const deptToken = opts.department
+    ? `<div class="row"><div class="col-xs-12 fontalign-left"><span class="joblayouttoken-label">Department: </span><span xml:lang="en-US" lang="en-US" data-careersite-propertyid="dept" class="rtltextaligneligible">${opts.department}</span></div></div>`
+    : '';
   return `<!DOCTYPE html><html><body>
     <div itemscope itemtype="http://schema.org/JobPosting">
       <h1><span itemprop="title" data-careersite-propertyid="title">${opts.title}</span></h1>
@@ -57,6 +61,7 @@ function detailPage(opts: {
       <meta itemprop="validThrough" content="Tue Aug 11 04:00:00 UTC 2026">
       <meta itemprop="hiringOrganization" content="${opts.hiringOrganization}">
       <span itemprop="industry">Quality Engineer, Engineering</span>
+      ${deptToken}
       <span itemprop="description" data-careersite-propertyid="description">${opts.descriptionHtml}</span>
     </div>
   </body></html>`;
@@ -186,6 +191,51 @@ describe('SuccessFactorsService — Career Site Builder reader', () => {
     expect(job.datePosted).toBe('2026-07-13');
     expect(job.description).toContain('Join us');
     expect(job.emails).toContain('jobs@northwind.example');
+    expect(job.department).toBeNull();
+  });
+
+  /**
+   * Spec 5129 — CSB renders department as a job-layout token
+   * (`data-careersite-propertyid="dept"`), not schema.org microdata.
+   */
+  it('maps the dept job-layout token to JobPostDto.department', async () => {
+    const pages = new Map<number, string>([
+      [
+        0,
+        tilePage([
+          tile(
+            '1385351300',
+            'Camden-Principal-Structural-Engineer-NJ-08101',
+            'Principal Structural Engineer',
+          ),
+        ]),
+      ],
+    ]);
+    const details = new Map<string, string>([
+      [
+        '1385351300',
+        detailPage({
+          title: 'Principal Structural Engineer',
+          city: 'Camden',
+          state: 'NJ',
+          country: 'US',
+          postalCode: '08101',
+          datePosted: 'Mon Jul 13 00:00:00 UTC 2026',
+          hiringOrganization: 'Northwind',
+          descriptionHtml: '<p>Stress analysis.</p>',
+          department: 'Civil Structural Engineering',
+        }),
+      ],
+    ]);
+    const svc = new TestSuccessFactorsService(pages, details);
+
+    const input = new ScraperInputDto();
+    input.companyUrl = 'https://careers.northwind.example/';
+    input.resultsWanted = 10;
+
+    const res = await svc.scrape(input);
+    expect(res.jobs).toHaveLength(1);
+    expect(res.jobs[0].department).toBe('Civil Structural Engineering');
   });
 
   it('paginates across tile pages and de-dupes repeated anchors', async () => {

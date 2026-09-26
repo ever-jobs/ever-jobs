@@ -1,0 +1,91 @@
+{
+  "data": {
+    "jobSearch": {
+      "pageInfo": { "nextCursor": "cursor-page-2" },
+      "results": [
+        {
+          "trackingKey": "t1",
+          "job": {
+            "source": { "name": "Acme Corp" },
+            "key": "aaa0000000000001",
+            "title": "Help Desk Technician",
+            "dateOnSite": "2026-09-23",
+            "datePublished": 1790121600000,
+            "description": { "html": "<p>On-site role. <b>No remote work</b>; you may occasionally work from home during storms.</p><p>Contact jobs@example.com</p>" },
+            "location": { "formatted": { "long": "New York, NY 10017" }, "city": "New York", "state": "NY", "country": "United States", "countryCode": "US", "postalCode": "10017" },
+            "attributes": [
+              { "key": "CF3CP", "label": "Full-time" },
+              { "key": "SYN01", "label": "Remote desktop support" },
+              { "key": "SYN02", "label": "In person" }
+            ],
+            "compensation": { "baseSalary": null, "estimated": { "baseSalary": { "unitOfWork": "HOUR", "range": { "min": 22.5, "max": 28 } } }, "formattedRange": null, "currencyCode": "USD" },
+            "employer": { "dpiUrl": null, "name": "Acme Corp", "companyProfile": { "pageUrl": "/cmp/Acme-Corp", "images": null, "description": null, "overview": null, "locations": null }, "relatedJobs": { "totalCount": 0 } }
+          }
+        },
+        {
+          "trackingKey": "t2",
+          "job": {
+            "source": { "name": "Globex" },
+            "key": "aaa0000000000002",
+            "title": "Senior Backend Engineer",
+            "dateOnSite": null,
+            "datePublished": "1790121600",
+            "description": { "html": "<p>Build APIs.</p>" },
+            "location": { "formatted": { "long": "Remote" }, "city": null, "state": null, "country": null, "countryCode": "US", "postalCode": null },
+            "attributes": [
+              { "key": "NJXCK", "label": "Contract" },
+              { "key": "DSQF7", "label": "Remote" }
+            ],
+            "compensation": { "baseSalary": { "unitOfWork": "YEAR", "range": { "min": 150000, "max": 185000 } }, "estimated": null, "formattedRange": "$150,000 - $185,000 a year", "currencyCode": "USD" },
+            "employer": { "dpiUrl": null, "name": "Globex", "companyProfile": { "pageUrl": "/cmp/Globex", "images": { "squareLogoUrl": "https://example.com/logo.png", "bannerUrl": "https://example.com/banner.png" }, "description": "Globex builds things.", "overview": { "revenue": "$100M to $500M (USD)", "employeeCount": "1,001 to 5,000", "industryName": "Technology" }, "locations": ["Springfield, IL"] }, "relatedJobs": { "totalCount": 3 } }
+          }
+        },
+        {
+          "trackingKey": "t3",
+          "job": {
+            "source": { "name": "Initech" },
+            "key": "aaa0000000000003",
+            "title": "Data Analyst",
+            "dateOnSite": "2026-09-20",
+            "datePublished": null,
+            "description": { "html": "<p>Analyze data.</p>" },
+            "location": { "formatted": { "long": "Remote in Austin, TX 78701" }, "city": "Austin", "state": "TX", "country": null, "countryCode": "US", "postalCode": "78701" },
+            "attributes": [ { "key": "75GKK", "label": "Part-time" } ],
+            "compensation": null,
+            "employer": { "dpiUrl": null, "name": "Initech", "companyProfile": null, "relatedJobs": null }
+          }
+        },
+        {
+          "trackingKey": "t4",
+          "job": {
+            "source": { "name": "Umbrella Ltd" },
+            "key": "aaa0000000000004",
+            "title": "Product Designer",
+            "dateOnSite": null,
+            "datePublished": null,
+            "description": { "html": "<p>Remote-friendly culture, 3 days in office.</p>" },
+            "location": { "formatted": { "long": "Hybrid work in London" }, "city": null, "state": null, "country": null, "countryCode": "GB", "postalCode": null },
+            "attributes": [ { "key": "SYN03", "label": "Hybrid work" }, { "key": "SYN04", "label": "Permanent" } ],
+            "compensation": { "baseSalary": null, "estimated": { "baseSalary": { "unitOfWork": "YEAR", "range": { "min": 55000, "max": 65000 } } }, "formattedRange": null, "currencyCode": "GBP" },
+            "employer": { "dpiUrl": null, "name": "Umbrella Ltd", "companyProfile": null, "relatedJobs": null }
+          }
+        },
+        {
+          "trackingKey": "t1-dup",
+          "job": {
+            "source": { "name": "Acme Corp" },
+            "key": "aaa0000000000001",
+            "title": "Help Desk Technician (duplicate key - must be dropped)",
+            "dateOnSite": null,
+            "datePublished": 1790121600000,
+            "description": { "html": "<p>dup</p>" },
+            "location": { "formatted": { "long": "New York, NY" }, "city": "New York", "state": "NY", "country": null, "countryCode": "US", "postalCode": null },
+            "attributes": [],
+            "compensation": null,
+            "employer": { "dpiUrl": null, "name": "Acme Corp", "companyProfile": null, "relatedJobs": null }
+          }
+        }
+      ]
+    }
+  }
+}

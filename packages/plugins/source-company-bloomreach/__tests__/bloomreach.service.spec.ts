@@ -86,7 +86,7 @@ describe('BloomreachService — Spec 139 / T04', () => {
       expect(ai?.jobUrl).toContain('job-boards.greenhouse.io/bloomreach/jobs/');
       // D-11 clean dept pass-through.
       expect(ai?.department).toBe('Marketing');
-      expect(ai?.location?.city).toBe('Slovakia');
+      expect(ai?.location?.city).toBeUndefined();
       expect(ai?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ai?.description).not.toContain('&lt;');
@@ -107,7 +107,7 @@ describe('BloomreachService — Spec 139 / T04', () => {
       // But the residual mojibake `Â` remains.
       expect(sec?.title).toMatch(/Â$/);
       expect(sec?.companyName).toBe('Bloomreach');
-      expect(sec?.location?.city).toBe('Remote, US');
+      expect(sec?.location?.city).toBeUndefined();
       expect(sec?.isRemote).toBe(true);
       // D-11 clean dept pass-through (with ampersand).
       expect(sec?.department).toBe('G&A - GIST');

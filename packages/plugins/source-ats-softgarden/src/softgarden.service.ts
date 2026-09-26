@@ -210,12 +210,14 @@ export class SoftgardenService implements IScraper {
       }
     }
 
+    const location = this.extractLocation(item);
     return new JobPostDto({
       id: `softgarden-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(item),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(item.datePosted),
       isRemote: this.detectRemote(item),

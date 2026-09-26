@@ -105,7 +105,7 @@ describe('SquarespaceService — Spec 088 / T04', () => {
       // First-listing dept clean — D-11 omitted.
       expect(eng?.department).toBe('Engineering (Domains & Apps)');
       expect(eng?.department).toBe(JOBS_PAGE_RAW.jobs[0].departments[0].name);
-      expect(eng?.location?.city).toBe('Dublin, Ireland');
+      expect(eng?.location?.city).toBe('Dublin');
       expect(eng?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(eng?.description).not.toContain('&lt;');
@@ -131,7 +131,7 @@ describe('SquarespaceService — Spec 088 / T04', () => {
       expect(community?.title.endsWith(' ')).toBe(false);
       expect(community?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 1);
       expect(community?.companyName).toBe('Squarespace');
-      expect(community?.location?.city).toBe('New York, NY');
+      expect(community?.location?.city).toBe('New York');
       expect(community?.isRemote).toBe(false);
       expect(community?.department).toBe('People');
       // Variant-22 lock for second listing — HTTP scheme.

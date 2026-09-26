@@ -165,6 +165,20 @@ describe('WorkAtAStartupService', () => {
     expect(software?.location?.city).toContain('Toronto');
     expect(software?.location?.city).toContain('Austin');
     expect(software?.location?.city).toContain(';');
+    expect(software?.locations).toMatchObject([
+      {
+        city: 'Toronto',
+        state: 'Ontario',
+        country: 'Canada',
+        text: 'Toronto, Ontario, CA',
+      },
+      {
+        city: 'Austin',
+        state: 'TX',
+        country: 'United States',
+        text: 'Austin, Texas, US',
+      },
+    ]);
   });
 
   it('falls back to list-only fields when the detail fetch fails', async () => {

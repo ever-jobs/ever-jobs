@@ -88,7 +88,7 @@ describe('ContentfulService — Spec 124 / T04', () => {
       );
       expect(sec?.jobUrl).toContain('job-boards.greenhouse.io/contentful/jobs/');
       expect(sec?.department).toBe('Security');
-      expect(sec?.location?.city).toBe('Berlin, Germany');
+      expect(sec?.location?.city).toBe('Berlin');
       expect(sec?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(sec?.description).not.toContain('&lt;');
@@ -101,7 +101,7 @@ describe('ContentfulService — Spec 124 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, Studio');
       expect(sse?.companyName).toBe('Contentful');
-      expect(sse?.location?.city).toBe('Denver, CO');
+      expect(sse?.location?.city).toBe('Denver');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('Engineering');
       expect(sse?.jobUrl).toBe(

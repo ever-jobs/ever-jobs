@@ -85,7 +85,7 @@ describe('AirbnbService — Spec 025 / T04', () => {
       expect(trust?.jobUrl).toBe(
         'https://boards.greenhouse.io/airbnb/jobs/7501234',
       );
-      expect(trust?.location?.city).toBe('San Francisco, CA');
+      expect(trust?.location?.city).toBe('San Francisco');
       expect(trust?.department).toBe('Engineering');
       expect(trust?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

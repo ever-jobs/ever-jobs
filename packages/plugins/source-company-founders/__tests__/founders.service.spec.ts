@@ -90,7 +90,7 @@ describe('FoundersService — Spec 148 / T04', () => {
       expect(tech?.jobUrl).toContain('boards.greenhouse.io/founders/jobs/');
       // D-11 clean dept pass-through.
       expect(tech?.department).toBe('Technicians');
-      expect(tech?.location?.city).toBe('Pasadena, CA');
+      expect(tech?.location?.city).toBe('Pasadena');
       expect(tech?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(tech?.description).not.toContain('&lt;');
@@ -101,7 +101,7 @@ describe('FoundersService — Spec 148 / T04', () => {
       expect(rec).toBeDefined();
       expect(rec?.title).toBe('Veterinary Receptionist');
       expect(rec?.companyName).toBe('Founders Green Animal Hospital');
-      expect(rec?.location?.city).toBe('Pasadena, CA');
+      expect(rec?.location?.city).toBe('Pasadena');
       expect(rec?.isRemote).toBe(false);
       expect(rec?.department).toBe('Reception');
       expect(rec?.jobUrl).toBe(

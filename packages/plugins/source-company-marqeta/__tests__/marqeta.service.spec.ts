@@ -94,7 +94,7 @@ describe('MarqetaService — Spec 084 / T04', () => {
       expect(cx?.department).toBe('Risk Operations');
       expect(cx?.department).toBe(JOBS_PAGE_RAW.jobs[0].departments[0].name);
       // Location — Marqeta's Oakland HQ.
-      expect(cx?.location?.city).toBe('Oakland, CA');
+      expect(cx?.location?.city).toBe('Oakland');
       expect(cx?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(cx?.description).not.toContain('&lt;');
@@ -125,7 +125,7 @@ describe('MarqetaService — Spec 084 / T04', () => {
       // with internal whitespace, commas.
       expect(fraud?.department).toBe('Risk, Fraud, Disputes Product');
       expect(fraud?.department).toBe(JOBS_PAGE_RAW.jobs[1].departments[0].name);
-      expect(fraud?.location?.city).toBe('Remote, USA');
+      expect(fraud?.location?.city).toBeUndefined();
       expect(fraud?.isRemote).toBe(true);
       // Variant-2 lock for second listing.
       expect(fraud?.jobUrl).toBe(

@@ -11,13 +11,7 @@ import {
   DescriptionFormat,
   Site,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { COROFLOT_RSS_URL, COROFLOT_DEFAULT_RESULTS, COROFLOT_HEADERS } from './coroflot.constants';
 import { CoroflotRssItem } from './coroflot.types';
 
@@ -165,13 +159,17 @@ export class CoroflotService implements IScraper {
     }
 
     const jobId = this.extractIdFromUrl(item.guid ?? item.link);
+    const locationParsed = parseLocationList([locationCity]);
 
     return new JobPostDto({
       id: `coroflot-${jobId}`,
       title: item.title,
       companyName,
       jobUrl: item.link,
-      location: new LocationDto({ city: locationCity }),
+      location: locationParsed.location,
+      ...(locationParsed.locations.length > 0
+        ? { locations: locationParsed.locations }
+        : {}),
       description,
       compensation: undefined,
       datePosted,

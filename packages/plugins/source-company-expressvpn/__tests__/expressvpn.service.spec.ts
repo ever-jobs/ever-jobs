@@ -95,7 +95,7 @@ describe('ExpressvpnService — Spec 145 / T04', () => {
       expect(crm?.jobUrl).toContain('job-boards.greenhouse.io/expressvpn/jobs/');
       // D-11 clean dept pass-through.
       expect(crm?.department).toBe('Marketing');
-      expect(crm?.location?.city).toBe('Remote, US');
+      expect(crm?.location?.city).toBeUndefined();
       expect(crm?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(crm?.description).not.toContain('&lt;');
@@ -116,7 +116,7 @@ describe('ExpressvpnService — Spec 145 / T04', () => {
       expect(cs?.companyName).toBe('ExpressVPN');
       // D-11 clean dept pass-through (with ampersand).
       expect(cs?.department).toBe('Data Engineering & Insights');
-      expect(cs?.location?.city).toBe('London, UK');
+      expect(cs?.location?.city).toBe('London');
       expect(cs?.isRemote).toBe(false);
       expect(cs?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/expressvpn/jobs/8524626002',

@@ -255,12 +255,14 @@ export class KekaService implements IScraper {
       format,
     );
 
+    const location = this.extractLocation(enriched);
     return new JobPostDto({
       id: `keka-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(enriched),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: enriched.datePosted ?? null,
       isRemote: enriched.isRemote ?? false,

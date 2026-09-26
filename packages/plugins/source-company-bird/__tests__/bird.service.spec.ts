@@ -89,7 +89,7 @@ describe('BirdService — Spec 153 / T04', () => {
       expect(co?.jobUrl).toContain('?gh_jid=');
       // D-11 clean dept pass-through.
       expect(co?.department).toBe('Operations');
-      expect(co?.location?.city).toBe('Detroit, MI');
+      expect(co?.location?.city).toBe('Detroit');
       expect(co?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(co?.description).not.toContain('&lt;');
@@ -104,7 +104,7 @@ describe('BirdService — Spec 153 / T04', () => {
       expect(vm?.title).toBe('Vehicle Mechanic - Bronx, NY');
       expect(vm?.title).not.toMatch(/\s$/);
       expect(vm?.companyName).toBe('Bird');
-      expect(vm?.location?.city).toBe('Bronx, NY');
+      expect(vm?.location?.city).toBe('Bronx');
       expect(vm?.isRemote).toBe(false);
       expect(vm?.department).toBe('Contractor');
       expect(vm?.jobUrl).toBe(

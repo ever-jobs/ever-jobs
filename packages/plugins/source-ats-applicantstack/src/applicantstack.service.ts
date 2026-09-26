@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -319,13 +320,15 @@ export class ApplicantStackService implements IScraper {
     if (!jobUrl) return null;
 
     const description = this.formatDescription(job.descriptionHtml ?? null, job.descriptionText ?? null, format);
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `applicantstack-${atsId}`,
       title,
       companyName: job.companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.datePosted),
       isRemote: this.detectRemote(job),
@@ -435,13 +438,7 @@ export class ApplicantStackService implements IScraper {
   private extractLocation(job: ApplicantStackJob): LocationDto | null {
     const city = this.cleanText(job.city);
     if (!city) return null;
-    // ApplicantStack rows split "City, ST" into a bare city in most tenants; when
-    // a "City, State" pair is present we split it so downstream consumers get both.
-    const parts = city.split(',').map((p) => p.trim()).filter(Boolean);
-    if (parts.length >= 2) {
-      return new LocationDto({ city: parts[0], state: parts[1] });
-    }
-    return new LocationDto({ city });
+    return parseLocationText(city).location;
   }
 
   /**

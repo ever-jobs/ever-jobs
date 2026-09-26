@@ -88,7 +88,7 @@ describe('BandwidthService — Spec 109 / T04', () => {
       );
       expect(ai?.jobUrl).toContain('job-boards.greenhouse.io/bandwidth/jobs/');
       expect(ai?.department).toBe('Network Engineering');
-      expect(ai?.location?.city).toBe('Raleigh, NC');
+      expect(ai?.location?.city).toBe('Raleigh');
       expect(ai?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ai?.description).not.toContain('&lt;');
@@ -101,7 +101,7 @@ describe('BandwidthService — Spec 109 / T04', () => {
       expect(sm).toBeDefined();
       expect(sm?.title).toBe('Senior Marketing Operations Manager');
       expect(sm?.companyName).toBe('Bandwidth');
-      expect(sm?.location?.city).toBe('Denver, CO');
+      expect(sm?.location?.city).toBe('Denver');
       expect(sm?.isRemote).toBe(false);
       expect(sm?.department).toBe('Marketing');
       expect(sm?.jobUrl).toBe(

@@ -8,6 +8,8 @@ export interface AshbyAddress {
     addressLocality?: string | null;
     addressRegion?: string | null;
     addressCountry?: string | null;
+    streetAddress?: string | null;
+    postalCode?: string | null;
   } | null;
 }
 

@@ -226,10 +226,8 @@ export class WorkAtAStartupService implements IScraper {
     );
     const plainText = description ? htmlToPlainText(description) : null;
 
-    const { location, isRemote, workFromHomeType } = this.buildLocation(
-      ld,
-      job.location,
-    );
+    const { location, locations, isRemote, workFromHomeType } =
+      this.buildLocation(ld, job.location);
 
     const compensation = resolveCompensation({
       structured: jobPostingLdToCompensation(ld?.baseSalary),
@@ -255,6 +253,7 @@ export class WorkAtAStartupService implements IScraper {
       companyUrl: waasCanonicalCompanyUrl(companySlug),
       ...(job.applyUrl ? { applyUrl: job.applyUrl } : {}),
       location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       ...(isRemote ? { isRemote: true } : {}),
       ...(workFromHomeType ? { workFromHomeType } : {}),
@@ -283,6 +282,7 @@ export class WorkAtAStartupService implements IScraper {
     listLocation: string | null | undefined,
   ): {
     location: LocationDto | null;
+    locations: LocationDto[];
     isRemote: boolean;
     workFromHomeType: string | null;
   } {
@@ -301,6 +301,7 @@ export class WorkAtAStartupService implements IScraper {
     const isRemote = parsed.remoteMentioned || !!ld?.remote;
     return {
       location: parsed.location,
+      locations: parsed.locations,
       isRemote,
       workFromHomeType: parsed.workFromHomeType,
     };
