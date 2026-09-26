@@ -52,6 +52,12 @@ The ladder nouns were red first (14 failing).
 
 ---
 
+## 2026-09-26 — Spec 1720 — Bayt listed in list mode; develop's cache-key tests follow `search-v2`
+
+- Spec 1710 (develop) rebuilt Bayt's search URL: an empty term now lists `/en/<market>/jobs/` instead of the malformed `/jobs/-jobs/` that made Spec 1720 flag it. The flag is removed; `naukri`, `stepstone` and `careeronestop` keep it. The audit test asserts Bayt carries no flag.
+- Develop's Spec 1690/1700 tests asserted the REST cache key with `endpoint: 'search'`; since Spec 1721 FR-19 the entry is the `search-v2` envelope, so they now use `SEARCH_CACHE_ENDPOINT`.
+
+
 ## 2026-09-26 — Merge — develop (Specs 1690-1713: crawl policy, multi-location search, exclusions, board fixes) into Specs 1720-1724
 
 - `searchJobsWithDiagnostics` runs both feature sets: list mode, `siteCategories`, the job ceiling, caller cancellation, NDJSON progress and the completeness record (Specs 1720/1721) now also cover multi-location searches (Spec 1700) and the crawl-policy scrape context with its deadline abort (Spec 1690). The deadline race rejects with `FanoutDeadlineError` and still calls the abort hook.

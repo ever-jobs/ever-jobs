@@ -42,9 +42,8 @@ const HOUR_MS = 60 * 60 * 1000;
   site: Site.BAYT,
   name: 'Bayt',
   category: 'regional',
-  // Spec 1720 — the term is a URL path segment (`/jobs/<term>-jobs/`); an
-  // empty term builds `/jobs/-jobs/`, which is not a listing page.
-  requiresSearchTerm: true,
+  // No `requiresSearchTerm` (Spec 1720): since Spec 1710 an empty term lists the
+  // market's `/en/<market>/jobs/` page, so list mode calls Bayt.
 })
 @Injectable()
 export class BaytService implements IScraper {

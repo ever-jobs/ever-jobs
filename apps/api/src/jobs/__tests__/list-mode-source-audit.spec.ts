@@ -247,17 +247,22 @@ describe('list-mode source audit (Spec 1720)', () => {
     // The exemption is doing real work: the known keyword-only plugins trip
     // the detector and are excused only by their flag.
     expect(exempt).toEqual(
-      expect.arrayContaining(['source-bayt', 'source-careeronestop', 'source-stepstone']),
+      expect.arrayContaining(['source-careeronestop', 'source-stepstone']),
     );
   });
 
   it('the keyword-only plugins declare requiresSearchTerm in their runtime metadata', () => {
-    for (const cls of [BaytService, NaukriService, StepStoneService, CareerOneStopService]) {
+    for (const cls of [NaukriService, StepStoneService, CareerOneStopService]) {
       const meta = Reflect.getMetadata(SOURCE_PLUGIN_METADATA, cls) as IPluginMetadata | undefined;
       expect({ plugin: cls.name, requiresSearchTerm: meta?.requiresSearchTerm }).toEqual({
         plugin: cls.name,
         requiresSearchTerm: true,
       });
     }
+  });
+
+  it('Bayt is listed in list mode: an empty term lists its market page (Spec 1710)', () => {
+    const meta = Reflect.getMetadata(SOURCE_PLUGIN_METADATA, BaytService) as IPluginMetadata | undefined;
+    expect(meta?.requiresSearchTerm).toBeUndefined();
   });
 });
