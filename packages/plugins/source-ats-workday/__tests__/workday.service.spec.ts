@@ -102,6 +102,9 @@ describe('WorkdayService — Spec 720 / T05', () => {
   describe('datePosted mapping', () => {
     it('maps relative postedOn labels to ISO dates (or null), never the raw label', async () => {
       mockPost.mockResolvedValueOnce({ data: clone(JOBS_PAGE) });
+      // The first posting's detail dates the board (its "Posted Today" row has
+      // today's startDate), so the other rows' labels count from that day.
+      mockGet.mockResolvedValueOnce({ data: { jobPostingInfo: { startDate: isoDateOf(new Date()) } } });
 
       const before = isoDateOf(new Date());
       const service = new WorkdayService();
@@ -261,7 +264,8 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(job.department).toBe('Engineering');
       expect(job.isRemote).toBe(true);
       expect(job.jobUrl).toBe(DETAIL.jobPostingInfo.externalUrl);
-      expect(job.datePosted).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      // DETAIL has no startDate, so its relative label has no board day to count from.
+      expect(job.datePosted).toBeNull();
     });
 
     it('honors HTML and Markdown description formats', async () => {
@@ -681,9 +685,14 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(job.datePosted).toBe('2026-05-20');
     });
 
-    it('falls back to the relative label when startDate is missing', async () => {
+    it('leaves a relative label undated when nothing dates the board (PR #99 review)', async () => {
       const job = await scrapeWith(detail({ startDate: null, postedOn: 'Posted Today' }));
-      expect(job.datePosted).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(job.datePosted).toBeNull();
+    });
+
+    it('still parses an absolute postedOn when nothing dates the board', async () => {
+      const job = await scrapeWith(detail({ startDate: null, postedOn: '2026-05-01' }));
+      expect(job.datePosted).toBe('2026-05-01');
     });
   });
 
@@ -927,7 +936,9 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(listLevel.jobUrl).toBe('https://acme.wd5.myworkdayjobs.com/Careers/job/Rockville-MD/Role-2_JR1002');
       expect(listLevel.location?.city).toBe('Rockville');
       expect(listLevel.location?.state).toBe('MD');
-      expect(listLevel.datePosted).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      // No served detail carries a startDate, so nothing dates the board's
+      // calendar and the row's relative label stays undated (PR #99 review).
+      expect(listLevel.datePosted).toBeNull();
     });
 
     it('gives a posting the same id whether or not it was enriched', async () => {
@@ -1254,9 +1265,11 @@ describe('WorkdayService — Spec 720 / T05', () => {
         expect(listLevel.isRemote).toBe(enriched.isRemote);
         expect(dedupKeyOf(listLevel)).toBe(dedupKeyOf(enriched));
         expect(dedupKeyOf(listLevel)).toBe('modernatx|senior specialist maintenance|norwood massachusetts united states');
-        // Absolute at both levels: the detail's startDate, the row's "Posted Today" on the recording day.
+        // The enriched copy has the detail's startDate. Alone, the list-level copy has only
+        // "Posted Today" and nothing to date the board's calendar, so it stays undated rather
+        // than counted from UTC's day (PR #99 review; the T17 suite covers a dated board).
         expect(enriched.datePosted).toBe('2026-09-25');
-        expect(listLevel.datePosted).toBe(enriched.datePosted);
+        expect(listLevel.datePosted).toBeNull();
         // Only the requisition country is ATS-declared.
         expect(enriched.countryCode).toBe('US');
         expect(listLevel.countryCode).toBeNull();
@@ -1498,16 +1511,17 @@ describe('WorkdayService — Spec 720 / T05', () => {
       expect(listLevel.map((job) => job.datePosted)).toEqual(listLevel.map((job) => START_DATE.get(job.id ?? '')));
     });
 
-    it('falls back to the UTC calendar when no enriched posting dates the board', async () => {
+    it('leaves relative dates unset when no enriched posting dates the board (PR #99 review)', async () => {
       // No detail request at all, or details without a startDate: nothing to count from.
+      // Counting from UTC's date would put Moderna's "Posted Today" on 2026-09-26 at
+      // 01:33 UTC, a day after its board's today (2026-09-25).
       const noDetails = await scrapeAt(RECORDED_AT, 0);
       serveDetails(DATES.details.map((d) => ({ ...d, startDate: null })));
       const noStartDate = await scrapeAt(RECORDED_AT, 5);
 
       for (const result of [noDetails, noStartDate]) {
         expect(result.jobs).toHaveLength(20);
-        expect(result.jobs[0].datePosted).toBe('2026-09-26');
-        expect(result.jobs[19].datePosted).toBe('2026-09-23');
+        expect(result.jobs.map((job) => job.datePosted)).toEqual(new Array(20).fill(null));
       }
     });
   });

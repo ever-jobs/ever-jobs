@@ -387,9 +387,12 @@ back from it. The row's label is used rather than the detail's, so a board
 midnight that passes between listing and enrichment does not shift the list
 labels' day. With no such posting in the scrape (`WORKDAY_MAX_DETAIL_FETCHES=0`,
 the time budget spent before the first detail, every detail failed or without
-a `startDate`, only "30+ Days Ago" rows) the label still counts from the UTC
-date and can be a day off during that window; the tenant's time zone is not in
-the CXS responses. Nothing reads the host time zone: the result is the same in
+a `startDate`, only "30+ Days Ago" rows) the board's day is unknown, and since
+PR #99's review a relative label then stays undated (`datePosted: null`)
+instead of counting from the UTC date: boards run from UTC−12 to UTC+14, so at
+every hour some board is a day off UTC's calendar, and the tenant's time zone
+is not in the CXS responses. An absolute `postedOn` is still parsed, and an
+enriched posting keeps its `startDate`. Nothing reads the host time zone: the result is the same in
 any zone (tested in six, UTC−7 to UTC+14, in a child process).
 
 **Verified on the recorded Moderna board** (`__tests__/fixtures/moderna-*.json`,

@@ -34,6 +34,7 @@ import {
   buildWorkdayUrl,
   buildWorkdayDetailUrl,
   parseWorkdayPostedOn,
+  workdayPostedOnDaysAgo,
   resolveWorkdayBoardToday,
   workdayListingKey,
   workdayListingRequisitionId,
@@ -382,9 +383,15 @@ export class WorkdayService implements IScraper {
    * The day this board's relative `postedOn` labels count back from (Spec 1736
    * T17): the board's own date, as its enriched postings give it (the search
    * row's label plus the detail's `startDate`), so a list-level posting gets
-   * the date its enriched copy would. Without such a posting (no detail
-   * request, none with a `startDate`, or only "30+ Days Ago" rows) it is the
-   * UTC date, which is right only while the board's calendar agrees with UTC's.
+   * the date its enriched copy would.
+   *
+   * `null` when no enriched posting dates the board (no detail request —
+   * `WORKDAY_MAX_DETAIL_FETCHES=0` or every detail failed — none with a
+   * `startDate`, or only "30+ Days Ago" rows). A board's calendar runs from
+   * UTC−12 to UTC+14, so at every hour of the day some boards are a day off
+   * UTC's; counting from UTC's date would then state a wrong day (at 01:33 UTC
+   * a US board's "Posted Today" is yesterday in UTC). Relative labels stay
+   * undated instead (PR #99 review).
    */
   private resolveLabelClock(
     listings: WorkdayJobListItem[],
@@ -392,7 +399,7 @@ export class WorkdayService implements IScraper {
     company: string,
     wdNumber: string,
     site: string,
-  ): Date {
+  ): Date | null {
     const now = new Date();
     const boardToday = resolveWorkdayBoardToday(
       listings.map((listing, index) => ({
@@ -401,7 +408,18 @@ export class WorkdayService implements IScraper {
       })),
       now,
     );
-    if (!boardToday) return now;
+    if (!boardToday) {
+      const relative = listings.filter(
+        (listing, index) => !details[index] && workdayPostedOnDaysAgo(listing.postedOn) !== null,
+      ).length;
+      if (relative > 0) {
+        this.logger.log(
+          `Workday: ${company} (wd${wdNumber}/${site}): no enriched posting dates this board's calendar; ` +
+          `${relative} list-level relative posted date(s) left unset rather than counted from UTC's`,
+        );
+      }
+      return null;
+    }
     if (boardToday.offsetDays !== 0) {
       this.logger.log(
         `Workday: ${company} (wd${wdNumber}/${site}) posts on a calendar one day ` +
@@ -418,7 +436,7 @@ export class WorkdayService implements IScraper {
     company: string,
     wdNumber: string,
     site: string,
-    labelClock: Date,
+    labelClock: Date | null,
     format?: DescriptionFormat,
   ): JobPostDto | null {
     const title = listing.title;
@@ -504,11 +522,17 @@ export class WorkdayService implements IScraper {
     // relative postedOn label. Both go through the validated ISO/relative parser,
     // so datePosted is always an absolute calendar date (or null). A list-level
     // posting has only the row's label, counted back from the board's own date
-    // (Spec 1736 T17: Workday's calendar, not UTC's); "Posted 30+ Days Ago"
-    // stays null rather than inventing a date (Spec 1736 §8.1).
+    // (Spec 1736 T17: Workday's calendar, not UTC's) — and left null when that
+    // date is unknown (PR #99 review); an absolute label is still parsed.
+    // "Posted 30+ Days Ago" stays null rather than inventing a date (§8.1).
+    const label = info?.postedOn ?? listing.postedOn;
     const datePosted =
       parseWorkdayPostedOn(info?.startDate) ??
-      parseWorkdayPostedOn(info?.postedOn ?? listing.postedOn, labelClock);
+      (labelClock
+        ? parseWorkdayPostedOn(label, labelClock)
+        : workdayPostedOnDaysAgo(label) === null
+          ? parseWorkdayPostedOn(label)
+          : null);
 
     // Compensation: Workday CXS has no structured pay field; recover the
     // pay-transparency range from the description body text.
