@@ -1,5 +1,9 @@
+import { spawnSync } from 'child_process';
+import * as path from 'path';
 import {
   parseWorkdayPostedOn,
+  resolveWorkdayBoardToday,
+  workdayPostedOnDaysAgo,
   parseWorkdaySlug,
   buildWorkdayUrl,
   buildWorkdayDetailUrl,
@@ -25,6 +29,7 @@ import {
   WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR,
   WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR,
 } from '../src/workday.constants';
+import type { TimeZoneResult } from './support/workday-dates-in-time-zones';
 
 /**
  * Spec 720 / T04 — `parseWorkdayPostedOn` branch-exhaustive unit tests.
@@ -133,6 +138,129 @@ describe('parseWorkdayPostedOn — Spec 720 / T04', () => {
       expect(parseWorkdayPostedOn('', NOW)).toBeNull();
       expect(parseWorkdayPostedOn('   ', NOW)).toBeNull();
     });
+  });
+});
+
+describe('workdayPostedOnDaysAgo — Spec 1736 T17', () => {
+  it('counts the days a relative label names', () => {
+    expect(workdayPostedOnDaysAgo('Posted Today')).toBe(0);
+    expect(workdayPostedOnDaysAgo('  posted   YESTERDAY ')).toBe(1);
+    expect(workdayPostedOnDaysAgo('Posted 1 Day Ago')).toBe(1);
+    expect(workdayPostedOnDaysAgo('Posted 3 Days Ago')).toBe(3);
+    expect(workdayPostedOnDaysAgo('posted 29 days ago')).toBe(29);
+  });
+
+  it('gives no count for an open bound, an absolute date, other text or nothing', () => {
+    expect(workdayPostedOnDaysAgo('Posted 30+ Days Ago')).toBeNull();
+    expect(workdayPostedOnDaysAgo('2026-09-25')).toBeNull();
+    expect(workdayPostedOnDaysAgo('Just Posted')).toBeNull();
+    expect(workdayPostedOnDaysAgo('Posted 99999999999999999999 Days Ago')).toBeNull();
+    expect(workdayPostedOnDaysAgo('')).toBeNull();
+    expect(workdayPostedOnDaysAgo(null)).toBeNull();
+    expect(workdayPostedOnDaysAgo(undefined)).toBeNull();
+  });
+});
+
+describe('parseWorkdayPostedOn around UTC midnight — Spec 1736 T17', () => {
+  it('counts back from the UTC date of `now`, either side of UTC midnight', () => {
+    const justBefore = new Date('2026-09-25T23:59:59.999Z');
+    const justAfter = new Date('2026-09-26T00:00:00.000Z');
+    expect(parseWorkdayPostedOn('Posted Today', justBefore)).toBe('2026-09-25');
+    expect(parseWorkdayPostedOn('Posted Today', justAfter)).toBe('2026-09-26');
+    expect(parseWorkdayPostedOn('Posted Yesterday', justAfter)).toBe('2026-09-25');
+    expect(parseWorkdayPostedOn('Posted 3 Days Ago', justAfter)).toBe('2026-09-23');
+    expect(parseWorkdayPostedOn('2026-09-25T22:30:00-04:00', justAfter)).toBe('2026-09-25');
+  });
+
+  it("counts back from the board's own date when given it", () => {
+    // Moderna at 00:42 UTC on the 26th: still the 25th in Massachusetts.
+    const board = resolveWorkdayBoardToday(
+      [{ postedOn: 'Posted Today', startDate: '2026-09-25' }],
+      new Date('2026-09-26T00:42:22Z'),
+    );
+    expect(board?.date).toBe('2026-09-25');
+    expect(parseWorkdayPostedOn('Posted Today', board?.reference)).toBe('2026-09-25');
+    expect(parseWorkdayPostedOn('Posted Yesterday', board?.reference)).toBe('2026-09-24');
+    expect(parseWorkdayPostedOn('Posted 2 Days Ago', board?.reference)).toBe('2026-09-23');
+    expect(parseWorkdayPostedOn('Posted 30+ Days Ago', board?.reference)).toBeNull();
+  });
+});
+
+describe('resolveWorkdayBoardToday — Spec 1736 T17', () => {
+  /** The recorded Moderna rows at 01:33 UTC on 2026-09-26: label and detail startDate. */
+  const MODERNA_AFTER_UTC_MIDNIGHT = [
+    { postedOn: 'Posted Today', startDate: '2026-09-25' },
+    { postedOn: 'Posted Yesterday', startDate: '2026-09-24' },
+    { postedOn: 'Posted 2 Days Ago', startDate: '2026-09-23' },
+    { postedOn: 'Posted 3 Days Ago', startDate: '2026-09-22' },
+  ];
+
+  it('dates a board behind UTC just after UTC midnight (US Eastern)', () => {
+    for (const now of ['2026-09-26T00:00:00Z', '2026-09-26T01:33:19Z', '2026-09-26T03:59:59Z']) {
+      expect(resolveWorkdayBoardToday(MODERNA_AFTER_UTC_MIDNIGHT, new Date(now))).toEqual({
+        date: '2026-09-25',
+        reference: new Date('2026-09-25T00:00:00Z'),
+        offsetDays: -1,
+        votes: 4,
+        samples: 4,
+      });
+    }
+  });
+
+  it("dates the same board on UTC's date just before UTC midnight", () => {
+    const board = resolveWorkdayBoardToday(MODERNA_AFTER_UTC_MIDNIGHT, new Date('2026-09-25T23:59:59Z'));
+    expect(board).toMatchObject({ date: '2026-09-25', offsetDays: 0, votes: 4, samples: 4 });
+  });
+
+  it('dates a board ahead of UTC (Tokyo, 05:00 on the 26th)', () => {
+    const board = resolveWorkdayBoardToday(
+      [
+        { postedOn: 'Posted Today', startDate: '2026-09-26' },
+        { postedOn: 'Posted 4 Days Ago', startDate: '2026-09-22T00:00:00.000+09:00' },
+      ],
+      new Date('2026-09-25T20:00:00Z'),
+    );
+    expect(board).toMatchObject({ date: '2026-09-26', offsetDays: 1, votes: 2, samples: 2 });
+    expect(board?.reference.toISOString()).toBe('2026-09-26T00:00:00.000Z');
+  });
+
+  it('returns null when no sample dates the board', () => {
+    const now = new Date('2026-09-26T00:42:22Z');
+    expect(resolveWorkdayBoardToday([], now)).toBeNull();
+    expect(
+      resolveWorkdayBoardToday(
+        [
+          { postedOn: 'Posted 30+ Days Ago', startDate: '2026-08-01' },
+          { postedOn: 'Posted Today', startDate: null },
+          { postedOn: 'Posted Today' },
+          { postedOn: 'Posted Today', startDate: 'September 25, 2026' },
+          { postedOn: 'Posted Today', startDate: '2026-02-30' },
+          { postedOn: null, startDate: '2026-09-25' },
+          { postedOn: '2026-09-25', startDate: '2026-09-25' },
+        ],
+        now,
+      ),
+    ).toBeNull();
+    expect(resolveWorkdayBoardToday(MODERNA_AFTER_UTC_MIDNIGHT, new Date(Number.NaN))).toBeNull();
+  });
+
+  it('ignores a sample more than a day off UTC (a repost), whatever it says', () => {
+    const now = new Date('2026-09-26T00:42:22Z');
+    expect(resolveWorkdayBoardToday([{ postedOn: 'Posted Today', startDate: '2026-08-03' }], now)).toBeNull();
+    expect(resolveWorkdayBoardToday([{ postedOn: 'Posted Yesterday', startDate: '2026-09-27' }], now)).toBeNull();
+    expect(
+      resolveWorkdayBoardToday([{ postedOn: 'Posted Today', startDate: '2026-08-03' }, ...MODERNA_AFTER_UTC_MIDNIGHT], now),
+    ).toMatchObject({ date: '2026-09-25', votes: 4, samples: 4 });
+  });
+
+  it("takes the date most samples give; a tie goes to UTC's date, then the earlier", () => {
+    const now = new Date('2026-09-26T00:42:22Z');
+    const behind = { postedOn: 'Posted Today', startDate: '2026-09-25' };
+    const onUtc = { postedOn: 'Posted Today', startDate: '2026-09-26' };
+    const ahead = { postedOn: 'Posted Today', startDate: '2026-09-27' };
+    expect(resolveWorkdayBoardToday([onUtc, behind, behind], now)).toMatchObject({ offsetDays: -1, votes: 2, samples: 3 });
+    expect(resolveWorkdayBoardToday([behind, onUtc], now)).toMatchObject({ offsetDays: 0, votes: 1, samples: 2 });
+    expect(resolveWorkdayBoardToday([ahead, behind], now)).toMatchObject({ offsetDays: -1, date: '2026-09-25' });
   });
 });
 
@@ -557,5 +685,89 @@ describe('resolveWorkdayScrapeTimeBudget', () => {
 
   it('never caps to 0, which would mean "no budget"', () => {
     expect(resolveWorkdayScrapeTimeBudget({ [FANOUT_DEADLINE_ENV_VAR]: '1' }).budgetMs).toBe(1);
+  });
+});
+
+/**
+ * Spec 1736 T17 — the date helpers in real host time zones. Jest hands a test
+ * file a copy of `process.env`, so `process.env.TZ = …` cannot move this
+ * process's zone; a plain Node child (ts-node) switches zone per run and
+ * reports each zone's UTC offset as the control that the switch happened.
+ */
+describe('Workday dates in real host time zones (child process) — Spec 1736 T17', () => {
+  const REPO_ROOT = path.resolve(__dirname, '../../../..');
+  const DRIVER = path.join(__dirname, 'support', 'workday-dates-in-time-zones.ts');
+
+  /** Zone and its `getTimezoneOffset()` on 2026-09-26 (minutes; positive = behind UTC). */
+  const ZONES: Array<[string, number]> = [
+    ['UTC', 0],
+    ['America/Los_Angeles', 420],
+    ['America/New_York', 240],
+    ['Europe/Berlin', -120],
+    ['Asia/Tokyo', -540],
+    ['Pacific/Kiritimati', -840],
+  ];
+
+  /** Recorded Moderna rows (label, detail startDate) at 01:33 UTC on 2026-09-26. */
+  const MODERNA = [
+    { postedOn: 'Posted Today', startDate: '2026-09-25' },
+    { postedOn: 'Posted Yesterday', startDate: '2026-09-24' },
+    { postedOn: 'Posted 2 Days Ago', startDate: '2026-09-23' },
+    { postedOn: 'Posted 3 Days Ago', startDate: '2026-09-22' },
+  ];
+  const LABELS = ['Posted Today', 'Posted Yesterday', 'Posted 2 Days Ago', 'Posted 3 Days Ago', 'Posted 30+ Days Ago'];
+  const COUNTING_FROM_25TH = ['2026-09-25', '2026-09-24', '2026-09-23', '2026-09-22', null];
+  const COUNTING_FROM_26TH = ['2026-09-26', '2026-09-25', '2026-09-24', '2026-09-23', null];
+
+  const CASES = [
+    // US Eastern board, a millisecond before and at UTC midnight: the 25th either way.
+    { now: '2026-09-25T23:59:59.999Z', samples: MODERNA, labels: LABELS },
+    { now: '2026-09-26T00:00:00.000Z', samples: MODERNA, labels: LABELS },
+    // Undated board: the UTC date of `now`.
+    { now: '2026-09-26T00:00:00.000Z', samples: [], labels: LABELS },
+    // Tokyo board at 05:00 on the 26th (20:00 UTC on the 25th).
+    { now: '2026-09-25T20:00:00.000Z', samples: [{ postedOn: 'Posted Today', startDate: '2026-09-26' }], labels: LABELS },
+  ];
+  const EXPECTED = [
+    { board: '2026-09-25', offsetDays: 0, dates: COUNTING_FROM_25TH },
+    { board: '2026-09-25', offsetDays: -1, dates: COUNTING_FROM_25TH },
+    { board: null, offsetDays: null, dates: COUNTING_FROM_26TH },
+    { board: '2026-09-26', offsetDays: 1, dates: COUNTING_FROM_26TH },
+  ];
+
+  it('gives the same board date and posted dates in six host time zones, UTC-7 to UTC+14', () => {
+    const run = spawnSync(
+      process.execPath,
+      ['-r', 'ts-node/register/transpile-only', '-r', 'tsconfig-paths/register', DRIVER],
+      {
+        cwd: REPO_ROOT,
+        env: { ...process.env, TS_NODE_PROJECT: path.join(REPO_ROOT, 'tsconfig.base.json'), TZ: 'UTC' },
+        input: JSON.stringify({ zones: ZONES.map(([zone]) => zone), cases: CASES }),
+        encoding: 'utf8',
+        timeout: 120_000,
+      },
+    );
+    expect(run.error).toBeUndefined();
+    expect({ status: run.status, stderr: run.status === 0 ? '' : run.stderr }).toEqual({ status: 0, stderr: '' });
+
+    const results = JSON.parse(run.stdout) as TimeZoneResult[];
+    // Control: every zone really took effect in the child.
+    expect(results.map((result) => [result.zone, result.utcOffsetMinutes])).toEqual(ZONES);
+    for (const result of results) {
+      expect([result.zone, result.cases]).toEqual([result.zone, EXPECTED]);
+    }
+  }, 120_000);
+
+  it('gives the same answers in this process as in the child', () => {
+    const here = CASES.map((testCase) => {
+      const now = new Date(testCase.now);
+      const board = resolveWorkdayBoardToday(testCase.samples, now);
+      return {
+        board: board?.date ?? null,
+        offsetDays: board?.offsetDays ?? null,
+        dates: testCase.labels.map((label) => parseWorkdayPostedOn(label, board?.reference ?? now)),
+      };
+    });
+    expect(here).toEqual(EXPECTED);
   });
 });

@@ -1298,6 +1298,220 @@ describe('WorkdayService — Spec 720 / T05', () => {
     });
   });
 
+  /**
+   * Spec 1736 T17 (§8.1, "Date"): Workday counts "Posted Today / Yesterday /
+   * N Days Ago" on the board's own calendar, not UTC's. Moderna's board is on
+   * US Eastern time, so from 00:00 UTC until midnight in Massachusetts every
+   * list-level posting came out one day later than its detail's `startDate`
+   * (20 of 20 in the 2026-09-26 00:42 UTC retest).
+   */
+  describe("list-level datePosted on the board's own calendar — Spec 1736 T17", () => {
+    const FIXTURES = path.join(__dirname, 'fixtures');
+    /** First listing page and every row's detail dates, recorded 2026-09-26 01:33 UTC (21:33 on the 25th in Massachusetts). */
+    const LIST = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'moderna-list-after-utc-midnight.json'), 'utf8'));
+    const DATES = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'moderna-detail-dates-after-utc-midnight.json'), 'utf8')) as {
+      recordedAt: string;
+      details: Array<{ externalPath: string; jobReqId: string; postedOn: string; startDate: string }>;
+    };
+    const RECORDED_AT = new Date(DATES.recordedAt);
+    const START_DATE = new Map(DATES.details.map((d) => [`wd-modernatx-${d.jobReqId}`, d.startDate]));
+
+    /** Serve a detail for each listed row: its `jobReqId`, `postedOn` and `startDate`. */
+    function serveDetails(
+      details: ReadonlyArray<{ externalPath: string; jobReqId: string; postedOn?: string | null; startDate?: string | null }>,
+    ) {
+      mockGet.mockImplementation(async (url: string) => {
+        const detail = details.find((d) => url.endsWith(d.externalPath));
+        if (!detail) throw new Error(`no recorded detail for ${url}`);
+        return {
+          data: {
+            jobPostingInfo: {
+              jobDescription: `<p>About ${detail.jobReqId}.</p>`,
+              jobReqId: detail.jobReqId,
+              postedOn: detail.postedOn,
+              startDate: detail.startDate,
+            },
+          },
+        };
+      });
+    }
+
+    function useClock(now: Date) {
+      // Fake the clock only: pagination and enrichment still run on real ticks.
+      jest.useFakeTimers({
+        now,
+        doNotFake: [
+          'hrtime',
+          'nextTick',
+          'performance',
+          'queueMicrotask',
+          'setImmediate',
+          'clearImmediate',
+          'setInterval',
+          'clearInterval',
+          'setTimeout',
+          'clearTimeout',
+        ],
+      });
+    }
+
+    async function scrapeAt(now: Date, maxDetails: number, page: unknown = clone(LIST), slug = 'modernatx:1:M_tx') {
+      useClock(now);
+      process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR] = String(maxDetails);
+      mockPost.mockResolvedValueOnce({ data: page });
+      return new WorkdayService().scrape({
+        siteType: [Site.WORKDAY],
+        companySlug: slug,
+        // One page: the recorded page is full (20 of 201), so a larger ask would page on.
+        resultsWanted: 20,
+      } as ScraperInputDto);
+    }
+
+    const savedTimeBudget = process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR];
+
+    beforeEach(() => {
+      // Detail pacing is mocked away; no budget so every allowed detail is fetched.
+      process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR] = '0';
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+      delete process.env[WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR];
+      if (savedTimeBudget === undefined) delete process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR];
+      else process.env[WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR] = savedTimeBudget;
+    });
+
+    it('records a board one calendar day behind UTC', () => {
+      expect(RECORDED_AT.toISOString()).toBe('2026-09-26T01:33:19.585Z');
+      expect(LIST.jobPostings).toHaveLength(20);
+      expect(DATES.details).toHaveLength(20);
+      // Each row's label counts back from 2026-09-25, the date in Massachusetts.
+      for (const [index, row] of LIST.jobPostings.entries()) {
+        const detail = DATES.details[index];
+        expect(detail.externalPath).toBe(row.externalPath);
+        expect(detail.postedOn).toBe(row.postedOn);
+        const daysAgo = { 'Posted Today': 0, 'Posted Yesterday': 1, 'Posted 2 Days Ago': 2, 'Posted 3 Days Ago': 3 }[
+          row.postedOn as string
+        ];
+        const implied = new Date(Date.parse(`${detail.startDate}T00:00:00Z`) + (daysAgo as number) * 86_400_000);
+        expect(implied.toISOString().slice(0, 10)).toBe('2026-09-25');
+      }
+    });
+
+    // The host time zone plays no part (Date's UTC fields only): the constants suite
+    // runs the date helpers in six real host time zones in a child process.
+    it('gives every list-level row the date its detail gives, at the recorded moment', async () => {
+      serveDetails(DATES.details);
+      const result = await scrapeAt(RECORDED_AT, 5);
+
+      expect(mockGet).toHaveBeenCalledTimes(5);
+      expect(result.jobs).toHaveLength(20);
+      const listLevel = result.jobs.filter((job) => job.description === null);
+      expect(listLevel).toHaveLength(15);
+      // The truth is each posting's own detail `startDate`, recorded for all 20 rows.
+      expect(result.jobs.map((job) => [job.id, job.datePosted])).toEqual(
+        result.jobs.map((job) => [job.id, START_DATE.get(job.id ?? '')]),
+      );
+      // Rows 6-20: six "Posted Yesterday", four "2 Days Ago", five "3 Days Ago".
+      expect(listLevel.map((job) => job.datePosted)).toEqual([
+        ...Array(6).fill('2026-09-24'),
+        ...Array(4).fill('2026-09-23'),
+        ...Array(5).fill('2026-09-22'),
+      ]);
+    });
+
+    it('agrees with the enriched copy of every posting, either side of UTC midnight', async () => {
+      // The recorded labels hold from 04:00 UTC on the 25th (midnight EDT) to 04:00 UTC on the 26th.
+      for (const now of ['2026-09-25T23:59:59Z', '2026-09-26T00:00:01Z', '2026-09-26T00:42:22Z', '2026-09-26T03:59:59Z']) {
+        serveDetails(DATES.details);
+        const enriched = await scrapeAt(new Date(now), 20);
+        const capped = await scrapeAt(new Date(now), 3);
+
+        expect(enriched.jobs.every((job) => job.description !== null)).toBe(true);
+        expect(capped.jobs.filter((job) => job.description === null)).toHaveLength(17);
+        const enrichedDate = new Map(enriched.jobs.map((job) => [job.id, job.datePosted]));
+        const disagreeing = capped.jobs.filter((job) => job.datePosted !== enrichedDate.get(job.id));
+        expect([now, disagreeing.map((job) => `${job.id}: ${job.datePosted} vs ${enrichedDate.get(job.id)}`)]).toEqual([now, []]);
+        jest.useRealTimers();
+      }
+    });
+
+    it('reads a board ahead of UTC (Tokyo, 05:00 on the 26th) the same way', async () => {
+      const page = {
+        total: 4,
+        jobPostings: [
+          { title: 'Analyst A', externalPath: '/job/Tokyo/Analyst-A_R100', postedOn: 'Posted Today', bulletFields: ['R100'] },
+          { title: 'Analyst B', externalPath: '/job/Tokyo/Analyst-B_R101', postedOn: 'Posted Today', bulletFields: ['R101'] },
+          { title: 'Analyst C', externalPath: '/job/Tokyo/Analyst-C_R102', postedOn: 'Posted Yesterday', bulletFields: ['R102'] },
+          { title: 'Analyst D', externalPath: '/job/Tokyo/Analyst-D_R103', postedOn: 'Posted 2 Days Ago', bulletFields: ['R103'] },
+        ],
+      };
+      serveDetails([
+        { externalPath: '/job/Tokyo/Analyst-A_R100', jobReqId: 'R100', postedOn: 'Posted Today', startDate: '2026-09-26' },
+        { externalPath: '/job/Tokyo/Analyst-B_R101', jobReqId: 'R101', postedOn: 'Posted Today', startDate: '2026-09-26' },
+      ]);
+
+      const result = await scrapeAt(new Date('2026-09-25T20:00:00Z'), 2, page, 'tokyoco:3:Careers');
+
+      expect(result.jobs.map((job) => [job.atsId, job.datePosted, job.description !== null])).toEqual([
+        ['R100', '2026-09-26', true],
+        ['R101', '2026-09-26', true],
+        ['R102', '2026-09-25', false],
+        ['R103', '2026-09-24', false],
+      ]);
+    });
+
+    it("counts from the row's label, not the detail's, when the board's midnight passes during enrichment", async () => {
+      // Listed at 03:59:50 UTC (23:59:50 EDT): the row still says "Posted Today";
+      // the detail, fetched after midnight in Massachusetts, already says "Posted Yesterday".
+      const page = {
+        total: 2,
+        jobPostings: [
+          { title: 'Role A', externalPath: '/job/Norwood/Role-A_R200', postedOn: 'Posted Today', bulletFields: ['R200'] },
+          { title: 'Role B', externalPath: '/job/Norwood/Role-B_R201', postedOn: 'Posted Yesterday', bulletFields: ['R201'] },
+        ],
+      };
+      serveDetails([
+        { externalPath: '/job/Norwood/Role-A_R200', jobReqId: 'R200', postedOn: 'Posted Yesterday', startDate: '2026-09-25' },
+      ]);
+
+      const result = await scrapeAt(new Date('2026-09-26T04:00:10Z'), 1, page, 'acme:1:Careers');
+
+      expect(result.jobs.map((job) => [job.atsId, job.datePosted])).toEqual([
+        ['R200', '2026-09-25'],
+        ['R201', '2026-09-24'],
+      ]);
+    });
+
+    it("ignores a detail whose startDate is more than a day off its row's label (a repost)", async () => {
+      const page = clone(LIST);
+      const details = DATES.details.map((d) => ({ ...d }));
+      // The newest row is a repost: "Posted Today" on the list, the original start date in the detail.
+      details[0].startDate = '2026-08-03';
+
+      serveDetails(details);
+      const result = await scrapeAt(RECORDED_AT, 4, page);
+
+      expect(result.jobs[0].datePosted).toBe('2026-08-03');
+      const listLevel = result.jobs.filter((job) => job.description === null);
+      expect(listLevel).toHaveLength(16);
+      expect(listLevel.map((job) => job.datePosted)).toEqual(listLevel.map((job) => START_DATE.get(job.id ?? '')));
+    });
+
+    it('falls back to the UTC calendar when no enriched posting dates the board', async () => {
+      // No detail request at all, or details without a startDate: nothing to count from.
+      const noDetails = await scrapeAt(RECORDED_AT, 0);
+      serveDetails(DATES.details.map((d) => ({ ...d, startDate: null })));
+      const noStartDate = await scrapeAt(RECORDED_AT, 5);
+
+      for (const result of [noDetails, noStartDate]) {
+        expect(result.jobs).toHaveLength(20);
+        expect(result.jobs[0].datePosted).toBe('2026-09-26');
+        expect(result.jobs[19].datePosted).toBe('2026-09-23');
+      }
+    });
+  });
+
   describe('remote location underscore normalization — Spec 5025', () => {
     it('detects isRemote when the only location label is slugified ("Remote_USA")', async () => {
       mockPost.mockResolvedValueOnce({

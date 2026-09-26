@@ -70,3 +70,10 @@
    detail (`__tests__/fixtures/moderna-*.json`), each new rule
    mutation-checked. Docs: the batch ships enabled (owner), the kill switch is
    an optional emergency lever; consumers key Workday postings on `id`.
+6. **List-level dates on the board's calendar (2026-09-26; T17, spec §8.1):**
+   in `source-ats-workday`, `resolveWorkdayBoardToday` dates the board from
+   the scrape's enriched postings (row label + detail `startDate`) and the
+   relative labels count back from that date instead of UTC's. Tests on a
+   recording of Moderna's first page and all 20 details taken after UTC
+   midnight, and in six host time zones through a ts-node child process
+   (Jest sandboxes `process.env`, so `TZ` cannot move inside a test).

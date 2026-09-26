@@ -7,7 +7,7 @@
 | Status | implemented |
 | Owner | agent (lane ej-sources) |
 | Created | 2026-09-24 |
-| Last updated | 2026-09-26 (review round 2: §7 shipped enabled, T16; §8.1 one identity per posting, T12–T14; §8.2 budget vs fan-out deadline, T15) |
+| Last updated | 2026-09-26 (review round 2: §7 shipped enabled, T16; §8.1 one identity per posting, T12–T14; §8.2 budget vs fan-out deadline, T15; §8.1 list-level dates on the board's calendar, T17) |
 | Related specs | 1735 (pipeline), 5004 (Workday detail enrichment), 5084 (Workday pagination guard), 5025 (Workday remote locations), 1737 (quant firms) |
 
 ## 1. Problem statement
@@ -367,6 +367,30 @@ inventing one. A list-level posting has only the row's label. On the day the
 Moderna fixtures were recorded both levels give `2026-09-25`; for a repost
 the row's label can be newer than `startDate`, which is one reason to key on
 `id` (below).
+
+**Date — the board's calendar (T17).** Workday counts "Posted Today /
+Yesterday / N Days Ago" on the board's own calendar, not UTC's. The label was
+counted back from the UTC date, so while the two calendars disagree every
+list-level posting came out one day off its enriched copy: Moderna (US
+Eastern) is a day behind UTC from 00:00 to 04:00 UTC, and the retest at
+00:42 UTC on 2026-09-26 had 20 of 20 list-level postings one day late. A
+recording at 01:33 UTC (`__tests__/fixtures/moderna-*-after-utc-midnight.json`:
+the first listing page and every row's detail) shows all 20 labels counting
+from 2026-09-25, the Madrid and Oxford postings included, so the calendar is
+the tenant's, not the posting's location's. The adapter now dates the board
+from its enriched postings (`resolveWorkdayBoardToday`): each one whose row
+label names a day count and whose detail has an ISO `startDate` gives
+`startDate + N days` as the board's today; samples more than a day off UTC's
+date (a repost) are ignored, the date most samples give wins (a tie goes to
+UTC's date, then the earlier), and every relative label of the scrape counts
+back from it. The row's label is used rather than the detail's, so a board
+midnight that passes between listing and enrichment does not shift the list
+labels' day. With no such posting in the scrape (`WORKDAY_MAX_DETAIL_FETCHES=0`,
+the time budget spent before the first detail, every detail failed or without
+a `startDate`, only "30+ Days Ago" rows) the label still counts from the UTC
+date and can be a day off during that window; the tenant's time zone is not in
+the CXS responses. Nothing reads the host time zone: the result is the same in
+any zone (tested in six, UTC−7 to UTC+14, in a child process).
 
 **Verified on the recorded Moderna board** (`__tests__/fixtures/moderna-*.json`,
 recorded 2026-09-25, description body replaced by a stand-in): the enriched

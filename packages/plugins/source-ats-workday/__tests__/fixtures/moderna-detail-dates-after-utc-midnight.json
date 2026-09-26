@@ -1,0 +1,126 @@
+{
+  "recordedAt": "2026-09-26T01:33:19.585Z",
+  "note": "Moderna public Workday board (modernatx:1:M_tx), first listing page and the detail of each of its 20 rows, recorded 2026-09-26 01:33-01:34 UTC (21:33 in Massachusetts on 2026-09-25). Per row: the detail postedOn label and the absolute startDate.",
+  "details": [
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Principal-Research-Associate--Clinical-Biomarker-Laboratory_R19772",
+      "jobReqId": "R19772",
+      "postedOn": "Posted Today",
+      "startDate": "2026-09-25"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Specialist--Quality-Control_R19479-1",
+      "jobReqId": "R19479",
+      "postedOn": "Posted Today",
+      "startDate": "2026-09-25"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Sr-Specialist--Maintenance_R19827",
+      "jobReqId": "R19827",
+      "postedOn": "Posted Today",
+      "startDate": "2026-09-25"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Scientist--Process-Development--Formulation-_R19218",
+      "jobReqId": "R19218",
+      "postedOn": "Posted Yesterday",
+      "startDate": "2026-09-24"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Director--CMC-Stability_R19494",
+      "jobReqId": "R19494",
+      "postedOn": "Posted Yesterday",
+      "startDate": "2026-09-24"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Sr-Research-Associate--Clinical-Biomarker-Laboratory--Flow-Cytometry_R19590",
+      "jobReqId": "R19590",
+      "postedOn": "Posted Yesterday",
+      "startDate": "2026-09-24"
+    },
+    {
+      "externalPath": "/job/Cambridge-Massachusetts/Linux-Engineer_R19825",
+      "jobReqId": "R19825",
+      "postedOn": "Posted Yesterday",
+      "startDate": "2026-09-24"
+    },
+    {
+      "externalPath": "/job/Madrid---Spain/Director--Product-Owner_R19816",
+      "jobReqId": "R19816",
+      "postedOn": "Posted Yesterday",
+      "startDate": "2026-09-24"
+    },
+    {
+      "externalPath": "/job/Oxford---England/Scientist--Clinical-Biomarker-Laboratory--Immuno-Assays---Cell-Based_R19336",
+      "jobReqId": "R19336",
+      "postedOn": "Posted Yesterday",
+      "startDate": "2026-09-24"
+    },
+    {
+      "externalPath": "/job/Madrid---Spain/Quality-Control-Associate--Microbiology_R19477-1",
+      "jobReqId": "R19477",
+      "postedOn": "Posted Yesterday",
+      "startDate": "2026-09-24"
+    },
+    {
+      "externalPath": "/job/Cambridge-Massachusetts/Sr-Scientist--Antibody-Discovery-and-Engineering_R19715",
+      "jobReqId": "R19715",
+      "postedOn": "Posted Yesterday",
+      "startDate": "2026-09-24"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Associate-II--Quality-Control_R19807",
+      "jobReqId": "R19807",
+      "postedOn": "Posted 2 Days Ago",
+      "startDate": "2026-09-23"
+    },
+    {
+      "externalPath": "/job/Seattle-Washington/Senior-Infrastructure-Automation-Engineer_R19761",
+      "jobReqId": "R19761",
+      "postedOn": "Posted 2 Days Ago",
+      "startDate": "2026-09-23"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Manufacturing-Associate-II_R19778-1",
+      "jobReqId": "R19778",
+      "postedOn": "Posted 2 Days Ago",
+      "startDate": "2026-09-23"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Technician-III--Utilities-Maintenance_R19658",
+      "jobReqId": "R19658",
+      "postedOn": "Posted 2 Days Ago",
+      "startDate": "2026-09-23"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Principal-Engineer--HVAC--Mechanical--and-Sustainability_R18856-1",
+      "jobReqId": "R18856",
+      "postedOn": "Posted 3 Days Ago",
+      "startDate": "2026-09-22"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Associate-II--Quality-Control_R19811",
+      "jobReqId": "R19811",
+      "postedOn": "Posted 3 Days Ago",
+      "startDate": "2026-09-22"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Specialist--Quality-Control_R19810",
+      "jobReqId": "R19810",
+      "postedOn": "Posted 3 Days Ago",
+      "startDate": "2026-09-22"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Specialist--Quality-Control_R19809",
+      "jobReqId": "R19809",
+      "postedOn": "Posted 3 Days Ago",
+      "startDate": "2026-09-22"
+    },
+    {
+      "externalPath": "/job/Norwood-Massachusetts/Specialist--Quality-Control_R19808",
+      "jobReqId": "R19808",
+      "postedOn": "Posted 3 Days Ago",
+      "startDate": "2026-09-22"
+    }
+  ]
+}

@@ -438,6 +438,37 @@ function isRealUtcDate(year: number, month: number, day: number): boolean {
 }
 
 /**
+ * An ISO-shaped absolute date as the epoch ms of that calendar date's UTC
+ * midnight, the date taken as written (any time part and zone ignored).
+ * Null for anything else or an impossible date. TZ-independent.
+ */
+function isoCalendarDateMs(value: string | null | undefined): number | null {
+  if (typeof value !== 'string') return null;
+  const isoMatch = value.trim().match(ISO_DATE_RE);
+  if (!isoMatch) return null;
+  const [year, month, day] = isoMatch.slice(1, 4).map(Number);
+  return isRealUtcDate(year, month, day) ? Date.UTC(year, month - 1, day) : null;
+}
+
+/**
+ * How many days before the board's "today" a relative Workday `postedOn`
+ * label counts: "Posted Today" -> 0, "Posted Yesterday" -> 1, "Posted N Day(s)
+ * Ago" -> N. Null for the open "Posted N+ Days Ago" (a lower bound only), an
+ * absolute date, any other text, and nullish input. Case-insensitive and
+ * tolerant of irregular whitespace. Never throws.
+ */
+export function workdayPostedOnDaysAgo(postedOn?: string | null): number | null {
+  if (typeof postedOn !== 'string') return null;
+  const normalized = postedOn.trim().replace(/\s+/g, ' ').toLowerCase();
+  if (normalized === 'posted today') return 0;
+  if (normalized === 'posted yesterday') return 1;
+  const relativeMatch = normalized.match(/^posted (\d+)(\+)? days? ago$/);
+  if (!relativeMatch || relativeMatch[2]) return null;
+  const days = Number(relativeMatch[1]);
+  return Number.isSafeInteger(days) ? days : null;
+}
+
+/**
  * Parse Workday's `postedOn` field into an ISO calendar date (YYYY-MM-DD).
  *
  * The job-list endpoint returns relative human-readable labels rather than
@@ -446,6 +477,13 @@ function isRealUtcDate(year: number, month: number, day: number): boolean {
  * "Posted 30+ Days Ago". Matching is case-insensitive and tolerant of
  * irregular whitespace. Day arithmetic is UTC-based off `now` (defaults to
  * the current time) so results do not drift with the host timezone.
+ *
+ * `now` is the day the label counts back from. Workday counts on the board's
+ * own calendar, which is not UTC's for part of every day (Moderna, on US
+ * Eastern time, is a day behind UTC from 00:00 to 04:00 UTC): pass the
+ * board's date from {@link resolveWorkdayBoardToday} when there is one
+ * (Spec 1736 T17). The default, the UTC date of the current time, is right
+ * only while the board's calendar and UTC's agree.
  *
  * - "Posted Today"        -> ISO date of `now`
  * - "Posted Yesterday"    -> `now` minus 1 day
@@ -467,34 +505,86 @@ export function parseWorkdayPostedOn(
 ): string | null {
   if (!postedOn) return null;
 
-  const normalized = postedOn.trim().replace(/\s+/g, ' ').toLowerCase();
-  if (!normalized) return null;
-
-  if (normalized === 'posted today') {
-    return toIsoDate(now);
+  const daysAgo = workdayPostedOnDaysAgo(postedOn);
+  if (daysAgo !== null) {
+    return toIsoDate(new Date(now.getTime() - daysAgo * MS_PER_DAY));
   }
 
-  if (normalized === 'posted yesterday') {
-    return toIsoDate(new Date(now.getTime() - MS_PER_DAY));
-  }
+  const absolute = isoCalendarDateMs(postedOn);
+  return absolute === null ? null : toIsoDate(new Date(absolute));
+}
 
-  const relativeMatch = normalized.match(/^posted (\d+)(\+)? days? ago$/);
-  if (relativeMatch) {
-    // "N+ Days Ago" is a lower bound only — no exact date can be derived.
-    if (relativeMatch[2]) return null;
-    const days = parseInt(relativeMatch[1], 10);
-    return toIsoDate(new Date(now.getTime() - days * MS_PER_DAY));
-  }
+/** One enriched posting's evidence for its board's calendar (Spec 1736 T17). */
+export interface WorkdayBoardDateSample {
+  /** The relative label, preferably the search row's (the list-level labels count from the same day). */
+  readonly postedOn?: string | null;
+  /** The detail's absolute `startDate`. */
+  readonly startDate?: string | null;
+}
 
-  const isoMatch = postedOn.trim().match(ISO_DATE_RE);
-  if (isoMatch) {
-    const [, year, month, day] = isoMatch;
-    if (isRealUtcDate(Number(year), Number(month), Number(day))) {
-      return `${year}-${month}-${day}`;
-    }
-  }
+/** The board's calendar date that its relative `postedOn` labels count back from. */
+export interface WorkdayBoardToday {
+  /** The board's date, `YYYY-MM-DD`. */
+  readonly date: string;
+  /** UTC midnight of {@link date}: the `now` to hand {@link parseWorkdayPostedOn}. */
+  readonly reference: Date;
+  /** {@link date} minus the UTC date of `now`: -1, 0 or +1. */
+  readonly offsetDays: number;
+  /** Samples that dated the board to {@link date}. */
+  readonly votes: number;
+  /** Samples that dated the board at all (a day-count label and a valid `startDate`, within a day of UTC). */
+  readonly samples: number;
+}
 
-  return null;
+/**
+ * Date a Workday board's calendar from its enriched postings (Spec 1736 T17).
+ *
+ * Workday resolves "Posted Today / Yesterday / N Days Ago" on the board's own
+ * calendar, not UTC's. The recorded Moderna board (US Eastern) at 01:33 UTC on
+ * 2026-09-26 labelled a posting whose detail `startDate` is 2026-09-25
+ * "Posted Today", and its Madrid and Oxford postings the same way, so the
+ * calendar is the tenant's, not the posting's location's. Counting the list
+ * labels back from the UTC date put every list-level posting one day late
+ * while the enriched copy (from `startDate`) was right.
+ *
+ * Each enriched posting whose label names a day count and whose detail has an
+ * ISO `startDate` dates the board: `startDate + N days` is the board's today.
+ * A board's calendar is at most one day off UTC's (UTC−12 … UTC+14), so a
+ * sample further off is a repost or other oddity and is ignored. The date most
+ * samples give wins; a tie goes to the one closest to UTC's date, then the
+ * earlier. Returns null when no sample dates the board — the caller then keeps
+ * the UTC date. `now` only bounds and ranks the samples; the result is
+ * independent of the host time zone. Never throws.
+ */
+export function resolveWorkdayBoardToday(
+  samples: ReadonlyArray<WorkdayBoardDateSample>,
+  now: Date = new Date(),
+): WorkdayBoardToday | null {
+  const utcToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  if (Number.isNaN(utcToday)) return null;
+
+  const votes = new Map<number, number>();
+  let usable = 0;
+  for (const sample of samples) {
+    const daysAgo = workdayPostedOnDaysAgo(sample.postedOn);
+    if (daysAgo === null) continue;
+    const start = isoCalendarDateMs(sample.startDate);
+    if (start === null) continue;
+    const offsetDays = Math.round((start + daysAgo * MS_PER_DAY - utcToday) / MS_PER_DAY);
+    if (!(offsetDays >= -1 && offsetDays <= 1)) continue;
+    usable++;
+    votes.set(offsetDays, (votes.get(offsetDays) ?? 0) + 1);
+  }
+  if (usable === 0) return null;
+
+  const [offsetDays, count] = [...votes.entries()].sort(
+    ([offsetA, votesA], [offsetB, votesB]) =>
+      votesB - votesA || Math.abs(offsetA) - Math.abs(offsetB) || offsetA - offsetB,
+  )[0];
+  const reference = new Date(utcToday + offsetDays * MS_PER_DAY);
+  const date = toIsoDate(reference);
+  if (date === null) return null;
+  return { date, reference, offsetDays, votes: count, samples: usable };
 }
 
 /**
