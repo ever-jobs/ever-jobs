@@ -205,7 +205,7 @@ export class PulsespaceService implements IScraper, OnModuleDestroy {
     const ready = waitSelector ?? 'main';
 
     if (page) {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
+      await BrowserPool.navigate(page, url, { waitUntil: 'domcontentloaded', timeout });
       await page
         .waitForSelector(ready, {
           timeout: PULSESPACE_READY_TIMEOUT_SECONDS * 1000,
@@ -216,7 +216,7 @@ export class PulsespaceService implements IScraper, OnModuleDestroy {
 
     const p = await BrowserPool.getPage({ stealth: true, headful: true });
     try {
-      await p.goto(url, { waitUntil: 'domcontentloaded', timeout });
+      await BrowserPool.navigate(p, url, { waitUntil: 'domcontentloaded', timeout });
       await p
         .waitForSelector(ready, {
           timeout: PULSESPACE_READY_TIMEOUT_SECONDS * 1000,

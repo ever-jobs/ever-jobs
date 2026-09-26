@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { getRequestContext, runWithRequestContext } from '../../context/request-context';
 import { readCrawlPolicyEnv } from './env';
 import { normalizeHostName } from './policy-schema';
+import { createScrapeProxyPin } from './proxy-selector';
 import { explainCrawlPolicy, resetCrawlPolicyLayerCache } from './resolve';
 import { CrawlPolicyEnvConfig, CrawlPolicyOverride, ResolvedCrawlPolicy, ScrapeContext } from './types';
 
@@ -17,6 +18,10 @@ const logger = new Logger('CrawlPolicy');
  * them. When both carry an `AbortSignal`, the inner scope sees one that aborts
  * when EITHER does, so an outer deadline still cancels inner work. Contexts are
  * isolated per async chain: concurrent scrapes never see each other's context.
+ *
+ * A new scrape (no parent context, and `ctx` brings no `proxyPin`) gets a fresh
+ * `per-scrape` proxy pin (Spec 1690 §4.4), shared by every `HttpClient` the
+ * scrape uses; a nested context inherits its parent's pin.
  */
 export function runWithScrapeContext<T>(ctx: ScrapeContext, fn: () => T): T {
   const parent = getRequestContext()?.scrape;
@@ -24,6 +29,7 @@ export function runWithScrapeContext<T>(ctx: ScrapeContext, fn: () => T): T {
   if (parent?.signal && ctx.signal && parent.signal !== ctx.signal) {
     scrape.signal = anySignal([parent.signal, ctx.signal]);
   }
+  if (!scrape.proxyPin) scrape.proxyPin = createScrapeProxyPin();
   return runWithRequestContext({ scrape }, fn);
 }
 

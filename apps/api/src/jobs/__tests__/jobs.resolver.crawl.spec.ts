@@ -175,6 +175,12 @@ describe('SearchJobsInput under the global ValidationPipe (Spec 1690)', () => {
     });
   });
 
+  it('bounds crawl.retries at MAX_CRAWL_RETRIES (10), like the REST DTO', async () => {
+    const out = (await pipe.transform({ searchTerm: 'x', crawl: { retries: 10 } }, args)) as SearchJobsInput;
+    expect(out.crawl?.retries).toBe(10);
+    await expect(pipe.transform({ searchTerm: 'x', crawl: { retries: 11 } }, args)).rejects.toMatchObject({ status: 400 });
+  });
+
   it('accepts GraphQL nulls for crawl fields', async () => {
     const out = (await pipe.transform({ searchTerm: 'x', crawl: { retries: null, discovery: 'auto' } }, args)) as SearchJobsInput;
     expect(toCrawlPolicyDto(out.crawl)).toEqual(Object.assign(new CrawlPolicyDto(), { discovery: 'auto' }));

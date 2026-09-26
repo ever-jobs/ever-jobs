@@ -27,6 +27,7 @@
 17. [Inspecting the effective policy: `GET /api/sources/:site/crawl-policy`](#17-inspecting-the-effective-policy)
 18. [Troubleshooting](#18-troubleshooting)
 19. [For plugin authors](#19-for-plugin-authors)
+20. [Browser pages (`BrowserPool`)](#20-browser-pages-browserpool)
 
 ---
 
@@ -78,12 +79,13 @@ With no configuration at all (preset `polite`):
 | Bulk ATS APIs | `api.greenhouse.io` / `boards-api.greenhouse.io` 16 in flight, `api.lever.co` / `api.ashbyhq.com` / `api.smartrecruiters.com` 12, no gap |
 | Softy (plugin manifest) | one bucket for all of `softy.pro`, **1** in flight, **1 s** between requests |
 | Proxies | none, unless configured; when a list is configured, one stable proxy per host bucket (`per-host`) |
-| Retries | 2, on `429, 502, 503, 504`, exponential back-off from 1 s (cap 30 s) with full jitter; a `429`/`503` waits **at least 5 s**, then 10 s (`throttleRetryDelayMs`) |
+| Retries | 2 (**at most 10** at any layer), on `429, 502, 503, 504`, exponential back-off from 1 s (cap 30 s) with full jitter; a `429`/`503` waits **at least 5 s**, then 10 s (`throttleRetryDelayMs`); no retry follows its failure in under 100 ms |
 | `Retry-After` | honoured; never retried earlier than asked; over **60 s** → give up and cool the whole bucket for the full period |
 | robots.txt | not fetched (`off`) |
 | Private networks | refused (loopback, RFC 1918, link-local, CGNAT, cluster names…) |
 | Discovery (Softy) | `auto`: sitemap first, list pages as fallback |
 | Search deadline | abandoned sources have their queued and in-flight requests cancelled |
+| Browser pages | navigations through `BrowserPool.navigate` get the same egress guard, robots.txt, per-host pacing, deadline abort and `429`/`503` back-off (§20) |
 
 These defaults were sized so a default search still finishes inside its 120 s deadline:
 an offline simulation of 800 Greenhouse requests plus a 100-wide fan-out to one ordinary
@@ -125,6 +127,7 @@ above it.
 | builtin bulk-host limits | on | **off** | on |
 | plugin manifests (`@SourcePlugin({ crawl })`) | on | **off** | on |
 | `DEFAULT_PROXIES` as fallback list | on | **off** | on |
+| browser navigations under the policy (§20) | on | **off** (plain `page.goto`) | on |
 
 > **`strict` still applies the builtin bulk-host limits and plugin manifests** (layers 3
 > and 4 sit above the preset). For "one request per domain per second, everywhere,
@@ -212,7 +215,7 @@ the CLI run) after changing it. The `SOFTY_*` variables are read per scrape.
 | `EVER_JOBS_CRAWL_JITTER_MS` | int | `0` |
 | `EVER_JOBS_CRAWL_MAX_QUEUE_WAIT_MS` | int, `0` = no limit | `0` |
 | `EVER_JOBS_CRAWL_ADAPTIVE` | bool | `true` |
-| `EVER_JOBS_CRAWL_RETRIES` | int | `2` |
+| `EVER_JOBS_CRAWL_RETRIES` | int `0`–`10` (a larger value is clamped to `10`, with a warning; §11) | `2` |
 | `EVER_JOBS_CRAWL_RETRY_STATUSES` | comma list or JSON array of 100–599; `none` = no status retried | `429,502,503,504` |
 | `EVER_JOBS_CRAWL_RETRY_BACKOFF` | `exponential` \| `linear` \| `constant` | `exponential` |
 | `EVER_JOBS_CRAWL_RETRY_BASE_DELAY_MS` | int | `1000` |
@@ -239,6 +242,7 @@ the CLI run) after changing it. The `SOFTY_*` variables are read per scrape.
 | `EVER_JOBS_CRAWL_BUILTIN_HOSTS` | bool — apply the builtin bulk-host limits | `true` (`false` under `legacy`) |
 | `EVER_JOBS_CRAWL_PLUGIN_MANIFESTS` | bool — apply `@SourcePlugin({ crawl })` | `true` (`false` under `legacy`) |
 | `EVER_JOBS_CRAWL_DEFAULT_PROXIES_FALLBACK` | bool — use `DEFAULT_PROXIES` when `EVER_JOBS_CRAWL_PROXIES` is unset | `true` (`false` under `legacy`) |
+| `EVER_JOBS_CRAWL_BROWSER_NAVIGATION` | bool — put browser navigations (`BrowserPool.navigate`) under the policy (§20); `false` = a plain `page.goto` | `true` (`false` under `legacy`) |
 
 ### 5.3 Mechanism tunables
 
@@ -529,7 +533,7 @@ removed (a bot UA with Chrome client hints is an inconsistent fingerprint).
 
 **Browser pages** (`BrowserPool`) follow the same rules: `identify`/`strict` use the
 configured UA (stealth or not); `plugin` uses the page's declared UA, else the
-pre-1690 random browser UA pool.
+pre-1690 random browser UA pool. Their navigations are paced and guarded too (§20).
 
 **Send a browser UA to one site only:**
 
@@ -544,8 +548,9 @@ live A/B behind these defaults is in [Q-097](./questions.md).
 
 ## 9. Pacing
 
-One process-wide limiter counts every request made through `HttpClient`, whichever
-plugin makes it, against a **bucket**:
+One process-wide limiter counts every request made through `HttpClient` — and every
+browser navigation made through `BrowserPool.navigate` (§20) — whichever plugin makes
+it, against a **bucket**:
 
 | `rateLimitScope` | Bucket | Use when |
 |---|---|---|
@@ -585,7 +590,7 @@ in which case axios still honours `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`. An entr
 | `proxyRotation` | Behaviour |
 |---|---|
 | `per-host` (default) | the same proxy for the same bucket, process-wide and across restarts (stable hash) — each site sees one origin |
-| `per-scrape` | one proxy per client (one scrape), spread across scrapes |
+| `per-scrape` | one proxy for the whole scrape — every client the plugin uses (e.g. a token client and a data client) keeps the same origin; successive scrapes are spread over the list. A client used outside any search keeps one proxy per client |
 | `per-request` | round-robin on every request (pre-1690) |
 | `off` | never use a proxy, even when a list is supplied |
 
@@ -609,7 +614,9 @@ HTTP-date):
 - **> `maxRetryAfterMs`**, `retryAfterOverMax: give-up` (default) → no retry; the whole
   bucket cools down for the full `Retry-After` (capped at
   `EVER_JOBS_CRAWL_MAX_COOLDOWN_MS`, 1 h), and the request fails with
-  `HostCoolingDownError`.
+  `HostCoolingDownError` (diagnostic `rate_limited`; the server's answer is its
+  `cause`) — whether or not a retry was left, so also with `retries: 0` and on the
+  last attempt.
 - **> `maxRetryAfterMs`**, `cap` → wait `maxRetryAfterMs`, then retry (pre-1690).
 
 **A `429`/`503` never gets a fast retry** (`throttleRetryDelayMs`, default 5 s). With
@@ -623,6 +630,17 @@ within `maxRetryAfterMs` still wins when it is longer (`max(floor, back-off,
 Retry-After)`); over `maxRetryAfterMs` the rules above are unchanged (`cap` never waits
 less than the floor). Other retryable answers (`502`, `504`, network errors) keep the
 plain back-off. `0` turns the floor off — the `legacy` preset's value.
+
+**At most 10 retries** (`MAX_CRAWL_RETRIES`). A `retries` above 10 is clamped to 10 at
+every layer — environment (`EVER_JOBS_CRAWL_RETRIES`, `RETRY_DEFAULT_RETRIES`), operator
+policy, plugin manifest or options, and the pre-1690 flat `retries` field — with a
+warning (startup log / `warnings` of §17); the `crawl.retries` of a REST, GraphQL or MCP
+search is rejected (`400`) above 10.
+
+**Never a tight retry loop.** When the configured back-off would leave less than
+**100 ms** before a retry (`retryBaseDelayMs` or `retryMaxDelayMs` `0`, or a base of a few
+ms), that retry waits 100 ms; a normal back-off keeps its full jitter. The `legacy`
+preset keeps the pre-1690 behaviour (a 0 ms back-off retries at once).
 
 Any `429`/`503` in a paced bucket also cools **the whole bucket** — not just the request
 that got it — for the same wait (so at least the floor), and feeds the adaptive throttle.
@@ -666,7 +684,8 @@ With `blockPrivateNetworks` (default `true`) Ever Jobs refuses to connect to:
 The literal check runs before anything is sent (also through proxies, and on every
 redirect); direct connections additionally use keep-alive agents whose DNS lookup
 refuses private answers, which defeats DNS rebinding. A refusal is an
-`EgressBlockedError`. This closes, for every plugin at once, the class of SSRF found in
+`EgressBlockedError`. Browser navigations get the literal check and a best-effort DNS
+check (§20). This closes, for every plugin at once, the class of SSRF found in
 fork syncs (Specs 1687/1688, [Q-092](./questions.md) option B).
 
 **Local mock servers and e2e tests:**
@@ -736,9 +755,10 @@ pre-1690 precedence (a request's own UA header, else the client's `userAgent` op
 else Chrome/120; UAs set through `setHeaders()` never reach the wire — exactly the old
 client), per-request proxy rotation with `DEFAULT_PROXIES` ignored, no pacing (the
 builtin host limits and plugin manifests are off too), 3 linear retries on
-`429,500,502,503,504` without jitter and no `429`/`503` floor, `Retry-After` capped at
-the retry ceiling and retried, no whole-bucket back-off, no egress guard; `BrowserPool` pages get the
-pre-1690 UA pool (a random entry for stealth pages, the first entry otherwise). Combine with `EVER_JOBS_CRAWL_ABORT_ON_DEADLINE=false` and
+`429,500,502,503,504` without jitter, no `429`/`503` floor and no 100 ms retry minimum,
+`Retry-After` capped at the retry ceiling and retried, no whole-bucket back-off, no egress
+guard; `BrowserPool` pages get the pre-1690 UA pool (a random entry for stealth pages, the
+first entry otherwise) and navigate with a plain `page.goto`. Combine with `EVER_JOBS_CRAWL_ABORT_ON_DEADLINE=false` and
 `EVER_JOBS_CIRCUIT_MAX_SITES=250` for the old deadline and breaker behaviour.
 
 **One piece at a time** (on top of `polite`):
@@ -752,6 +772,7 @@ pre-1690 UA pool (a random entry for stealth pages, the first entry otherwise). 
 | `DEFAULT_PROXIES` unused | `EVER_JOBS_CRAWL_DEFAULT_PROXIES_FALLBACK=false` |
 | old retries | `EVER_JOBS_CRAWL_RETRIES=3`, `EVER_JOBS_CRAWL_RETRY_STATUSES=429,500,502,503,504`, `EVER_JOBS_CRAWL_RETRY_BACKOFF=linear`, `EVER_JOBS_CRAWL_RETRY_JITTER=false`, `EVER_JOBS_CRAWL_MAX_RETRY_AFTER_MS=30000`, `EVER_JOBS_CRAWL_RETRY_AFTER_OVER_MAX=cap`, `EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS=0` |
 | no egress guard | `EVER_JOBS_CRAWL_BLOCK_PRIVATE_NETWORKS=false` |
+| browser pages navigate outside the policy | `EVER_JOBS_CRAWL_BROWSER_NAVIGATION=false` |
 | requests keep running after the deadline | `EVER_JOBS_CRAWL_ABORT_ON_DEADLINE=false` |
 | breaker tracks 250 sites | `EVER_JOBS_CIRCUIT_MAX_SITES=250` |
 | Softy's old browser UA | `"sites": {"softy": {"userAgentMode": "plugin"}}` |
@@ -892,7 +913,9 @@ Common symptoms:
   indexes, lastmod sorting, size bounds) and `BoundedTtlCache` for detail caches keyed
   by `url|lastmod`.
 - **Browser pages:** pass `host` (and a declared `userAgent`, if any) in the
-  `BrowserPool.getPage()` options so the right policy applies.
+  `BrowserPool.getPage()` options so the right policy applies, and navigate with
+  `BrowserPool.navigate(page, url, { waitUntil, timeout })` — never `page.goto` directly
+  (§20). Test fakes keep working: `navigate` ends in the page's own `goto`.
 - **`createHttpClient(input)`** with the search DTO keeps working: inside a search the
   DTO's caller fields are ignored (the scrape context already carries them) and your
   own `timeout` is no longer dropped when proxies are set.
@@ -902,3 +925,40 @@ Common symptoms:
   `EVER_JOBS_CRAWL_EGRESS_ALLOW_HOSTS`.
 - Plugin unit tests that stub `createHttpClient` are unaffected; there is nothing to
   mock for the policy.
+
+---
+
+## 20. Browser pages (`BrowserPool`)
+
+Browser plugins (Playwright through `BrowserPool`) navigate with
+`BrowserPool.navigate(page, url, options)`: the browser counterpart of an `HttpClient`
+request. `options` (`waitUntil`, `timeout`, `referer`) go to `page.goto` unchanged. For the
+URL's host, under the policy resolved from the search in scope (plus the page's `crawl`
+options from `getPage`):
+
+| Step | What happens |
+|---|---|
+| Abort | a source the search deadline abandoned navigates nowhere; an abort while queued, resolving or loading rejects at once (its open pages are closed too, as before) |
+| Egress guard (`blockPrivateNetworks`) | the literal check of §13 before anything else; a page launched with a proxy that is not one of the operator's env proxies has the proxy checked too; for a page `getPage` created without a proxy, the name is resolved once right before the navigation and refused when any answer is private. Only `http(s)` URLs navigate (plus `about:`, `data:` and `blob:`, which touch no network); `file:` and the rest are refused |
+| robots.txt (`robotsTxt`) | as §12: the shared cache, fetched with the configured identity and a slot of the host's bucket; `respect` refuses a disallowed URL (`RobotsDisallowedError`), a `Crawl-delay` spaces the navigations |
+| Pacing | a slot of the host's bucket (§9) — the same bucket its HTTP requests use — held for the whole navigation |
+| `429`/`503` | the response still comes back (the page loaded), but it counts as throttling and cools the bucket, exactly like an HTTP answer a plugin accepts through `validateStatus` (§11) |
+
+Limits of the browser path:
+
+- **DNS rebinding.** Chromium's own resolver cannot be hooked, so the DNS check is best
+  effort: a record that changes between our lookup and the browser's is not caught
+  (direct `HttpClient` connections are guarded on the address actually connected to).
+  Redirects inside the browser, and sub-resources the page loads, are not checked or
+  paced — only the navigation itself.
+- **robots.txt of a proxied page** is fetched directly, not through the page's proxy.
+- **Pages `getPage` did not create** (a plugin test's fake page, or a page of a Chromium a
+  plugin launched itself) get everything above except the DNS check: their proxy is
+  unknown.
+- **Not migrated:** `source-tesla-playwright` and `source-ats-kula_ai` launch their own
+  Chromium instead of using `BrowserPool` (their identity is not policy-driven either),
+  and still call `page.goto` directly; so does `source-wellfound` until its rewrite lands.
+  Every other browser plugin navigates through `navigate`.
+
+`EVER_JOBS_CRAWL_BROWSER_NAVIGATION=false` (the default under `legacy`) turns all of it
+off: `navigate` is then exactly `page.goto(url, options)`, the pre-1690 behaviour.

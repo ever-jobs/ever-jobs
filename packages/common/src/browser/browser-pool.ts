@@ -5,16 +5,27 @@ import type {
   Page,
   LaunchOptions,
   BrowserContextOptions,
+  Response as PlaywrightResponse,
 } from 'playwright';
 import { createHash } from 'crypto';
 import { homedir } from 'os';
 import { join } from 'path';
 import { EVER_JOBS_DEFAULT_USER_AGENT } from '../http/crawl/defaults';
-import { crawlPluginManifestsEnabled, expandUserAgent, readCrawlPolicyEnv } from '../http/crawl/env';
-import { abortReasonOf } from '../http/crawl/host-limiter';
+import { assertPublicHostname, assertPublicProxy, assertPublicResolution } from '../http/crawl/egress-guard';
+import {
+  crawlBrowserNavigationEnabled,
+  crawlPluginManifestsEnabled,
+  expandUserAgent,
+  readCrawlPolicyEnv,
+} from '../http/crawl/env';
+import { EgressBlockedError, RobotsDisallowedError } from '../http/crawl/errors';
+import { abortReasonOf, bucketKeyFor, getHostLimiter } from '../http/crawl/host-limiter';
 import { sanitizeHeaderValue } from '../http/crawl/policy-schema';
+import { getRobotsTxtCache } from '../http/crawl/robots';
 import { getEffectiveCrawlPolicy, getScrapeContext } from '../http/crawl/scrape-context';
 import type { CrawlPolicy, CrawlPolicyOverride, ResolvedCrawlPolicy } from '../http/crawl/types';
+import { HttpClient, crawlAcquireOptions, recordAnswerOutcome } from '../http/http-client';
+import { describeUrlForLog } from '../utils/url-guard';
 import { STEALTH_INIT_SCRIPT, USER_AGENT_POOL, VIEWPORT_POOL } from './stealth-scripts';
 
 /**
@@ -109,6 +120,51 @@ export function isLegacyBrowserIdentity(
   );
 }
 
+/**
+ * Options of `BrowserPool.navigate` — Playwright's `page.goto` options
+ * (`waitUntil`, `timeout`, `referer`), passed through unchanged.
+ */
+export type BrowserNavigateOptions = Parameters<Page['goto']>[1];
+
+/** What `getPage` remembers about a page for `navigate` (pages it did not create have none). */
+interface PageCrawlInfo {
+  /** The page's per-page crawl options (plugin layer), as passed to `getPage`. */
+  crawl?: CrawlPolicyOverride;
+  /** The proxy the page's context was launched with, if any. */
+  proxy?: string;
+  /** The context's User-Agent (robots.txt group matching). */
+  userAgent: string;
+}
+
+/** Schemes a navigation may use without touching the network (no policy applies). */
+const LOCAL_NAVIGATION_SCHEMES: ReadonlySet<string> = new Set(['about:', 'data:', 'blob:']);
+
+/** Bytes of robots.txt downloaded at most (the cache parses the first 512 KiB), as `HttpClient`. */
+const ROBOTS_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024;
+
+/** Reject with the signal's reason as soon as it aborts; the promise itself is left to settle quietly. */
+function raceAbort<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) {
+    promise.catch(() => undefined);
+    return Promise.reject(abortReasonOf(signal));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(abortReasonOf(signal));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
 /** Hide proxy credentials (`//user:pass@`, `|user:pass@`) in a persistent-context key before it is logged. */
 export function redactBrowserIdentityKey(key: string): string {
   return key.replace(/(:\/\/|\|)[^|@\s/]+@/g, '$1***@');
@@ -189,7 +245,14 @@ interface PersistentIdentity {
  *
  * Usage:
  *   const page = await BrowserPool.getPage();
- *   try { ... } finally { await page.close(); }
+ *   try {
+ *     await BrowserPool.navigate(page, url, { waitUntil: 'domcontentloaded' });
+ *     ...
+ *   } finally { await page.close(); }
+ *
+ * Navigate with `BrowserPool.navigate(page, url, options)`, never `page.goto`:
+ * it applies the crawl policy (egress guard, robots.txt, per-host pacing, abort,
+ * 429/503 back-off) the way `HttpClient` does for HTTP requests.
  *
  * For anti-bot protected sites:
  *   const page = await BrowserPool.getPage({ stealth: true, proxy, headful: true });
@@ -217,6 +280,13 @@ export class BrowserPool {
   private static readonly stealthApplied = new WeakSet<BrowserContext>();
   /** The blank page `launchPersistentContext` opens for us, pending disposal. */
   private static readonly initialPages = new WeakMap<BrowserContext, Page[]>();
+  /** What `getPage` knew about each page it handed out (`navigate` reads it). */
+  private static readonly pageCrawl = new WeakMap<object, PageCrawlInfo>();
+  /**
+   * The client robots.txt is fetched with for `navigate` (lazily built): its
+   * interceptor applies the configured identity and the egress guard.
+   */
+  private static navigationHttp?: HttpClient;
   private static readonly logger = new Logger(BrowserPool.name);
 
   /** Default Chromium launch options. */
@@ -462,6 +532,11 @@ export class BrowserPool {
       ctxOpts.proxy = { server: opts.proxy };
     }
 
+    // For `navigate`: the page-level crawl options, proxy and context UA.
+    const info: PageCrawlInfo = { userAgent: ua.userAgent };
+    if (opts?.crawl) info.crawl = opts.crawl;
+    if (opts?.proxy) info.proxy = opts.proxy;
+
     if (wantsPersistent) {
       const userDataDir = opts?.userDataDir ?? this.defaultUserDataDir;
       const identity: PersistentIdentity = {
@@ -475,6 +550,7 @@ export class BrowserPool {
       await this.applyStealthToContext(context, stealth);
       const page = await context.newPage();
       await this.disposeInitialPages(context);
+      this.pageCrawl.set(page, info);
       // A persistent context is shared: only this page goes on abort.
       return this.closeOnAbort(page, signal, () => page.close());
     }
@@ -483,8 +559,182 @@ export class BrowserPool {
     const context = await browser.newContext(ctxOpts);
     await this.applyStealthToContext(context, stealth);
     const page = await context.newPage();
+    this.pageCrawl.set(page, info);
     // This context exists for this page alone: closing it closes the page too.
     return this.closeOnAbort(page, signal, () => context.close());
+  }
+
+  /**
+   * Navigate `page` to `url` under the crawl policy (Spec 1690) — the browser
+   * counterpart of `HttpClient.request()`, and what every plugin should call
+   * instead of `page.goto`. For the URL's host, with the policy resolved from the
+   * scrape context in scope (`getEffectiveCrawlPolicy`, plus the page's `crawl`
+   * options from `getPage`):
+   *
+   * 1. **abort** — a scrape the deadline aborted navigates nowhere; an abort
+   *    while queued, resolving or loading rejects at once with its reason;
+   * 2. **egress guard** (`blockPrivateNetworks`) — the literal check
+   *    (`assertPublicHostname`) before anything else; a page launched with a
+   *    proxy that is not one of the operator's env proxies has that proxy
+   *    checked too; for a page `getPage` created without a proxy, the name is
+   *    resolved once right before `page.goto` and refused when any answer is
+   *    private (`assertPublicResolution`). The browser's own resolver is not
+   *    hooked, so this is best effort against DNS rebinding (a record that
+   *    changes between the two lookups is not caught), and redirects inside the
+   *    browser are not checked. Non-http(s) URLs other than `about:`, `data:` and
+   *    `blob:` are refused under the guard;
+   * 3. **robots.txt** (`robotsTxt` not `off`) — the shared `getRobotsTxtCache()`,
+   *    fetched through an `HttpClient` (configured identity, egress guard) with a
+   *    slot from the host limiter; `respect` refuses a disallowed URL with
+   *    `RobotsDisallowedError`, a `Crawl-delay` raises the bucket's interval;
+   * 4. **pacing** — a `HostLimiter` slot for the URL's bucket, held for the whole
+   *    navigation (released when `page.goto` settles);
+   * 5. **back-off** — a 429/503 navigation response feeds the adaptive throttle
+   *    and cools the bucket (`recordAnswerOutcome`), as `HttpClient` does for an
+   *    answer it hands back. The response is still returned: the page loaded.
+   *
+   * `options` go to `page.goto` unchanged, and `page.goto` is what performs the
+   * navigation — so any object with a `goto` works (plugin test fakes, or a page
+   * of a Chromium the plugin launched itself; pages `getPage` did not create skip
+   * only the DNS pre-check, since their proxy is unknown).
+   * `EVER_JOBS_CRAWL_BROWSER_NAVIGATION=false` (the `legacy` preset's default)
+   * makes this exactly `page.goto(url, options)`.
+   */
+  static async navigate(
+    page: Pick<Page, 'goto'>,
+    url: string,
+    options?: BrowserNavigateOptions,
+  ): Promise<PlaywrightResponse | null> {
+    const env = readCrawlPolicyEnv();
+    if (!crawlBrowserNavigationEnabled(env)) return page.goto(url, options);
+
+    const scrape = getScrapeContext();
+    const signal = scrape?.signal;
+    if (signal?.aborted) throw abortReasonOf(signal);
+
+    let target: URL | null = null;
+    try {
+      target = new URL(url);
+    } catch {
+      target = null;
+    }
+    const info = this.pageCrawl.get(page);
+    const policy = getEffectiveCrawlPolicy(target?.hostname || undefined, info?.crawl);
+
+    if (!target || (target.protocol !== 'http:' && target.protocol !== 'https:')) {
+      // No host to pace or guard: a local document passes; anything else
+      // (file:, ftp:, chrome:…, or no URL at all) is refused under the guard.
+      if (target && LOCAL_NAVIGATION_SCHEMES.has(target.protocol)) return page.goto(url, options);
+      if (policy.blockPrivateNetworks) {
+        const what = target ? `${target.protocol} URL` : describeUrlForLog(url);
+        throw new EgressBlockedError(what, 'only http(s) navigations are allowed');
+      }
+      return page.goto(url, options);
+    }
+
+    if (policy.blockPrivateNetworks) {
+      assertPublicHostname(target.hostname);
+      if (info?.proxy && !env.proxies.includes(info.proxy)) assertPublicProxy(info.proxy);
+    }
+
+    const limiter = getHostLimiter();
+    const bucket = bucketKeyFor(target.href, policy.rateLimitScope, scrape?.site);
+
+    let crawlDelayMs = 0;
+    if (policy.robotsTxt !== 'off') {
+      const robotsUa = info?.userAgent ?? policy.userAgent;
+      const decision = await raceAbort(
+        getRobotsTxtCache().check(target.href, robotsUa, policy.robotsTxt, (robotsUrl) =>
+          this.fetchRobotsTxt(robotsUrl, policy, scrape?.site, signal),
+        ),
+        signal,
+      );
+      if (!decision.allowed) throw new RobotsDisallowedError(`${target.origin}${target.pathname}`);
+      // A site's Crawl-delay is honoured up to the limiter's cool-down ceiling.
+      crawlDelayMs = Math.min(decision.crawlDelayMs ?? 0, limiter.maxCooldownMs);
+    }
+
+    const release = await limiter.acquire(bucket, crawlAcquireOptions(policy, signal, crawlDelayMs));
+    try {
+      if (policy.blockPrivateNetworks && info && !info.proxy) {
+        // Right before the browser connects, to keep the rebinding window small.
+        await raceAbort(assertPublicResolution(target.hostname), signal);
+      }
+      const response = await raceAbort(page.goto(url, options), signal);
+      this.recordNavigation(bucket, policy, target, response);
+      return response;
+    } finally {
+      release();
+    }
+  }
+
+  /** Feed a navigation's response status to the limiter (`recordAnswerOutcome`). */
+  private static recordNavigation(
+    bucket: string,
+    policy: CrawlPolicy,
+    target: URL,
+    response: PlaywrightResponse | null | undefined,
+  ): void {
+    if (!response || typeof response.status !== 'function') return;
+    let status: number | undefined;
+    let headers: Record<string, string> | undefined;
+    try {
+      status = response.status();
+      headers = typeof response.headers === 'function' ? response.headers() : undefined;
+    } catch {
+      return;
+    }
+    if (typeof status !== 'number') return;
+    const outcome = recordAnswerOutcome(getHostLimiter(), bucket, policy, 0, status, headers);
+    if (outcome.giveUpAfterMs !== undefined) {
+      this.logger.warn(
+        `Navigation to ${describeUrlForLog(target.href)} answered ${status}, Retry-After ${outcome.giveUpAfterMs}ms ` +
+          `exceeds maxRetryAfterMs ${policy.maxRetryAfterMs}ms (${bucket} cooling down)`,
+      );
+    } else if (outcome.backOffMs !== undefined) {
+      this.logger.debug(
+        `Navigation to ${describeUrlForLog(target.href)} answered ${status}; ${bucket} backs off ${outcome.backOffMs}ms`,
+      );
+    }
+  }
+
+  /**
+   * robots.txt fetcher for `navigate` (Spec 1690 §4.7): a slot from the host
+   * limiter for the robots.txt bucket, then a GET straight through the shared
+   * `HttpClient`'s axios instance — whose interceptor applies the configured
+   * identity (UA, `From`, no client hints) and the egress guard. Not through
+   * `HttpClient.request()`: a robots.txt check there would wait on this very
+   * fetch. Fetched directly, not through the page's proxy.
+   */
+  private static async fetchRobotsTxt(
+    robotsUrl: string,
+    policy: CrawlPolicy,
+    site: string | undefined,
+    signal: AbortSignal | undefined,
+  ): Promise<{ status: number; body: string }> {
+    const bucket = bucketKeyFor(robotsUrl, policy.rateLimitScope, site);
+    const release = await getHostLimiter().acquire(bucket, crawlAcquireOptions(policy, signal));
+    try {
+      const response = await this.robotsHttpClient().getAxiosInstance().request({
+        url: robotsUrl,
+        method: 'GET',
+        headers: { Accept: 'text/plain, */*;q=0.5' },
+        responseType: 'text',
+        maxContentLength: ROBOTS_MAX_DOWNLOAD_BYTES,
+        validateStatus: () => true,
+        ...(signal ? { signal } : {}),
+      });
+      const body = typeof response.data === 'string' ? response.data : response.data == null ? '' : String(response.data);
+      return { status: response.status, body };
+    } finally {
+      release();
+    }
+  }
+
+  /** The shared client robots.txt is fetched with (see `fetchRobotsTxt`). */
+  private static robotsHttpClient(): HttpClient {
+    if (!this.navigationHttp) this.navigationHttp = new HttpClient();
+    return this.navigationHttp;
   }
 
   /**

@@ -1,4 +1,5 @@
 import { domainToASCII } from 'node:url';
+import { MAX_CRAWL_RETRIES } from '@ever-jobs/models';
 
 import { EVER_JOBS_DEFAULT_USER_AGENT, USER_AGENT_KEYWORDS } from './defaults';
 import {
@@ -42,7 +43,8 @@ export type CrawlPolicyFieldSpec =
   | { kind: 'string' }
   | { kind: 'enum'; values: readonly string[] }
   | { kind: 'bool' }
-  | { kind: 'int' }
+  /** `max`: a practical ceiling below `MAX_CRAWL_POLICY_INT`; larger values are clamped with a warning. */
+  | { kind: 'int'; max?: number }
   | { kind: 'statuses' };
 
 /** Every `CrawlPolicy` field and the kind of value it takes (the single source of truth). */
@@ -61,7 +63,8 @@ export const CRAWL_POLICY_FIELD_SPECS: { readonly [K in keyof CrawlPolicy]-?: Cr
   maxQueueWaitMs: { kind: 'int' },
   adaptiveThrottle: { kind: 'bool' },
 
-  retries: { kind: 'int' },
+  // `MAX_CRAWL_RETRIES` (10) bounds every layer: env, operator file, plugin, caller.
+  retries: { kind: 'int', max: MAX_CRAWL_RETRIES },
   retryStatuses: { kind: 'statuses' },
   retryBackoff: { kind: 'enum', values: RETRY_BACKOFFS },
   retryBaseDelayMs: { kind: 'int' },
@@ -237,8 +240,13 @@ export function coerceCrawlField(field: keyof CrawlPolicy, raw: unknown): Coerce
       return coerceEnum(raw, spec.values);
     case 'bool':
       return coerceBoolean(raw);
-    case 'int':
-      return coerceNonNegativeInt(raw);
+    case 'int': {
+      const result = coerceNonNegativeInt(raw);
+      if (spec.max !== undefined && result.value !== undefined && result.value > spec.max) {
+        return { value: spec.max, note: `${describeValue(raw)} clamped to ${spec.max} (the most this field allows)` };
+      }
+      return result;
+    }
     case 'statuses':
       return coerceStatusList(raw);
   }

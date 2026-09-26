@@ -1,3 +1,5 @@
+import { MAX_CRAWL_RETRIES } from '@ever-jobs/models';
+
 import {
   BUILTIN_HOST_POLICIES,
   CRAWL_ENV,
@@ -178,6 +180,31 @@ describe('resolveCrawlPolicy (Spec 1690)', () => {
       }
       // Under `any` (the default) a caller may lower or disable it.
       expect(resolveCrawlPolicy({ caller: { throttleRetryDelayMs: 0 } }, envOf()).throttleRetryDelayMs).toBe(0);
+    });
+  });
+
+  describe(`retries — at most MAX_CRAWL_RETRIES (${MAX_CRAWL_RETRIES}) at every layer`, () => {
+    it('a plugin manifest, plugin options and a caller each get clamped, with a note', () => {
+      const explained = explainCrawlPolicy({ plugin: { retries: 50 } }, envOf());
+      expect(explained.policy.retries).toBe(MAX_CRAWL_RETRIES);
+      expect(explained.policy.provenance.retries).toBe('plugin');
+      expect(explained.notes).toEqual([expect.stringMatching(/^plugin manifest: retries: .*clamped to 10/)]);
+
+      const options = explainCrawlPolicy({ explicit: { retries: 2 ** 31 - 1 } }, envOf());
+      expect(options.policy.retries).toBe(MAX_CRAWL_RETRIES);
+      expect(options.notes).toEqual([expect.stringContaining('clamped to 10')]);
+
+      const caller = explainCrawlPolicy({ caller: { retries: 11 } }, envOf());
+      expect(caller.policy.retries).toBe(MAX_CRAWL_RETRIES);
+      expect(caller.policy.provenance.retries).toBe('caller');
+      expect(caller.notes).toEqual([expect.stringMatching(/^caller: retries: .*clamped to 10/)]);
+    });
+
+    it('env and operator layers are bounded too; values within the cap are untouched', () => {
+      expect(resolveCrawlPolicy({}, envOf({ [CRAWL_ENV.RETRIES]: '40' })).retries).toBe(MAX_CRAWL_RETRIES);
+      expect(resolveCrawlPolicy({ site: 'softy' }, policiesEnv({ sites: { softy: { retries: 99 } } })).retries).toBe(MAX_CRAWL_RETRIES);
+      expect(resolveCrawlPolicy({ caller: { retries: MAX_CRAWL_RETRIES } }, envOf()).retries).toBe(MAX_CRAWL_RETRIES);
+      expect(normalizeCrawlOverride({ retries: 7 })).toEqual({ value: { retries: 7 }, warnings: [] });
     });
   });
 

@@ -56,7 +56,10 @@ describe('HireserveService (E2E)', () => {
       expect(job.atsId).toBeDefined();
       expect(job.jobUrl).toBeDefined();
     }
-  }, 30000);
+    // Live site: its responses take seconds each, and since Spec 1690 the detail
+    // fetches are paced per host (not fired all at once), so the first (cold) run
+    // can exceed 30 s legitimately.
+  }, 60000);
 
   it('should return empty results when neither companySlug nor companyUrl is provided', async () => {
     const input = new ScraperInputDto({

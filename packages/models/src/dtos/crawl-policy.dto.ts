@@ -39,6 +39,15 @@ export type CrawlDtoRetryAfterOverMax = (typeof CRAWL_POLICY_DTO_VALUES.retryAft
 export type CrawlDtoRobotsTxt = (typeof CRAWL_POLICY_DTO_VALUES.robotsTxt)[number];
 export type CrawlDtoDiscovery = (typeof CRAWL_POLICY_DTO_VALUES.discovery)[number];
 
+/**
+ * Most retries a crawl policy may ask for (Spec 1690 §4.5). A request is retried
+ * at most this many times whichever layer (env, operator file, plugin, caller)
+ * set `retries`: the REST/GraphQL DTO rejects a larger value, and the shared
+ * policy normalization in `@ever-jobs/common` clamps one to it with a warning.
+ * Without a bound a caller could ask for 2^31−1 retries against one host.
+ */
+export const MAX_CRAWL_RETRIES = 10;
+
 /** A header value must not be able to smuggle a second header line. */
 const SINGLE_HEADER_LINE = /^[^\r\n\0]*$/;
 
@@ -139,10 +148,15 @@ export class CrawlPolicyDto {
 
   // ── Retries ─────────────────────────────────────────────────────────────
 
-  @ApiPropertyOptional({ description: 'Retries per request on a retryable status (or network error when enabled).', minimum: 0 })
+  @ApiPropertyOptional({
+    description: `Retries per request on a retryable status (or network error when enabled), 0–${MAX_CRAWL_RETRIES}.`,
+    minimum: 0,
+    maximum: MAX_CRAWL_RETRIES,
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(MAX_CRAWL_RETRIES)
   retries?: number;
 
   @ApiPropertyOptional({

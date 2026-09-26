@@ -213,7 +213,7 @@ export class MundaneCoService implements IScraper, OnModuleDestroy {
     try {
       for (const { job, url } of targets) {
         try {
-          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+          await BrowserPool.navigate(page, url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
           await this.delay(MUNDANE_AIRTABLE_HYDRATE_MS);
           const description = (await page.evaluate(AIRTABLE_DESCRIPTION_JS)) as string | null;
           const text = this.normalize(description ?? '');

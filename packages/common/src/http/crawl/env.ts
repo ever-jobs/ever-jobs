@@ -73,6 +73,13 @@ export const CRAWL_EXTRA_ENV = {
    * `true`; `false` under the `legacy` preset (pre-1690 parsed it and never used it).
    */
   DEFAULT_PROXIES_FALLBACK: 'EVER_JOBS_CRAWL_DEFAULT_PROXIES_FALLBACK',
+  /**
+   * Put browser navigations (`BrowserPool.navigate`) under the crawl policy:
+   * egress guard, robots.txt, a host-limiter slot, the scrape's abort, and
+   * 429/503 back-off. Default `true`; `false` under the `legacy` preset
+   * (pre-1690 pages navigated with a plain `page.goto`, which `false` restores).
+   */
+  BROWSER_NAVIGATION: 'EVER_JOBS_CRAWL_BROWSER_NAVIGATION',
 } as const;
 
 /** Values of `EVER_JOBS_CRAWL_CALLER_PROXIES`. */
@@ -94,6 +101,8 @@ export interface ParsedCrawlPolicyEnv extends CrawlPolicyEnvConfig {
   pluginManifests?: boolean;
   /** `EVER_JOBS_CRAWL_CALLER_PROXIES` (missing = derived from `callerOverrides`). */
   callerProxies?: CallerProxiesPolicy;
+  /** `EVER_JOBS_CRAWL_BROWSER_NAVIGATION` (missing on a hand-built config = `true`, except under `legacy`). */
+  browserNavigation?: boolean;
 }
 
 /**
@@ -112,6 +121,16 @@ export function crawlBuiltinHostsEnabled(env: CrawlPolicyEnvConfig): boolean {
  */
 export function crawlPluginManifestsEnabled(env: CrawlPolicyEnvConfig): boolean {
   const value = (env as ParsedCrawlPolicyEnv).pluginManifests;
+  return typeof value === 'boolean' ? value : env.preset !== 'legacy';
+}
+
+/**
+ * Whether `BrowserPool.navigate` applies the crawl policy under `env`
+ * (`EVER_JOBS_CRAWL_BROWSER_NAVIGATION`; for a hand-built config without the
+ * field: off under `legacy`, else on). Off = a plain `page.goto`.
+ */
+export function crawlBrowserNavigationEnabled(env: CrawlPolicyEnvConfig): boolean {
+  const value = (env as ParsedCrawlPolicyEnv).browserNavigation;
   return typeof value === 'boolean' ? value : env.preset !== 'legacy';
 }
 
@@ -362,6 +381,7 @@ function parseCrawlPolicyEnv(env: NodeJS.ProcessEnv): ParsedCrawlPolicyEnv {
   const builtinHosts = readBooleanSwitch(env, CRAWL_EXTRA_ENV.BUILTIN_HOSTS, !legacy, warnings);
   const pluginManifests = readBooleanSwitch(env, CRAWL_EXTRA_ENV.PLUGIN_MANIFESTS, !legacy, warnings);
   const defaultProxiesFallback = readBooleanSwitch(env, CRAWL_EXTRA_ENV.DEFAULT_PROXIES_FALLBACK, !legacy, warnings);
+  const browserNavigation = readBooleanSwitch(env, CRAWL_EXTRA_ENV.BROWSER_NAVIGATION, !legacy, warnings);
   let callerProxies: CallerProxiesPolicy = callerOverrides === 'any' ? 'any' : 'none';
   const rawCallerProxies = readVar(env, CRAWL_EXTRA_ENV.CALLER_PROXIES);
   if (rawCallerProxies !== undefined) {
@@ -404,6 +424,7 @@ function parseCrawlPolicyEnv(env: NodeJS.ProcessEnv): ParsedCrawlPolicyEnv {
     builtinHosts,
     pluginManifests,
     callerProxies,
+    browserNavigation,
   };
   if (contact !== undefined) config.contact = contact;
   return config;

@@ -278,6 +278,7 @@ so none of them changes the defaults above):
 | `EVER_JOBS_CRAWL_PLUGIN_MANIFESTS` | bool (`true`; `false` under `legacy`) — apply `@SourcePlugin({ crawl })` |
 | `EVER_JOBS_CRAWL_CALLER_PROXIES` | `any` \| `none` (`any` when caller overrides are `any`, else `none`) |
 | `EVER_JOBS_CRAWL_DEFAULT_PROXIES_FALLBACK` | bool (`true`; `false` under `legacy`) — use `DEFAULT_PROXIES` when `EVER_JOBS_CRAWL_PROXIES` is unset |
+| `EVER_JOBS_CRAWL_BROWSER_NAVIGATION` | bool (`true`; `false` under `legacy`) — `BrowserPool.navigate` applies the policy; `false` = a plain `page.goto` (§9.2) |
 | `EVER_JOBS_CRAWL_MAX_BUCKETS` | int (`10000`) — soft LRU cap of the host limiter |
 | `EVER_JOBS_CRAWL_MAX_COOLDOWN_MS` | int (`3600000`) — ceiling on any bucket cool-down (Retry-After, Crawl-delay) |
 | `EVER_JOBS_CRAWL_EGRESS_ALLOW_HOSTS` | comma list of hosts / `*.suffix` / IP literals exempt from the egress guard (unset) |
@@ -471,6 +472,30 @@ differently, and why. Where the design was silent the most flexible option was t
   search caller's `crawl` (a caller's `retries` would override the checker's own
   `retries: 0`), and is bounded by `EVER_JOBS_LIVENESS_DEADLINE_MS` (60 s): probes
   queued behind a paced or cooling-down host are aborted and reported `uncertain`.
+- **`per-scrape` is per scrape, not per client** (§4.4 said "one proxy per client").
+  A plugin that builds a token client and a data client (NavJobs, France Travail)
+  switched origin mid-scrape. The pin now lives in the scrape context
+  (`ScrapeContext.proxyPin`, created by `runWithScrapeContext` for each new scrape and
+  inherited by nested contexts), one rotation state per distinct proxy list, all from
+  the scrape's seed; scrapes are seeded from their own counter, so the clients a scrape
+  builds do not skew how scrapes spread over the list. Outside any scrape context the
+  pin stays per client, as before.
+- **`give-up` always raises `HostCoolingDownError`** (§4.5). With `retries: 0`, on the
+  last attempt, or for a 429/503 outside `retryStatuses`, the over-limit `Retry-After`
+  rule cooled the bucket but raised the raw HTTP error, so diagnostics said `error`
+  instead of `rate_limited`. The raw answer is the error's `cause`.
+- **`retries` is bounded at `MAX_CRAWL_RETRIES` = 10** (defined in `@ever-jobs/models`):
+  the DTO (`@Max`) and so the GraphQL `CrawlPolicyInput` reject more (400), the MCP
+  schema and `tool_manifest.json` declare `maximum: 10`, and the shared coercion
+  (`CRAWL_POLICY_FIELD_SPECS.retries.max`) clamps every other layer — env,
+  `RETRY_DEFAULT_RETRIES`, operator file, plugin manifest and options, the pre-1690 flat
+  `retries` — to 10 with a warning. The shared coercion previously allowed 2^31−1.
+- **A retry never follows its failure in under 100 ms** (`MIN_RETRY_DELAY_MS`): when the
+  un-jittered back-off for a retry is shorter (`retryBaseDelayMs`/`retryMaxDelayMs` 0, or a
+  base of a few ms), the retry waits 100 ms, so `retries: 10` with 0 ms delays cannot
+  hammer a host. A normal back-off keeps its full jitter; 429/503 already wait the
+  throttle floor; the `legacy` preset keeps the pre-1690 immediate retry.
+  `retryDecision` takes it as an optional sixth argument (`minDelayMs`, default 0).
 - **Caller proxies** reach every plugin client through the scrape context unless
   `EVER_JOBS_CRAWL_CALLER_PROXIES=none` (the default whenever caller overrides are not
   `any`); refused proxies reach neither the context nor the DTO.
@@ -493,7 +518,8 @@ differently, and why. Where the design was silent the most flexible option was t
   status)` takes the answer's status; `throttleRetryFloorMs()` is exported with it.
 - `EVER_JOBS_CRAWL_PROXIES` also accepts a JSON array; `none`/`off`/`direct` = no
   proxies and no fallback to `DEFAULT_PROXIES`.
-- Value coercion: integers ≥ 0 (fractions floored, values above 2^31−1 clamped);
+- Value coercion: integers ≥ 0 (fractions floored, values above 2^31−1 clamped;
+  `retries` above `MAX_CRAWL_RETRIES` = 10 clamped, §9.1);
   case-insensitive enums with `_` accepted for `-`; status lists `"429,503"` or
   `[429,503]`, 100–599, `none` = empty; header-unsafe characters stripped from
   `userAgent`/`from`; the contact loses parentheses (they would unbalance the UA
@@ -514,6 +540,27 @@ differently, and why. Where the design was silent the most flexible option was t
   `resolveBrowserUserAgent()`. In mode `plugin` with no declared UA the pre-1690
   random pool UA stands in (so `EVER_JOBS_CRAWL_USER_AGENT_MODE=plugin` reproduces the
   old pages), and the `legacy` preset reproduces pre-1690 pages byte for byte.
+- **`BrowserPool.navigate(page, url, options?)`** (PR #93 review): browser navigations
+  bypassed the policy — `getPage()` applied only the identity and abort-closing, and
+  plugins called `page.goto()` themselves. `navigate` resolves the policy for the URL's
+  host (scrape context + the page's `getPage` `crawl` options) and applies, in order: the
+  scrape's abort; the egress guard (literal `assertPublicHostname`, a non-env page proxy
+  via `assertPublicProxy`, non-http(s) schemes other than `about:`/`data:`/`blob:`
+  refused, and for a proxy-less page `getPage` created, a DNS pre-check
+  `assertPublicResolution` right before `page.goto` — best effort against rebinding,
+  since Chromium's resolver is not hooked); robots.txt through `getRobotsTxtCache()`,
+  fetched with a limiter slot straight through a shared `HttpClient`'s axios instance
+  (identity + egress from its interceptor; not `request()`, whose own robots check would
+  wait on this fetch); a `HostLimiter` slot held until `page.goto` settles; and
+  `recordAnswerOutcome` for the response (429/503 throttle and cool the bucket, like an
+  answer accepted through `validateStatus`). `options` go to `page.goto` unchanged and
+  `page.goto` performs the navigation, so plugin test fakes keep working. Switch:
+  `EVER_JOBS_CRAWL_BROWSER_NAVIGATION` (default on, off under `legacy` — then `navigate`
+  is exactly `page.goto`). All 18 direct `page.goto` calls in 15 BrowserPool plugins
+  were migrated; `source-tesla-playwright` and `source-ats-kula_ai` launch their own
+  Chromium (out of scope) and `source-wellfound` awaits its separate rewrite. Shared
+  helpers exported for it: `crawlAcquireOptions`, `recordAnswerOutcome`,
+  `assertPublicResolution`, `crawlBrowserNavigationEnabled`.
 - A compile-time check (`apps/api/src/jobs/crawl-policy.mapping.ts`) fails the build
   if `CrawlPolicyDto` and `CrawlPolicy` drift apart in either direction; the MCP
   schema is kept in step by a test.
@@ -548,4 +595,12 @@ requests) and the candidates it found are recorded in Q-097.
   gap between wire starts of a burst measured 86–90 ms (the limiter spaces grants,
   not wire starts — only the first pair of a burst is affected).
 - Softy live wire proof: see Spec 1691 §6.
+- PR #93 review fixes (browser navigation, per-scrape pin, retries cap, give-up error):
+  both `tsc` projects 0 errors; `npm run test:core` 73/73 suites, 2,327/2,327 tests
+  (new `browser-navigate.spec.ts`, 32 tests); plugin units 1,632/1,632 suites,
+  16,397/16,397 tests; `npm run test:scripts` 15/15, 243/243; `lint:docs` clean. Mutation
+  check: dropping the navigation's limiter slot, its literal egress check, its DNS
+  pre-check, its response accounting, the always-`HostCoolingDownError` give-up, the
+  shared per-scrape pin, the 100 ms retry minimum or the retries clamp each turns
+  specific tests red.
 

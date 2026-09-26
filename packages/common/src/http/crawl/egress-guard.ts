@@ -390,6 +390,32 @@ export function createGuardedLookup(
   };
 }
 
+/**
+ * Resolve `hostname` once (every address, `dns.lookup`) and reject with
+ * `EgressBlockedError` when any answer is private — the DNS half of the egress
+ * guard for a connection whose resolver cannot be hooked (a browser navigation,
+ * `BrowserPool.navigate`). Best effort against DNS rebinding: the browser
+ * resolves the name again itself, so a record that changes between the two
+ * lookups is not caught (direct `HttpClient` connections are guarded at connect
+ * time instead). IP literals (checked literally by `assertPublicHostname`) and
+ * allow-listed hosts resolve nothing; a lookup that fails (e.g. `ENOTFOUND`)
+ * resolves quietly, leaving the error to the connection itself.
+ */
+export function assertPublicResolution(
+  hostname: string,
+  options: EgressGuardOptions = {},
+  baseLookup: BaseLookup = defaultBaseLookup,
+): Promise<void> {
+  const host = normalizeHostLiteral(hostname);
+  if (!host || isIP(host) || isEgressAllowListed(host, options)) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    createGuardedLookup(baseLookup, options)(host, { all: true }, (err) => {
+      if (err && (err as unknown) instanceof EgressBlockedError) reject(err);
+      else resolve();
+    });
+  });
+}
+
 /** Options for `getGuardedAgents`. */
 export interface GuardedAgentOptions {
   /** `rejectUnauthorized: false` — mirrors the pre-1690 `caCert` behaviour. */

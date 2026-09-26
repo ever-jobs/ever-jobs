@@ -22,6 +22,8 @@
  * layer.
  */
 
+import type { ScrapeProxyPin } from './proxy-selector';
+
 /**
  * Which User-Agent goes on the wire.
  *
@@ -38,7 +40,9 @@ export type UserAgentMode = 'identify' | 'strict' | 'plugin';
  * How a request picks a proxy from the proxy list.
  *
  * - `per-request`: round-robin on every request (the pre-1690 behaviour).
- * - `per-scrape`: one proxy for the lifetime of an `HttpClient` (one scrape).
+ * - `per-scrape`: one proxy for the whole scrape — shared by every `HttpClient`
+ *   the scrape uses (`ScrapeContext.proxyPin`); outside any scrape context, one
+ *   per `HttpClient`.
  * - `per-host` (default): the same proxy for the same rate-limit bucket, process
  *   wide — a site always sees one stable origin.
  * - `off`: never use a proxy, even when a list is supplied.
@@ -193,6 +197,12 @@ export interface ScrapeContext {
   signal?: AbortSignal;
   /** Proxies supplied by the caller for this search. */
   proxies?: string[];
+  /**
+   * The scrape's `per-scrape` proxy pin, shared by every `HttpClient` of the
+   * scrape. `runWithScrapeContext` creates one for each new scrape (a nested
+   * context inherits its parent's, like every field it leaves out).
+   */
+  proxyPin?: ScrapeProxyPin;
 }
 
 /** Input to `resolveCrawlPolicy`. */

@@ -6,6 +6,7 @@ import {
   CRAWL_POLICY_DTO_VALUES,
   Country,
   CrawlPolicyDto,
+  MAX_CRAWL_RETRIES,
   Site,
   getIndeedDomain,
   type CrawlDtoDiscovery,
@@ -31,8 +32,9 @@ const oneOf = (values: readonly string[]): string => values.join(' | ');
 /**
  * Per-request crawl policy (Spec 1690 §5.2) — the GraphQL face of
  * `CrawlPolicyDto`. It extends the DTO, so it inherits the DTO's
- * class-validator rules (enums, `Min(0)`, header-safe strings); this class only
- * adds the GraphQL `@Field`s. Enum-like fields are `String`s because several
+ * class-validator rules (enums, `Min(0)`, `retries` ≤ `MAX_CRAWL_RETRIES`,
+ * header-safe strings); this class only adds the GraphQL `@Field`s. Enum-like
+ * fields are `String`s because several
  * values (`per-request`, `give-up`, `crawl-delay`) are not valid GraphQL enum
  * names. Every field is nullable; `null` means "not set".
  */
@@ -74,7 +76,10 @@ export class CrawlPolicyGqlInput extends CrawlPolicyDto {
   @Field(() => Boolean, { nullable: true })
   adaptiveThrottle?: boolean;
 
-  @Field(() => Int, { nullable: true })
+  @Field(() => Int, {
+    nullable: true,
+    description: `Retries per request, 0-${MAX_CRAWL_RETRIES}; a larger value is rejected.`,
+  })
   retries?: number;
 
   @Field(() => [Int], { nullable: true, description: 'HTTP statuses that are retried.' })

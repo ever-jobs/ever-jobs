@@ -12,13 +12,35 @@ export interface ProxyRotationState {
   scrapeSeed?: number;
 }
 
-/** Process-wide counter seeding `per-scrape` picks (one step per new client). */
+/**
+ * The `per-scrape` proxy pin of one scrape (Spec 1690 §4.4), shared by every
+ * `HttpClient` the scrape uses — `runWithScrapeContext` creates one per scrape
+ * (`ScrapeContext.proxyPin`), so a plugin that builds a token client and a data
+ * client keeps one origin for the whole scrape. Mutable; treat as opaque.
+ */
+export interface ScrapeProxyPin {
+  /** Where this scrape's pick starts in a list (taken at its first `per-scrape` pick). */
+  seed?: number;
+  /**
+   * Rotation state per proxy list (keyed by the list): clients given different
+   * lists (a caller's vs the env's) each stay within their own, from the same seed.
+   */
+  states?: Map<string, ProxyRotationState>;
+}
+
+/** Process-wide counter seeding per-client `per-scrape` picks (one step per new client). */
 let scrapeSeedCounter = 0;
+/**
+ * Process-wide counter seeding the pins of scrape contexts (one step per scrape
+ * that picks). Separate from the client counter: a scrape builds any number of
+ * clients, which must not skew how scrapes are spread over the list.
+ */
+let scrapePinSeedCounter = 0;
 
 /**
- * Fresh rotation state for one client (one scrape). `per-request` still starts
- * at entry 0 (pre-1690); a `per-scrape` client pins the entry after the one the
- * previous client pinned, so the list is used evenly.
+ * Fresh rotation state for one client. `per-request` still starts at entry 0
+ * (pre-1690); outside any scrape context a `per-scrape` client pins the entry
+ * after the one the previous client pinned, so the list is used evenly.
  */
 export function createProxyRotationState(): ProxyRotationState {
   const scrapeSeed = scrapeSeedCounter;
@@ -26,9 +48,44 @@ export function createProxyRotationState(): ProxyRotationState {
   return { index: 0, scrapeSeed };
 }
 
-/** Restart the `per-scrape` seed sequence (tests). */
+/** An empty pin for one scrape (`runWithScrapeContext`); the seed is taken lazily. */
+export function createScrapeProxyPin(): ScrapeProxyPin {
+  return {};
+}
+
+/** Distinct proxy lists remembered per scrape (a plugin uses one or two). */
+const MAX_LISTS_PER_SCRAPE = 16;
+
+/**
+ * The rotation state a `per-scrape` pick of `proxies` uses inside the scrape that
+ * owns `pin`: one per distinct list, all seeded with the scrape's seed (one step
+ * of a process-wide counter per scrape, so successive scrapes are spread over
+ * the list). Every client of the scrape that picks from the same list therefore
+ * gets the same proxy.
+ */
+export function scrapeProxyRotationState(pin: ScrapeProxyPin, proxies: readonly string[]): ProxyRotationState {
+  const states = pin.states ?? (pin.states = new Map());
+  const key = JSON.stringify(proxies ?? []);
+  let state = states.get(key);
+  if (!state) {
+    if (pin.seed === undefined) {
+      pin.seed = scrapePinSeedCounter;
+      scrapePinSeedCounter = (scrapePinSeedCounter + 1) % Number.MAX_SAFE_INTEGER;
+    }
+    if (states.size >= MAX_LISTS_PER_SCRAPE) {
+      const oldest = states.keys().next().value;
+      if (oldest !== undefined) states.delete(oldest);
+    }
+    state = { index: 0, scrapeSeed: pin.seed };
+    states.set(key, state);
+  }
+  return state;
+}
+
+/** Restart the `per-scrape` seed sequences — per client and per scrape context (tests). */
 export function resetProxyScrapeSeed(value = 0): void {
   scrapeSeedCounter = Number.isInteger(value) && value >= 0 ? value : 0;
+  scrapePinSeedCounter = scrapeSeedCounter;
 }
 
 /**
@@ -72,6 +129,8 @@ function nextRoundRobin(proxies: readonly string[], state: ProxyRotationState): 
  * - `per-scrape`: the first call picks entry `state.scrapeSeed` (else
  *   `state.index`), modulo the list length, and pins it in `state.pinned`; every
  *   later call returns the pin (even a pinned `null`, i.e. a direct connection).
+ *   `HttpClient` passes the scrape's shared state (`scrapeProxyRotationState`)
+ *   inside a scrape context, its own per-client state outside one.
  * - `per-host` (default): `proxies[fnv1a32(bucketKey) % length]` — one stable
  *   origin per rate-limit bucket, process wide. `state` is not touched.
  * - `off`: always null, whatever the list holds.

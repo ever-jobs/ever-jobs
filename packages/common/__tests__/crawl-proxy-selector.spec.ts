@@ -1,4 +1,11 @@
-import { createProxyRotationState, fnv1a32, resetProxyScrapeSeed, selectProxy } from '../src/http/crawl/proxy-selector';
+import {
+  createProxyRotationState,
+  createScrapeProxyPin,
+  fnv1a32,
+  resetProxyScrapeSeed,
+  scrapeProxyRotationState,
+  selectProxy,
+} from '../src/http/crawl/proxy-selector';
 import { ProxyRotation } from '../src/http/crawl/types';
 
 /**
@@ -98,6 +105,36 @@ describe('selectProxy — Spec 1690 §4.4', () => {
       const two = { index: 2 };
       expect(selectProxy(list, 'per-scrape', one, 'k')).toBe('http://p1:8080');
       expect(selectProxy(list, 'per-scrape', two, 'k')).toBe('p3:3128');
+    });
+
+    describe('a scrape context pin (scrapeProxyRotationState)', () => {
+      it('hands every client of one scrape the same state per list, so they all get one proxy', () => {
+        const pin = createScrapeProxyPin();
+        const a = scrapeProxyRotationState(pin, list);
+        const b = scrapeProxyRotationState(pin, [...list]);
+        expect(b).toBe(a);
+        const first = selectProxy(list, 'per-scrape', a, 'host:a.example');
+        expect(selectProxy(list, 'per-scrape', b, 'host:b.example')).toBe(first);
+      });
+
+      it('successive scrapes are spread over the list, however many clients each builds', () => {
+        const picks: Array<string | null> = [];
+        for (let i = 0; i < 3; i++) {
+          createProxyRotationState(); // a token client
+          createProxyRotationState(); // a data client
+          picks.push(selectProxy(list, 'per-scrape', scrapeProxyRotationState(createScrapeProxyPin(), list), 'k'));
+        }
+        expect(picks).toEqual(list);
+      });
+
+      it('keeps a separate state per list (a caller list vs the env list), from the scrape seed', () => {
+        const pin = createScrapeProxyPin();
+        const other = ['http://q1:1', 'http://q2:2'];
+        expect(selectProxy(list, 'per-scrape', scrapeProxyRotationState(pin, list), 'k')).toBe('http://p1:8080');
+        expect(selectProxy(other, 'per-scrape', scrapeProxyRotationState(pin, other), 'k')).toBe('http://q1:1');
+        expect(pin.seed).toBe(0);
+        expect(pin.states?.size).toBe(2);
+      });
     });
   });
 

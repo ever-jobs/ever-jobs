@@ -88,6 +88,13 @@ editing plugin call sites:
   whole-catalogue fan-out); `createHttpClient` keeps a plugin's `timeout` when proxies are set.
 - **Entry points:** REST `crawl`, GraphQL `CrawlPolicyInput`, MCP `crawl`, CLI `--crawl` and
   convenience flags plus `--crawl-preset` / `--caller-overrides`.
+- **PR #93 review:** browser navigations now go through the policy too (`BrowserPool.navigate`:
+  abort, egress guard with a best-effort DNS pre-check, robots.txt, a host-limiter slot for the
+  whole navigation, 429/503 back-off; the 18 direct `page.goto` calls of 15 plugins migrated;
+  switch `EVER_JOBS_CRAWL_BROWSER_NAVIGATION`, off under `legacy`), the `per-scrape` proxy pin
+  is shared by every client of a scrape, `retries` is capped at 10 at every layer with at least
+  100 ms before any retry (except `legacy`), and an over-limit `Retry-After` always raises
+  `HostCoolingDownError` (`rate_limited`), also with `retries: 0`.
 - **Nothing removed.** Pre-1690 behaviour: `EVER_JOBS_CRAWL_PRESET=legacy`, or one knob at a
   time. `RETRY_DEFAULT_*` / `RETRY_PER_SOURCE` still honoured.
 - **Docs:** operator guide `docs/CRAWL_POLICY.md`; ADR 0001 amends constitution Art. 5.2,

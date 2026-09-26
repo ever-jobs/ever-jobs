@@ -112,6 +112,9 @@ export const MCP_CRAWL_ENUMS = {
 
 const nonNegativeInt = (description: string) => ({ type: 'integer', minimum: 0, description });
 
+/** `MAX_CRAWL_RETRIES` of `@ever-jobs/models` (copied: this package cannot import it; a test pins the copy). */
+export const MCP_MAX_CRAWL_RETRIES = 10;
+
 /**
  * JSON Schema of the `crawl` argument of the `search_jobs` tool. Every field
  * is optional; the API is the authority on validation.
@@ -136,7 +139,10 @@ export const CRAWL_POLICY_INPUT_SCHEMA = {
     jitterMs: nonNegativeInt('Random extra 0..jitterMs per gap, ms.'),
     maxQueueWaitMs: nonNegativeInt('Longest wait for a slot before failing fast, ms. 0 = no limit.'),
     adaptiveThrottle: { type: 'boolean' },
-    retries: nonNegativeInt('Retries per request on a retryable status.'),
+    retries: {
+      ...nonNegativeInt(`Retries per request on a retryable status, 0-${MCP_MAX_CRAWL_RETRIES}.`),
+      maximum: MCP_MAX_CRAWL_RETRIES,
+    },
     retryStatuses: { type: 'array', items: { type: 'integer', minimum: 100, maximum: 599 } },
     retryBackoff: { type: 'string', enum: [...MCP_CRAWL_ENUMS.retryBackoff] },
     retryBaseDelayMs: nonNegativeInt('Base retry delay, ms.'),
