@@ -29,7 +29,7 @@
 
 ---
 
-## 2026-09-25 — Specs 1751 (T11–T12) and 1752 — guard follows record links; NAV id proved; ReliefWeb on API v2
+## 2026-09-25 — Spec 1752 (with Spec 1751 T11–T12) — guard follows record links; NAV id proved; ReliefWeb on API v2
 
 **Change:**
 
