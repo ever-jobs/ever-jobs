@@ -273,7 +273,7 @@ describe('PostgresPrismaJobStore — batch write path (always-on, Spec 1722)', (
     expect(calls).toHaveLength(3);
   });
 
-  it('putAllMany chunks by canonical id, keeps the last duplicate and drops unparsable dates', async () => {
+  it('putAllMany chunks by canonical id, keeps the last duplicate, and leaves a set with an unparsable date untouched', async () => {
     const { client, calls } = recordingRawClient();
     const store = new PostgresPrismaJobStore({ client, batchSize: 2 });
     const obs = (sourceJobId: string, url = `https://x/${sourceJobId}`, observedAt = '2026-09-24') => ({
@@ -292,19 +292,24 @@ describe('PostgresPrismaJobStore — batch write path (always-on, Spec 1722)', (
 
     expect(client.$transaction).not.toHaveBeenCalled();
     expect(calls.map((c) => c.sql)).toEqual([REPLACE_OBSERVATIONS_CHUNK_SQL, REPLACE_OBSERVATIONS_CHUNK_SQL]);
-    expect(JSON.parse(calls[0]!.params[0] as string)).toEqual(['a', 'b']);
-    expect(JSON.parse(calls[0]!.params[1] as string)).toEqual([
-      {
-        canonical_job_id: 'a',
-        site: 'linkedin',
-        source_job_id: 'a1',
-        url: 'https://x/final',
-        observed_at: '2026-09-24T00:00:00.000Z',
-        raw_title: null,
-      },
-    ]);
+    // 'a' (its last entry wins) carries an unparsable date: it is left out of the
+    // statement entirely, so its stored observations are neither deleted nor
+    // replaced — sending the id with the other row would delete the stored a2.
+    expect(JSON.parse(calls[0]!.params[0] as string)).toEqual(['b']);
+    expect(JSON.parse(calls[0]!.params[1] as string)).toEqual([]);
     expect(JSON.parse(calls[1]!.params[0] as string)).toEqual(['c']);
     expect((JSON.parse(calls[1]!.params[1] as string) as unknown[]).length).toBe(1);
+  });
+
+  it('putAllMany with a valid last entry for the same id writes it (the invalid one was replaced)', async () => {
+    const { client, calls } = recordingRawClient();
+    const store = new PostgresPrismaJobStore({ client });
+    await store.putAllMany([
+      { canonicalJobId: 'a', observations: [{ site: Site.LINKEDIN, sourceJobId: 'a1', url: 'u', observedAt: 'not a date' }] },
+      { canonicalJobId: 'a', observations: [{ site: Site.LINKEDIN, sourceJobId: 'a1', url: 'u', observedAt: '2026-09-24' }] },
+    ]);
+    expect(JSON.parse(calls[0]!.params[0] as string)).toEqual(['a']);
+    expect((JSON.parse(calls[0]!.params[1] as string) as unknown[]).length).toBe(1);
   });
 
   it('empty batches make no round-trip', async () => {

@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   CanonicalJob,
   ERR_STORE_INVALID_CURSOR,
@@ -381,6 +381,8 @@ export const STORE_POSTGRES_PRISMA_CONFIG = 'STORE_POSTGRES_PRISMA_CONFIG';
 })
 @Injectable()
 export class PostgresPrismaJobStore implements IJobStore, IJobObservationStore {
+  private readonly logger = new Logger(PostgresPrismaJobStore.name);
+
   private readonly client: PrismaJobsClient;
   private readonly batchSize: number;
 
@@ -575,6 +577,9 @@ export class PostgresPrismaJobStore implements IJobStore, IJobObservationStore {
    * Entries whose canonical row does not exist are skipped (their
    * observations would violate the FK and fail the whole chunk). A repeated
    * canonical id: the last entry wins, as sequential `putAll` calls would.
+   * An entry with an unparsable `observedAt` is skipped whole and its stored
+   * set left as it was — what its own `putAll` did (the transaction failed):
+   * replacing the set without that observation would delete the stored one.
    */
   async putAllMany(entries: ReadonlyArray<ObservationBatchEntry>): Promise<void> {
     if (entries.length === 0) return;
@@ -582,23 +587,28 @@ export class PostgresPrismaJobStore implements IJobStore, IJobObservationStore {
     for (const entry of entries) byId.set(entry.canonicalJobId, entry.observations);
     const ids = [...byId.keys()].sort(compareIds);
 
+    let skipped = 0;
     for (let start = 0; start < ids.length; start += this.batchSize) {
-      const chunkIds = ids.slice(start, start + this.batchSize);
+      const chunkIds: string[] = [];
       const rows: ObservationSqlRow[] = [];
-      for (const canonicalJobId of chunkIds) {
+      for (const canonicalJobId of ids.slice(start, start + this.batchSize)) {
         // Within one canonical id the (site, sourceJobId) primary key must be
         // unique in a single statement: the last observation wins.
         const observations = lastById(
           byId.get(canonicalJobId) ?? [],
           (o) => `${String(o.site)}\u0000${o.sourceJobId}`,
         );
+        const entryRows: ObservationSqlRow[] = [];
+        let valid = true;
         for (const o of observations.values()) {
           // `observedAt` is the source's own posting date when it had one.
-          // An unparsable value used to fail that job's whole `putAll`; here
-          // it would fail the chunk, so only that observation is dropped.
+          // An unparsable value fails this entry only (see above), not the chunk.
           const observedAt = isoOrUndefined(o.observedAt);
-          if (observedAt === undefined) continue;
-          rows.push({
+          if (observedAt === undefined) {
+            valid = false;
+            break;
+          }
+          entryRows.push({
             canonical_job_id: canonicalJobId,
             site: String(o.site),
             source_job_id: o.sourceJobId,
@@ -607,11 +617,23 @@ export class PostgresPrismaJobStore implements IJobStore, IJobObservationStore {
             raw_title: o.rawTitle ?? null,
           });
         }
+        if (!valid) {
+          skipped++;
+          continue;
+        }
+        chunkIds.push(canonicalJobId);
+        rows.push(...entryRows);
       }
+      if (chunkIds.length === 0) continue;
       await this.client.$queryRawUnsafe(
         REPLACE_OBSERVATIONS_CHUNK_SQL,
         toJsonbParam(chunkIds),
         toJsonbParam(rows),
+      );
+    }
+    if (skipped > 0) {
+      this.logger.warn(
+        `putAllMany: ${skipped} of ${ids.length} observation sets left unchanged (an unparsable observedAt)`,
       );
     }
   }

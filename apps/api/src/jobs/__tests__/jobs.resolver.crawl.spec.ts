@@ -14,7 +14,9 @@ import { CrawlPolicyGqlInput, SearchJobsInput } from '../gql-types';
  */
 
 function createResolver() {
-  const jobsService = { searchJobs: jest.fn().mockResolvedValue([] as JobPostDto[]) };
+  const jobsService = {
+    searchJobsWithDiagnostics: jest.fn().mockResolvedValue({ jobs: [] as JobPostDto[], perSource: [] }),
+  };
   const cacheService = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) };
   const aggregator = {
     aggregateRaw: jest.fn(async (rawJobs: JobPostDto[]) => ({
@@ -69,7 +71,7 @@ describe('JobsResolver.searchJobs — crawl mapping (Spec 1690)', () => {
 
     await resolver.searchJobs(input);
 
-    const passed = jobsService.searchJobs.mock.calls[0][0];
+    const passed = jobsService.searchJobsWithDiagnostics.mock.calls[0][0];
     expect(passed.searchTerm).toBe('engineer');
     expect(passed.crawl).toBeInstanceOf(CrawlPolicyDto);
     expect({ ...passed.crawl }).toEqual({ discovery: 'sitemap', maxConcurrentPerHost: 1, userAgentMode: 'strict' });
@@ -78,7 +80,7 @@ describe('JobsResolver.searchJobs — crawl mapping (Spec 1690)', () => {
   it('does not add a crawl key when the caller sent none (the pre-1690 DTO shape is unchanged)', async () => {
     const { resolver, jobsService } = createResolver();
     await resolver.searchJobs(Object.assign(new SearchJobsInput(), { searchTerm: 'engineer' }));
-    expect('crawl' in jobsService.searchJobs.mock.calls[0][0]).toBe(false);
+    expect('crawl' in jobsService.searchJobsWithDiagnostics.mock.calls[0][0]).toBe(false);
   });
 
   it('includes crawl in the cache key, so a different crawl policy is a different cache entry', async () => {

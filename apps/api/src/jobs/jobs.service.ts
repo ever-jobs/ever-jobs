@@ -1139,16 +1139,20 @@ export class JobsService implements OnModuleInit {
     const out: LocationOutcome[] = [];
     let refusal: LocationRefusal | undefined;
     let attempted = false;
+    // Set when the deadline race abandons a call. The timer can fire a few ms
+    // before `Date.now()` reaches `deadlineAt` (libuv's cached loop time), so
+    // without it the next location could still start after the cut.
+    let deadlineHit = false;
     for (const location of locations) {
       if (refusal) {
         this.metrics.scraperRequestsTotal.inc({ site, status: 'location_skipped' });
         out.push({ location, notAttempted: refusal });
         continue;
       }
-      if (attempted && intervalMs > 0 && Date.now() < deadlineAt) {
+      if (attempted && intervalMs > 0 && !deadlineHit && Date.now() < deadlineAt) {
         await this.pause(Math.min(intervalMs, deadlineAt - Date.now()));
       }
-      if (Date.now() >= deadlineAt) {
+      if (deadlineHit || Date.now() >= deadlineAt) {
         this.metrics.scraperRequestsTotal.inc({ site, status: 'deadline_skipped' });
         out.push({
           location,
@@ -1178,6 +1182,7 @@ export class JobsService implements OnModuleInit {
         if (reason) refusal = { reason, trigger: location };
       } catch (err) {
         out.push({ location, settled: { status: 'rejected', reason: err }, deadlineAborted });
+        if (err instanceof FanoutDeadlineError) deadlineHit = true;
         const reason = refusalFromError(err);
         if (reason) refusal = { reason, trigger: location };
       }

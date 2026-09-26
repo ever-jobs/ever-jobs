@@ -135,9 +135,15 @@ export class JobsResolver {
       if (crawl) {
         scraperInput.crawl = crawl;
       }
-      rawJobs = await this.jobsService.searchJobs(scraperInput);
-      // Spec 1720 / FR-13 — same bound as the REST path.
-      if (
+      const result = await this.jobsService.searchJobsWithDiagnostics(scraperInput);
+      rawJobs = result.jobs;
+      // Spec 1721 / FR-20 — like the REST path, an incomplete crawl (the
+      // deadline or the job ceiling left sources unscraped) is served but never
+      // cached: a retry within the TTL must get a fresh chance at those sources.
+      // Spec 1720 / FR-13 — and the same size bound.
+      if (result.completeness?.complete === false) {
+        this.logger.log(`Not caching an incomplete crawl (${result.completeness.stopReason})`);
+      } else if (
         isCacheableJobCount(
           rawJobs.length,
           this.configService.get<number>('cache.maxJobs', DEFAULT_CACHE_MAX_JOBS),

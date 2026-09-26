@@ -5,12 +5,21 @@
 
 ---
 
+## 2026-09-26 — Spec 1724 — PR #98 review: stable cluster ids, no cached cut-off GraphQL crawls, observation sets kept on a bad date
+
+- **Stable ids (Spec 1724 FR-5, D-04 superseded).** A cluster id no longer depends on the batch: the default engagement (full-time or unknown) keeps the plain `canonicalJobId`, any other employment class always gets `sha256(<canonicalKey>|<classes>)`. The same rule is `clusterKeyForJob` in `@ever-jobs/common` (the employment-class helpers moved there from the merge gate, re-exported), which the aggregator uses for a `dedup=true` representative's `dedupKey`. Before, an internship's id and stored row changed with whether its full-time twin was in the same crawl. A representative whose key differs from its plain per-job key is returned as a copy, so a cached raw job never carries it into a later `dedup=false` response.
+- **GraphQL cache (Spec 1721 FR-20).** The resolver now calls `searchJobsWithDiagnostics` and, like REST, never caches an incomplete crawl.
+- **Postgres observations (Spec 1722 FR-13).** `putAllMany` skips a canonical entry with an unparsable `observedAt` whole and leaves its stored set untouched (what its own `putAll` did); dropping only that row made the replace statement delete the stored observation.
+- **Multi-location deadline (Spec 1700 × 1721).** The location loop remembers a deadline cut, so a timer that fires before `Date.now()` reaches the deadline cannot start the next location.
+- **Spec 1721 FR-1** says `201`, the status the POST search has always returned (the spec said `200`).
+- **docs/log.md** headings carry a unique `Spec NNNN` per date so `lint:docs` passes on the merged tree.
+
 ## 2026-09-26 — Spec 1720 — Bayt listed in list mode; develop's cache-key tests follow `search-v2`
 
 - Spec 1710 (develop) rebuilt Bayt's search URL: an empty term now lists `/en/<market>/jobs/` instead of the malformed `/jobs/-jobs/` that made Spec 1720 flag it. The flag is removed; `naukri`, `stepstone` and `careeronestop` keep it. The audit test asserts Bayt carries no flag.
 - Develop's Spec 1690/1700 tests asserted the REST cache key with `endpoint: 'search'`; since Spec 1721 FR-19 the entry is the `search-v2` envelope, so they now use `SEARCH_CACHE_ENDPOINT`.
 
-## 2026-09-26 — Merge — develop (Specs 1690-1713: crawl policy, multi-location search, exclusions, board fixes) into Specs 1720-1724
+## 2026-09-26 — Spec 1722 — merge: develop (Specs 1690-1713: crawl policy, multi-location search, exclusions, board fixes) into Specs 1720-1724
 
 - `searchJobsWithDiagnostics` runs both feature sets: list mode, `siteCategories`, the job ceiling, caller cancellation, NDJSON progress and the completeness record (Specs 1720/1721) now also cover multi-location searches (Spec 1700) and the crawl-policy scrape context with its deadline abort (Spec 1690). The deadline race rejects with `FanoutDeadlineError` and still calls the abort hook.
 - Completeness counts SOURCES in both modes: a multi-location source cut short by the deadline, or not started by a bound, counts once in `sourcesSkipped` and appears once in `problemSources` (`skipped`); a source that ran reports its first problem location. `mergeLocationOutcomes` returns each source's rows for this.

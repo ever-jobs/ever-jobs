@@ -63,6 +63,9 @@ apart whose company, title and location coincide (an internship and a new-grad p
 same title in one city). On the default `dedup=true` path those representatives carry their
 (distinct, discriminated) cluster ids instead of the shared per-job key, so distinct postings
 never share a `dedupKey`; with `dedup=false` they still share one (Spec 1724 D-05).
+Since the 2026-09-26 PR review that `dedup=true` key is `clusterKeyForJob`: class-scoped for any
+engagement other than full-time/unknown in EVERY batch, not only in a batch that holds the
+conflicting twin, so it no longer changes from run to run (Spec 1724 FR-5).
 ## Q-099 — Boards whose robots.txt disallows generic crawlers (Specs 1692-1713)
 
 **Context:** The board fixes in Specs 1701-1713 made each plugin honest about what it fetches:
