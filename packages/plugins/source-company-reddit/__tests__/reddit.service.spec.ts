@@ -87,7 +87,7 @@ describe('RedditService — Spec 027 / T04', () => {
       expect(adsRanking?.jobUrl).toBe(
         'https://boards.greenhouse.io/reddit/jobs/7701234',
       );
-      expect(adsRanking?.location?.city).toBe('San Francisco, CA');
+      expect(adsRanking?.location?.city).toBe('San Francisco');
       expect(adsRanking?.department).toBe('Engineering');
       expect(adsRanking?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

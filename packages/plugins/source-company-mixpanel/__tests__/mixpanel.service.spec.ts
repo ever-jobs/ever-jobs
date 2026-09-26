@@ -131,7 +131,7 @@ describe('MixpanelService — Spec 062 / T04', () => {
       expect(am?.jobUrl).toContain('job-boards.greenhouse.io');
       expect(am?.jobUrl).toContain('/mixpanel/jobs/');
       expect(am?.jobUrl).not.toContain('?gh_jid=');
-      expect(am?.location?.city).toBe('San Francisco, CA');
+      expect(am?.location?.city).toBe('San Francisco');
       // D-11 regression guard: the emitted `department` for the first
       // fixture listing is the flat single-token string `'Sales'`
       // byte-for-byte AND matches the wire `departments[0].name`
@@ -169,7 +169,7 @@ describe('MixpanelService — Spec 062 / T04', () => {
       // byte-for-byte.
       expect(eng?.title).toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(eng?.companyName).toBe('Mixpanel');
-      expect(eng?.location?.city).toBe('Bangalore, India');
+      expect(eng?.location?.city).toBe('Bangalore');
       // The fixture location string does NOT contain "Remote"
       // (Bangalore hybrid string, no remote keyword) so isRemote
       // should be false.

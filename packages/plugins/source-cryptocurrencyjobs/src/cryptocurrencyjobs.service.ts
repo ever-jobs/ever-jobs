@@ -193,6 +193,7 @@ export class CryptocurrencyJobsService implements IScraper {
       companyName,
       jobUrl: item.link,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       compensation: undefined,
       datePosted,

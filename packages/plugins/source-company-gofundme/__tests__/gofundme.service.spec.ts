@@ -97,7 +97,7 @@ describe('GofundmeService — Spec 151 / T04', () => {
       );
       // D-11 clean dept (this listing has clean wire dept).
       expect(ae?.department).toBe('Sales');
-      expect(ae?.location?.city).toBe('San Diego, CA');
+      expect(ae?.location?.city).toBe('San Diego');
       expect(ae?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ae?.description).not.toContain('&lt;');
@@ -121,7 +121,7 @@ describe('GofundmeService — Spec 151 / T04', () => {
       expect(pp?.department).toBe('Technical Solutions & Partnerships');
       expect(pp?.department).not.toMatch(/\s$/);
       expect(pp?.companyName).toBe('GoFundMe');
-      expect(pp?.location?.city).toBe('Remote, US');
+      expect(pp?.location?.city).toBeUndefined();
       expect(pp?.isRemote).toBe(true);
       expect(pp?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/gofundme/jobs/7759883',

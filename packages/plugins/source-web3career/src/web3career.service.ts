@@ -13,7 +13,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import { createHttpClient, htmlToPlainText, markdownConverter, extractEmails } from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList } from '@ever-jobs/common';
 import { WEB3CAREER_API_URL, WEB3CAREER_HEADERS } from './web3career.constants';
 import { Web3CareerJob, Web3CareerResponse } from './web3career.types';
 
@@ -135,9 +135,8 @@ export class Web3CareerService implements IScraper {
     }
 
     // Build location
-    const location = new LocationDto({
-      city: entry.location || null,
-    });
+    const locationParsed = parseLocationList([entry.location || null]);
+    const location = locationParsed.location;
 
     // Parse date
     const rawDate = entry.date_posted || entry.created_at;
@@ -150,10 +149,11 @@ export class Web3CareerService implements IScraper {
       companyLogo: entry.company_logo || null,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,
-      isRemote: entry.is_remote ?? entry.remote ?? false,
+      isRemote: (entry.is_remote ?? entry.remote ?? false) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       site: Site.WEB3CAREER,
       skills: entry.tags?.length ? entry.tags : null,

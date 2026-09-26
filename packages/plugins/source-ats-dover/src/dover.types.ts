@@ -61,6 +61,17 @@ export interface DoverListJob {
   is_sample?: boolean | null;
 }
 
+/**
+ * A job group (department) from `job-groups/{clientId}/job-groups` — the feed
+ * the board SPA uses for its per-group sections.
+ */
+export interface DoverJobGroup {
+  id?: string | null;
+  /** Group display name — the role's department. */
+  name?: string | null;
+  jobs?: DoverListJob[] | null;
+}
+
 /** The careers-page jobs-list envelope (paged). */
 export interface DoverJobsResponse {
   count?: number | null;
@@ -95,8 +106,10 @@ export interface DoverJobDetail {
 export interface DoverJob {
   /** Role id — used as the ATS id. */
   jobId: string;
-  /** Absolute public board URL. */
+  /** Absolute public URL used as `jobUrl` — shape per `DOVER_JOB_URL_STYLE`. */
   url: string;
+  /** Per-role apply-form URL (or the careers URL when no slug is known). */
+  applyUrl: string;
   /** Job display title. */
   title: string | null;
   /** Tenant company display name (from `client_name` / careers-page `name`). */
@@ -111,6 +124,8 @@ export interface DoverJob {
   employmentType: string | null;
   /** Posted date — parsed to `YYYY-MM-DD`. */
   datePosted: string | null;
+  /** Job-group (department) name, when the role appears in the groups feed. */
+  department: string | null;
   /** True when the role advertises remote / distributed working. */
   isRemote: boolean;
   /** Structured compensation parsed from the detail's `compensation` block. */

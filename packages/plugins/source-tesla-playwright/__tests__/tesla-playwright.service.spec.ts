@@ -275,7 +275,7 @@ describe('TeslaPlaywrightService (Spec 013 / T09 + T10 — opt-in lazy-Playwrigh
       // dedup-engine's per-source breaker can track the two plugins
       // independently; cross-plugin dedup runs via the hash strategy.
       expect(first.site).toBe(Site.TESLA_PLAYWRIGHT);
-      expect(first.location?.city).toBe('Palo Alto, CA');
+      expect(first.location?.city).toBe('Palo Alto');
       expect(first.isRemote).toBe(false);
       expect(first.department).toBe('Software & IT');
       expect(first.jobUrl).toBe(
@@ -284,7 +284,7 @@ describe('TeslaPlaywrightService (Spec 013 / T09 + T10 — opt-in lazy-Playwrigh
 
       // Remote-detection branch on listing 300002 (`Remote, United States`).
       const second = result.jobs[1];
-      expect(second.location?.city).toBe('Remote, United States');
+      expect(second.location?.city).toBeUndefined();
       expect(second.isRemote).toBe(true);
       expect(second.department).toBe('Software & IT');
 

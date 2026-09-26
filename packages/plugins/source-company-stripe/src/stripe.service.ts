@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 /** Stripe uses Greenhouse for their careers page */
 const API_URL = 'https://api.greenhouse.io/v1/boards/stripe/jobs';
@@ -53,9 +53,8 @@ export class StripeService implements IScraper {
         const id = `stripe-${jobId}`;
 
         const locationStr = listing.location?.name ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const locationParsed = parseLocationList([locationStr]);
+        const location = locationStr ? locationParsed.location : null;
 
         // Filter by location if provided
         if (input.location && locationStr) {
@@ -70,9 +69,10 @@ export class StripeService implements IScraper {
             companyName: 'Stripe',
             jobUrl: listing.absolute_url ?? `https://stripe.com/jobs/listing/${listing.id}`,
             location,
+            ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
             description: listing.content ? stripHtmlTags(listing.content) : null,
             datePosted: listing.updated_at ?? null,
-            isRemote: locationStr?.toLowerCase().includes('remote') ?? false,
+            isRemote: (locationStr?.toLowerCase().includes('remote') ?? false) || locationParsed.remoteMentioned,
             department: listing.departments?.[0]?.name ?? null,
           }),
         );

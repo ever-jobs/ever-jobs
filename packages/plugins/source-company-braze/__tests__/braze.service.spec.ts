@@ -110,7 +110,7 @@ describe('BrazeService — Spec 110 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, Platform');
       expect(sse?.companyName).toBe('Braze');
-      expect(sse?.location?.city).toBe('New York, NY');
+      expect(sse?.location?.city).toBe('New York');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('Engineering');
       expect(sse?.jobUrl).toBe(

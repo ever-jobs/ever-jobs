@@ -7,6 +7,7 @@ import { classifyScrapeError,
   JobResponseDto,
   JobPostDto,
   CompensationDto,
+  LocationDto,
   Site,
   DescriptionFormat,
   getCompensationInterval,
@@ -16,7 +17,10 @@ import {
   HttpClient,
   htmlToPlainText,
   extractEmails,
+  normalizeCountryOnly,
+  normalizeUsState,
   parseLocationList,
+  parseLocationText,
   resolveCompensation,
   aggregateCompensation,
   toDateOnly,
@@ -234,6 +238,7 @@ export class AshbyService implements IScraper {
     }
 
     const parsedLocations = parseLocationList(this.locationLabels(job));
+    const locations = this.siteLocations(job);
 
     // Remote status: Ashby's structured `workplaceType` is authoritative
     // (`isRemote=true` is also set for Hybrid roles, so the boolean alone
@@ -277,6 +282,7 @@ export class AshbyService implements IScraper {
       companyName: companySlug,
       jobUrl: job.jobUrl ?? `https://jobs.ashbyhq.com/${companySlug}/${job.id}`,
       location: parsedLocations.location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       compensation,
       datePosted,
@@ -348,6 +354,112 @@ export class AshbyService implements IScraper {
       postal.addressCountry,
     ].filter((part): part is string => Boolean(part?.trim()));
     return parts.length > 0 ? parts.join(', ') : null;
+  }
+
+  /**
+   * Per-site `locations[]` (Spec 5121). Each site keeps its structured
+   * `postalAddress` fields rather than being flattened into a re-parsed
+   * label: `addressLocality` → `city`, `addressRegion` → `state`
+   * (normalized), `addressCountry` → `country`, and the wire `location`
+   * string is preserved verbatim in `text`. Entries without a postalAddress
+   * still go through `parseLocationList` so `text` is recorded there too.
+   */
+  private siteLocations(job: AshbyJob): LocationDto[] {
+    const entries: Array<{
+      label?: string | null;
+      address?: AshbyJob['address'];
+    }> = [
+      { label: job.location, address: job.address },
+      ...(job.secondaryLocations ?? []).map((secondary) => ({
+        label: secondary?.location,
+        address: secondary?.address,
+      })),
+    ];
+
+    const sites: LocationDto[] = [];
+    const seen = new Set<string>();
+    for (const entry of entries) {
+      const site = this.siteLocation(entry.label, entry.address);
+      if (!site) continue;
+      const key = [site.name, site.city, site.state, site.country]
+        .filter((part): part is string => typeof part === 'string')
+        .join('|')
+        .toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      sites.push(site);
+    }
+    return sites;
+  }
+
+  /** A locality holding digits is a street address, not a city. */
+  private siteLocation(
+    label: string | null | undefined,
+    address: AshbyJob['address'],
+  ): LocationDto | null {
+    const text = label?.replace(/\s+/g, ' ').trim() || null;
+    const postal = address?.postalAddress;
+    const postalFields = postal
+      ? [
+          postal.addressLocality,
+          postal.addressRegion,
+          postal.addressCountry,
+          postal.streetAddress,
+          postal.postalCode,
+        ].filter((part) => typeof part === 'string' && part.trim())
+      : [];
+
+    if (postalFields.length === 0) {
+      // No structured address: parse the label so `text` is still recorded.
+      if (!text) return null;
+      const parsed = parseLocationText(text);
+      return parsed.location
+        ? new LocationDto({ ...parsed.location, text })
+        : null;
+    }
+
+    const locality = postal!.addressLocality?.trim() ?? '';
+    const localityIsStreet = /\d/.test(locality);
+    const localityIsCountry = /^(?:united states(?: of america)?|usa|us)$/i.test(
+      locality,
+    );
+
+    let city = locality && !localityIsStreet && !localityIsCountry ? locality : null;
+    let state =
+      normalizeUsState(postal!.addressRegion ?? '') ??
+      postal!.addressRegion?.trim() ??
+      null;
+    const rawCountry = postal!.addressCountry?.trim() ?? null;
+    let country =
+      (rawCountry ? normalizeCountryOnly(rawCountry) : null) ?? rawCountry;
+
+    // When the postal locality is unusable, the label is the better source
+    // for the city.
+    if (!city && text) {
+      const parsed = parseLocationText(text);
+      if (parsed.location?.city) city = parsed.location.city;
+      if (!state && parsed.location?.state) state = parsed.location.state;
+    }
+
+    const streetAddress =
+      postal!.streetAddress?.trim() || (localityIsStreet ? locality : null);
+    const postalCode = postal!.postalCode?.trim() ?? null;
+
+    // A label carrying a site-name keyword is a name, not just geography.
+    const name =
+      text && /\b(?:hq|headquarters|office|campus|ranch|lab(?:s)?|studio(?:s)?|facility|site|plant|warehouse|factory)\b/i.test(text)
+        ? text
+        : null;
+
+    return new LocationDto({
+      name,
+      text,
+      city,
+      state,
+      country,
+      streetAddress,
+      postalCode,
+    });
   }
 
   /**

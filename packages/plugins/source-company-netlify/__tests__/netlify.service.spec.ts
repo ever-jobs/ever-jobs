@@ -114,7 +114,7 @@ describe('NetlifyService — Spec 053 / T04', () => {
       // form Ramp Network introduced in Spec 052.
       expect(ux?.jobUrl).toContain('job-boards.greenhouse.io');
       expect(ux?.jobUrl).not.toContain('job-boards.eu.greenhouse.io');
-      expect(ux?.location?.city).toBe('Remote');
+      expect(ux?.location?.city).toBeUndefined();
       // D-11 regression guard: the wire department name is `'R&D'`
       // (literal ASCII ampersand). The plugin pins it byte-for-byte
       // — no entity decode pass on department names (only on the
@@ -146,7 +146,7 @@ describe('NetlifyService — Spec 053 / T04', () => {
       const talent = dto.jobs.find((j) => j.id === 'netlify-4224129002');
       expect(talent?.isRemote).toBe(true);
       expect(talent?.department).toBe('G&A');
-      expect(talent?.location?.city).toBe('Remote');
+      expect(talent?.location?.city).toBeUndefined();
       expect(talent?.companyName).toBe('Netlify');
       expect(talent?.title).toBe('Your Chance to Join Our Talent Community!');
       // Tags stripped after decode (no literal `<p>` substrings).

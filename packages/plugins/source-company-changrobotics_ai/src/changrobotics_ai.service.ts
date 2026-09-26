@@ -91,7 +91,7 @@ export class ChangroboticsAiService implements IScraper, OnModuleDestroy {
 
     const p = page ?? (await BrowserPool.getPage({ stealth: true, headful: true }));
     try {
-      await p.goto(url, {
+      await BrowserPool.navigate(p, url, {
         waitUntil: 'domcontentloaded',
         timeout,
       });

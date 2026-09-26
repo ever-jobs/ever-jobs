@@ -11,7 +11,7 @@ import {
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList } from '@ever-jobs/common';
 import {
   MERCOR_API_BASE_URL,
   MERCOR_DEFAULT_RESULTS_WANTED,
@@ -122,9 +122,8 @@ export class MercorService implements IScraper {
 
   /** Map a single explore-page listing into the canonical `JobPostDto`. */
   private toJobPost(listing: MercorListing): JobPostDto {
-    const location = listing.location
-      ? new LocationDto({ city: listing.location })
-      : null;
+    const locationParsed = parseLocationList([listing.location]);
+    const location = listing.location ? locationParsed.location : null;
     const isRemote =
       listing.location?.toLowerCase().includes('remote') ?? false;
 
@@ -136,6 +135,7 @@ export class MercorService implements IScraper {
       companyName: listing.companyName ?? 'Mercor',
       jobUrl: this.buildJobUrl(listing),
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       isRemote,
       site: Site.MERCOR,
       atsId: listing.listingId,

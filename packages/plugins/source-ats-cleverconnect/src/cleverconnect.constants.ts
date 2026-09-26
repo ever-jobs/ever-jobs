@@ -124,3 +124,18 @@ export const CLEVERCONNECT_OFFER_ID_REGEX = /(\d+)\s*$/;
 /** Detects remote / home-working roles across the title, location, and contract fields. */
 export const CLEVERCONNECT_REMOTE_REGEX =
   /\b(remote|t[ée]l[ée]travail|home[\s-]?(?:based|working|office)|work\s*from\s*home|wfh|telecommute|fully\s*remote|100\s*%\s*remote)\b/i;
+
+/**
+ * Env toggle for CleverConnect location heuristics (Spec 1689), layered on top
+ * of the shared parser: the board's "City (dept) - Region[, Country]" locality
+ * shape ("Guebwiller (68) - Grand Est") is split into city / state / country —
+ * the pre-5125 behaviour. The shared parser keeps only the city and drops the
+ * region. `false` / `0` / `off` / `no` → shared-parser output only; unset or
+ * anything else → on.
+ */
+export const CLEVERCONNECT_LOCATION_HEURISTICS_ENV = 'CLEVERCONNECT_LOCATION_HEURISTICS';
+
+export function cleverConnectLocationHeuristicsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = (env[CLEVERCONNECT_LOCATION_HEURISTICS_ENV] ?? '').trim().toLowerCase();
+  return !(v === 'false' || v === '0' || v === 'off' || v === 'no');
+}

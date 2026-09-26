@@ -43,6 +43,7 @@ export enum Site {
   DICE = 'dice',
   SIMPLYHIRED = 'simplyhired',
   WELLFOUND = 'wellfound',
+  WELLFOUND_ATS = 'wellfound_ats',
   STEPSTONE = 'stepstone',
   MONSTER = 'monster',
   CAREERBUILDER = 'careerbuilder',
@@ -3561,6 +3562,46 @@ export enum Site {
   PULSESPACE = 'pulsespace',
   // Phase 1694: Spec 5115 — Source Company Plugin: ReNEW Manufacturing Solutions (renewmfgsol.com)
   RENEWMFGSOL = 'renewmfgsol',
+  // Phase 1695: Spec 5132 — Octbr (octbr.ai) multi-tenant ATS plugin (Laravel/Inertia data-page props)
+  OCTBR_AI = 'octbr_ai',
+  // Phase 1696: Spec 5135 — Nodi (nodi.global) multi-tenant ATS plugin (api.nodi.global JSON endpoints)
+  NODI_GLOBAL = 'nodi_global',
+  // Phase 1697: Spec 5140 — Source Company Plugin: Tau Robotics (tau-robotics.com)
+  TAU_ROBOTICS = 'tau-robotics',
+  // Phase 1698: Spec 5141 — Source Company Plugin: Powerus (power.us) — public /api/careers JSON feed
+  POWER_US = 'power_us',
+  // Phase 1699: Spec 5142 — Source Company Plugin: Mundane (mundane.co) — careers array embedded in JS bundle
+  MUNDANE_CO = 'mundane_co',
+
+  // Phase 1700: Spec 5143 — Source Company Plugin: Max Space (getmaxspace.com) — Webflow CMS careers, Indeed apply links
+  GETMAXSPACE = 'getmaxspace',
+
+  // Phase 1701: Spec 5147 — Source Company Plugin: Ampflame / Accurate Metals (ampflame.com) — Next.js careers table
+  AMPFLAME = 'ampflame',
+
+  // Phase 1702: Spec 5148 — Source Company Plugin: 4Earth (4earth.tech) — careers array embedded in Careers chunk
+  FOUR_EARTH_TECH = '4earth_tech',
+
+  // Phase 1703: Spec 5149 — Source Company Plugin: Zenno Astronautics (zennoastronautics.com) — Sanity CMS query API
+  ZENNOASTRONAUTICS = 'zennoastronautics',
+
+  // Phase 1704: Spec 5150 — Source Company Plugin: Thermwood (thermwood.com) — static job-card careers page
+  THERMWOOD = 'thermwood',
+
+  // Phase 1705: Spec 5151 — Source Company Plugin: Actor (labs.actor) — careers array in lazy webpack chunk
+  LABS_ACTOR = 'labs_actor',
+
+  // Phase 1706: Spec 5152 — Source Company Plugin: Soundryx (soundryx.com) — static Astro careers index + detail pages
+  SOUNDRYX = 'soundryx',
+
+  // Phase 1692: Spec 1692 — Source ATS Plugin: InHire (inhire.app) — public job-posts JSON API keyed by X-Tenant header
+  INHIRE = 'inhire',
+
+  // Phase 1693: Spec 1693 — Source Plugin: Level (jobsbylevel.com) — AI-rated job board via the public MCP server, RSS feed fallback
+  JOBSBYLEVEL = 'jobsbylevel',
+
+  // Phase 1694: Spec 1694 — Source Plugin: Simplify (new grad & internships) — public listings files, ETag-cached
+  SIMPLIFYJOBS = 'simplifyjobs',
 }
 
 /**

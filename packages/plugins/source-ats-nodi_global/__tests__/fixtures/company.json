@@ -1,0 +1,18 @@
+{
+ "company_name": "Radical AI",
+ "logo_url": "https://storage.googleapis.com/nodi-uploads/companies/e0b5ac32-a596-4cc3-865b-ef20fbc180ab/logos/a026675bcca1436f860558a507c4787a.jpg?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=development%40graphic-charter-464703-a5.iam.gserviceaccount.com%2F20260919%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260919T235459Z&X-Goog-Expires=21600&X-Goog-SignedHeaders=host&X-Goog-Signature=109c79dade14691d790899d66fcab42c584cc1f064d1a888957b35bfef793214819222b681e2c92c37ed81833ea4cb3c51485885c2b3c71b1e164d9f6983d55829e0ff582b4e7f4306c7a61f2fd8c0ce33340666798c91049f4b942dce3a0fe5fb570e7541358fad1b3147f97e664f8299c75425b494042ce5a360bb1cb9e9e1834a14cdca8a6ffad580a334151654665caeb3f27469ea5b82eedcbc127d1dd88aa0f57431c1ad47e7a18e7b067f2a567050c0755fd0a14b7354b3c161f0d2cdd16901efdfc65802bc7ceda7a6971f7693bdc8b5df6b168ae4e52ec209b589f497ef736691a00708be43dec37e7f88f28cd49c6f322b45c51e960600ca0b3706",
+ "banner_url": null,
+ "company_description": "Radical AI is accelerating materials R&D.Through the integration of artificial intelligence, engineering, materials science, and applied research, we are changing the way materials are designed, developed, and discovered. In doing so we are tackling the world's most pressing problems.",
+ "recruiter_id": "e0b5ac32-a596-4cc3-865b-ef20fbc180ab",
+ "industry": "SaaS",
+ "website": "https://radical-ai.com",
+ "password": null,
+ "show_images": false,
+ "career_page_theme": {
+  "accent_color": "#1A1A1A",
+  "button_color": "#1A1A1A",
+  "background_color": "#FFFFFF",
+  "logo_backdrop": "none",
+  "font_family": "inter"
+ }
+}

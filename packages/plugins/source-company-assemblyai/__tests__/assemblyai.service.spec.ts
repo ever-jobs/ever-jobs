@@ -104,7 +104,7 @@ describe('AssemblyAIService — Spec 108 / T04', () => {
       expect(fde?.department).toBe('Customer Experience');
       expect(fde?.department).not.toBe(JOBS_PAGE_RAW.jobs[0].departments[0].name);
       expect(fde?.department).not.toMatch(/\s$/);
-      expect(fde?.location?.city).toContain('Remote');
+      expect(fde?.location?.city).toBe('San Francisco OR New York');
       expect(fde?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(fde?.description).not.toContain('&lt;');
@@ -122,7 +122,7 @@ describe('AssemblyAIService — Spec 108 / T04', () => {
       expect(JOBS_PAGE_RAW.jobs[1].departments[0].name).toBe('Research ');
       expect(srs?.department).toBe('Research');
       expect(srs?.department).not.toMatch(/\s$/);
-      expect(srs?.location?.city).toBe('San Francisco, CA');
+      expect(srs?.location?.city).toBe('San Francisco');
       expect(srs?.isRemote).toBe(false);
       expect(srs?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/assemblyai/jobs/4688321005',

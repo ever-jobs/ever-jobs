@@ -16,6 +16,7 @@ import {
   randomSleep,
   extractSalary,
   extractEmails,
+  parseLocationList,
 } from '@ever-jobs/common';
 import { BrowserPool } from '@ever-jobs/common';
 import {
@@ -145,7 +146,7 @@ export class MonsterService implements IScraper, OnModuleDestroy {
       url.searchParams.set('page', '1');
 
       this.logger.log(`Monster Playwright: navigating to ${url.toString()}`);
-      await page.goto(url.toString(), {
+      await BrowserPool.navigate(page, url.toString(), {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });
@@ -191,14 +192,17 @@ export class MonsterService implements IScraper, OnModuleDestroy {
       jobUrl = `https://www.monster.com${jobUrl.startsWith('/') ? '' : '/'}${jobUrl}`;
     }
 
-    // Build location from city, stateProvince, formattedLocation
-    let locationStr: string | null = null;
+    // Structured city/stateProvince when both are present; otherwise the
+    // formattedLocation / city label goes through the shared parser.
+    let location: LocationDto | null = null;
+    let locations: LocationDto[] = [];
     if (job.city && job.stateProvince) {
-      locationStr = `${job.city}, ${job.stateProvince}`;
-    } else if (job.formattedLocation) {
-      locationStr = job.formattedLocation;
-    } else if (job.city) {
-      locationStr = job.city;
+      location = new LocationDto({ city: job.city, state: job.stateProvince });
+      locations = [location];
+    } else {
+      const parsed = parseLocationList([job.formattedLocation ?? job.city ?? null]);
+      location = parsed.location;
+      locations = parsed.locations;
     }
 
     // Parse date
@@ -233,7 +237,8 @@ export class MonsterService implements IScraper, OnModuleDestroy {
       title,
       companyName: job.company?.name?.trim() ?? null,
       jobUrl,
-      location: locationStr ? new LocationDto({ city: locationStr }) : null,
+      location,
+      ...(locations.length > 0 ? { locations } : {}),
       compensation: compensation as any,
       datePosted,
       description: job.description ?? null,
@@ -296,6 +301,7 @@ export class MonsterService implements IScraper, OnModuleDestroy {
             .find('[data-testid="jobLocation"], .job-cardstyle__JobCardLocation, .location')
             .text()
             .trim() || null;
+        const locationParsed = parseLocationList([location]);
 
         // Extract salary
         const salaryText =
@@ -352,7 +358,10 @@ export class MonsterService implements IScraper, OnModuleDestroy {
             title,
             companyName: company,
             jobUrl: href,
-            location: location ? new LocationDto({ city: location }) : null,
+            location: locationParsed.location,
+            ...(locationParsed.locations.length > 0
+              ? { locations: locationParsed.locations }
+              : {}),
             compensation: compensation as any,
             datePosted: dateText,
             description: snippet,

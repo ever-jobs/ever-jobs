@@ -1,0 +1,96 @@
+{
+  "_note": "SYNTHETIC fixture - shape of /jobapi/v3/search as documented (the live endpoint could not be sampled on 2026-09-24: honest UA tarpitted, browser UA -> 406 recaptcha). Company names are invented. Test clock: 2026-09-24T12:00:00Z = 1790251200000.",
+  "noOfJobs": 7,
+  "jobDetails": [
+    {
+      "jobId": "240926000001",
+      "title": "Senior Node.js Developer",
+      "companyName": "Acme Softech Pvt Ltd",
+      "staticUrl": "acme-softech-jobs-careers-1001",
+      "jdURL": "/job-listings-senior-node-js-developer-acme-softech-bengaluru-5-to-8-years-240926000001",
+      "jobDescription": "Build <b>REST APIs</b> in Node.js.<br>Own services end to end.",
+      "placeholders": [
+        { "type": "experience", "label": "5-8 Yrs" },
+        { "type": "salary", "label": "12-16 Lacs P.A." },
+        { "type": "location", "label": "Bengaluru, Hyderabad, Pune" }
+      ],
+      "footerPlaceholderLabel": "Today",
+      "createdDate": 1790240400000,
+      "tagsAndSkills": "Node.Js, REST, Microservices ,AWS",
+      "experienceText": "5-8 Yrs",
+      "ambitionBoxData": { "AggregateRating": "3.9", "ReviewsCount": 1234 },
+      "vacancy": 3,
+      "logoPathV3": "https://img.naukimg.com/logo_images/groups/v1/1001.gif"
+    },
+    {
+      "jobId": "240926000002",
+      "title": "Data Engineer",
+      "companyName": "Blue Delta Analytics",
+      "staticUrl": "blue-delta-jobs-careers-1002",
+      "jdURL": "/job-listings-data-engineer-blue-delta-240926000002",
+      "jobDescription": "Spark and Airflow pipelines. Remote-friendly culture, but this team is hybrid.",
+      "placeholders": [
+        { "type": "experience", "label": "3-6 Yrs" },
+        { "type": "salary", "label": "Not disclosed" },
+        { "type": "location", "label": "Hybrid - Bengaluru, Chennai" }
+      ],
+      "footerPlaceholderLabel": "3 Days Ago",
+      "tagsAndSkills": "Spark,Airflow,Python",
+      "experienceText": "3-6 Yrs",
+      "ambitionBoxData": { "AggregateRating": "", "ReviewsCount": 0 },
+      "vacancy": 0,
+      "logoPath": "https://img.naukimg.com/logo_images/groups/v1/1002.gif"
+    },
+    {
+      "jobId": "240926000003",
+      "title": "Principal Architect",
+      "companyName": "Crescent Systems",
+      "jdURL": "/job-listings-principal-architect-crescent-240926000003",
+      "jobDescription": "Lead the platform architecture.",
+      "placeholders": [
+        { "type": "salary", "label": "80 Lacs-1.2 Cr P.A." },
+        { "type": "location", "label": "Remote" }
+      ],
+      "footerPlaceholderLabel": "30+ Days Ago",
+      "createdDate": 1786060800000,
+      "tagsAndSkills": "",
+      "experienceText": "15-20 Yrs"
+    },
+    {
+      "jobId": "240926000004",
+      "title": "QA Engineer",
+      "companyName": "Delta Quality Labs",
+      "jdURL": "https://www.naukri.com/job-listings-qa-engineer-delta-240926000004",
+      "jobDescription": "Manual and automation testing. This is not a remote role; work from office five days.",
+      "placeholders": [
+        { "type": "salary", "label": "Up to 10 Lacs P.A." },
+        { "type": "location", "label": "Pune" }
+      ],
+      "footerPlaceholderLabel": "Just Now",
+      "createdDate": 1790250000000
+    },
+    {
+      "jobId": "240926000005",
+      "title": "Support Executive",
+      "companyName": "Evergreen BPO",
+      "jdURL": "/job-listings-support-executive-evergreen-240926000005",
+      "jobDescription": "Voice process.",
+      "placeholders": [
+        { "type": "salary", "label": "2,50,000-3,50,000 P.A." },
+        { "type": "location", "label": "Temp. WFH - Mumbai (All Areas)" }
+      ],
+      "footerPlaceholderLabel": "Few Hours Ago"
+    },
+    {
+      "jobId": "240926000001",
+      "title": "Senior Node.js Developer (duplicate row)",
+      "companyName": "Acme Softech Pvt Ltd",
+      "placeholders": []
+    },
+    {
+      "title": "Row without jobId (skipped)",
+      "companyName": "Nobody",
+      "placeholders": []
+    }
+  ]
+}

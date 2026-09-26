@@ -91,7 +91,7 @@ describe('BobbieService — Spec 093 / T04', () => {
       expect(med?.jobUrl).toContain('job-boards.greenhouse.io/bobbie/jobs/');
       expect(med?.jobUrl).not.toContain('bobbie.com');
       expect(med?.department).toBe('Commercial');
-      expect(med?.location?.city).toBe('Remote ');
+      expect(med?.location?.city).toBeUndefined();
       expect(med?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(med?.description).not.toContain('&lt;');
@@ -105,7 +105,7 @@ describe('BobbieService — Spec 093 / T04', () => {
       expect(cgo).toBeDefined();
       expect(cgo?.title).toBe('Chief Growth Officer');
       expect(cgo?.companyName).toBe('Bobbie');
-      expect(cgo?.location?.city).toBe('San Francisco, CA');
+      expect(cgo?.location?.city).toBe('San Francisco');
       expect(cgo?.isRemote).toBe(false);
       expect(cgo?.department).toBe('Brand & Marketing');
       expect(cgo?.jobUrl).toBe(

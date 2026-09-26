@@ -1,0 +1,1 @@
+webpackChunkactor_labs_landing.push([[115],["115"=>function(e){"use strict";const c=[{id:"excavator",name:"Excavator",tagline:"Autonomous digging & trenching",accent:"#ffffff"},{id:"dozer",name:"Dozer",tagline:"Precision grading",accent:"#ffffff"}];e.exports=c;}]]);

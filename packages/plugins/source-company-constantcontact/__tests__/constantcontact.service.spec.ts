@@ -95,7 +95,7 @@ describe('ConstantContactService — Spec 111 / T04', () => {
       // byte (numeric organizational ID + name).
       expect(ai?.department).toBe('100 Engineering');
       expect(ai?.department).toMatch(/^\d+ /);
-      expect(ai?.location?.city).toBe('Waterloo, CA');
+      expect(ai?.location?.city).toBe('Waterloo');
       expect(ai?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ai?.description).not.toContain('&lt;');
@@ -108,7 +108,7 @@ describe('ConstantContactService — Spec 111 / T04', () => {
       expect(spd).toBeDefined();
       expect(spd?.title).toBe('Senior Product Designer');
       expect(spd?.companyName).toBe('Constant Contact');
-      expect(spd?.location?.city).toBe('Waltham, MA');
+      expect(spd?.location?.city).toBe('Waltham');
       expect(spd?.isRemote).toBe(false);
       expect(spd?.department).toBe('126 Design');
       expect(spd?.department).toMatch(/^\d+ /);

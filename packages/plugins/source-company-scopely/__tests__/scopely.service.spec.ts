@@ -109,7 +109,7 @@ describe('ScopelyService — Spec 087 / T04', () => {
       expect(artist?.department).toBe('MonopolyGo');
       expect(artist?.department).toBe(JOBS_PAGE_RAW.jobs[0].departments[0].name);
       // Location — Scopely's Barcelona studio.
-      expect(artist?.location?.city).toBe('Barcelona, Spain');
+      expect(artist?.location?.city).toBe('Barcelona');
       expect(artist?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(artist?.description).not.toContain('&lt;');
@@ -137,7 +137,7 @@ describe('ScopelyService — Spec 087 / T04', () => {
       // D-11 second-listing pass-through guard.
       expect(accounting?.department).toBe('Finance');
       expect(accounting?.department).toBe(JOBS_PAGE_RAW.jobs[1].departments[0].name);
-      expect(accounting?.location?.city).toBe('Remote, USA');
+      expect(accounting?.location?.city).toBeUndefined();
       expect(accounting?.isRemote).toBe(true);
       // Variant-2 lock for second listing.
       expect(accounting?.jobUrl).toBe(

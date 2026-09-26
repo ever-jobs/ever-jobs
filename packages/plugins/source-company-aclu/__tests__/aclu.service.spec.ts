@@ -99,7 +99,7 @@ describe('AcluService — Spec 178 / T04', () => {
       expect(devops?.jobUrl).toContain('job-boards.greenhouse.io/aclu/jobs/');
       // D-11 clean dept on this listing (Technology is unpadded).
       expect(devops?.department).toBe('Technology');
-      expect(devops?.location?.city).toBe('New York, New York, United States');
+      expect(devops?.location?.city).toBe('New York');
       expect(devops?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(devops?.description).not.toContain('&lt;');
@@ -112,7 +112,7 @@ describe('AcluService — Spec 178 / T04', () => {
       expect(dirNc?.title).toBe('Director, National Campaigns, Abuse of Power');
       expect(dirNc?.companyName).toBe('ACLU - National Office');
       expect(dirNc?.location?.city).toBe(
-        'New York, New York, United States; Washington, District of Columbia, United States',
+        'New York; Washington, District of Columbia',
       );
       expect(dirNc?.isRemote).toBe(false);
       // D-11 lock — wire dept carries trailing-pad; emitted
@@ -136,7 +136,7 @@ describe('AcluService — Spec 178 / T04', () => {
       // `Remote - National ` string — JobPostDto.location.city
       // preserves the raw wire field byte-for-byte (the trim
       // pipeline only applies to title + department).
-      expect(fellow?.location?.city).toBe('Remote - National ');
+      expect(fellow?.location?.city).toBe('National');
       expect(fellow?.isRemote).toBe(true);
       expect(fellow?.department).toBe('Legal');
 

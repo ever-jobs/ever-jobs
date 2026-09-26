@@ -18,6 +18,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -268,9 +269,8 @@ export class PersonioService implements IScraper {
       }
     }
 
-    const location = new LocationDto({
-      city: attrs.office?.attributes?.name ?? null,
-    });
+    const officeName = attrs.office?.attributes?.name;
+    const location = officeName ? parseLocationText(officeName).location : null;
 
     // Build job URL (default to .de domain for API-sourced positions)
     const jobUrl = `https://${encodeURIComponent(companySlug)}.jobs.personio.de/job/${pos.id}`;
@@ -290,6 +290,7 @@ export class PersonioService implements IScraper {
       companyName: companySlug,
       jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted,
       isRemote: false,
@@ -383,6 +384,7 @@ export class PersonioService implements IScraper {
       companyName: companySlug,
       jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted,
       isRemote: false,

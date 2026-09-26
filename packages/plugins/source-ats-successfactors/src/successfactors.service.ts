@@ -21,6 +21,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -541,6 +542,13 @@ export class SuccessFactorsService implements IScraper {
     const descEl = $('[itemprop="description"]').first();
     const descriptionHtml = descEl.length ? (descEl.html() ?? null) : null;
 
+    // CSB renders the requisition's department as a job-layout token, not
+    // schema.org microdata: <span data-careersite-propertyid="dept">Name</span>
+    const deptEl = $('[data-careersite-propertyid="dept"]').first();
+    const department = deptEl.length
+      ? deptEl.text().replace(/\s+/g, ' ').trim() || null
+      : null;
+
     const detail: SfCsbDetail = {
       title: content('title'),
       descriptionHtml,
@@ -548,6 +556,7 @@ export class SuccessFactorsService implements IScraper {
       validThrough: content('validThrough'),
       hiringOrganization: content('hiringOrganization'),
       industry: content('industry'),
+      department,
       city: addr('addressLocality'),
       state: addr('addressRegion'),
       country: addr('addressCountry'),
@@ -579,10 +588,9 @@ export class SuccessFactorsService implements IScraper {
           })
         : null;
 
-    const isRemote = locationParts
-      .join(', ')
-      .toLowerCase()
-      .includes('remote');
+    const isRemote = locationParts.some((p) =>
+      p.toLowerCase().includes('remote'),
+    );
 
     const datePosted = detail?.datePosted
       ? (() => {
@@ -606,11 +614,13 @@ export class SuccessFactorsService implements IScraper {
       jobUrl: item.jobUrl,
       applyUrl: item.jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted,
       isRemote,
       emails: emails && emails.length > 0 ? emails : null,
       jobFunction: detail?.industry ?? null,
+      department: detail?.department ?? null,
       site: Site.SUCCESSFACTORS,
       atsId: item.jobId,
       atsType: 'successfactors',
@@ -692,20 +702,19 @@ export class SuccessFactorsService implements IScraper {
       ? listing.externalJobUrl
       : `https://${instance}.successfactors.com/career?company=${encodeURIComponent(companyId)}&jobId=${encodeURIComponent(jobReqId ?? '')}`;
 
-    // Build location from locationObj
+    // Build location from locationObj — fields map structurally
     const locObj = listing.locationObj;
     const locationParts: string[] = [];
     if (locObj?.city) locationParts.push(locObj.city);
     if (locObj?.state) locationParts.push(locObj.state);
     if (locObj?.country) locationParts.push(locObj.country);
-    const locationStr = locationParts.length > 0 ? locationParts.join(', ') : null;
 
-    const location = locationStr
-      ? new LocationDto({ city: locObj?.city ?? locationStr, state: locObj?.state, country: locObj?.country })
+    const location = locationParts.length > 0
+      ? new LocationDto({ city: locObj?.city ?? null, state: locObj?.state ?? null, country: locObj?.country ?? null })
       : null;
 
     // Remote detection
-    const isRemote = locationStr?.toLowerCase().includes('remote') ?? false;
+    const isRemote = locationParts.some((p) => p.toLowerCase().includes('remote'));
 
     // Date from postingStartDate
     const rawDate = listing.postingStartDate ?? null;
@@ -796,12 +805,10 @@ export class SuccessFactorsService implements IScraper {
         // Extract location
         const locationStr =
           card.find('.jobLocation, .location, [class*="location"]').text().trim() || null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const parsed = parseLocationText(locationStr);
+        const location = parsed.location;
 
-        const isRemote =
-          locationStr?.toLowerCase().includes('remote') ?? false;
+        const isRemote = parsed.remoteMentioned;
 
         // Extract date
         const dateStr =

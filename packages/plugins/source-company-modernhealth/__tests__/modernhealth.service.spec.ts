@@ -96,7 +96,7 @@ describe('ModernHealthService — Spec 131 / T04', () => {
       );
       expect(cm?.jobUrl).toContain('job-boards.greenhouse.io/modernhealth/jobs/');
       expect(cm?.department).toBe('Customer Success');
-      expect(cm?.location?.city).toBe('Singapore');
+      expect(cm?.location?.city).toBeUndefined();
       expect(cm?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(cm?.description).not.toContain('&lt;');
@@ -109,7 +109,7 @@ describe('ModernHealthService — Spec 131 / T04', () => {
       expect(sape).toBeDefined();
       expect(sape?.title).toBe('Staff AI Product Engineer');
       expect(sape?.companyName).toBe('Modern Health');
-      expect(sape?.location?.city).toBe('San Francisco, CA');
+      expect(sape?.location?.city).toBe('San Francisco');
       expect(sape?.isRemote).toBe(false);
       expect(sape?.department).toBe('Engineering');
       expect(sape?.jobUrl).toBe(

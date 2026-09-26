@@ -269,4 +269,152 @@ describe('GreenhouseService — Spec 5009', () => {
       expect(job.workFromHomeType).toBeNull();
     });
   });
+
+  // ── Spec 5122 — per-site locations[] and offices[] ─────────────────────
+  describe('per-site locations[] and offices[] (Spec 5122)', () => {
+    it('emits one locations[] entry per packed `or` segment, each with its raw text', async () => {
+      const job = await scrapeOne({
+        id: 40,
+        title: 'Engineer',
+        content: '&lt;p&gt;Role&lt;/p&gt;',
+        location: { name: 'Rockville, MD or Hawthorne, CA or Tulsa, OK' },
+      });
+
+      expect(job.locations).toHaveLength(3);
+      expect(job.locations?.map((l) => l.city)).toEqual([
+        'Rockville',
+        'Hawthorne',
+        'Tulsa',
+      ]);
+      expect(job.locations?.map((l) => l.state)).toEqual(['MD', 'CA', 'OK']);
+      expect(job.locations?.[0].text).toBeUndefined();
+      // merged view unchanged
+      expect(job.location?.city).toContain('Rockville');
+    });
+
+    it('maps offices[] verbatim: name from office.name, geo from office.location', async () => {
+      const job = await scrapeOne({
+        id: 41,
+        title: 'Engineer',
+        content: '&lt;p&gt;Role&lt;/p&gt;',
+        location: { name: 'Austin, TX' },
+        offices: [
+          { id: 42, name: 'US', location: 'Emeryville, California, United States' },
+        ],
+      });
+
+      expect(job.offices).toHaveLength(1);
+      const office = job.offices![0];
+      expect(office.id).toBe('42');
+      expect(office.name).toBe('US');
+      expect(office.text).toBe('Emeryville, California, United States');
+      expect(office.city).toBe('Emeryville');
+      expect(office.state).toBe('CA');
+      expect(office.country).toBe('United States');
+    });
+
+    it('unpacks a parenthesized street address from the office name', async () => {
+      const job = await scrapeOne({
+        id: 43,
+        title: 'Engineer',
+        content: '&lt;p&gt;Role&lt;/p&gt;',
+        location: { name: 'Alameda, CA' },
+        offices: [
+          {
+            id: 7,
+            name: 'Alameda HQ (707 West Tower Avenue, Suite A, Alameda, CA 94501)',
+          },
+        ],
+      });
+
+      const office = job.offices![0];
+      expect(office.name).toBe(
+        'Alameda HQ (707 West Tower Avenue, Suite A, Alameda, CA 94501)',
+      );
+      expect(office.streetAddress).toBe('707 West Tower Avenue, Suite A');
+      expect(office.postalCode).toBe('94501');
+      expect(office.city).toBe('Alameda');
+      expect(office.state).toBe('CA');
+    });
+
+    it('parses geography from the geographic tail of an office name', async () => {
+      const job = await scrapeOne({
+        id: 44,
+        title: 'Engineer',
+        content: '&lt;p&gt;Role&lt;/p&gt;',
+        location: { name: 'Rockville, MD' },
+        offices: [{ id: 8, name: 'Quantum Space - Rockville, MD (HQ)' }],
+      });
+
+      const office = job.offices![0];
+      expect(office.name).toBe('Quantum Space - Rockville, MD (HQ)');
+      expect(office.city).toBe('Rockville');
+      expect(office.state).toBe('MD');
+      expect(office.streetAddress).toBeNull();
+    });
+
+    it('does not mint locations[] entries from offices the location label did not name', async () => {
+      const job = await scrapeOne({
+        id: 45,
+        title: 'Engineer',
+        content: '&lt;p&gt;Role&lt;/p&gt;',
+        location: { name: 'Austin, TX' },
+        offices: [
+          { id: 9, name: 'Austin', location: 'Austin, TX' },
+          { id: 10, name: 'Denver Office' },
+        ],
+      });
+
+      expect(job.locations).toHaveLength(1);
+      expect(job.locations?.[0].city).toBe('Austin');
+      expect(job.offices).toHaveLength(2);
+      expect(job.offices?.[1].name).toBe('Denver Office');
+      // "Denver Office" carries a site-name keyword and no parseable state —
+      // no fabricated geography.
+      expect(job.offices?.[1].city).toBeNull();
+    });
+
+    it('emits a remote-tag office with no geography while still flagging remote', async () => {
+      const job = await scrapeOne({
+        id: 46,
+        title: 'Engineer',
+        content: '&lt;p&gt;Role&lt;/p&gt;',
+        location: { name: 'Austin, TX' },
+        offices: [{ id: 11, name: 'Remote ' }],
+      });
+
+      expect(job.isRemote).toBe(true);
+      const office = job.offices![0];
+      expect(office.name).toBe('Remote');
+      expect(office.city).toBeNull();
+      expect(office.state).toBeNull();
+    });
+  });
+});
+
+/** Best of three wall-clock runs, in ms (one run can overshoot on a throttled pod). */
+function bestOf3Ms(fn: () => unknown): number {
+  let best = Infinity;
+  for (let i = 0; i < 3; i++) {
+    const started = performance.now();
+    fn();
+    best = Math.min(best, performance.now() - started);
+  }
+  return best;
+}
+
+describe('GreenhouseService scraped-text regexes stay linear (Spec 1689)', () => {
+  type Internals = { officeGeoFromName(name: string | null): Record<string, unknown> };
+  const geo = (name: string) => (new GreenhouseService() as unknown as Internals).officeGeoFromName(name);
+
+  it('strips the same parentheticals as before', () => {
+    expect(geo('HQ (Main) - Austin, TX')).toMatchObject({ city: 'Austin', state: 'TX' });
+  });
+
+  it.each([
+    ['a whitespace run without a paren', `Austin${' '.repeat(20_000)}x`],
+    ['a whitespace run before a paren', `Austin${' '.repeat(20_000)}(x)`],
+  ])('reads a 20k-char office name with %s in linear time', (_name, name) => {
+    expect(bestOf3Ms(() => geo(name))).toBeLessThan(50);
+  });
 });

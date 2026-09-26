@@ -144,3 +144,17 @@ export const EMPLOYMENTHERO_REMOTE_TYPE = 'remote';
  */
 export const EMPLOYMENTHERO_REMOTE_REGEX =
   /\b(remote|home[\s-]?office|telecommute|teleworking|wfh|work\s*from\s*home|fully\s*remote|anywhere)\b/i;
+
+/**
+ * Env toggle for Employment Hero location heuristics (Spec 1689), layered on
+ * top of the shared parser: a trailing postcode is stripped from the region
+ * ("Sydney, NSW 2000" → state "NSW", "Greater London, SouthEast E1" → state
+ * "SouthEast") — the pre-5125 behaviour. `false` / `0` / `off` / `no` →
+ * shared-parser output only (Spec 5125); unset or anything else → on.
+ */
+export const EMPLOYMENTHERO_LOCATION_HEURISTICS_ENV = 'EMPLOYMENTHERO_LOCATION_HEURISTICS';
+
+export function employmentHeroLocationHeuristicsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = (env[EMPLOYMENTHERO_LOCATION_HEURISTICS_ENV] ?? '').trim().toLowerCase();
+  return !(v === 'false' || v === '0' || v === 'off' || v === 'no');
+}

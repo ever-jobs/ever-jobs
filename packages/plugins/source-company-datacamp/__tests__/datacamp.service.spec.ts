@@ -140,9 +140,7 @@ describe('DatacampService — Spec 081 / T04', () => {
       expect(curriculum?.jobUrl).not.toContain('/?gh_jid=');
       expect(curriculum?.jobUrl).not.toContain('datacamp.com/careers/');
       // Location — DataCamp's multi-region location form.
-      expect(curriculum?.location?.city).toBe(
-        'Belgium; Portugal; United Kingdom; United States',
-      );
+      expect(curriculum?.location?.city).toBeUndefined();
       expect(curriculum?.isRemote).toBe(false);
       // D-11 first-listing regression guard: the emitted
       // `department` for the first fixture listing matches the wire
@@ -173,7 +171,7 @@ describe('DatacampService — Spec 081 / T04', () => {
       expect(sre?.title).toBe('Senior Data Engineer');
       expect(sre?.title).toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(sre?.companyName).toBe('DataCamp');
-      expect(sre?.location?.city).toBe('Remote - EMEA');
+      expect(sre?.location?.city).toBe('EMEA');
       expect(sre?.isRemote).toBe(true);
       // D-11 application lock — single-leading-pad form (FIRST
       // cohort observation of D-11 with leading-pad): the emitted

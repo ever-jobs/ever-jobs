@@ -385,12 +385,14 @@ export class AkkenCloudService implements IScraper {
       format,
     );
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `akkencloud-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,

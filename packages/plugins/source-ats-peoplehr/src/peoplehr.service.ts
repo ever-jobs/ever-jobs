@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
 } from '@ever-jobs/common';
 import {
   PEOPLEHR_ROOT_DOMAIN,
@@ -288,13 +289,15 @@ export class PeopleHrService implements IScraper {
 
     const companyName = job.companyName ?? this.deriveTenantName(tenant);
     const description = this.formatDescription(job.descriptionHtml ?? null, format);
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `peoplehr-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: null,
       isRemote: job.isRemote ?? false,
@@ -387,18 +390,7 @@ export class PeopleHrService implements IScraper {
   private extractLocation(job: PeopleHrJob): LocationDto | null {
     const raw = this.cleanText(job.locationText);
     if (!raw) return null;
-    const parts = raw
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    const city = parts[0];
-    const state = parts.length >= 3 ? parts[1] : null;
-    const country = parts[parts.length - 1];
-    return new LocationDto({ city, state, country });
+    return parseLocationText(raw).location;
   }
 
   /** Detect remote roles from the title, location, or department text. */

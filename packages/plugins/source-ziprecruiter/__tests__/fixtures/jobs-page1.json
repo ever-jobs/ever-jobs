@@ -1,0 +1,44 @@
+{
+  "_note": "SYNTHETIC fixture. Field names follow the documented app-API contract; values are invented. No live 200 sample could be captured from a non-North-American egress (HTTP 403 forbidden cf-waf).",
+  "jobs": [
+    {
+      "listing_key": "AbCdEf0123456789xyz",
+      "name": "Senior Frontend Engineer",
+      "job_description": "<p>Build <strong>React</strong> apps. Contact jobs@acme-example.com.</p>",
+      "buyer_type": "organic",
+      "hiring_company": { "name": "Acme Example Inc" },
+      "job_city": "Austin",
+      "job_state": "TX",
+      "job_country": "US",
+      "employment_type": "full_time",
+      "posted_time": "2026-09-20T23:10:00Z",
+      "compensation_min": 120000,
+      "compensation_max": 150000,
+      "compensation_interval": "annual",
+      "compensation_currency": "USD"
+    },
+    {
+      "listing_key": "ZyXw9876543210abc",
+      "name": "Warehouse Associate",
+      "job_description": "Pick and pack orders.",
+      "buyer_type": "sponsored",
+      "hiring_company": { "name": "Maple Logistics Example" },
+      "job_city": "Toronto",
+      "job_state": "ON",
+      "job_country": "CA",
+      "employment_type": "part_time",
+      "posted_time": "2026-09-23T08:00:00Z",
+      "compensation_min": 18.5,
+      "compensation_max": 21,
+      "compensation_interval": "hourly",
+      "compensation_currency": "CAD"
+    },
+    {
+      "name": "Record without listing_key (must be dropped, not crash the page)",
+      "job_city": "Denver",
+      "job_state": "CO",
+      "job_country": "US"
+    }
+  ],
+  "continue": "synthetic-continue-token-1"
+}

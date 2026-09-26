@@ -3,6 +3,8 @@ export * from './html-utils';
 export * from './experience-extractor';
 export * from './location-parser';
 export * from './country-name';
+export * from './iso3166';
 export * from './jsonld';
 export * from './site-from-domain';
 export * from './site-from-url';
+export * from './url-guard';

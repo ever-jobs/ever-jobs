@@ -11,7 +11,7 @@ import {
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList } from '@ever-jobs/common';
 import {
   AVATURE_APPLY_DECOY_TEXTS,
   AVATURE_DEFAULT_RESULTS_WANTED,
@@ -284,9 +284,8 @@ export class AvatureService implements IScraper {
     parsed: AvatureParsedJob,
     tenant: AvatureTenantContext,
   ): JobPostDto {
-    const location = parsed.location
-      ? new LocationDto({ city: parsed.location })
-      : null;
+    const locationParsed = parseLocationList([parsed.location]);
+    const location = parsed.location ? locationParsed.location : null;
     const isRemote =
       parsed.location?.toLowerCase().includes('remote') ?? false;
 
@@ -296,6 +295,7 @@ export class AvatureService implements IScraper {
       companyName: tenant.companyName,
       jobUrl: parsed.jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       isRemote,
       site: Site.AVATURE,
       atsId: parsed.jobId,

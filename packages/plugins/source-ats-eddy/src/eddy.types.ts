@@ -68,6 +68,18 @@ export interface EddyJobDetail {
 }
 
 /**
+ * The public slug→UUID lookup response (`/api/ds/organization/{slug}/id`) — the same
+ * call the careers SPA issues for vanity careers URLs. `organizationUuid` then keys the
+ * jobs endpoints.
+ */
+export interface EddyOrganizationIdResponse {
+  /** The tenant's vanity short name, echoed back. */
+  currentShortName?: string | null;
+  /** The tenant's organization UUID — required by every jobs endpoint. */
+  organizationUuid?: string | null;
+}
+
+/**
  * Normalised view of a single Eddy role, ready to map to a JobPostDto.
  */
 export interface EddyJob {

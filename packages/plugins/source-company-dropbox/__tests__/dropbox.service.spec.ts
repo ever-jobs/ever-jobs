@@ -89,7 +89,7 @@ describe('DropboxService — Spec 040 / T04', () => {
       expect(eng?.jobUrl).toBe(
         'https://jobs.dropbox.com/listing/7646405?gh_jid=7646405',
       );
-      expect(eng?.location?.city).toBe('San Francisco, CA');
+      expect(eng?.location?.city).toBe('San Francisco');
       expect(eng?.department).toBe('Engineering');
       expect(eng?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

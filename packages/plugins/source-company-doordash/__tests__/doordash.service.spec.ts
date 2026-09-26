@@ -85,7 +85,7 @@ describe('DoorDashService — Spec 024 / T04', () => {
       expect(logistics?.jobUrl).toBe(
         'https://boards.greenhouse.io/doordash/jobs/7401234',
       );
-      expect(logistics?.location?.city).toBe('San Francisco, CA');
+      expect(logistics?.location?.city).toBe('San Francisco');
       expect(logistics?.department).toBe('Engineering');
       expect(logistics?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

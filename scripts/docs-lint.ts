@@ -16,6 +16,10 @@
  *   7. No two spec directories share the same leading number, except a small
  *      allow-list of numbers already duplicated across forks before this guard
  *      existed (inherited via an upstream merge; see DUPLICATE_NUMBER_ALLOWLIST).
+ *   8. No leftover git conflict markers (`<<<<<<< `, `||||||| `, `>>>>>>> `,
+ *      and a bare `=======` only when it sits between them) in any doc under
+ *      `docs/` or `.specify/` (Spec 1689 — a diff3 `||||||| 062a1346` line
+ *      from a fork sync sat in `docs/questions.md` with this lint green).
  *
  * Zero runtime deps — small regex parser. See Q-011 in `docs/questions.md`
  * for the trade-off vs `remark-parse` + `unified`.
@@ -45,7 +49,13 @@ export interface DocLintResult {
   overlappingRanges: string[];
   outOfBandSpecs: string[];
   duplicateSpecNumbers: string[];
+  conflictMarkers: string[];
   ok: boolean;
+}
+
+export interface ConflictMarker {
+  line: number;
+  text: string;
 }
 
 interface ParsedLink {
@@ -104,6 +114,19 @@ const LOG_HEADER_DATE_ONLY_RE = /^##\s+(\d{4}-\d{2}-\d{2})\b/;
 const SPEC_FRONTMATTER_RE = /^\.specify\/specs\/[0-9a-z][0-9a-z\-]*\/(spec|plan)\.md$/;
 const TABLE_HEADER_RE = /^\s*\|.+\|\s*$/;
 const TABLE_DIVIDER_RE = /^\s*\|[\s:|-]+\|\s*$/;
+// Git conflict markers (check 8). Git writes each at column 0, seven characters
+// long (the default `conflict-marker-size`), then a space and a label — or
+// nothing, for a label-less `git merge-file`. Eight-plus `<`/`|`/`>` runs do not
+// match. Deliberately NOT fence-aware: a leftover conflict lands wherever the
+// merge put it, code blocks included; a doc that needs to show a marker as an
+// example can indent it.
+const CONFLICT_OPEN_RE = /^<{7}(?: |$)/;
+const CONFLICT_BASE_RE = /^\|{7}(?: |$)/;
+const CONFLICT_CLOSE_RE = /^>{7}(?: |$)/;
+// A bare `=======` is also a setext H1 underline, so it only counts while a
+// conflict is open AND a closing `>>>>>>>` follows it (see findConflictMarkers).
+const CONFLICT_SEPARATOR_RE = /^={7}[ \t]*$/;
+const CONFLICT_TEXT_MAX = 80;
 
 function toPosix(p: string): string {
   return p.split(path.sep).join('/');
@@ -299,6 +322,38 @@ export function checkFrontmatter(body: string): boolean {
   return false;
 }
 
+/**
+ * Leftover git conflict markers in a markdown body, in line order.
+ *
+ * `<<<<<<< `, `||||||| ` and `>>>>>>> ` lines are always reported. A bare
+ * `=======` is reported only when it sits inside an open conflict (after a
+ * `<<<<<<<` or `|||||||`) and a `>>>>>>>` closes that conflict later — so a
+ * setext H1 underline elsewhere in a doc never trips the check.
+ */
+export function findConflictMarkers(body: string): ConflictMarker[] {
+  const lines = body.split(/\r?\n/);
+  const found: ConflictMarker[] = [];
+  let open = false;
+  let pendingSeparators: ConflictMarker[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const marker = { line: i + 1, text: line.slice(0, CONFLICT_TEXT_MAX) };
+    if (CONFLICT_OPEN_RE.test(line) || CONFLICT_BASE_RE.test(line)) {
+      found.push(marker);
+      open = true;
+    } else if (CONFLICT_CLOSE_RE.test(line)) {
+      // Separators seen since the conflict opened are now proven to sit
+      // between markers — report them ahead of the closer (line order).
+      found.push(...pendingSeparators, marker);
+      pendingSeparators = [];
+      open = false;
+    } else if (open && CONFLICT_SEPARATOR_RE.test(line)) {
+      pendingSeparators.push(marker);
+    }
+  }
+  return found;
+}
+
 export async function lintDocs(repoRoot: string): Promise<DocLintResult> {
   const result: DocLintResult = {
     brokenLinks: [],
@@ -309,6 +364,7 @@ export async function lintDocs(repoRoot: string): Promise<DocLintResult> {
     overlappingRanges: [],
     outOfBandSpecs: [],
     duplicateSpecNumbers: [],
+    conflictMarkers: [],
     ok: true,
   };
 
@@ -424,6 +480,15 @@ export async function lintDocs(repoRoot: string): Promise<DocLintResult> {
   }
   result.duplicateSpecNumbers = dupes.sort();
 
+  // 8. Leftover git conflict markers, in every scanned doc (index/log/
+  // questions/templates included — a merge can leave them anywhere).
+  // `docs` is already sorted by path and each list is in line order.
+  for (const doc of docs) {
+    for (const m of findConflictMarkers(doc.body)) {
+      result.conflictMarkers.push(`${doc.relPath}:${m.line} ${m.text}`);
+    }
+  }
+
   result.ok =
     result.brokenLinks.length === 0 &&
     result.unindexedDocs.length === 0 &&
@@ -432,7 +497,8 @@ export async function lintDocs(repoRoot: string): Promise<DocLintResult> {
     result.missingFrontmatter.length === 0 &&
     result.overlappingRanges.length === 0 &&
     result.outOfBandSpecs.length === 0 &&
-    result.duplicateSpecNumbers.length === 0;
+    result.duplicateSpecNumbers.length === 0 &&
+    result.conflictMarkers.length === 0;
 
   return result;
 }
@@ -482,6 +548,12 @@ export function formatResult(result: DocLintResult): string {
       `✗ ${result.duplicateSpecNumbers.length} duplicate spec number(s) (not allow-listed):`,
     );
     for (const d of result.duplicateSpecNumbers) lines.push(`    ${d}`);
+  }
+  if (result.conflictMarkers.length) {
+    lines.push(
+      `✗ ${result.conflictMarkers.length} leftover git conflict marker(s):`,
+    );
+    for (const c of result.conflictMarkers) lines.push(`    ${c}`);
   }
   if (result.ok) lines.push('✓ Doc-lint passed — no issues.');
   return lines.join('\n');

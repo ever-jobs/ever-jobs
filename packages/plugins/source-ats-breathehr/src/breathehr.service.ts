@@ -17,6 +17,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -452,14 +453,7 @@ export class BreatheHrService implements IScraper {
   private extractLocation(job: BreatheHrJob): LocationDto | null {
     const text = this.cleanText(job.locationText);
     if (!text) return null;
-    const parts = text
-      .split(/[,/]/)
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0);
-    if (parts.length === 0) return null;
-    const city = parts[0] ?? null;
-    const region = parts.length > 1 ? parts.slice(1).join(', ') : null;
-    return new LocationDto({ city, state: region, country: null });
+    return parseLocationText(text).location;
   }
 
   /** Detect remote / home-working roles from the title, location, or description text. */

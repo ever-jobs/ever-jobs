@@ -11,13 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationText, toDateOnly } from '@ever-jobs/common';
 import {
   DARWINBOX_HOST_TEMPLATES,
   DARWINBOX_CAREERS_PATH,
@@ -259,12 +253,14 @@ export class DarwinboxService implements IScraper {
     const rawText = job.description_text ?? job.descriptionText ?? null;
     const description = this.formatDescription(rawHtml, rawText, format);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `darwinbox-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(
         job.posted_on ??
@@ -389,7 +385,7 @@ export class DarwinboxService implements IScraper {
         (typeof job.job_location === 'string' && job.job_location.trim()) ||
         (typeof job.jobLocation === 'string' && job.jobLocation.trim()) ||
         '';
-      if (loc) return new LocationDto({ city: loc });
+      if (loc) return parseLocationText(loc).location;
       return null;
     }
     return new LocationDto({ city, state, country });

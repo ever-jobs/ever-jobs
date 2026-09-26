@@ -91,7 +91,7 @@ describe('BitgoService — Spec 154 / T04', () => {
       );
       // D-11 clean dept pass-through.
       expect(ase?.department).toBe('Security');
-      expect(ase?.location?.city).toBe('Palo Alto, CA');
+      expect(ase?.location?.city).toBe('Palo Alto');
       expect(ase?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ase?.description).not.toContain('&lt;');
@@ -106,7 +106,7 @@ describe('BitgoService — Spec 154 / T04', () => {
       expect(sd?.title).toBe('Senior Director Risk Management');
       expect(sd?.title).not.toMatch(/^\s/);
       expect(sd?.companyName).toBe('BitGo');
-      expect(sd?.location?.city).toBe('Remote, US');
+      expect(sd?.location?.city).toBeUndefined();
       expect(sd?.isRemote).toBe(true);
       expect(sd?.department).toBe('Risk');
       expect(sd?.jobUrl).toBe(

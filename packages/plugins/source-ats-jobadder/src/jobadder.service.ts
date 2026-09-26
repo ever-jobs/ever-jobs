@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -274,6 +275,7 @@ export class JobAdderService implements IScraper {
       companyName,
       jobUrl: listing.jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(listing.datePostedText),
       isRemote,
@@ -342,18 +344,7 @@ export class JobAdderService implements IScraper {
   /** Build a `LocationDto` from a free-text "City, Region, Country"-style label. */
   private buildLocation(text: string | null): LocationDto | null {
     if (!text || !text.trim()) return null;
-    const parts = text
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
-    }
-    const city = parts[0];
-    const country = parts[parts.length - 1];
-    const state = parts.length >= 3 ? parts[1] : null;
-    return new LocationDto({ city: city ?? null, state: state ?? null, country: country ?? null });
+    return parseLocationText(text).location;
   }
 
   /** Resolve the tenant (accountId + slug) from an explicit slug or a Careerpage URL. */

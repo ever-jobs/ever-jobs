@@ -101,7 +101,7 @@ describe('AckermannGroupService — Spec 177 / T04', () => {
       expect(ac?.jobUrl).toContain('?gh_jid=5157287008');
       // D-11 completely-absent-departments lock for this listing.
       expect(ac?.department).toBeNull();
-      expect(ac?.location?.city).toBe('Cincinnati, OH');
+      expect(ac?.location?.city).toBe('Cincinnati');
       expect(ac?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(ac?.description).not.toContain('&lt;');
@@ -113,7 +113,7 @@ describe('AckermannGroupService — Spec 177 / T04', () => {
       expect(cm).toBeDefined();
       expect(cm?.title).toBe('Community Manager - Britton Woods Apartments');
       expect(cm?.companyName).toBe('Ackermann Group');
-      expect(cm?.location?.city).toBe('Dublin, OH');
+      expect(cm?.location?.city).toBe('Dublin');
       expect(cm?.isRemote).toBe(false);
       expect(cm?.department).toBeNull();
       expect(cm?.jobUrl).toBe(
@@ -124,7 +124,7 @@ describe('AckermannGroupService — Spec 177 / T04', () => {
       expect(lc).toBeDefined();
       expect(lc?.title).toBe('Leasing Consultant - Britton Woods Apartments');
       expect(lc?.companyName).toBe('Ackermann Group');
-      expect(lc?.location?.city).toBe('Dublin, OH');
+      expect(lc?.location?.city).toBe('Dublin');
       expect(lc?.isRemote).toBe(false);
       expect(lc?.department).toBeNull();
 

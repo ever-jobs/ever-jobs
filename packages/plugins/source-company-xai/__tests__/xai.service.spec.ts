@@ -99,7 +99,7 @@ describe('XaiService — Spec 105 / T04', () => {
       expect(t?.jobUrl).toContain('job-boards.greenhouse.io/xai/jobs/');
       expect(t?.jobUrl).not.toContain('xai.com');
       expect(t?.department).toBe('Human Data');
-      expect(t?.location?.city).toBe('Remote');
+      expect(t?.location?.city).toBeUndefined();
       expect(t?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(t?.description).not.toContain('&lt;');
@@ -112,7 +112,7 @@ describe('XaiService — Spec 105 / T04', () => {
       expect(dco).toBeDefined();
       expect(dco?.title).toBe('Senior Datacenter Operations Engineer');
       expect(dco?.companyName).toBe('xAI');
-      expect(dco?.location?.city).toBe('Memphis, TN');
+      expect(dco?.location?.city).toBe('Memphis');
       expect(dco?.isRemote).toBe(false);
       expect(dco?.department).toBe('Data Center');
       expect(dco?.jobUrl).toBe(

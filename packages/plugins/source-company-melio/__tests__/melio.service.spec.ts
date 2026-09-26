@@ -89,7 +89,7 @@ describe('MelioService — Spec 130 / T04', () => {
       );
       expect(dfa?.jobUrl).toContain('job-boards.greenhouse.io/melio/jobs/');
       expect(dfa?.department).toBe('Finance');
-      expect(dfa?.location?.city).toBe('New York, NY');
+      expect(dfa?.location?.city).toBe('New York');
       expect(dfa?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(dfa?.description).not.toContain('&lt;');
@@ -102,7 +102,7 @@ describe('MelioService — Spec 130 / T04', () => {
       expect(spd).toBeDefined();
       expect(spd?.title).toBe('Senior Product Designer');
       expect(spd?.companyName).toBe('Melio');
-      expect(spd?.location?.city).toBe('Tel Aviv, Israel');
+      expect(spd?.location?.city).toBe('Tel Aviv');
       expect(spd?.isRemote).toBe(false);
       // **D-11 APPLIED lock** — wire dept carries trailing-
       // space pad; emitted dept trimmed.

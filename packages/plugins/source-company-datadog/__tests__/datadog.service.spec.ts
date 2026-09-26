@@ -87,7 +87,7 @@ describe('DatadogService — Spec 038 / T04', () => {
       expect(apm?.jobUrl).toBe(
         'https://boards.greenhouse.io/datadog/jobs/9701234',
       );
-      expect(apm?.location?.city).toBe('New York, NY');
+      expect(apm?.location?.city).toBe('New York');
       expect(apm?.department).toBe('Engineering');
       expect(apm?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

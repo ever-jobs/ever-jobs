@@ -96,7 +96,7 @@ describe('LaunchdarklyService — Spec 114 / T04', () => {
       );
       expect(eae?.jobUrl).toContain('job-boards.greenhouse.io/launchdarkly/jobs/');
       expect(eae?.department).toBe('Sales');
-      expect(eae?.location?.city).toBe('Remote, Germany');
+      expect(eae?.location?.city).toBeUndefined();
       expect(eae?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(eae?.description).not.toContain('&lt;');
@@ -109,7 +109,7 @@ describe('LaunchdarklyService — Spec 114 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, Core');
       expect(sse?.companyName).toBe('LaunchDarkly');
-      expect(sse?.location?.city).toBe('Oakland, CA');
+      expect(sse?.location?.city).toBe('Oakland');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('Core Engineering');
       expect(sse?.jobUrl).toBe(

@@ -18,6 +18,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationList,
 } from '@ever-jobs/common';
 import { THEMUSE_API_URL, THEMUSE_HEADERS } from './themuse.constants';
 import { TheMuseResponse, TheMuseJob } from './themuse.types';
@@ -119,8 +120,11 @@ export class TheMuseService implements IScraper {
       }
     }
 
-    // Build location from first location entry
-    const location = this.parseLocation(entry.locations);
+    // Build location from the per-site location labels
+    const parsedLocations = parseLocationList(
+      (entry.locations ?? []).map((l) => l.name).filter((n): n is string => !!n),
+    );
+    const location = parsedLocations.location;
 
     // Parse date (extract date part from ISO 8601)
     const datePosted = entry.publication_date
@@ -133,6 +137,9 @@ export class TheMuseService implements IScraper {
       companyName: entry.company?.name ?? null,
       jobUrl: entry.refs.landing_page,
       location,
+      ...(parsedLocations.locations.length > 0
+        ? { locations: parsedLocations.locations }
+        : {}),
       description,
       compensation: null,
       datePosted,
@@ -146,22 +153,4 @@ export class TheMuseService implements IScraper {
    * Parse location from TheMuse locations array.
    * Format is typically "City, State, Country".
    */
-  private parseLocation(locations: { name: string }[]): LocationDto {
-    if (!locations || locations.length === 0) {
-      return new LocationDto({});
-    }
-
-    const raw = locations[0].name;
-    if (!raw) {
-      return new LocationDto({});
-    }
-
-    const parts = raw.split(',').map((p) => p.trim());
-
-    return new LocationDto({
-      city: parts[0] ?? null,
-      state: parts[1] ?? null,
-      country: parts[2] ?? null,
-    });
-  }
 }

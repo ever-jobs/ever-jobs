@@ -99,7 +99,7 @@ describe('GustoService — Spec 048 / T04', () => {
       expect(compliance?.jobUrl).toBe(
         'https://job-boards.greenhouse.io/gusto/jobs/7714510',
       );
-      expect(compliance?.location?.city).toBe('Denver, CO;San Francisco, CA');
+      expect(compliance?.location?.city).toBe('Denver, CO; San Francisco, CA');
       expect(compliance?.department).toBe('Legal & Compliance');
       expect(compliance?.isRemote).toBe(false);
       // D-08 regression guard: the description-cleanup pipeline must
@@ -117,7 +117,7 @@ describe('GustoService — Spec 048 / T04', () => {
       const eng = dto.jobs.find((j) => j.id === 'gusto-7714511');
       expect(eng?.isRemote).toBe(true);
       expect(eng?.department).toBe('Engineering');
-      expect(eng?.location?.city).toBe('Remote, US');
+      expect(eng?.location?.city).toBeUndefined();
       expect(eng?.companyName).toBe('Gusto');
       // Named entity (&rsquo;) decoded in the second listing too.
       expect(eng?.description).toContain('Gusto’s');

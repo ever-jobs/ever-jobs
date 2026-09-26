@@ -5,7 +5,7 @@ import {
   classifyScrapeError,
   IScraper, ScraperInputDto, JobResponseDto, JobPostDto, Site, LocationDto,
 } from '@ever-jobs/models';
-import { createHttpClient, stripHtmlTags } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList, stripHtmlTags } from '@ever-jobs/common';
 
 /** OpenAI uses Ashby for their careers page */
 const API_URL = 'https://api.ashbyhq.com/posting-api/job-board/openai';
@@ -53,9 +53,8 @@ export class OpenAIService implements IScraper {
         const id = `openai-${jobId}`;
 
         const locationStr = listing.locationName ?? listing.location ?? null;
-        const location = locationStr
-          ? new LocationDto({ city: locationStr })
-          : null;
+        const locationParsed = parseLocationList([locationStr]);
+        const location = locationStr ? locationParsed.location : null;
 
         // Filter by location if provided
         if (input.location && locationStr) {
@@ -70,11 +69,12 @@ export class OpenAIService implements IScraper {
             companyName: 'OpenAI',
             jobUrl: listing.jobUrl ?? `https://openai.com/careers/${listing.id}`,
             location,
+            ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
             description: listing.descriptionHtml
               ? stripHtmlTags(listing.descriptionHtml)
               : listing.descriptionPlain ?? null,
             datePosted: listing.publishedAt ?? null,
-            isRemote: listing.isRemote ?? (locationStr?.toLowerCase().includes('remote') ?? false),
+            isRemote: (listing.isRemote ?? (locationStr?.toLowerCase().includes('remote') ?? false)) || locationParsed.remoteMentioned,
             department: listing.departmentName ?? listing.team ?? null,
           }),
         );

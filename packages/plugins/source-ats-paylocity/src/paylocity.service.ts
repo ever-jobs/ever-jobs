@@ -335,6 +335,7 @@ export class PaylocityService implements IScraper {
       companyName,
       jobUrl: paylocityDetailUrl(guid, job.JobId),
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted,
       isRemote,

@@ -50,6 +50,14 @@ Search for jobs across all sources.
 | `company`     | string  | ❌       | Company slug for ATS sources (e.g. "stripe")       |
 | `limit`       | number  | ❌       | Max results (default: 20, max: 100)                |
 | `remote_only` | boolean | ❌       | Filter to remote positions only                    |
+| `locations`   | string[] | ❌      | Several locations in one call (schema limit 10 items; the server searches the first `EVER_JOBS_SEARCH_MAX_LOCATIONS`, default 10). Each source runs once per location; same-source duplicates are removed; `location`, when also set, is searched first |
+| `exclude_title_terms` | string[] | ❌ | Drop jobs whose title contains any of these words or phrases (up to 50; literal, whole-word, trailing `*` = prefix, never a regex) |
+| `exclude_keywords` | string[] | ❌ | Drop jobs whose title or description contains any of these words or phrases (up to 50; same rules) |
+| `exclude_presets` | string[] | ❌ | Curated exclusion lists; `security_clearance` drops roles that require a security clearance or vetting |
+| `crawl`       | object  | ❌       | Per-request crawl policy (Spec 1690), camelCase    |
+
+`crawl` is forwarded to the API unchanged as the `crawl` field (same key in every
+`EVER_JOBS_MCP_REQUEST_KEYS` style); see [`docs/CRAWL_POLICY.md`](../../docs/CRAWL_POLICY.md).
 
 ### `get_job_details`
 
@@ -103,9 +111,23 @@ _No parameters required._
 
 ## Environment Variables
 
-| Variable            | Default                 | Description            |
-| ------------------- | ----------------------- | ---------------------- |
-| `EVER_JOBS_API_URL` | `http://localhost:3001` | Ever Jobs API endpoint |
+| Variable                        | Default                 | Description                                                                                                                                                                  |
+| ------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EVER_JOBS_API_URL`             | `http://localhost:3001` | Ever Jobs API endpoint                                                                                                                                                       |
+| `EVER_JOBS_MCP_LOCATION_FORMAT` | `full`                  | How a job's `location` string is rendered: `full` = `city, state, country` (falling back to the site name, then its label text); `city` = the legacy city-only string        |
+| `EVER_JOBS_MCP_REQUEST_KEYS`    | `camel`                 | Search request key style sent to the API: `camel` (what `ScraperInputDto` accepts), `snake` (the legacy wire shape), `both`                                                  |
+
+Remote-only jobs: whether their `location` reads `Remote` depends on the API's
+`EVER_JOBS_LOCATION_REMOTE_CITY` (default `false` — a bare `Remote` label gives
+`null` and `Remote - US` gives `United States`, with `is_remote` carrying the
+signal; `true` restores `Remote` / `Remote, United States`). See `.env.example`.
+
+Posting time: every job from `search_jobs`, `search_remote_jobs` and `get_job_details` carries
+`date_posted` (a `YYYY-MM-DD` date). When the source gives more (Spec 1696), three keys follow it:
+`date_posted_at` (ISO-8601 UTC instant; precision `exact`, `minute` or `hour` only),
+`date_posted_precision` (`exact | minute | hour | day | week | month | year`) and
+`date_posted_basis` (`timestamp | date | relative`, where `relative` means estimated from an age
+label such as "3 hours ago" at fetch time). A job without that detail has none of the three keys.
 
 ## Source Coverage
 

@@ -226,13 +226,15 @@ export class WebcruiterService implements IScraper {
       }
     }
 
+    const location = this.extractLocation(advert);
     return new JobPostDto({
       id: `webcruiter-${atsId}`,
       title,
       companyName,
       jobUrl,
       jobUrlDirect: jobUrl,
-      location: this.extractLocation(advert),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(advert.PublishedDate ?? advert.PublishedIntranetDate),
       isRemote: this.detectRemote(advert),

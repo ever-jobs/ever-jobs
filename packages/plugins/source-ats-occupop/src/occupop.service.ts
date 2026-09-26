@@ -188,12 +188,14 @@ export class OccupopService implements IScraper {
 
     const department = this.extractDepartment(job);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `occupop-${atsId}`,
       title,
       companyName: job.companyName ?? job.hiringCompany?.name ?? companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(job.publishedAt ?? job.published_at ?? job.createdAt),
       isRemote: this.detectRemote(job),

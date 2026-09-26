@@ -87,7 +87,7 @@ describe('PlaidService — Spec 030 / T04', () => {
       expect(openBanking?.jobUrl).toBe(
         'https://boards.greenhouse.io/plaid/jobs/8001234',
       );
-      expect(openBanking?.location?.city).toBe('San Francisco, CA');
+      expect(openBanking?.location?.city).toBe('San Francisco');
       expect(openBanking?.department).toBe('Engineering');
       expect(openBanking?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

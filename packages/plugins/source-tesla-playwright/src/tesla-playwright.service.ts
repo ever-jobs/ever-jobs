@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SourcePlugin } from '@ever-jobs/plugin';
+import { parseLocationList } from '@ever-jobs/common';
 import {
   classifyScrapeError,
   IScraper,
@@ -304,9 +305,8 @@ export class TeslaPlaywrightService implements IScraper {
     const locationStr = lookup.locations?.[listing.l ?? ''] ?? null;
     const departmentStr = lookup.departments?.[listing.d ?? ''] ?? null;
 
-    const location = locationStr
-      ? new LocationDto({ city: locationStr })
-      : null;
+    const locationParsed = parseLocationList([locationStr]);
+    const location = locationStr ? locationParsed.location : null;
     const isRemote =
       locationStr?.toLowerCase().includes('remote') ?? false;
 
@@ -316,6 +316,7 @@ export class TeslaPlaywrightService implements IScraper {
       companyName: 'Tesla',
       jobUrl: this.buildJobUrl(listing.id, listing.t),
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       isRemote,
       site: Site.TESLA_PLAYWRIGHT,
       atsId: listing.id,

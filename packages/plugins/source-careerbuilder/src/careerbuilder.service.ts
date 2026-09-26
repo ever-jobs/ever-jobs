@@ -11,12 +11,7 @@ import {
   LocationDto,
   Site,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  randomSleep,
-  extractSalary,
-  extractEmails,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, extractSalary, parseLocationList, randomSleep } from '@ever-jobs/common';
 import { BrowserPool } from '@ever-jobs/common';
 import {
   CB_SEARCH_URL,
@@ -111,7 +106,7 @@ export class CareerBuilderService implements IScraper, OnModuleDestroy {
       if (input.location) url.searchParams.set('location', input.location);
 
       this.logger.log(`CareerBuilder Playwright: navigating to ${url.toString()}`);
-      await page.goto(url.toString(), {
+      await BrowserPool.navigate(page, url.toString(), {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });
@@ -186,6 +181,7 @@ export class CareerBuilderService implements IScraper, OnModuleDestroy {
         // Extract location
         const location =
           card.find('.data-details .data-location, [data-cb-type="location"]').text().trim() || null;
+        const locationParsed = parseLocationList([location]);
 
         // Extract salary
         const salaryText =
@@ -241,7 +237,10 @@ export class CareerBuilderService implements IScraper, OnModuleDestroy {
             title,
             companyName: company,
             jobUrl: href,
-            location: location ? new LocationDto({ city: location }) : null,
+            location: location ? locationParsed.location : null,
+            ...(locationParsed.locations.length > 0
+              ? { locations: locationParsed.locations }
+              : {}),
             compensation: compensation as any,
             datePosted: dateAttr,
             description: snippet,

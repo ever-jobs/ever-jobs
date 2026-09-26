@@ -140,7 +140,7 @@ describe('UdemyService — Spec 078 / T04', () => {
       expect(backend?.jobUrl).toContain('app.careerpuck.com/job-board/udemy/job/');
       expect(backend?.jobUrl).not.toContain('job-boards.greenhouse.io');
       // Location — Udemy's SF HQ on the first listing.
-      expect(backend?.location?.city).toBe('San Francisco, CA');
+      expect(backend?.location?.city).toBe('San Francisco');
       expect(backend?.isRemote).toBe(false);
       // D-11 first-listing regression guard: the emitted
       // `department` for the first fixture listing matches the wire
@@ -182,7 +182,7 @@ describe('UdemyService — Spec 078 / T04', () => {
       expect(sdr?.title.endsWith(' ')).toBe(false);
       expect(sdr?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 1);
       expect(sdr?.companyName).toBe('Udemy');
-      expect(sdr?.location?.city).toBe('Remote, USA');
+      expect(sdr?.location?.city).toBeUndefined();
       expect(sdr?.isRemote).toBe(true);
       // D-11 second-listing regression guard: the emitted
       // `department` for the second fixture listing matches the

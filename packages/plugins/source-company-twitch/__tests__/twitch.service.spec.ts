@@ -87,7 +87,7 @@ describe('TwitchService — Spec 034 / T04', () => {
       expect(ingest?.jobUrl).toBe(
         'https://boards.greenhouse.io/twitch/jobs/9301234',
       );
-      expect(ingest?.location?.city).toBe('San Francisco, CA');
+      expect(ingest?.location?.city).toBe('San Francisco');
       expect(ingest?.department).toBe('Engineering');
       expect(ingest?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

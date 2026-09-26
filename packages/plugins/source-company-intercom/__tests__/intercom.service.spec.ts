@@ -132,7 +132,7 @@ describe('IntercomService — Spec 061 / T04', () => {
       expect(ae?.jobUrl).toContain('job-boards.greenhouse.io');
       expect(ae?.jobUrl).toContain('/intercom/jobs/');
       expect(ae?.jobUrl).not.toContain('?gh_jid=');
-      expect(ae?.location?.city).toBe('London, United Kingdom');
+      expect(ae?.location?.city).toBe('London');
       // D-11 regression guard: the emitted `department` for the first
       // fixture listing is the flat single-token string `'Sales'`
       // byte-for-byte AND matches the wire `departments[0].name`
@@ -170,7 +170,7 @@ describe('IntercomService — Spec 061 / T04', () => {
       // byte-for-byte.
       expect(eng?.title).toBe(JOBS_PAGE_RAW.jobs[1].title);
       expect(eng?.companyName).toBe('Intercom');
-      expect(eng?.location?.city).toBe('Dublin, Ireland');
+      expect(eng?.location?.city).toBe('Dublin');
       // The fixture location string does NOT contain "Remote" (Dublin
       // hybrid string, no remote keyword) so isRemote should be false.
       expect(eng?.isRemote).toBe(false);

@@ -91,7 +91,7 @@ describe('TatariService — Spec 173 / T04', () => {
       expect(dsa?.jobUrl).toContain('job-boards.greenhouse.io/tatari/jobs/');
       // D-11 clean dept pass-through.
       expect(dsa?.department).toBe('Data Science');
-      expect(dsa?.location?.city).toBe('San Francisco, CA');
+      expect(dsa?.location?.city).toBe('San Francisco');
       expect(dsa?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(dsa?.description).not.toContain('&lt;');
@@ -103,7 +103,7 @@ describe('TatariService — Spec 173 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, Platform');
       expect(sse?.companyName).toBe('Tatari');
-      expect(sse?.location?.city).toBe('Remote, US');
+      expect(sse?.location?.city).toBeUndefined();
       expect(sse?.isRemote).toBe(true);
       expect(sse?.department).toBe('Engineering');
       expect(sse?.jobUrl).toBe(

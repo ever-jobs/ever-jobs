@@ -101,7 +101,7 @@ describe('SamsaraService — Spec 168 / T04', () => {
       expect(cae?.jobUrl).toContain('?gh_jid=5747183');
       // D-11 clean dept pass-through.
       expect(cae?.department).toBe('US Commercial AE1');
-      expect(cae?.location?.city).toBe('Remote - US');
+      expect(cae?.location?.city).toBeUndefined();
       expect(cae?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(cae?.description).not.toContain('&lt;');
@@ -118,7 +118,7 @@ describe('SamsaraService — Spec 168 / T04', () => {
       expect(sa?.title).toBe('Solutions Architect');
       expect(sa?.title).not.toMatch(/\s$/);
       expect(sa?.companyName).toBe('Samsara');
-      expect(sa?.location?.city).toBe('Atlanta, GA');
+      expect(sa?.location?.city).toBe('Atlanta');
       expect(sa?.isRemote).toBe(false);
       expect(sa?.department).toBe('Sales Engineering');
       expect(sa?.jobUrl).toBe(
@@ -131,7 +131,7 @@ describe('SamsaraService — Spec 168 / T04', () => {
       expect(sse?.title).toBe('Senior Software Engineer, Platform');
       expect(sse?.companyName).toBe('Samsara');
       expect(sse?.department).toBe('Platform');
-      expect(sse?.location?.city).toBe('San Francisco, CA');
+      expect(sse?.location?.city).toBe('San Francisco');
       expect(sse?.isRemote).toBe(false);
 
       const calledUrls = mockGet.mock.calls.map((c) => c[0] as string);

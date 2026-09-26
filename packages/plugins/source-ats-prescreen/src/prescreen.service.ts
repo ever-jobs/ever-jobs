@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -398,6 +399,7 @@ export class PrescreenService implements IScraper {
       companyName,
       jobUrl,
       location: this.extractLocation(job),
+      locations: this.extractLocations(job),
       description,
       datePosted: this.parseDate(job.ld?.datePosted),
       isRemote: this.detectRemote(job),
@@ -498,19 +500,32 @@ export class PrescreenService implements IScraper {
 
     const label = job.listingLocation?.trim();
     if (!label) return null;
-    const parts = label
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) {
-      return new LocationDto({ city: parts[0], state: null, country: null });
+    return parseLocationText(label).location;
+  }
+
+  /** Per-site LocationDto list — one per JSON-LD `jobLocation` Place, else the merged location. */
+  private extractLocations(job: PrescreenJob): LocationDto[] {
+    const out: LocationDto[] = [];
+    const jobLocation = job.ld?.jobLocation;
+    const places = Array.isArray(jobLocation) ? jobLocation : jobLocation ? [jobLocation] : [];
+    for (const place of places) {
+      const address = place?.address;
+      if (!address || typeof address !== 'object') continue;
+      if (address.addressLocality || address.addressRegion || address.addressCountry) {
+        out.push(
+          new LocationDto({
+            city: address.addressLocality?.trim() || null,
+            state: address.addressRegion?.trim() || null,
+            country: address.addressCountry?.trim() || null,
+          }),
+        );
+      }
     }
-    return new LocationDto({
-      city: parts[0] ?? null,
-      state: parts.length >= 3 ? parts[1] : null,
-      country: parts[parts.length - 1] ?? null,
-    });
+    if (out.length === 0) {
+      const merged = this.extractLocation(job);
+      if (merged) out.push(merged);
+    }
+    return out;
   }
 
   /** Normalise the JSON-LD `jobLocation` (Place or Place[]) to its first Place. */

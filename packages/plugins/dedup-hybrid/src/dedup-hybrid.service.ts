@@ -7,6 +7,8 @@ import {
   FieldWithProvenance,
   IDedupEngine,
   JobPostDto,
+  LocationDto,
+  OfficeDto,
   Site,
   SourceObservation,
   provenance,
@@ -139,10 +141,16 @@ export class DedupHybridService implements IDedupEngine {
         }
       }
 
+      // Spec 1689 — `isRemote` feeds the key's remote bucket: a parsed
+      // 'Remote' (no location) or 'Remote - US' (`{ country }` only) keys to
+      // `remote`, the same as a source emitting `{ city: 'Remote' }`, so the
+      // two hash-merge in stage 1 instead of relying on MinHash.
       const keyInput = {
         title: raw.title ?? '',
         company: raw.companyName ?? '',
         location: raw.location ? formatLocation(raw.location) : '',
+        locations: raw.locations,
+        isRemote: raw.isRemote,
       };
       prepared.push({
         index: i,
@@ -208,6 +216,15 @@ export class DedupHybridService implements IDedupEngine {
       const headSourceId = String(head.raw.id ?? observations[0]?.sourceJobId ?? '');
       const observedAt = observations[0]?.observedAt ?? mergedAt;
 
+      // Per-site data is merged as a union across every observation, not
+      // just the head's: stage-2 (MinHash) clusters may weld postings whose
+      // site lists genuinely differ (e.g. a repost that added a site).
+      const locations = unionLocations(cluster, prepared);
+      const offices = unionOffices(cluster, prepared);
+      // Spec 1689 — the ATS posting country (`JobPostDto.countryCode`) is
+      // carried onto the canonical record instead of being dropped here.
+      const countryCode = pickCountryCode(cluster, prepared);
+
       const titleVal = normalizeTitle(head.raw.title ?? '');
       const companyVal = normalizeCompany(head.raw.companyName ?? '');
       const locationVal = head.raw.location ? normalizeLocation(formatLocation(head.raw.location)) : '';
@@ -219,12 +236,23 @@ export class DedupHybridService implements IDedupEngine {
       if (head.raw.description) {
         fields['description'] = provenance(head.raw.description, headSite, headSourceId, observedAt);
       }
+      if (countryCode) {
+        fields['countryCode'] = provenance(
+          countryCode.value,
+          (countryCode.raw.site as Site) ?? headSite,
+          String(countryCode.raw.id ?? countryCode.raw.atsId ?? countryCode.raw.jobUrl ?? headSourceId),
+          observedAt,
+        );
+      }
 
       const record: CanonicalJob = {
         canonicalJobId: head.canonicalJobId,
         title: titleVal,
         company: companyVal,
         location: locationVal,
+        ...(locations.length > 0 ? { locations } : {}),
+        ...(offices.length > 0 ? { offices } : {}),
+        ...(countryCode ? { countryCode: countryCode.value } : {}),
         description: head.raw.description ?? undefined,
         url: head.raw.jobUrl,
         sources: observations,
@@ -258,6 +286,72 @@ export class DedupHybridService implements IDedupEngine {
       metrics,
     };
   }
+}
+
+/**
+ * Union of `locations[]` across a cluster's observations, head-first.
+ * Entries dedupe on their `city|state|country` triple (entries with no
+ * geography dedupe on `name|text` so name-only sites don't collapse into
+ * each other). First occurrence wins, preserving each observation's raw
+ * `text`/`name`/`postalCode` fields on the surviving entry.
+ */
+function unionLocations(
+  cluster: ReadonlyArray<number>,
+  prepared: PreparedJob[],
+): LocationDto[] {
+  const seen = new Set<string>();
+  const out: LocationDto[] = [];
+  for (const pos of cluster) {
+    for (const loc of prepared[pos].raw.locations ?? []) {
+      const geo = [loc.city, loc.state, loc.country]
+        .filter(Boolean)
+        .join('|')
+        .toLowerCase();
+      const key = geo || `${loc.name ?? ''}|${loc.text ?? ''}`.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(loc);
+    }
+  }
+  return out;
+}
+
+/**
+ * Union of `offices[]` across a cluster's observations, head-first.
+ * Entries dedupe on `id` when present, else `name|text`.
+ */
+function unionOffices(
+  cluster: ReadonlyArray<number>,
+  prepared: PreparedJob[],
+): OfficeDto[] {
+  const seen = new Set<string>();
+  const out: OfficeDto[] = [];
+  for (const pos of cluster) {
+    for (const office of prepared[pos].raw.offices ?? []) {
+      const key = (office.id ?? `${office.name ?? ''}|${office.text ?? ''}`).toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(office);
+    }
+  }
+  return out;
+}
+
+/**
+ * The cluster's ATS posting country (`JobPostDto.countryCode`), head-first:
+ * the head's code when it carries one, else the first observation's that does.
+ * Kept verbatim (trimmed). Returns `null` when no observation carries one.
+ */
+function pickCountryCode(
+  cluster: ReadonlyArray<number>,
+  prepared: PreparedJob[],
+): { value: string; raw: JobPostDto } | null {
+  for (const pos of cluster) {
+    const raw = prepared[pos].raw;
+    const code = typeof raw.countryCode === 'string' ? raw.countryCode.trim() : '';
+    if (code) return { value: code, raw };
+  }
+  return null;
 }
 
 /**

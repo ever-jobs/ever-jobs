@@ -10,7 +10,7 @@ import {
   classifyScrapeError,
   ScrapeDiagnostics,
 } from '@ever-jobs/models';
-import { createHttpClient } from '@ever-jobs/common';
+import { createHttpClient, parseLocationList } from '@ever-jobs/common';
 import {
   ORACLE_DEFAULT_EXPAND,
   ORACLE_DEFAULT_FACETS,
@@ -334,9 +334,8 @@ export class OracleService implements IScraper {
     req: OracleRequisition,
     tenant: OracleTenantContext,
   ): JobPostDto {
-    const location = req.PrimaryLocation
-      ? new LocationDto({ city: req.PrimaryLocation })
-      : null;
+    const locationParsed = parseLocationList([req.PrimaryLocation]);
+    const location = req.PrimaryLocation ? locationParsed.location : null;
     const isRemote =
       req.PrimaryLocation?.toLowerCase().includes('remote') ?? false;
 
@@ -348,6 +347,7 @@ export class OracleService implements IScraper {
       companyName: req.EmployerName ?? tenant.companyName,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       isRemote,
       site: Site.ORACLE,
       atsId: req.Id,

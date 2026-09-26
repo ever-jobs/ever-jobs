@@ -120,7 +120,7 @@ describe('ToastService — Spec 055 / T04', () => {
       expect(ae?.jobUrl).toContain('careers.toasttab.com');
       expect(ae?.jobUrl).toContain('?gh_jid=');
       expect(ae?.jobUrl).not.toContain('job-boards.greenhouse.io');
-      expect(ae?.location?.city).toBe('Melbourne, Australia');
+      expect(ae?.location?.city).toBe('Melbourne');
       // D-11 regression guard: the emitted `department` for the first
       // fixture listing is the colon-separated nested path
       // `'Sales : International : Horizon 2'` byte-for-byte AND matches
@@ -151,7 +151,7 @@ describe('ToastService — Spec 055 / T04', () => {
       expect(bdr).toBeDefined();
       expect(bdr?.title).toBe('Bilingual Business Development Representative (Mandarin)');
       expect(bdr?.companyName).toBe('Toast');
-      expect(bdr?.location?.city).toBe('Remote - US (PST time zone)');
+      expect(bdr?.location?.city).toBe('US PST time zone');
       // The fixture location string contains "Remote" so isRemote
       // should be true.
       expect(bdr?.isRemote).toBe(true);

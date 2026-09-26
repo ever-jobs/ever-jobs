@@ -105,7 +105,8 @@ export class JsonLdService implements IScraper {
     const jobUrl = posting.url ?? pageUrl;
     const description = this.formatDescription(posting.description, format);
 
-    const location = this.buildLocation(posting.locations, posting.remote);
+    const locations = this.buildLocations(posting.locations, posting.remote);
+    const location = locations[0] ?? null;
 
     const compensation: CompensationDto | null = resolveCompensation({
       structured: jobPostingLdToCompensation(posting.baseSalary),
@@ -127,6 +128,7 @@ export class JsonLdService implements IScraper {
       jobUrl,
       ...(posting.applyUrl ? { applyUrl: posting.applyUrl } : {}),
       location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       datePosted,
       isRemote: posting.remote,
@@ -142,8 +144,8 @@ export class JsonLdService implements IScraper {
 
   /**
    * Map schema.org `employmentType` to {@link JobType}s. Handles the underscore
-   * spelling (`FULL_TIME`) that {@link getJobTypeFromString} doesn't normalise,
-   * and the `, `-joined multi-value form produced by the shared helper.
+   * spelling (`FULL_TIME`), which {@link getJobTypeFromString} also normalises
+   * since Spec 1697, and the `, `-joined multi-value form produced by the shared helper.
    */
   private mapJobTypes(employmentType: string | null): JobType[] {
     if (!employmentType) return [];
@@ -155,20 +157,23 @@ export class JsonLdService implements IScraper {
     return [...seen];
   }
 
-  /** First structured location; remote-only postings become `Remote`. */
-  private buildLocation(
+  /** One LocationDto per structured location; remote-only postings become `Remote`. */
+  private buildLocations(
     locations: JobPostingLdLocation[],
     isRemote: boolean,
-  ): LocationDto | null {
-    const first = locations[0];
-    if (!first) {
-      return isRemote ? new LocationDto({ city: 'Remote' }) : null;
+  ): LocationDto[] {
+    if (locations.length === 0) {
+      return isRemote ? [new LocationDto({ city: 'Remote' })] : [];
     }
-    return new LocationDto({
-      city: first.city ?? (isRemote ? 'Remote' : null),
-      state: first.region,
-      country: first.country,
-    });
+    return locations.map(
+      (entry, index) =>
+        new LocationDto({
+          city: entry.city ?? (index === 0 && isRemote ? 'Remote' : null),
+          state: entry.region,
+          country: entry.country,
+          postalCode: entry.postalCode,
+        }),
+    );
   }
 
   /** Short stable id from the job URL (avoids leaking the full URL into ids). */

@@ -122,7 +122,7 @@ describe('SoFiService — Spec 102 / T04', () => {
       expect(cma).toBeDefined();
       expect(cma?.title).toBe('Senior Capital Markets Analyst');
       expect(cma?.companyName).toBe('SoFi');
-      expect(cma?.location?.city).toBe('Frisco - TX');
+      expect(cma?.location?.city).toBe('Frisco');
       expect(cma?.isRemote).toBe(false);
       expect(cma?.department).toBe('Capital Markets');
       expect(cma?.jobUrl).toBe(

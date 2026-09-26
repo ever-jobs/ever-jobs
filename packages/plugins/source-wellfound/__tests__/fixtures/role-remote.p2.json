@@ -1,0 +1,184 @@
+{
+  "page": "/seoLanding/roleRemoteSearch",
+  "query": { "page": "2", "role": "software-engineer" },
+  "buildId": "synthetic-build",
+  "props": {
+    "pageProps": {
+      "role": "software-engineer",
+      "location": null,
+      "apolloState": {
+        "data": {
+          "ROOT_QUERY": {
+            "__typename": "Query",
+            "talent": {
+              "__typename": "Talent",
+              "seoLandingPageJobSearchResults({\"page\":2,\"remote\":true,\"role\":\"software-engineer\"})": {
+                "__typename": "Results",
+                "totalJobCount": 1204,
+                "totalStartupCount": 611,
+                "perPage": 20,
+                "pageCount": 45,
+                "startups": [
+                  { "__ref": "StartupResult:910001" },
+                  { "__ref": "StartupResult:910002" },
+                  { "__ref": "StartupResult:910003" }
+                ]
+              }
+            }
+          },
+          "StartupResult:910001": {
+            "__typename": "StartupResult",
+            "id": "910001",
+            "name": "Lanternfish Payroll",
+            "slug": "lanternfish-payroll",
+            "logoUrl": "https://example.invalid/logos/lanternfish.png",
+            "highConcept": "Payroll for crews at sea",
+            "companySize": "SIZE_1001_5000",
+            "badges": [],
+            "highlightedJobListings": [
+              { "__ref": "JobListingSearchResult:810011" },
+              { "__ref": "JobListingSearchResult:810012" }
+            ]
+          },
+          "JobListingSearchResult:810011": {
+            "__typename": "JobListingSearchResult",
+            "id": "810011",
+            "title": "Software Engineer, Python",
+            "slug": "software-engineer-python",
+            "description": "Ledger services in Python.",
+            "jobType": "full-time",
+            "liveStartAt": 1790022134,
+            "locationNames": [],
+            "acceptedRemoteLocationNames": ["United States"],
+            "remote": true,
+            "remoteConfig": null,
+            "primaryRoleTitle": "Software Engineer",
+            "compensation": "$140k – $155k",
+            "yearsExperienceMin": null,
+            "yearsExperienceMax": null,
+            "atsSource": "AtsIntegration::Greenhouse::Listing",
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "JobListingSearchResult:810012": {
+            "__typename": "JobListingSearchResult",
+            "id": "810012",
+            "title": "Staff Software Engineer",
+            "slug": "staff-software-engineer",
+            "description": "Lead the tax engine.",
+            "jobType": "full-time",
+            "liveStartAt": 1789629769,
+            "locationNames": ["India"],
+            "acceptedRemoteLocationNames": ["India"],
+            "remote": true,
+            "remoteConfig": { "__typename": "JobListingRemoteConfig", "kind": "REMOTE", "wfhFlexible": false },
+            "primaryRoleTitle": "Software Engineer",
+            "compensation": "$45k – $80k • 0.005% – 0.05%",
+            "yearsExperienceMin": 4,
+            "yearsExperienceMax": null,
+            "atsSource": null,
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "StartupResult:910002": {
+            "__typename": "StartupResult",
+            "id": "910002",
+            "name": "Copperleaf Studios",
+            "slug": "copperleaf-studios-2",
+            "logoUrl": null,
+            "highConcept": "Game tools for tiny teams",
+            "companySize": "SIZE_201_500",
+            "badges": [],
+            "highlightedJobListings": [{ "__ref": "JobListingSearchResult:810021" }]
+          },
+          "JobListingSearchResult:810021": {
+            "__typename": "JobListingSearchResult",
+            "id": "810021",
+            "title": "Staff Data Scientist",
+            "slug": "staff-data-scientist",
+            "description": "Player analytics.",
+            "jobType": "full-time",
+            "liveStartAt": 1789049679,
+            "locationNames": ["Toronto"],
+            "acceptedRemoteLocationNames": ["Canada"],
+            "remote": true,
+            "remoteConfig": { "__typename": "JobListingRemoteConfig", "kind": "ONSITE_OR_REMOTE", "wfhFlexible": false },
+            "primaryRoleTitle": "Data Scientist",
+            "compensation": "",
+            "yearsExperienceMin": 5,
+            "yearsExperienceMax": null,
+            "atsSource": null,
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "StartupResult:910003": {
+            "__typename": "StartupResult",
+            "id": "910003",
+            "name": "Meadowlark Flight",
+            "slug": "meadowlark-flight",
+            "logoUrl": "https://example.invalid/logos/meadowlark.png",
+            "highConcept": "Charter booking for small airports",
+            "companySize": "SIZE_11_50",
+            "badges": [],
+            "highlightedJobListings": [
+              { "__ref": "JobListingSearchResult:810031" },
+              { "__ref": "JobListingSearchResult:810032" }
+            ]
+          },
+          "JobListingSearchResult:810031": {
+            "__typename": "JobListingSearchResult",
+            "id": "810031",
+            "title": "Software Engineer",
+            "slug": "software-engineer",
+            "description": "Crew scheduling.",
+            "jobType": "full-time",
+            "liveStartAt": 1774370202,
+            "locationNames": ["San Mateo"],
+            "acceptedRemoteLocationNames": ["United States"],
+            "remote": true,
+            "remoteConfig": { "__typename": "JobListingRemoteConfig", "kind": "ONSITE", "wfhFlexible": true },
+            "primaryRoleTitle": "Software Engineer",
+            "compensation": "$120k – $180k",
+            "yearsExperienceMin": null,
+            "yearsExperienceMax": null,
+            "atsSource": "AtsIntegration::Greenhouse::Listing",
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "JobListingSearchResult:810032": {
+            "__typename": "JobListingSearchResult",
+            "id": "810032",
+            "title": "Senior Software Engineer",
+            "slug": "senior-software-engineer",
+            "description": "Fares and pricing.",
+            "jobType": "full-time",
+            "liveStartAt": 1774370203,
+            "locationNames": ["San Mateo"],
+            "acceptedRemoteLocationNames": ["United States"],
+            "remote": true,
+            "remoteConfig": null,
+            "primaryRoleTitle": "Software Engineer",
+            "compensation": "",
+            "yearsExperienceMin": null,
+            "yearsExperienceMax": null,
+            "atsSource": "AtsIntegration::Greenhouse::Listing",
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "SeoRoleKeyword:710": {
+            "__typename": "SeoRoleKeyword",
+            "id": "710",
+            "slug": "software-engineer",
+            "displayName": "Software Engineer"
+          },
+          "NewTag:155588": {
+            "__typename": "NewTag",
+            "id": "155588",
+            "slug": "remote-1",
+            "displayName": "Remote"
+          }
+        }
+      }
+    }
+  }
+}

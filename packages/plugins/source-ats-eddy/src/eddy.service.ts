@@ -32,8 +32,14 @@ import {
   eddyJobsListUrl,
   eddyJobDetailUrl,
   eddyJobPageUrl,
+  eddyOrganizationIdUrl,
 } from './eddy.constants';
-import { EddyJob, EddyJobListItem, EddyJobDetail } from './eddy.types';
+import {
+  EddyJob,
+  EddyJobListItem,
+  EddyJobDetail,
+  EddyOrganizationIdResponse,
+} from './eddy.types';
 
 /**
  * Eddy ATS careers scraper — generic, multi-tenant.
@@ -56,11 +62,13 @@ import { EddyJob, EddyJobListItem, EddyJobDetail } from './eddy.types';
  * `/careers/{org}/{jobUuid}` and is the stable ATS id.
  *
  * The caller addresses a tenant by `companySlug` (the organization UUID) or by `companyUrl`
- * (a careers URL on the `app.eddy.com` host whose first `/careers/{…}` path segment is the
- * organization UUID). An unknown tenant, one with no open roles, or an empty board degrades
- * naturally to an empty result. A fetch error, an HTTP 4xx, a DNS failure, or a malformed
- * body degrades to an empty / partial result rather than throwing, so a single tenant never
- * nukes a batch run.
+ * (a careers URL on the `app.eddy.com` host). Vanity short names are equally accepted —
+ * `hypercraftusa` or `/careers/hypercraftusa/preview/embed` — and resolved to the
+ * organization UUID via the same public lookup the careers SPA issues
+ * (`/api/ds/organization/{slug}/id`). An unknown tenant, one with no open roles, or an
+ * empty board degrades naturally to an empty result. A fetch error, an HTTP 4xx, a DNS
+ * failure, or a malformed body degrades to an empty / partial result rather than
+ * throwing, so a single tenant never nukes a batch run.
  */
 @SourcePlugin({
   site: Site.EDDY,
@@ -79,18 +87,11 @@ export class EddyService implements IScraper {
       return new JobResponseDto([]);
     }
 
-    const tenant = this.resolveTenant(companySlug, input.companyUrl);
-    if (!tenant) {
-      // The public API strictly requires the organization UUID; a non-UUID vanity token
-      // is unresolvable. Degrade to empty rather than firing a request we know 400s.
-      this.logger.warn('Could not resolve an Eddy organization UUID from input');
-      return new JobResponseDto([]);
-    }
-
     // Cap the per-request timeout so an unresponsive Eddy careers host degrades gracefully
     // fast rather than hanging on the client's 60s default. Bound BOTH keys: the no-proxy
     // path keys off `timeout`, the proxy path off `requestTimeout`. A caller may request a
-    // shorter timeout; we only cap.
+    // shorter timeout; we only cap. The client is built before tenant resolution because
+    // the vanity-slug fallback issues a public lookup through it.
     const timeoutSeconds = Math.min(
       input.requestTimeout ?? EDDY_DEFAULT_TIMEOUT_SECONDS,
       EDDY_DEFAULT_TIMEOUT_SECONDS,
@@ -102,6 +103,21 @@ export class EddyService implements IScraper {
       requestTimeout: timeoutSeconds,
     });
     client.setHeaders(EDDY_HEADERS);
+
+    let tenant = this.resolveTenant(companySlug, input.companyUrl);
+    if (!tenant) {
+      // No UUID in the input — try the vanity slug via the public lookup the careers
+      // SPA itself issues (`/api/ds/organization/{slug}/id`). One extra GET, only on
+      // the slug path.
+      const slug = this.slugCandidate(companySlug, input.companyUrl);
+      if (slug) {
+        tenant = await this.resolveSlugToUuid(client, slug);
+      }
+    }
+    if (!tenant) {
+      this.logger.warn('Could not resolve an Eddy organization UUID from input');
+      return new JobResponseDto([]);
+    }
 
     const resultsWanted = input.resultsWanted ?? EDDY_DEFAULT_RESULTS;
     const jobPosts: JobPostDto[] = [];
@@ -428,6 +444,93 @@ export class EddyService implements IScraper {
       }
     } catch {
       // Malformed URL — no tenant.
+    }
+    return '';
+  }
+
+  /**
+   * Extract the vanity-slug candidate from the input when no UUID was found: a bare
+   * non-UUID `companySlug` (`hypercraftusa`), or the first non-UUID `/careers/{…}` path
+   * segment of an Eddy-host URL (`/careers/hypercraftusa/preview/embed` →
+   * `hypercraftusa`). Returns '' when nothing slug-shaped is present.
+   */
+  private slugCandidate(
+    companySlug: string | undefined,
+    companyUrl: string | undefined,
+  ): string {
+    if (companySlug && companySlug.trim()) {
+      const slug = companySlug.trim();
+      if (/^https?:\/\//i.test(slug) || slug.includes(EDDY_ROOT_DOMAIN)) {
+        return this.firstCareersTailSegment(slug);
+      }
+      // Anything non-UUID that isn't a URL is treated as a candidate; the lookup
+      // rejects unknown slugs with 404.
+      return EDDY_UUID_REGEX.test(slug) ? '' : slug;
+    }
+    if (companyUrl) {
+      return this.firstCareersTailSegment(companyUrl);
+    }
+    return '';
+  }
+
+  /**
+   * Return the first non-UUID path segment after `/careers` on an Eddy host — the
+   * vanity short name — or '' when absent (or when the URL isn't on an Eddy host).
+   */
+  private firstCareersTailSegment(value: string): string {
+    const raw = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const u = new URL(raw);
+      const hostname = u.hostname.toLowerCase();
+      if (hostname !== EDDY_CAREERS_HOST && !hostname.endsWith(`.${EDDY_ROOT_DOMAIN}`)) {
+        return '';
+      }
+      const segments = u.pathname.split('/').filter((s) => s.length > 0);
+      const careersIdx = segments.findIndex((s) => s.toLowerCase() === EDDY_CAREERS_PATH);
+      const tail = careersIdx >= 0 ? segments.slice(careersIdx + 1) : [];
+      const first = tail.length > 0 ? decodeURIComponent(tail[0]) : '';
+      return first && !EDDY_UUID_REGEX.test(first) ? first : '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Resolve a vanity short name to the organization UUID via the public anonymous
+   * lookup the careers SPA issues — `GET /api/ds/organization/{slug}/id` →
+   * `{organizationUuid}`. Never throws: an HTTP error, non-object body, or non-UUID
+   * `organizationUuid` all yield ''. Tries the slug as-given, then lowercased.
+   */
+  private async resolveSlugToUuid(
+    client: ReturnType<typeof createHttpClient>,
+    slug: string,
+  ): Promise<string> {
+    const candidates = slug === slug.toLowerCase() ? [slug] : [slug, slug.toLowerCase()];
+    for (const candidate of candidates) {
+      try {
+        const response = await client.get<unknown>(eddyOrganizationIdUrl(candidate), {
+          responseType: 'json',
+        });
+        const data = response?.data as EddyOrganizationIdResponse | string | undefined;
+        let uuid: string | null | undefined;
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          uuid = (data as EddyOrganizationIdResponse).organizationUuid;
+        } else if (typeof data === 'string') {
+          try {
+            uuid = (JSON.parse(data) as EddyOrganizationIdResponse).organizationUuid;
+          } catch {
+            uuid = undefined;
+          }
+        }
+        if (uuid && EDDY_UUID_REGEX.test(uuid)) {
+          this.logger.log(`Resolved Eddy vanity slug "${candidate}" → ${uuid}`);
+          return uuid.toLowerCase();
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `Eddy slug lookup failed for "${candidate}": ${err?.message ?? err}`,
+        );
+      }
     }
     return '';
   }

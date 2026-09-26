@@ -88,7 +88,7 @@ describe('OtterService — Spec 116 / T04', () => {
       );
       expect(bse?.jobUrl).toContain('job-boards.greenhouse.io/otter/jobs/');
       expect(bse?.department).toBe('ENG Brick & Mortar');
-      expect(bse?.location?.city).toBe('Los Angeles, CA');
+      expect(bse?.location?.city).toBe('Los Angeles');
       expect(bse?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(bse?.description).not.toContain('&lt;');
@@ -101,7 +101,7 @@ describe('OtterService — Spec 116 / T04', () => {
       expect(she).toBeDefined();
       expect(she?.title).toBe('Senior Hardware Engineer');
       expect(she?.companyName).toBe('Otter');
-      expect(she?.location?.city).toBe('Mountain View, CA');
+      expect(she?.location?.city).toBe('Mountain View');
       expect(she?.isRemote).toBe(false);
       expect(she?.department).toBe('Hardware Engineering');
       expect(she?.jobUrl).toBe(

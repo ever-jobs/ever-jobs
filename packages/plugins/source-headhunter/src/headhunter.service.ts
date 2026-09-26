@@ -20,6 +20,7 @@ import {
 } from '@ever-jobs/common';
 import {
   HEADHUNTER_API_URL,
+  HEADHUNTER_CRAWL_POLICY,
   HEADHUNTER_DEFAULT_RESULTS,
   HEADHUNTER_HEADERS,
 } from './headhunter.constants';
@@ -29,6 +30,8 @@ import { HeadhunterVacancy, HeadhunterApiResponse } from './headhunter.types';
   site: Site.HEADHUNTER,
   name: 'HeadHunter',
   category: 'regional',
+  // The API requires an app-identifying User-Agent (declared via setHeaders below).
+  crawl: HEADHUNTER_CRAWL_POLICY,
 })
 @Injectable()
 export class HeadhunterService implements IScraper {
@@ -41,7 +44,12 @@ export class HeadhunterService implements IScraper {
       proxies: input.proxies,
       caCert: input.caCert,
       timeout: input.requestTimeout,
+      // Also the explicit plugin layer, so the UA opt-in holds when scrape() is
+      // called outside JobsService's scrape context (CLI, library, e2e tests).
+      crawl: HEADHUNTER_CRAWL_POLICY,
     });
+    // Declares the app UA; it reaches the wire through the `userAgentMode: 'plugin'`
+    // opt-in in HEADHUNTER_CRAWL_POLICY.
     client.setHeaders(HEADHUNTER_HEADERS);
 
     const url = this.buildUrl(input.searchTerm, resultsWanted);

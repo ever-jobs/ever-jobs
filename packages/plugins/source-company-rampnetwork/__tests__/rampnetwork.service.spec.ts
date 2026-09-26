@@ -142,7 +142,7 @@ describe('RampNetworkService — Spec 052 / T04', () => {
       const eng = dto.jobs.find((j) => j.id === 'rampnetwork-4830509202');
       expect(eng?.isRemote).toBe(false);
       expect(eng?.department).toBe('Engineering');
-      expect(eng?.location?.city).toBe('London, United Kingdom');
+      expect(eng?.location?.city).toBe('London');
       expect(eng?.companyName).toBe('Ramp Network');
       expect(eng?.title).toBe('Staff Engineer, Compliance Platform');
       expect(eng?.jobUrl).toBe(

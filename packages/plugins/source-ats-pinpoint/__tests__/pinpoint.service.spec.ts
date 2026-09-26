@@ -102,7 +102,7 @@ describe('PinpointService — Spec 5090', () => {
 
     expect(response.jobs).toHaveLength(1);
     expect(response.jobs[0].isRemote).toBe(true);
-    expect(response.jobs[0].location?.city).toBe('Remote - US');
+    expect(response.jobs[0].location?.city).toBeUndefined();
     expect(response.jobs[0].location?.state).toBeUndefined();
   });
 
@@ -119,7 +119,7 @@ describe('PinpointService — Spec 5090', () => {
 
     expect(response.jobs).toHaveLength(1);
     expect(response.jobs[0].isRemote).toBe(true);
-    expect(response.jobs[0].location?.city).toBe('Remote');
+    expect(response.jobs[0].location?.city).toBeUndefined();
   });
 
   it('honours resultsWanted', async () => {
@@ -145,5 +145,76 @@ describe('PinpointService — Spec 5090', () => {
     expect(response.jobs[0].jobUrl).toBe(
       `https://${COMPANY}.pinpointhq.com/postings/290788`,
     );
+  });
+
+  /**
+   * Spec 5129 — postings.json nests department under `job.department.name`;
+   * the adapter must emit the group name, not the object.
+   */
+  it('maps nested job.department.name to department', async () => {
+    const response = await scrape([
+      posting({
+        id: '290789',
+        title: 'Avionics Engineer',
+        job: { id: '306744', department: { id: '25601', name: 'Avionics' } },
+      }),
+    ]);
+
+    expect(response.jobs).toHaveLength(1);
+    expect(response.jobs[0].department).toBe('Avionics');
+  });
+
+  it('leaves department unset when the posting carries no job.department', async () => {
+    const response = await scrape([
+      posting({ id: '290790', title: 'No Department Job' }),
+    ]);
+
+    expect(response.jobs).toHaveLength(1);
+    expect(response.jobs[0].department).toBeNull();
+  });
+
+  /**
+   * Spec 1689 — the pre-5125 `name ?? city ?? province` fallback: a location
+   * with only a province also uses it as the city label (default on;
+   * PINPOINT_LOCATION_HEURISTICS=false keeps the province in state only).
+   */
+  describe('province-only location (PINPOINT_LOCATION_HEURISTICS)', () => {
+    const saved = process.env.PINPOINT_LOCATION_HEURISTICS;
+
+    beforeEach(() => {
+      delete process.env.PINPOINT_LOCATION_HEURISTICS;
+    });
+
+    afterAll(() => {
+      if (saved === undefined) delete process.env.PINPOINT_LOCATION_HEURISTICS;
+      else process.env.PINPOINT_LOCATION_HEURISTICS = saved;
+    });
+
+    it('uses the province as the city label by default', async () => {
+      const response = await scrape([
+        posting({ id: '401', location: { name: '', city: null, province: 'Ontario' } }),
+      ]);
+
+      expect(response.jobs[0].location).toMatchObject({ city: 'Ontario', state: 'Ontario' });
+      expect(response.jobs[0].locations).toEqual([response.jobs[0].location]);
+    });
+
+    it('never replaces a city parsed from name/city', async () => {
+      const response = await scrape([
+        posting({ id: '402', location: { name: 'Toronto', city: 'Toronto', province: 'Ontario' } }),
+      ]);
+
+      expect(response.jobs[0].location?.city).toBe('Toronto');
+    });
+
+    it.each(['false', '0', 'off', 'no'])('=%s keeps the province in state only', async (value) => {
+      process.env.PINPOINT_LOCATION_HEURISTICS = value;
+      const response = await scrape([
+        posting({ id: '403', location: { name: '', city: null, province: 'Ontario' } }),
+      ]);
+
+      expect(response.jobs[0].location?.state).toBe('Ontario');
+      expect(response.jobs[0].location?.city).toBeUndefined();
+    });
   });
 });

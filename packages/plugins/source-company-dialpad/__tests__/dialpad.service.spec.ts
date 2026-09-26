@@ -94,7 +94,7 @@ describe('DialpadService — Spec 126 / T04', () => {
       // ` - ` separator + name).
       expect(aie?.department).toBe('214 - AI Engineering');
       expect(aie?.department).toMatch(/^\d+ - /);
-      expect(aie?.location?.city).toBe('San Francisco, CA');
+      expect(aie?.location?.city).toBe('San Francisco');
       expect(aie?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(aie?.description).not.toContain('&lt;');
@@ -107,7 +107,7 @@ describe('DialpadService — Spec 126 / T04', () => {
       expect(pom).toBeDefined();
       expect(pom?.title).toBe('Product Operations Manager');
       expect(pom?.companyName).toBe('Dialpad');
-      expect(pom?.location?.city).toBe('Vancouver, BC, Canada');
+      expect(pom?.location?.city).toBe('Vancouver');
       expect(pom?.isRemote).toBe(false);
       // **D-11 lock — second sample**: numeric-prefix-with-
       // hyphen pass-through preserved byte-for-byte.

@@ -92,6 +92,24 @@ describe('AuroraTechService — Spec 5102', () => {
       );
     });
 
+    it('emits per-site locations[] when a posting lists primary + secondary sites', async () => {
+      const raw = clone(JOBS_PAGE_RAW);
+      raw.jobs[0].secondaryLocations = [{ location: 'Bozeman, MT' }];
+      mockGet.mockResolvedValueOnce({ data: raw });
+
+      const service = new AuroraTechService();
+      const result = await service.scrape({
+        siteType: [Site.AURORA_TECH],
+        resultsWanted: 100,
+      } as ScraperInputDto);
+      const job0 = result.jobs.find((j) => j.id === 'aurora_tech-job-001');
+
+      expect(job0?.locations).toMatchObject([
+        { city: 'Pittsburgh', state: 'PA' },
+        { city: 'Bozeman', state: 'MT' },
+      ]);
+    });
+
     it('resolves a postalAddress location and remote workplaceType', async () => {
       mockGet.mockResolvedValueOnce({ data: clone(JOBS_PAGE_RAW) });
 

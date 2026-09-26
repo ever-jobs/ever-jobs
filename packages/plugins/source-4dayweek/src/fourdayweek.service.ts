@@ -13,12 +13,7 @@ import {
   DescriptionFormat,
   CompensationInterval,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList } from '@ever-jobs/common';
 import { FOURDAYWEEK_API_URL, FOURDAYWEEK_HEADERS } from './fourdayweek.constants';
 import { FourDayWeekJob } from './fourdayweek.types';
 
@@ -122,9 +117,8 @@ export class FourDayWeekService implements IScraper {
     }
 
     // Build location
-    const location = new LocationDto({
-      city: entry.location || null,
-    });
+    const locationParsed = parseLocationList([entry.location || null]);
+    const location = locationParsed.location;
 
     // Parse compensation from salary_min/salary_max
     const compensation = this.parseCompensation(entry);
@@ -141,10 +135,11 @@ export class FourDayWeekService implements IScraper {
       companyLogo: entry.company_logo || null,
       jobUrl: entry.url,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation,
       datePosted,
-      isRemote: entry.is_remote ?? null,
+      isRemote: (entry.is_remote ?? null) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       site: Site.FOURDAYWEEK,
       skills: entry.tags && entry.tags.length > 0 ? entry.tags : null,

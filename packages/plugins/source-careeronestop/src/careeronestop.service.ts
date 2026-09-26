@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -164,6 +165,7 @@ export class CareerOneStopService implements IScraper {
       companyName: entry.Company ?? null,
       jobUrl,
       location,
+      locations: [location],
       description,
       compensation: null,
       datePosted,
@@ -182,10 +184,6 @@ export class CareerOneStopService implements IScraper {
       return new LocationDto({});
     }
 
-    const parts = locationStr.split(',').map((p) => p.trim());
-    return new LocationDto({
-      city: parts[0] || null,
-      state: parts[1] || null,
-    });
+    return parseLocationText(locationStr).location ?? new LocationDto({});
   }
 }

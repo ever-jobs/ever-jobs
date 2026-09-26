@@ -257,6 +257,7 @@ export class ExactHireService implements IScraper {
       city: jsonLdAddr.city ?? titleParts.city,
       state: jsonLdAddr.state ?? titleParts.state,
       country: jsonLdAddr.country,
+      locationEntries: this.jsonLdAddresses(jsonLd),
       department: this.deriveDepartment(keywords),
       employmentType: this.jsonLdEmploymentType(jsonLd),
       datePosted: this.parseDate(jsonLd?.datePosted) ?? this.parseDate(entry.lastmod),
@@ -326,13 +327,15 @@ export class ExactHireService implements IScraper {
 
     const companyName = this.deriveCompanyName(job.company ?? job.companyName, tenant);
     const description = this.formatDescription(job.descriptionHtml ?? null, job.description ?? null, format);
+    const location = this.extractLocation(job);
 
     return new JobPostDto({
       id: `exacthire-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      locations: this.extractLocations(job),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: this.detectRemote(job),
@@ -523,7 +526,7 @@ export class ExactHireService implements IScraper {
       .replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
-  /** Resolve the structured location parts from the JSON-LD `jobLocation`. */
+  /** Resolve the structured location parts from the first JSON-LD `jobLocation`. */
   private jsonLdAddress(jsonLd: ExactHireJsonLd | null): {
     city: string | null;
     state: string | null;
@@ -531,20 +534,41 @@ export class ExactHireService implements IScraper {
   } {
     const empty = { city: null, state: null, country: null };
     if (!jsonLd) return empty;
-    const loc = jsonLd.jobLocation;
-    const node = Array.isArray(loc) ? loc[0] : loc;
-    const addr: ExactHirePostalAddress | null | undefined = node?.address;
-    if (!addr || typeof addr !== 'object') return empty;
-    let country: string | null = null;
-    if (typeof addr.addressCountry === 'string') country = this.cleanText(addr.addressCountry);
-    else if (addr.addressCountry && typeof addr.addressCountry === 'object') {
-      country = this.cleanText(addr.addressCountry.name ?? null);
+    return this.jsonLdAddresses(jsonLd)[0] ?? empty;
+  }
+
+  /** Resolve one `{city,state,country}` triple per JSON-LD `jobLocation` entry. */
+  private jsonLdAddresses(
+    jsonLd: ExactHireJsonLd | null,
+  ): Array<{ city: string | null; state: string | null; country: string | null }> {
+    const loc = jsonLd?.jobLocation;
+    if (!loc) return [];
+    const nodes = Array.isArray(loc) ? loc : [loc];
+    const out: Array<{ city: string | null; state: string | null; country: string | null }> = [];
+    for (const node of nodes) {
+      const addr: ExactHirePostalAddress | null | undefined = node?.address;
+      if (!addr || typeof addr !== 'object') continue;
+      let country: string | null = null;
+      if (typeof addr.addressCountry === 'string') country = this.cleanText(addr.addressCountry);
+      else if (addr.addressCountry && typeof addr.addressCountry === 'object') {
+        country = this.cleanText(addr.addressCountry.name ?? null);
+      }
+      const city = this.cleanText(addr.addressLocality ?? null);
+      const state = this.cleanText(addr.addressRegion ?? null);
+      if (city || state || country) out.push({ city, state, country });
     }
-    return {
-      city: this.cleanText(addr.addressLocality ?? null),
-      state: this.cleanText(addr.addressRegion ?? null),
-      country,
-    };
+    return out;
+  }
+
+  /** Per-site LocationDto list — one per JSON-LD `jobLocation`, else the merged location. */
+  private extractLocations(job: ExactHireJob): LocationDto[] {
+    if (job.locationEntries && job.locationEntries.length > 0) {
+      return job.locationEntries.map(
+        (e) => new LocationDto({ city: e.city, state: e.state, country: e.country }),
+      );
+    }
+    const merged = this.extractLocation(job);
+    return merged ? [merged] : [];
   }
 
   /** Parse a date string into a YYYY-MM-DD string. */

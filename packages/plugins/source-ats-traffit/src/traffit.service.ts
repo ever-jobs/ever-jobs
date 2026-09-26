@@ -201,12 +201,14 @@ export class TraffitService implements IScraper {
 
     const geo = this.extractGeolocation(advert);
 
+    const location = this.buildLocation(geo);
     return new JobPostDto({
       id: `traffit-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.buildLocation(geo),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: this.parseDate(post.valid_start ?? post.validStart),
       isRemote: this.detectRemote(title, rawDescription, geo),

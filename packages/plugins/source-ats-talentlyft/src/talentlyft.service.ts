@@ -11,13 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { TALENTLYFT_API_URL, TALENTLYFT_HEADERS } from './talentlyft.constants';
 import { TalentLyftJob, TalentLyftResponse } from './talentlyft.types';
 
@@ -124,9 +118,8 @@ export class TalentLyftService implements IScraper {
 
     // Location from Location string field
     const locationStr = job.Location ?? null;
-    const location = locationStr
-      ? new LocationDto({ city: locationStr })
-      : null;
+    const locationParsed = parseLocationList([locationStr]);
+    const location = locationStr ? locationParsed.location : null;
 
     // Remote detection from location string
     const isRemote = locationStr?.toLowerCase().includes('remote') ?? false;
@@ -145,6 +138,7 @@ export class TalentLyftService implements IScraper {
       companyName: companySlug,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       datePosted,
       isRemote,

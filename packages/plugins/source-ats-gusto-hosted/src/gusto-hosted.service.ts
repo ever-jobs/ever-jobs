@@ -193,7 +193,7 @@ export class GustoHostedService implements IScraper, OnModuleDestroy {
     const readyMs = GUSTO_HOSTED_READY_TIMEOUT_SECONDS * 1000;
     const page = await BrowserPool.getPage({ proxy, stealth: true, headful: true });
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      await BrowserPool.navigate(page, url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
       if (opts.waitForSelector) {
         await page
           .waitForSelector(opts.waitForSelector, { timeout: readyMs })
@@ -277,6 +277,18 @@ export class GustoHostedService implements IScraper, OnModuleDestroy {
     const posting = parseJobPostingLd(html)[0];
     if (posting) {
       const loc = posting.locations[0] ?? null;
+      // The JSON-LD sites are already structured, so map each one directly
+      // rather than rebuilding a label for the parser to re-split.
+      const locations = posting.locations
+        .map(
+          (site) =>
+            new LocationDto({
+              city: site.city ?? null,
+              state: site.region ?? null,
+              country: site.country ?? null,
+            }),
+        )
+        .filter((site) => site.city || site.state || site.country);
       return {
         title: posting.title,
         descriptionHtml: posting.description,
@@ -287,6 +299,7 @@ export class GustoHostedService implements IScraper, OnModuleDestroy {
         city: loc?.city ?? null,
         state: loc?.region ?? null,
         country: loc?.country ?? null,
+        locations: locations.length > 0 ? locations : null,
         compensation: jobPostingLdToCompensation(posting.baseSalary),
         workFromHomeType: null,
       };
@@ -351,6 +364,8 @@ export class GustoHostedService implements IScraper, OnModuleDestroy {
       city: location?.city ?? null,
       state: location?.state ?? null,
       country: location?.country ?? null,
+      locations:
+        parsedLocations.locations.length > 0 ? parsedLocations.locations : null,
       compensation: null,
       workFromHomeType: parsedLocations.workFromHomeType ?? null,
     };
@@ -398,8 +413,8 @@ export class GustoHostedService implements IScraper, OnModuleDestroy {
       GUSTO_HOSTED_REMOTE_REGEX.test(item.title);
 
     const employmentType = detail?.employmentType ?? null;
-    // schema.org employmentType is underscore-cased (e.g. `FULL_TIME`);
-    // getJobTypeFromString strips spaces/hyphens but not underscores.
+    // schema.org employmentType is underscore-cased (e.g. `FULL_TIME`). Since
+    // Spec 1697 getJobTypeFromString strips underscores itself; the replace stays.
     const jobType = employmentType
       ? getJobTypeFromString(employmentType.replace(/_/g, ' '))
       : null;
@@ -410,6 +425,9 @@ export class GustoHostedService implements IScraper, OnModuleDestroy {
       companyName: detail?.hiringOrganizationName ?? companyName,
       jobUrl: item.jobUrl,
       location: this.buildLocation(detail, isRemote),
+      ...(detail?.locations && detail.locations.length > 0
+        ? { locations: detail.locations }
+        : {}),
       description: this.formatDescription(detail?.descriptionHtml ?? null, format),
       datePosted: detail?.datePosted ? toDateOnly(detail.datePosted) : null,
       isRemote,

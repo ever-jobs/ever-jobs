@@ -91,7 +91,7 @@ describe('CerebralService — Spec 094 / T04', () => {
       expect(ta?.jobUrl).toContain('job-boards.greenhouse.io/cerebral/jobs/');
       expect(ta?.jobUrl).not.toContain('cerebral.com');
       expect(ta?.department).toBe('Behavioral Care');
-      expect(ta?.location?.city).toBe('Remote (United States)');
+      expect(ta?.location?.city).toBeUndefined();
       expect(ta?.isRemote).toBe(true);
       // D-08 regression guard.
       expect(ta?.description).not.toContain('&lt;');
@@ -104,7 +104,7 @@ describe('CerebralService — Spec 094 / T04', () => {
       expect(dcp).toBeDefined();
       expect(dcp?.title).toBe('Direct Care Physician (1099 Contract) - Tennessee');
       expect(dcp?.companyName).toBe('Cerebral');
-      expect(dcp?.location?.city).toBe('Tennessee');
+      expect(dcp?.location?.city).toBeUndefined();
       expect(dcp?.isRemote).toBe(false);
       expect(dcp?.department).toBe('Medical Care');
       expect(dcp?.jobUrl).toBe(

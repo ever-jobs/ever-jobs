@@ -1,0 +1,359 @@
+{
+  "hits": [
+    {
+      "objectID": "a1000000-0000-4000-8000-000000000001",
+      "reference": "a1000000-0000-4000-8000-000000000001",
+      "wk_reference": "ACME_Ab12Cd3",
+      "name": "Robotics Software Engineer",
+      "slug": "robotics-software-engineer_paris_ACME_Ab12Cd3",
+      "language": "fr",
+      "contract_type": "full_time",
+      "remote": "partial",
+      "has_remote": true,
+      "offices": [
+        {
+          "city": "Paris",
+          "state": "Ile-de-France",
+          "country": "France",
+          "country_code": "FR",
+          "district": "Paris"
+        },
+        {
+          "city": "Berlin",
+          "state": "Berlin",
+          "country": "Germany",
+          "country_code": "de"
+        }
+      ],
+      "new_profession": {
+        "category_name": "Tech",
+        "sub_category_name": "Software Engineering",
+        "pivot_name": "Backend Developer"
+      },
+      "summary": "Build the control software for our robot arms.",
+      "key_missions": [
+        "Design motion-planning services.",
+        "Review code & mentor juniors.",
+        "Ship firmware updates <safely>."
+      ],
+      "profile": "<p>You have <strong>5 years</strong> of C++ experience.</p>",
+      "salary_minimum": 43000,
+      "salary_maximum": 51000,
+      "salary_currency": "EUR",
+      "salary_period": "yearly",
+      "salary_yearly_minimum": 43000,
+      "has_salary_yearly_minimum": true,
+      "experience_level_minimum": 5,
+      "has_experience_level_minimum": true,
+      "education_level": "bac_5",
+      "sectors": [
+        {
+          "name": "IT / Digital",
+          "parent_name": "Consulting / Audit"
+        },
+        {
+          "name": "SaaS / Cloud Services",
+          "parent_name": "Tech"
+        },
+        {
+          "name": "it / digital",
+          "parent_name": "Tech"
+        }
+      ],
+      "published_at": "2026-09-22T15:06:42Z",
+      "published_at_date": "2026-09-22",
+      "published_at_timestamp": 1790089602,
+      "organization": {
+        "name": "Acme Robotics",
+        "slug": "acme-robotics",
+        "reference": "AcMe001",
+        "summary": "Industrial robots for small factories.",
+        "logo": {
+          "url": "https://cdn.example.test/logos/acme-robotics.png"
+        },
+        "nb_employees": 800
+      }
+    },
+    {
+      "objectID": "b2000000-0000-4000-8000-000000000002",
+      "reference": "b2000000-0000-4000-8000-000000000002",
+      "name": "Chef de projet digital",
+      "slug": "chef-de-projet-digital_lyon_BIST_Ef34Gh5",
+      "language": "fr",
+      "contract_type": "apprenticeship",
+      "remote": "punctual",
+      "offices": [
+        {
+          "city": "Lyon",
+          "state": "Auvergne-Rhone-Alpes",
+          "country": "France",
+          "country_code": "FR"
+        }
+      ],
+      "new_profession": {
+        "category_name": "Marketing & Communication",
+        "sub_category_name": "Digital Marketing",
+        "pivot_name": null
+      },
+      "summary": "Pilotez nos projets digitaux.",
+      "key_missions": "Piloter la refonte du site.",
+      "profile": null,
+      "salary_minimum": 1200,
+      "salary_maximum": 1500,
+      "salary_currency": "EUR",
+      "salary_period": "monthly",
+      "salary_yearly_minimum": 14400,
+      "has_salary_yearly_minimum": true,
+      "experience_level_minimum": 0,
+      "has_experience_level_minimum": true,
+      "sectors": [
+        {
+          "name": "Restaurant",
+          "parent_name": "Hospitality"
+        }
+      ],
+      "published_at": "2026-09-21T08:00:00Z",
+      "published_at_date": "2026-09-21",
+      "published_at_timestamp": 1789977600,
+      "organization": {
+        "name": "Bistro Numerique",
+        "slug": "bistro-numerique",
+        "reference": "BiSt002",
+        "summary": null,
+        "logo": null,
+        "nb_employees": null
+      }
+    },
+    {
+      "objectID": "c3000000-0000-4000-8000-000000000003",
+      "reference": "c3000000-0000-4000-8000-000000000003",
+      "name": "Full remote backend engineer",
+      "slug": "full-remote-backend-engineer_ACME_Ij56Kl7",
+      "language": "en",
+      "contract_type": "freelance",
+      "offices": [
+        {
+          "city": null,
+          "state": null,
+          "country": "France",
+          "country_code": "FR"
+        }
+      ],
+      "new_profession": {
+        "category_name": "Tech",
+        "sub_category_name": "Backend",
+        "pivot_name": null
+      },
+      "summary": "Contract backend work, fully remote.",
+      "key_missions": [
+        "Maintain the fleet API."
+      ],
+      "profile": null,
+      "salary_minimum": null,
+      "salary_maximum": null,
+      "salary_currency": "USD",
+      "salary_period": null,
+      "salary_yearly_minimum": 90000,
+      "has_salary_yearly_minimum": true,
+      "experience_level_minimum": 0.5,
+      "has_experience_level_minimum": true,
+      "published_at": "2026-09-20T10:30:00Z",
+      "published_at_date": "2026-09-20",
+      "published_at_timestamp": 1789900200,
+      "organization": {
+        "name": "Acme Robotics",
+        "slug": "acme-robotics",
+        "reference": "AcMe001",
+        "summary": "Industrial robots for small factories.",
+        "logo": {
+          "url": "https://cdn.example.test/logos/acme-robotics.png"
+        },
+        "nb_employees": 800
+      }
+    },
+    {
+      "objectID": "d4000000-0000-4000-8000-000000000004",
+      "reference": "d4000000-0000-4000-8000-000000000004",
+      "name": "Remote Sommelier",
+      "slug": "remote-sommelier_bordeaux_BIST_Mn78Op9",
+      "language": "fr",
+      "contract_type": "vie",
+      "remote": "no",
+      "offices": [
+        {
+          "city": "Bordeaux",
+          "state": "Nouvelle-Aquitaine",
+          "country": "France",
+          "country_code": "FR"
+        }
+      ],
+      "summary": "Conseillez nos clients.",
+      "key_missions": [],
+      "profile": "<p>Salary band: €32k - €36k.</p>",
+      "salary_minimum": 30000,
+      "salary_maximum": 35000,
+      "salary_currency": null,
+      "salary_period": "yearly",
+      "published_at": "2026-09-19T12:00:00Z",
+      "published_at_date": "2026-09-19",
+      "published_at_timestamp": 1789819200,
+      "organization": {
+        "name": "Bistro Numerique",
+        "slug": "bistro-numerique",
+        "reference": "BiSt002",
+        "summary": null,
+        "logo": null,
+        "nb_employees": null
+      }
+    },
+    {
+      "objectID": "e5000000-0000-4000-8000-000000000005",
+      "reference": "e5000000-0000-4000-8000-000000000005",
+      "name": "Data Analyst",
+      "slug": "data-analyst_munich_ACME_Qr90St1",
+      "language": "de",
+      "contract_type": "temporary",
+      "remote": "fulltime",
+      "offices": [
+        {
+          "city": "Munich",
+          "state": "Bavaria",
+          "country": "Germany",
+          "country_code": "DE"
+        }
+      ],
+      "new_profession": {
+        "category_name": "Tech",
+        "sub_category_name": "Data",
+        "pivot_name": "Data Analyst"
+      },
+      "summary": "Analyse production data.",
+      "key_missions": [
+        "Build dashboards."
+      ],
+      "profile": "<p>SQL required.</p>",
+      "published_at": "2026-09-18T09:15:00Z",
+      "published_at_date": "2026-09-18",
+      "published_at_timestamp": 1789722900,
+      "organization": {
+        "name": "Acme Robotics",
+        "slug": "acme-robotics",
+        "reference": "AcMe001",
+        "summary": "Industrial robots for small factories.",
+        "logo": {
+          "url": "https://cdn.example.test/logos/acme-robotics.png"
+        },
+        "nb_employees": 800
+      }
+    },
+    {
+      "objectID": "f6000000-0000-4000-8000-000000000006",
+      "reference": "f6000000-0000-4000-8000-000000000006",
+      "name": "Commis de cuisine",
+      "slug": "commis-de-cuisine_nantes_BIST_Uv23Wx4",
+      "language": "fr",
+      "contract_type": "part_time",
+      "remote": "unknown",
+      "offices": [
+        {
+          "city": "Nantes",
+          "state": "Pays de la Loire",
+          "country": "France",
+          "country_code": "FR"
+        }
+      ],
+      "summary": "Rejoignez la brigade.",
+      "key_missions": [
+        "Préparer les entrées.",
+        "  "
+      ],
+      "profile": null,
+      "salary_minimum": 0,
+      "salary_maximum": 0,
+      "salary_currency": "EUR",
+      "salary_period": "yearly",
+      "salary_yearly_minimum": 0,
+      "published_at": "2026-09-17T07:00:00Z",
+      "published_at_date": "2026-09-17",
+      "published_at_timestamp": 1789628400,
+      "organization": {
+        "name": "Bistro Numerique",
+        "slug": "bistro-numerique",
+        "reference": "BiSt002",
+        "summary": null,
+        "logo": null,
+        "nb_employees": null
+      }
+    },
+    {
+      "objectID": "g7000000-0000-4000-8000-000000000007",
+      "reference": "g7000000-0000-4000-8000-000000000007",
+      "name": "Graduate Programme Trainee",
+      "slug": "graduate-programme-trainee_london_ACME_Yz56Ab7",
+      "language": "en",
+      "contract_type": "graduate_program",
+      "remote": "no",
+      "offices": [
+        {
+          "city": "London",
+          "state": "England",
+          "country": "United Kingdom",
+          "country_code": "GB"
+        }
+      ],
+      "summary": "Rotate through three teams.",
+      "key_missions": null,
+      "profile": "<p>Recent graduates welcome.</p>",
+      "published_at": "2026-09-16T11:00:00Z",
+      "published_at_date": "2026-09-16",
+      "published_at_timestamp": 1789556400,
+      "organization": {
+        "name": "Acme Robotics",
+        "slug": "acme-robotics",
+        "reference": "AcMe001",
+        "summary": "Industrial robots for small factories.",
+        "logo": {
+          "url": "https://cdn.example.test/logos/acme-robotics.png"
+        },
+        "nb_employees": 800
+      }
+    },
+    {
+      "objectID": "h8000000-0000-4000-8000-000000000008",
+      "reference": "h8000000-0000-4000-8000-000000000008",
+      "name": "Stagiaire marketing",
+      "slug": "stagiaire-marketing_madrid_BIST_Cd89Ef0",
+      "language": "es",
+      "contract_type": "internship",
+      "remote": "partial",
+      "offices": [
+        {
+          "city": "Madrid",
+          "state": "Madrid",
+          "country": "Spain",
+          "country_code": "ES"
+        }
+      ],
+      "summary": "Apoya al equipo de marketing.",
+      "key_missions": [
+        "Gestionar redes sociales."
+      ],
+      "profile": null,
+      "published_at": "2026-09-15T13:45:00Z",
+      "published_at_date": "2026-09-15",
+      "published_at_timestamp": 1789479900,
+      "organization": {
+        "name": "Bistro Numerique",
+        "slug": "bistro-numerique",
+        "reference": "BiSt002",
+        "summary": null,
+        "logo": null,
+        "nb_employees": null
+      }
+    }
+  ],
+  "nbHits": 8,
+  "page": 0,
+  "nbPages": 1,
+  "hitsPerPage": 100
+}

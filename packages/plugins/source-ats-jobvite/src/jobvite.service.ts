@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  parseLocationText,
   parseJobPostingLd,
   jobPostingLdToCompensation,
 } from '@ever-jobs/common';
@@ -251,12 +252,15 @@ export class JobviteService implements IScraper {
       (item.locationText != null && JOBVITE_REMOTE_REGEX.test(item.locationText)) ||
       JOBVITE_REMOTE_REGEX.test(item.title);
 
+    const location = this.buildLocation(item, detail, isRemote);
+
     return new JobPostDto({
       id: `jobvite-${slug}-${item.jobId}`,
       title: item.title,
       companyName: detail?.hiringOrganizationName ?? companyName,
       jobUrl: item.jobUrl,
-      location: this.buildLocation(item, detail, isRemote),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description: this.formatDescription(detail?.descriptionHtml ?? null, format),
       datePosted: detail?.datePosted ? toDateOnly(detail.datePosted) : null,
       isRemote,
@@ -283,28 +287,13 @@ export class JobviteService implements IScraper {
     if (detail && (detail.city || detail.state || detail.country)) {
       return new LocationDto({ city: detail.city, state: detail.state, country: detail.country });
     }
-    const parsed = this.parseLocationText(item.locationText);
-    if (parsed.city || parsed.state || parsed.country) {
-      return new LocationDto(parsed);
+    const parsed = parseLocationText(item.locationText).location;
+    if (parsed && (parsed.city || parsed.state || parsed.country)) {
+      return parsed;
     }
     return isRemote ? new LocationDto({ city: 'Remote' }) : null;
   }
 
-  /**
-   * Parse a list location cell into parts — a comma-separated
-   * "City, Region[, Country]" string. A single part becomes the city.
-   */
-  private parseLocationText(raw: string | null): {
-    city: string | null;
-    state: string | null;
-    country: string | null;
-  } {
-    if (!raw) return { city: null, state: null, country: null };
-    const parts = raw.split(',').map((p) => p.trim()).filter((p) => p.length > 0);
-    if (parts.length === 0) return { city: null, state: null, country: null };
-    if (parts.length === 1) return { city: parts[0], state: null, country: null };
-    return { city: parts[0], state: parts[1], country: parts.slice(2).join(', ') || null };
-  }
 
   /** Convert the HTML job-ad body per `descriptionFormat`. */
   private formatDescription(html: string | null, format?: DescriptionFormat): string | null {

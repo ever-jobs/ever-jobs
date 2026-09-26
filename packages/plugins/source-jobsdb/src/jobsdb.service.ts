@@ -11,13 +11,7 @@ import {
   DescriptionFormat,
   LocationDto,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-  toDateOnly,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { JOBSDB_API_URL, JOBSDB_HEADERS } from './jobsdb.constants';
 import { JobsdbJob } from './jobsdb.types';
 
@@ -163,12 +157,16 @@ export class JobsdbService implements IScraper {
       item.isRemote === true ||
       (item.workType ?? '').toLowerCase().includes('remote');
 
+    const locationParsed = parseLocationList([item.location]);
     return new JobPostDto({
       id: `jobsdb-${item.id}`,
       title: item.title,
       jobUrl,
       companyName: item.companyName ?? null,
-      location: item.location ? new LocationDto({ city: item.location }) : null,
+      location: item.location ? locationParsed.location : null,
+      ...(locationParsed.locations.length > 0
+        ? { locations: locationParsed.locations }
+        : {}),
       description,
       compensation: null,
       datePosted,

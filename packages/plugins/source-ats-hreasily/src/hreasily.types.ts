@@ -178,6 +178,9 @@ export interface HReasilyJob {
   state?: string | null;
   country?: string | null;
 
+  /** One `{city,state,country}` triple per JSON-LD `jobLocation` entry, when present. */
+  locationEntries?: Array<{ city: string | null; state: string | null; country: string | null }> | null;
+
   /** Combined free-text location, used for remote detection. */
   locationText?: string | null;
 

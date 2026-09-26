@@ -87,7 +87,7 @@ describe('PinterestService — Spec 028 / T04', () => {
       expect(visualDiscovery?.jobUrl).toBe(
         'https://boards.greenhouse.io/pinterest/jobs/7801234',
       );
-      expect(visualDiscovery?.location?.city).toBe('San Francisco, CA');
+      expect(visualDiscovery?.location?.city).toBe('San Francisco');
       expect(visualDiscovery?.department).toBe('Engineering');
       expect(visualDiscovery?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

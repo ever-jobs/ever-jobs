@@ -11,12 +11,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  htmlToPlainText,
-  markdownConverter,
-  extractEmails,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList } from '@ever-jobs/common';
 import {
   STARTUPJOBS_API_URL,
   STARTUPJOBS_FEED_URL,
@@ -178,9 +173,8 @@ export class StartupJobsService implements IScraper {
     }
 
     // Build location
-    const location = new LocationDto({
-      city: entry.location || null,
-    });
+    const locationParsed = parseLocationList([entry.location || null]);
+    const location = locationParsed.location;
 
     // Parse date from published_at or created_at
     const rawDate = entry.published_at || entry.created_at || null;
@@ -193,10 +187,11 @@ export class StartupJobsService implements IScraper {
       companyLogo,
       jobUrl,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       compensation: null,
       datePosted,
-      isRemote: entry.remote ?? null,
+      isRemote: (entry.remote ?? null) || locationParsed.remoteMentioned,
       emails: extractEmails(description),
       site: Site.STARTUPJOBS,
       skills: entry.tags && entry.tags.length > 0 ? entry.tags : null,

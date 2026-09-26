@@ -89,7 +89,7 @@ describe('InstacartService — Spec 039 / T04', () => {
       expect(eng?.jobUrl).toBe(
         'https://instacart.careers/job/?gh_jid=7642776',
       );
-      expect(eng?.location?.city).toBe('San Francisco, CA');
+      expect(eng?.location?.city).toBe('San Francisco');
       expect(eng?.department).toBe('Engineering');
       expect(eng?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

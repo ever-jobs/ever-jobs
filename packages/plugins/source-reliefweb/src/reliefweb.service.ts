@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationList,
   toDateOnly,
 } from '@ever-jobs/common';
 import {
@@ -121,10 +122,11 @@ export class ReliefWebService implements IScraper {
     const companyName = fields.source?.[0]?.name ?? null;
 
     const countries = fields.country?.map(c => c.name) ?? [];
-    const location = new LocationDto({
-      country: countries[0] ?? null,
-      city: countries.length > 1 ? countries.join(', ') : null,
-    });
+    // each country name is a site-level country label — let the shared parser
+    // emit per-country entries instead of cramming the list into `city`
+    const parsedLocations = parseLocationList(countries);
+    const location = parsedLocations.location;
+    const locations = parsedLocations.locations;
 
     let datePosted: string | null = null;
     if (fields.date?.created) {
@@ -141,6 +143,7 @@ export class ReliefWebService implements IScraper {
       companyName,
       jobUrl,
       location,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       compensation: undefined,
       datePosted,

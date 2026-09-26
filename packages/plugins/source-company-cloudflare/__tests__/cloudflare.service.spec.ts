@@ -87,7 +87,7 @@ describe('CloudflareService — Spec 036 / T04', () => {
       expect(workers?.jobUrl).toBe(
         'https://boards.greenhouse.io/cloudflare/jobs/9501234',
       );
-      expect(workers?.location?.city).toBe('San Francisco, CA');
+      expect(workers?.location?.city).toBe('San Francisco');
       expect(workers?.department).toBe('Engineering');
       expect(workers?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.

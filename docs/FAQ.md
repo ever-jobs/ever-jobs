@@ -33,7 +33,18 @@ API_KEYS=key1,key2,key3
 
 Then include `x-api-key: key1` in request headers.
 
+## How does Ever Jobs identify itself, and how fast does it crawl?
+
+By default every request carries `Mozilla/5.0 (compatible; EverJobs/1.0; +https://github.com/ever-jobs/ever-jobs)`
+and is paced per host (4 in flight, 100 ms apart), backs off on 429/`Retry-After`, and uses one
+stable proxy per site. Add your contact with `EVER_JOBS_CRAWL_CONTACT`, change anything per site,
+host or request, or restore the pre-1690 behaviour with `EVER_JOBS_CRAWL_PRESET=legacy`. See
+[CRAWL_POLICY.md](./CRAWL_POLICY.md).
+
 ## How do I set up rate limiting?
+
+_This section is about limiting **incoming** API requests. Outgoing requests to job sites are
+paced by the crawl policy (above)._
 
 ```bash
 RATE_LIMIT_ENABLED=true

@@ -16,6 +16,7 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  parseLocationText,
   randomSleep,
   toDateOnly,
 } from '@ever-jobs/common';
@@ -280,12 +281,15 @@ export class CornerstoneService implements IScraper {
     const department =
       requisition.department ?? requisition.division ?? requisition.businessUnit ?? null;
 
+    const locations = this.extractLocations(requisition);
+
     return new JobPostDto({
       id: `cornerstone-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(requisition),
+      location: locations[0] ?? null,
+      ...(locations.length > 0 ? { locations } : {}),
       description,
       datePosted: this.parseDate(
         requisition.postingEffectiveDate ??
@@ -358,24 +362,22 @@ export class CornerstoneService implements IScraper {
   }
 
   /** CSOD returns locations as an array of objects, a single object, or a string. */
-  private extractLocation(requisition: CornerstoneRequisition): LocationDto | null {
+  private extractLocations(requisition: CornerstoneRequisition): LocationDto[] {
     const locs = requisition.locations;
-    if (Array.isArray(locs) && locs.length > 0 && locs[0]) {
-      return this.locationFromObject(locs[0]);
+    if (Array.isArray(locs) && locs.length > 0) {
+      return locs
+        .filter((l): l is CornerstoneLocation => !!l)
+        .map((l) => this.locationFromObject(l));
     }
     const single = requisition.location;
-    if (single && typeof single === 'object') return this.locationFromObject(single);
+    if (single && typeof single === 'object') return [this.locationFromObject(single)];
     const display =
       (typeof single === 'string' ? single : null) ?? requisition.displayLocation;
     if (typeof display === 'string' && display.trim()) {
-      const parts = display.split(',').map((p) => p.trim()).filter(Boolean);
-      return new LocationDto({
-        city: parts[0] ?? null,
-        state: parts[1] ?? null,
-        country: parts[2] ?? null,
-      });
+      const parsed = parseLocationText(display).location;
+      if (parsed) return [parsed];
     }
-    return null;
+    return [];
   }
 
   private locationFromObject(obj: CornerstoneLocation): LocationDto {

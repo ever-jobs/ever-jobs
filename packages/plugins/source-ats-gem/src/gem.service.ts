@@ -10,13 +10,7 @@ import { classifyScrapeError,
   Site,
   getJobTypeFromString,
 } from '@ever-jobs/models';
-import {
-  createHttpClient,
-  extractEmails,
-  htmlToPlainText,
-  markdownConverter,
-  resolveCompensation,
-} from '@ever-jobs/common';
+import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, resolveCompensation } from '@ever-jobs/common';
 import {
   GEM_API_ENDPOINT,
   GEM_BASE_URL,
@@ -263,9 +257,8 @@ export class GemService implements IScraper {
 
     const firstLocation = posting.locations?.[0];
     const locationName = firstLocation?.name?.trim() ?? null;
-    const location = locationName
-      ? new LocationDto({ city: locationName })
-      : null;
+    const locationParsed = parseLocationList([locationName]);
+    const location = locationName ? locationParsed.location : null;
     const isRemote =
       firstLocation?.isRemote === true ||
       (locationName?.toLowerCase().includes('remote') ?? false) ||
@@ -293,6 +286,7 @@ export class GemService implements IScraper {
       companyName,
       jobUrl: `${GEM_BASE_URL}/${slug}/${id}`,
       location,
+      ...(locationParsed.locations.length > 0 ? { locations: locationParsed.locations } : {}),
       description,
       emails: extractEmails(description),
       datePosted,

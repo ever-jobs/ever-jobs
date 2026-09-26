@@ -415,12 +415,14 @@ export class Expr3ssService implements IScraper {
     const companyName = job.companyName || brandName || this.deriveSlugName(tenant);
     const description = this.formatDescription(job.descriptionHtml ?? null, format);
 
+    const location = this.extractLocation(job);
     return new JobPostDto({
       id: `expr3ss-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.extractLocation(job),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: job.datePosted ?? null,
       isRemote: job.isRemote ?? false,

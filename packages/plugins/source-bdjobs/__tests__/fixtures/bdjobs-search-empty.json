@@ -1,0 +1,12 @@
+{
+  "message": "Success",
+  "statuscode": "1",
+  "data": [],
+  "premiumData": [],
+  "common": {
+    "total_records_found": 0,
+    "showd": "1",
+    "totalpages": 0,
+    "total_vacancies": 0
+  }
+}

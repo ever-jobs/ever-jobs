@@ -147,7 +147,7 @@ describe('MavenclinicService — Spec 076 / T04', () => {
       expect(brand?.jobUrl).toContain('job-boards.greenhouse.io/mavenclinic/jobs/');
       expect(brand?.jobUrl).not.toContain('?gh_jid=');
       // Location — Maven Clinic's NYC HQ on the first listing.
-      expect(brand?.location?.city).toBe('New York, NY');
+      expect(brand?.location?.city).toBe('New York');
       expect(brand?.isRemote).toBe(false);
       // D-11 first-listing regression guard: the emitted
       // `department` for the first fixture listing matches the wire
@@ -189,7 +189,7 @@ describe('MavenclinicService — Spec 076 / T04', () => {
       expect(coa?.title.endsWith(' ')).toBe(false);
       expect(coa?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 1);
       expect(coa?.companyName).toBe('Maven Clinic');
-      expect(coa?.location?.city).toBe('Remote - United States');
+      expect(coa?.location?.city).toBeUndefined();
       expect(coa?.isRemote).toBe(true);
       // D-11 second-listing regression guard: the emitted
       // `department` for the second fixture listing matches the

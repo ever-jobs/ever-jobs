@@ -1,6 +1,40 @@
+// ── TypeScript test transformer (Spec 1689) ─────────────────────────────────
+// Two supported ways to run the suites, picked by `JEST_TRANSFORMER`:
+//
+//   swc     (default) @swc/jest transpiles only — fast, but specs are NOT
+//           type-checked while they run. CI's `tsc --project
+//           tsconfig.typecheck.json` step covers type errors instead.
+//   ts-jest the pre-fork-sync transform (`preset: 'ts-jest'` + ts-jest over
+//           tsconfig.base.json): every spec is type-checked as it runs, so a
+//           type error fails the test. Slower. `npm run test:typed` sets it.
+//
+// An unrecognised value throws instead of silently falling back, so a typo
+// can never make a "typed" run quietly skip the type-check.
+const TS_TRANSFORMERS = {
+  swc: ['@swc/jest', {
+    jsc: {
+      parser: { syntax: 'typescript', decorators: true },
+      transform: { legacyDecorator: true, decoratorMetadata: true, useDefineForClassFields: false },
+      target: 'es2021',
+      keepClassNames: true,
+    },
+    module: { type: 'commonjs' },
+    sourceMaps: 'inline',
+  }],
+  'ts-jest': ['ts-jest', { tsconfig: 'tsconfig.base.json' }],
+};
+const requestedTransformer = (process.env.JEST_TRANSFORMER || '').trim().toLowerCase();
+const tsTransformer = requestedTransformer || 'swc';
+if (!Object.prototype.hasOwnProperty.call(TS_TRANSFORMERS, tsTransformer)) {
+  throw new Error(
+    `Unknown JEST_TRANSFORMER "${process.env.JEST_TRANSFORMER}" — expected one of: ${Object.keys(TS_TRANSFORMERS).join(', ')}`,
+  );
+}
+
 /** @type {import('jest').Config} */
 module.exports = {
-  preset: 'ts-jest',
+  // ts-jest mode restores the full pre-fork-sync config, preset included.
+  ...(tsTransformer === 'ts-jest' ? { preset: 'ts-jest' } : {}),
   testEnvironment: 'node',
   roots: ['<rootDir>/packages/', '<rootDir>/apps/', '<rootDir>/scripts/'],
   testMatch: ['**/__tests__/**/*.e2e-spec.ts', '**/__tests__/**/*.spec.ts'],
@@ -1865,11 +1899,28 @@ module.exports = {
     '^@ever-jobs/source-company-hlaboratories$': '<rootDir>/packages/plugins/source-company-hlaboratories/src/index.ts',
     '^@ever-jobs/source-company-pulsespace$': '<rootDir>/packages/plugins/source-company-pulsespace/src/index.ts',
     '^@ever-jobs/source-company-renewmfgsol$': '<rootDir>/packages/plugins/source-company-renewmfgsol/src/index.ts',
+    '^@ever-jobs/source-ats-octbr_ai$': '<rootDir>/packages/plugins/source-ats-octbr_ai/src/index.ts',
+    '^@ever-jobs/source-ats-nodi_global$': '<rootDir>/packages/plugins/source-ats-nodi_global/src/index.ts',
+    '^@ever-jobs/source-ats-wellfound$': '<rootDir>/packages/plugins/source-ats-wellfound/src/index.ts',
+    '^@ever-jobs/source-company-tau-robotics$': '<rootDir>/packages/plugins/source-company-tau-robotics/src/index.ts',
+    '^@ever-jobs/source-company-power_us$': '<rootDir>/packages/plugins/source-company-power_us/src/index.ts',
+    '^@ever-jobs/source-company-mundane_co$': '<rootDir>/packages/plugins/source-company-mundane_co/src/index.ts',
+    '^@ever-jobs/source-company-getmaxspace$': '<rootDir>/packages/plugins/source-company-getmaxspace/src/index.ts',
+    '^@ever-jobs/source-company-ampflame$': '<rootDir>/packages/plugins/source-company-ampflame/src/index.ts',
+    '^@ever-jobs/source-company-4earth_tech$': '<rootDir>/packages/plugins/source-company-4earth_tech/src/index.ts',
+    '^@ever-jobs/source-company-zennoastronautics$': '<rootDir>/packages/plugins/source-company-zennoastronautics/src/index.ts',
+    '^@ever-jobs/source-company-thermwood$': '<rootDir>/packages/plugins/source-company-thermwood/src/index.ts',
+    '^@ever-jobs/source-company-labs_actor$': '<rootDir>/packages/plugins/source-company-labs_actor/src/index.ts',
+    '^@ever-jobs/source-company-soundryx$': '<rootDir>/packages/plugins/source-company-soundryx/src/index.ts',
+    '^@ever-jobs/source-ats-inhire$': '<rootDir>/packages/plugins/source-ats-inhire/src/index.ts',
+    '^@ever-jobs/source-jobsbylevel$': '<rootDir>/packages/plugins/source-jobsbylevel/src/index.ts',
+    '^@ever-jobs/source-simplifyjobs$': '<rootDir>/packages/plugins/source-simplifyjobs/src/index.ts',
     '^@ever-jobs/source-tesla$': '<rootDir>/packages/plugins/source-tesla/src/index.ts',
     '^@ever-jobs/source-tesla-playwright$': '<rootDir>/packages/plugins/source-tesla-playwright/src/index.ts',
   },
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.base.json' }],
+    // `swc` by default; `JEST_TRANSFORMER=ts-jest` for type-checked runs (see top).
+    '^.+\\.tsx?$': TS_TRANSFORMERS[tsTransformer],
     // Transform ESM-only packages (uuid v13+ ships as ESM .js)
     '[/\\\\]node_modules[/\\\\]uuid[/\\\\].+\\.js$': ['ts-jest', {
       tsconfig: 'tsconfig.base.json',

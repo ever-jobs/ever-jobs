@@ -121,7 +121,7 @@ describe('AdaptiveBiotechnologiesService — Spec 187 / T04', () => {
       expect(ao?.title).toBe('Account Operations Manager - Southeast');
       expect(ao?.companyName).toBe('Adaptive Biotechnologies');
       expect(ao?.department).toBe('Commercial Operations');
-      expect(ao?.location?.city).toBe('Remote (WFH)');
+      expect(ao?.location?.city).toBe('WFH');
       expect(ao?.isRemote).toBe(true);
 
       const calledUrls = mockGet.mock.calls.map((c) => c[0] as string);

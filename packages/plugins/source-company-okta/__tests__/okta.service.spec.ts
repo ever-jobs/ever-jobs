@@ -99,7 +99,7 @@ describe('OktaService — Spec 115 / T04', () => {
       // department `'Auth0 DevRel-494'` byte-for-byte.
       expect(aiops?.department).toBe('Auth0 DevRel-494');
       expect(aiops?.department).toMatch(/-\d+$/);
-      expect(aiops?.location?.city).toBe('San Francisco, CA');
+      expect(aiops?.location?.city).toBe('San Francisco');
       expect(aiops?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(aiops?.description).not.toContain('&lt;');
@@ -112,7 +112,7 @@ describe('OktaService — Spec 115 / T04', () => {
       expect(sse).toBeDefined();
       expect(sse?.title).toBe('Senior Software Engineer, Workforce Identity');
       expect(sse?.companyName).toBe('Okta');
-      expect(sse?.location?.city).toBe('Bellevue, WA');
+      expect(sse?.location?.city).toBe('Bellevue');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('BT Engineering Services-779');
       expect(sse?.department).toMatch(/-\d+$/);

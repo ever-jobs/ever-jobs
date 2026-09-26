@@ -60,6 +60,14 @@ export const EDDY_API_ORIGIN = 'https://app.eddy.com';
 export const EDDY_CAREERS_PATH = 'careers';
 
 /**
+ * Public, anonymous slug→UUID lookup, the same call the careers SPA issues for vanity
+ * careers URLs: `{ currentShortName, organizationUuid }` — the
+ * `{organizationUuid}` then keys the jobs endpoints. Unknown slugs answer 404.
+ */
+export const eddyOrganizationIdUrl = (slug: string): string =>
+  `${EDDY_API_ORIGIN}/api/ds/organization/${encodeURIComponent(slug)}/id`;
+
+/**
  * Public, anonymous open-roles list endpoint, keyed by the tenant's organization UUID.
  * Returns a JSON array of lightweight role records
  * (`{ jobOpeningUuid, title, departmentId, locationId, postedDate }`).
@@ -127,8 +135,8 @@ export const EDDY_HEADERS: Record<string, string> = {
 
 /**
  * Matches a 36-char canonical UUID (8-4-4-4-12). Used to recognise the organization UUID
- * in a `companySlug` / `companyUrl` and to reject non-UUID vanity tokens (the public API
- * strictly requires the organization UUID).
+ * in a `companySlug` / `companyUrl` — and to validate the `organizationUuid` returned by
+ * the vanity-slug lookup, which is what the jobs API strictly requires.
  */
 export const EDDY_UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

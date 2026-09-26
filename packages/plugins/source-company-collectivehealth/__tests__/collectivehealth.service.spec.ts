@@ -94,7 +94,7 @@ describe('CollectiveHealthService — Spec 155 / T04', () => {
       expect(csr?.jobUrl).toContain('?gh_jid=');
       // D-11 clean dept pass-through.
       expect(csr?.department).toBe('Health Plan Operations');
-      expect(csr?.location?.city).toBe('Lehi, UT');
+      expect(csr?.location?.city).toBe('Lehi');
       expect(csr?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(csr?.description).not.toContain('&lt;');
@@ -106,7 +106,7 @@ describe('CollectiveHealthService — Spec 155 / T04', () => {
       // D-10 omitted — title byte-for-byte pass-through.
       expect(sse?.title).toBe('Senior Software Engineer');
       expect(sse?.companyName).toBe('Collective Health');
-      expect(sse?.location?.city).toBe('San Francisco, CA');
+      expect(sse?.location?.city).toBe('San Francisco');
       expect(sse?.isRemote).toBe(false);
       expect(sse?.department).toBe('Engineering');
       expect(sse?.jobUrl).toBe(

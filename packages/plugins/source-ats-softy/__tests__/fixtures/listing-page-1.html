@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<!-- Synthetic fixture shaped like a live Softy listing page (/offers?page=1, Spec 1691 section 2). -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Offres d'emploi - ACME</title>
+</head>
+<body>
+  <header>
+    <a href="https://acme.softy.pro">Accueil</a>
+    <a href="https://acme.softy.pro/offers">Nos offres</a>
+  </header>
+  <main>
+    <div class="grid gap-4">
+      <a class="block" href="https://acme.softy.pro/offers/1001">
+        <div data-slot="card" class="rounded-xl border">
+          <div data-slot="card-content" class="p-4">
+            <div class="flex"><svg aria-hidden="true"><path d="M5 12h14"></path></svg></div>
+            <div class="flex"><h3 data-slot="joboffer-title" class="font-semibold">Développeur Full-Stack - H/F</h3></div>
+            <div data-slot="joboffer-locations" class="flex"><div class="flex"><div class="flex"><svg aria-hidden="true"></svg><p class="text-sm">Toulouse</p></div></div></div>
+            <span data-slot="joboffer-published-at" class="text-xs"><div class="flex">Mise en ligne le 20/09/2026</div></span>
+            <div class="flex"><div class="flex">
+              <span data-slot="badge" class="rounded-xl">CDI</span>
+              <span data-slot="badge" class="rounded-xl">Temps plein</span>
+            </div></div>
+          </div>
+        </div>
+      </a>
+      <a class="block" href="https://acme.softy.pro/offers/1002">
+        <div data-slot="card" class="rounded-xl border">
+          <div data-slot="card-content" class="p-4">
+            <div class="flex"><h3 data-slot="joboffer-title" class="font-semibold">Chef de projet &amp; PMO - H/F</h3></div>
+            <div data-slot="joboffer-locations" class="flex"><div class="flex"><div class="flex"><p class="text-sm">Paris</p></div></div></div>
+            <span data-slot="joboffer-published-at" class="text-xs"><div class="flex">Mise en ligne le 18/09/2026</div></span>
+            <div class="flex"><div class="flex">
+              <span data-slot="badge" class="rounded-xl">CDD - 6 Mois</span>
+              <span data-slot="badge" class="rounded-xl">Temps partiel</span>
+            </div></div>
+          </div>
+        </div>
+      </a>
+      <a class="block" href="https://acme.softy.pro/offers/1003">
+        <div data-slot="card" class="rounded-xl border">
+          <div data-slot="card-content" class="p-4">
+            <div class="flex"><h3 data-slot="joboffer-title" class="font-semibold">Alternant(e) Marketing Digital</h3></div>
+            <div data-slot="joboffer-locations" class="flex"><div class="flex"><div class="flex"><p class="text-sm">Dijon</p></div></div></div>
+            <span data-slot="joboffer-published-at" class="text-xs"><div class="flex">Mise en ligne le 15/09/2026</div></span>
+            <div class="flex"><div class="flex">
+              <span data-slot="badge" class="rounded-xl">Apprentissage - 24 Mois</span>
+            </div></div>
+          </div>
+        </div>
+      </a>
+    </div>
+    <nav role="navigation" aria-label="pagination" data-slot="pagination">
+      <ul data-slot="pagination-content">
+        <li data-slot="pagination-item"><a data-slot="pagination-link" aria-label="Précédent" aria-disabled="true" href="https://acme.softy.pro/offers?page=1"><span>Précédent</span></a></li>
+        <li data-slot="pagination-item"><a aria-current="page" data-slot="pagination-link" data-active="true" href="https://acme.softy.pro/offers?page=1">1</a></li>
+        <li data-slot="pagination-item"><a data-slot="pagination-link" data-active="false" href="https://acme.softy.pro/offers?page=2">2</a></li>
+        <li data-slot="pagination-item"><a data-slot="pagination-link" aria-label="Suivant" aria-disabled="false" href="https://acme.softy.pro/offers?page=2"><span>Suivant</span></a></li>
+      </ul>
+    </nav>
+  </main>
+  <footer><a href="https://www.softy.pro">Propulsé par Softy</a></footer>
+</body>
+</html>

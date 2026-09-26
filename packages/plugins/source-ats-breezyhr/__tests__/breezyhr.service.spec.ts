@@ -99,6 +99,35 @@ describe('BreezyHRService', () => {
     expect(JSON.stringify(loc)).not.toContain('[object Object]');
   });
 
+  it('emits per-site locations[] for multi-site postings', async () => {
+    mockBoard(
+      [
+        listing({
+          locations: [
+            {
+              city: 'Austin',
+              state: { id: 'TX', name: 'Texas' },
+              country: { id: 'US', name: 'United States' },
+            },
+            {
+              city: 'Denver',
+              state: { id: 'CO', name: 'Colorado' },
+              country: { id: 'US', name: 'United States' },
+            },
+          ] as BreezyJob['locations'],
+        }),
+      ],
+      { 'friendly-1': detailPage('<p>Body</p>') },
+    );
+
+    const result = await new BreezyHRService().scrape(input());
+
+    expect(result.jobs[0].locations).toMatchObject([
+      { city: 'Austin', state: 'TX', text: 'Austin, Texas, United States' },
+      { city: 'Denver', state: 'CO', text: 'Denver, Colorado, United States' },
+    ]);
+  });
+
   it('fetches the detail page and extracts description from the JobPosting ld+json (markdown default)', async () => {
     mockBoard([listing()], {
       'friendly-1': detailPage('<h2>About</h2><p>Build things.</p>'),

@@ -10,6 +10,7 @@ export interface IcimsListItem {
   city: string | null;
   state: string | null;
   country: string | null;
+  locationEntries: Array<{ city: string | null; state: string | null; country: string | null }>;
   locationRaw: string | null;
   department: string | null;
   descriptionSnippet: string | null;

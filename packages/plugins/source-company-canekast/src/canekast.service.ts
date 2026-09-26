@@ -10,7 +10,7 @@ import { classifyScrapeError,
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient, parseLocationList } from '@ever-jobs/common';
+import { createHttpClient, normalizeUsState } from '@ever-jobs/common';
 import {
   CANEKAST_CAREERS_URL,
   CANEKAST_COMPANY_NAME,
@@ -175,6 +175,7 @@ export class CanekastService implements IScraper {
       companyUrl: CANEKAST_CAREERS_URL,
       jobUrl: opening.pdfUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       isRemote: false,
       datePosted: null,
@@ -193,7 +194,7 @@ export class CanekastService implements IScraper {
     const city = this.normalize(match[1]);
     const state = this.normalize(match[2]);
     if (!city || !state) return null;
-    return parseLocationList([`${city}, ${state}`]).location;
+    return new LocationDto({ city, state: normalizeUsState(state) ?? state });
   }
 
   /** Clean a listing anchor's text into a title, dropping a trailing `.pdf`. */

@@ -128,7 +128,7 @@ describe('CartaService — Spec 066 / T04', () => {
       expect(ae?.jobUrl).toContain('job-boards.greenhouse.io');
       expect(ae?.jobUrl).toContain('/carta/jobs/');
       expect(ae?.jobUrl).not.toContain('?gh_jid=');
-      expect(ae?.location?.city).toBe('Sydney, Australia');
+      expect(ae?.location?.city).toBe('Sydney');
       // D-11 first-listing regression guard: the emitted `department`
       // for the first fixture listing matches the wire
       // `departments[0].name === 'Account Executive'` byte-for-byte

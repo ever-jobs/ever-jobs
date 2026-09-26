@@ -91,7 +91,7 @@ describe('AdyenService — Spec 090 / T04', () => {
       // First-listing dept clean — D-11 omitted.
       expect(am?.department).toBe('Account Management');
       expect(am?.department).toBe(JOBS_PAGE_RAW.jobs[0].departments[0].name);
-      expect(am?.location?.city).toBe('Amsterdam, Netherlands');
+      expect(am?.location?.city).toBe('Amsterdam');
       expect(am?.isRemote).toBe(false);
       // D-08 regression guard.
       expect(am?.description).not.toContain('&lt;');
@@ -111,7 +111,7 @@ describe('AdyenService — Spec 090 / T04', () => {
       expect(eng?.title.endsWith(' ')).toBe(false);
       expect(eng?.title.length).toBe(JOBS_PAGE_RAW.jobs[1].title.length - 1);
       expect(eng?.companyName).toBe('Adyen');
-      expect(eng?.location?.city).toBe('San Francisco, CA');
+      expect(eng?.location?.city).toBe('San Francisco');
       expect(eng?.isRemote).toBe(false);
       expect(eng?.department).toBe('Infrastructure');
 

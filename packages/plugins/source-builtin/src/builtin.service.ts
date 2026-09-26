@@ -278,10 +278,9 @@ export class BuiltInService implements IScraper {
         jobUrl = `${BUILTIN_BASE_URL}/job/internal/${job.id}`;
       }
 
-      // Build location
-      const locationParts = [job.city_name, job.state_name].filter(Boolean);
-      const locationStr = locationParts.length > 0 ? locationParts.join(', ') : null;
-      const location = locationStr
+      // Build location — fields map structurally, no joined label round-trip
+      const hasGeo = Boolean(job.city_name || job.state_name || job.country_name);
+      const location = hasGeo
         ? new LocationDto({
             city: job.city_name ?? null,
             state: job.state_name ?? null,
@@ -293,7 +292,9 @@ export class BuiltInService implements IScraper {
       const isRemote =
         job.remote_type === 'Remote' ||
         job.remote_type === 'Fully Remote' ||
-        locationStr?.toLowerCase().includes('remote') ||
+        [job.city_name, job.state_name].some(
+          (p) => typeof p === 'string' && p.toLowerCase().includes('remote'),
+        ) ||
         false;
 
       // Compensation
@@ -330,6 +331,7 @@ export class BuiltInService implements IScraper {
           : null,
         jobUrl,
         location,
+        ...(location ? { locations: [location] } : {}),
         description,
         compensation: compensation as any,
         datePosted: job.created ?? job.changed ?? null,

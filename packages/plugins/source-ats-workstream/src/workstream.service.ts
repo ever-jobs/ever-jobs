@@ -16,6 +16,9 @@ import {
   htmlToPlainText,
   markdownConverter,
   extractEmails,
+  findUsAddressSnippet,
+  normalizeUsState,
+  parseLocationText,
   randomSleep,
 } from '@ever-jobs/common';
 import {
@@ -27,6 +30,7 @@ import {
   WORKSTREAM_DEFAULT_RESULTS,
   WORKSTREAM_HEADERS,
   WORKSTREAM_JOB_HREF_REGEX,
+  workstreamLocationHeuristicsEnabled,
 } from './workstream.constants';
 import { WorkstreamListJob, WorkstreamDetailJob } from './workstream.types';
 
@@ -336,6 +340,7 @@ export class WorkstreamService implements IScraper {
       companyName: detail?.companyName ?? fallbackCompanyName,
       jobUrl: listJob.jobUrl,
       location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted: null, // Not available in the public HTML surface.
       isRemote: detail?.isRemote ?? this.detectRemoteFromSlug(listJob.jobSlug),
@@ -475,17 +480,20 @@ export class WorkstreamService implements IScraper {
       if (loc.city || loc.state) return { ...loc, raw: ogDesc };
     }
 
-    // Look for a US-style address pattern: "City, ST ZIP" or "City, State ZIP".
-    const addrRe =
-      /([A-Za-z\s]+),\s+([A-Z]{2})\s+\d{5}/;
-    const addrMatch = addrRe.exec(html);
+    // Look for a US-style address pattern: "City, ST ZIP" — the first match of
+    // /[A-Za-z\s]+,\s+[A-Z]{2}\s+\d{5}/ over the whole page, found in linear
+    // time (Spec 1689: the regex was quadratic on long prose, 21.8 s at 110 KB).
+    const addrMatch = findUsAddressSnippet(html, 'required');
     if (addrMatch) {
-      return {
-        city: addrMatch[1].trim(),
-        state: addrMatch[2].trim(),
-        country: 'US',
-        raw: addrMatch[0],
-      };
+      const loc = parseLocationText(addrMatch).location;
+      if (loc) {
+        return {
+          city: loc.city ?? null,
+          state: loc.state ?? null,
+          country: this.inferUsCountry(loc.state ?? null, loc.country ?? null),
+          raw: addrMatch,
+        };
+      }
     }
 
     return { city: null, state: null, country: null, raw: null };
@@ -495,18 +503,29 @@ export class WorkstreamService implements IScraper {
   private parseAddressString(
     raw: string,
   ): { city: string | null; state: string | null; country: string | null } {
-    // Matches patterns like "San Jose, CA 95130" or "1030 El Paseo, San Jose, CA 95130".
-    const re = /([A-Za-z][A-Za-z\s]+),\s+([A-Z]{2})(?:\s+\d{5})?/;
-    const m = re.exec(raw);
-    if (m) {
-      return { city: m[1].trim(), state: m[2].trim(), country: 'US' };
-    }
-    // Comma-split fallback.
-    const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
-    if (parts.length >= 2) {
-      return { city: parts[0], state: parts[1], country: null };
-    }
-    return { city: null, state: null, country: null };
+    // Matches patterns like "San Jose, CA 95130" or "1030 El Paseo, San Jose, CA 95130"
+    // (linear: see findUsAddressSnippet — Spec 1689).
+    const m = findUsAddressSnippet(raw, 'optional');
+    const loc = parseLocationText(m ?? raw).location;
+    const state = loc?.state ?? null;
+    const country = loc?.country ?? null;
+    return {
+      city: loc?.city ?? null,
+      state,
+      country: m ? this.inferUsCountry(state, country) : country,
+    };
+  }
+
+  /**
+   * US country inference from the "City, ST[ ZIP]" address shape (Spec 1689 —
+   * restores the `US` stamp Spec 5125 removed; WORKSTREAM_LOCATION_HEURISTICS
+   * =false keeps the shared parser's literal-only country). A parsed country
+   * always wins, and the stamp needs a real US state code so a non-US 2-letter
+   * token is never mislabelled.
+   */
+  private inferUsCountry(state: string | null, country: string | null): string | null {
+    if (country || !workstreamLocationHeuristicsEnabled()) return country;
+    return state && normalizeUsState(state) ? 'US' : null;
   }
 
   /** Build a LocationDto from detail data, falling back to the location slug. */

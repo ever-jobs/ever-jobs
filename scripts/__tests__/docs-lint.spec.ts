@@ -1,7 +1,8 @@
 /**
  * Unit tests for `scripts/docs-lint.ts`. Covers the five Spec-002 §7.1 checks
  * plus parser corner cases (code fences, inline code, fragment/query/line
- * suffixes, /-rooted vs ../ paths, frontmatter heuristics).
+ * suffixes, /-rooted vs ../ paths, frontmatter heuristics), the range/duplicate
+ * spec-number guards and the Spec 1689 leftover-conflict-marker check.
  */
 
 import { promises as fs } from 'fs';
@@ -11,6 +12,7 @@ import * as path from 'path';
 import {
   checkFrontmatter,
   extractLinks,
+  findConflictMarkers,
   formatResult,
   lintDocs,
   parseLogHeaders,
@@ -116,6 +118,97 @@ describe('docs-lint helpers', () => {
     it('fails when no H1 is present', () => {
       const body = '## Sub\n\n| Field | Value |\n| --- | --- |\n';
       expect(checkFrontmatter(body)).toBe(false);
+    });
+  });
+
+  // Markers are built with repeat() so this spec file never carries a literal
+  // column-0 conflict marker of its own (`git diff --check` flags those).
+  describe('findConflictMarkers (Spec 1689)', () => {
+    const OPEN = '<'.repeat(7);
+    const BASE = '|'.repeat(7);
+    const SEP = '='.repeat(7);
+    const CLOSE = '>'.repeat(7);
+
+    it('flags every line of a diff3 conflict block, in line order', () => {
+      const body = [
+        '# Doc',
+        `${OPEN} HEAD`,
+        'ours',
+        `${BASE} 062a1346`,
+        'base',
+        SEP,
+        'theirs',
+        `${CLOSE} makedeeply/develop`,
+        'after',
+      ].join('\n');
+      expect(findConflictMarkers(body)).toEqual([
+        { line: 2, text: `${OPEN} HEAD` },
+        { line: 4, text: `${BASE} 062a1346` },
+        { line: 6, text: SEP },
+        { line: 8, text: `${CLOSE} makedeeply/develop` },
+      ]);
+    });
+
+    it('flags a lone stray diff3 base line (the docs/questions.md case)', () => {
+      const body = `---\n\n${BASE} 062a1346\n## Q-092 — something\n`;
+      expect(findConflictMarkers(body)).toEqual([
+        { line: 3, text: `${BASE} 062a1346` },
+      ]);
+    });
+
+    it('flags label-less markers (`git merge-file` without -L)', () => {
+      const body = `${OPEN}\na\n${SEP}\nb\n${CLOSE}\n`;
+      expect(findConflictMarkers(body).map((m) => m.line)).toEqual([1, 3, 5]);
+    });
+
+    it('never flags a setext H1 underline outside a conflict', () => {
+      const body = `Title\n${SEP}\n\nText\n${'='.repeat(12)}\n`;
+      expect(findConflictMarkers(body)).toEqual([]);
+    });
+
+    it('does not flag a bare separator when no closing marker follows it', () => {
+      const body = `${OPEN} HEAD\nHeading\n${SEP}\nprose\n`;
+      // The opener itself is still reported; the `=======` is not provably
+      // between markers, so it stays unflagged (it may be an underline).
+      expect(findConflictMarkers(body)).toEqual([
+        { line: 1, text: `${OPEN} HEAD` },
+      ]);
+    });
+
+    it('does not flag a separator that follows an already-closed conflict', () => {
+      const body = `${OPEN} a\nx\n${CLOSE} b\nTitle\n${SEP}\n${CLOSE} c\n`;
+      expect(findConflictMarkers(body).map((m) => m.line)).toEqual([1, 3, 6]);
+    });
+
+    it('ignores longer runs, indented markers and ordinary blockquotes', () => {
+      const body = [
+        `${'<'.repeat(8)} not a marker`,
+        `    ${OPEN} indented example`,
+        `${'|'.repeat(7)}x no space after the run`,
+        '> a quote',
+        `${'>'.repeat(8)} deep quote`,
+        '| a | table |',
+      ].join('\n');
+      expect(findConflictMarkers(body)).toEqual([]);
+    });
+
+    it('still flags markers inside a fenced code block', () => {
+      const body = `\`\`\`ts\n${OPEN} HEAD\nconst a = 1;\n${SEP}\nconst a = 2;\n${CLOSE} theirs\n\`\`\`\n`;
+      expect(findConflictMarkers(body).map((m) => m.line)).toEqual([2, 4, 6]);
+    });
+
+    it('handles CRLF bodies', () => {
+      const body = `ok\r\n${BASE} base\r\nmore\r\n`;
+      expect(findConflictMarkers(body)).toEqual([
+        { line: 2, text: `${BASE} base` },
+      ]);
+    });
+
+    it('truncates very long marker labels in the report', () => {
+      const body = `${OPEN} ${'x'.repeat(200)}\n`;
+      const [m] = findConflictMarkers(body);
+      expect(m.line).toBe(1);
+      expect(m.text.length).toBeLessThanOrEqual(80);
     });
   });
 });
@@ -410,6 +503,59 @@ describe('lintDocs', () => {
     expect(r.overlappingRanges).toEqual([]);
     expect(r.ok).toBe(true);
   });
+
+  describe('conflict markers (Spec 1689)', () => {
+    const OPEN = '<'.repeat(7);
+    const BASE = '|'.repeat(7);
+    const SEP = '='.repeat(7);
+    const CLOSE = '>'.repeat(7);
+
+    it('flags a stray marker in index-exempt docs/questions.md', async () => {
+      tempRoot = await makeRepo({
+        'docs/index.md': '# Index\n',
+        'docs/questions.md': `# Q\n\n---\n\n${BASE} 062a1346\n## Q-092 — x\n`,
+      });
+      const r = await lintDocs(tempRoot);
+      expect(r.conflictMarkers).toEqual([`docs/questions.md:5 ${BASE} 062a1346`]);
+      expect(r.unindexedDocs).toEqual([]);
+      expect(r.ok).toBe(false);
+    });
+
+    it('flags a full conflict block in a .specify spec, sorted by path', async () => {
+      tempRoot = await makeRepo({
+        'docs/index.md': `# Index\n[s](../.specify/specs/9001-foo/spec.md)\n${CLOSE} theirs\n`,
+        '.specify/specs/9001-foo/spec.md': [
+          '# Spec',
+          '',
+          '| Field | Value |',
+          '| --- | --- |',
+          `${OPEN} HEAD`,
+          '| Spec | ours |',
+          SEP,
+          '| Spec | theirs |',
+          `${CLOSE} fork`,
+          '',
+        ].join('\n'),
+      });
+      const r = await lintDocs(tempRoot);
+      expect(r.conflictMarkers).toEqual([
+        `.specify/specs/9001-foo/spec.md:5 ${OPEN} HEAD`,
+        `.specify/specs/9001-foo/spec.md:7 ${SEP}`,
+        `.specify/specs/9001-foo/spec.md:9 ${CLOSE} fork`,
+        `docs/index.md:3 ${CLOSE} theirs`,
+      ]);
+      expect(r.ok).toBe(false);
+    });
+
+    it('stays green for setext headings and ordinary quotes', async () => {
+      tempRoot = await makeRepo({
+        'docs/index.md': `Index\n${SEP}\n\n> quoted\n\n${'='.repeat(20)}\n`,
+      });
+      const r = await lintDocs(tempRoot);
+      expect(r.conflictMarkers).toEqual([]);
+      expect(r.ok).toBe(true);
+    });
+  });
 });
 
 describe('formatResult', () => {
@@ -423,6 +569,7 @@ describe('formatResult', () => {
       overlappingRanges: [],
       outOfBandSpecs: [],
       duplicateSpecNumbers: [],
+      conflictMarkers: [],
       ok: true,
     });
     expect(out).toContain('Doc-lint passed');
@@ -440,6 +587,7 @@ describe('formatResult', () => {
       overlappingRanges: ['range "a" [1-5000] overlaps "b" [5000-5999]'],
       outOfBandSpecs: ['9001-foo (number 9001 is outside every reserved band)'],
       duplicateSpecNumbers: ['5090: 5090-first, 5090-second'],
+      conflictMarkers: ['docs/questions.md:45 ' + '|'.repeat(7) + ' 062a1346'],
       ok: false,
     });
     expect(out).toContain('1 broken link(s)');
@@ -450,5 +598,7 @@ describe('formatResult', () => {
     expect(out).toContain('overlapping fork range');
     expect(out).toContain('outside every reserved range');
     expect(out).toContain('duplicate spec number');
+    expect(out).toContain('1 leftover git conflict marker(s)');
+    expect(out).toContain('docs/questions.md:45');
   });
 });

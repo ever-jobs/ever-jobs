@@ -17,6 +17,7 @@ jest.mock('@ever-jobs/common', () => {
 });
 
 import { StratolaunchModule, StratolaunchService } from '../src';
+import { parseLocationText } from '@ever-jobs/common';
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures');
 const JOBS_PAGE_RAW = JSON.parse(
@@ -72,7 +73,7 @@ describe('StratolaunchService — Spec 5089 / T04', () => {
       expect(job0?.jobUrl).toBe(first.absolute_url);
       expect(job0?.applyUrl).toBe(first.absolute_url);
       expect(job0?.jobUrl).toContain('job-boards.greenhouse.io/stratolaunch/jobs/');
-      expect(job0?.location?.city).toBe(first.location.name);
+      expect(job0?.location?.city).toBe(parseLocationText(first.location.name).location?.city);
       expect(job0?.datePosted).toBe(first.first_published);
       expect(job0?.department).toBe(
         first.departments && first.departments[0]

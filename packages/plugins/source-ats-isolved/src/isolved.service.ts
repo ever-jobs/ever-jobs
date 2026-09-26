@@ -242,13 +242,15 @@ export class IsolvedService implements IScraper {
 
     const datePosted = detail?.datePosted ?? null;
     const description = this.formatDescription(detail?.descriptionHtml ?? null, format);
+    const location = this.buildLocation(city, state, country, isRemote);
 
     return new JobPostDto({
       id: `isolved-${atsId}`,
       title,
       companyName,
       jobUrl,
-      location: this.buildLocation(city, state, country, isRemote),
+      location,
+      ...(location ? { locations: [location] } : {}),
       description,
       datePosted,
       isRemote,
