@@ -35,7 +35,27 @@ A search with `locations` runs every selected source once per location, so the w
   catalogue-wide default site selection, narrow `siteType` or `locations` if the diagnostics show
   `timeout` rows for skipped locations.
 - A source that refuses one location (429, a block, an open circuit breaker) is not asked for the
-  rest; those rows say `not attempted`.
+  rest; those rows say `not attempted`. Since Spec 1690 a `rate_limited` answer (the host asked us to
+  back off longer than we wait, or its rate-limit bucket gave no slot in time) counts as a refusal too.
+- With the crawl policy (next section) every location call runs in its own scrape context: the
+  host limiter paces each request per host on top of the location interval, a memo hit sends
+  nothing and takes no limiter slot, and the search deadline aborts the in-flight location's
+  requests. The location interval is kept as an extra per-source gap between location calls;
+  set it to `0` to leave the pacing to the limiter (and a plugin's declared gap) alone.
+
+## Per-Host Pacing (crawl policy, Spec 1690)
+
+- Sources run in parallel, but requests to any one host are paced by a process-wide
+  limiter: by default 4 in flight and at least 100 ms between request starts per host
+  (`EVER_JOBS_CRAWL_MAX_CONCURRENT_PER_HOST`, `EVER_JOBS_CRAWL_MIN_INTERVAL_MS`), with
+  higher builtin limits for the Greenhouse, Lever, Ashby and SmartRecruiters APIs.
+- A default search stays well inside the 120 s deadline (simulated: 800 Greenhouse requests
+  plus a 100-wide fan-out to one host in 11.3 s). If a slow host dominates, raise its limit
+  with an operator host policy (`EVER_JOBS_CRAWL_POLICIES`) rather than globally.
+- The limiter is per process: with N replicas a host sees up to N × the per-host limit.
+- Inspect a source with `GET /api/sources/:site/crawl-policy?host=<host>`.
+- `EVER_JOBS_CRAWL_PRESET=legacy` removes pacing entirely (pre-1690 behaviour).
+- Details: [CRAWL_POLICY.md](./CRAWL_POLICY.md) §9 and §18.
 
 ## Logging
 

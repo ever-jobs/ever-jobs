@@ -86,9 +86,10 @@ export class AdpService implements IScraper {
     });
     client.setHeaders(ADP_HEADERS);
 
-    const resultsWanted = input.resultsWanted ?? 100;
+    const resultsWanted = this.nonNegativeInt(input.resultsWanted ?? 100, 100);
+    const offset = this.nonNegativeInt(input.offset, 0);
     const limits: AdpListLimits = {
-      budget: this.nonNegativeInt(input.offset, 0) + this.nonNegativeInt(resultsWanted, 100),
+      budget: offset + resultsWanted,
       maxPages: this.resolveMaxListPages(),
     };
 
@@ -108,8 +109,10 @@ export class AdpService implements IScraper {
     );
 
     // The list feed omits the posting body; `requisitionDescription` lives only
-    // on the per-requisition detail endpoint. Overlay the wanted slice.
-    const wanted = listing.jobs.slice(0, resultsWanted);
+    // on the per-requisition detail endpoint. Overlay the wanted slice — the
+    // requested window (offset .. offset + resultsWanted), so detail requests
+    // are only spent on rows the caller will receive.
+    const wanted = listing.jobs.slice(offset, offset + resultsWanted);
     const details = await this.fetchDetails(client, listing.host, cid, wanted);
 
     const jobPosts: JobPostDto[] = [];

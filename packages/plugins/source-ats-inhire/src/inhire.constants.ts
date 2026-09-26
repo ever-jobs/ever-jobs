@@ -1,3 +1,4 @@
+import type { PluginCrawlPolicy } from '@ever-jobs/common';
 import { JobType, Site } from '@ever-jobs/models';
 
 /**
@@ -159,6 +160,22 @@ export const INHIRE_MAX_MIN_INTERVAL_MS = 60_000;
  * A value below the default is raised to the default: the gap can only grow.
  */
 export const INHIRE_MIN_INTERVAL_ENV = 'INHIRE_MIN_INTERVAL_MS';
+
+/**
+ * The plugin's crawl-policy defaults (`@SourcePlugin({ crawl })`, Spec 1690),
+ * declaring the pacing this plugin was designed with (Spec 1692 §10): every
+ * tenant shares the one API host, requests start at least
+ * {@link INHIRE_MIN_INTERVAL_MS} apart, and never more than
+ * {@link INHIRE_MAX_DETAIL_CONCURRENCY} are in flight (1 by default; the
+ * plugin's own pool decides). The module-level slot reservation keeps pacing
+ * outside a scrape context too. Operators (`EVER_JOBS_CRAWL_POLICIES`
+ * `sites.inhire`) and search callers (`crawl`) can override it; the identity
+ * stays with the global policy (no `userAgentMode` opt-in).
+ */
+export const INHIRE_CRAWL_POLICY: PluginCrawlPolicy = {
+  maxConcurrentPerHost: INHIRE_MAX_DETAIL_CONCURRENCY,
+  minIntervalMs: INHIRE_MIN_INTERVAL_MS,
+};
 
 /** A role is emitted only with this status; anything else is skipped and counted. */
 export const INHIRE_PUBLISHED_STATUS = 'published';

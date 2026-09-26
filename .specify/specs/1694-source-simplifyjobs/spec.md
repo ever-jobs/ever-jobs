@@ -210,7 +210,12 @@ Environment variables (all optional):
   `offset + resultsWanted`. Same order as filter-all → merge → dedup → slice (pinned by an
   exhaustive equivalence test), without touching or keying every row per search.
 - **D-11 — No crawl manifest field.** `@SourcePlugin` has no crawl-policy field on this branch;
-  sequential fetching, the spacing and the cache give the same effect until it lands.
+  sequential fetching, the spacing and the cache give the same effect until it lands. (Landed with
+  the Spec 1690 merge (`feat/http-politeness`, 2026-09-26): the plugin now declares `SIMPLIFYJOBS_CRAWL_POLICY` =
+  `{ maxConcurrentPerHost: 1, minIntervalMs: 2000 }`, the D-10 spacing per host. Both it and the
+  client's `rateDelayMin` are the crawl policy's plugin layer, which a search caller's
+  `rateDelayMin` (the caller layer) replaces, so the client also sets `minIntervalFloorMs` = 2000:
+  no layer shortens that, and D-10 holds.)
 
 ## 11. References
 

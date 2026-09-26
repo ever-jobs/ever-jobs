@@ -30,6 +30,7 @@ import {
   JOBSBYLEVEL_BASE_URL,
   JOBSBYLEVEL_CACHE_TTL_ENV,
   JOBSBYLEVEL_CATEGORIES_ENV,
+  JOBSBYLEVEL_CRAWL_POLICY,
   JOBSBYLEVEL_DEFAULT_MAX_PAGES,
   JOBSBYLEVEL_DEFAULT_RESULTS,
   JOBSBYLEVEL_DETAIL_CACHE_MAX,
@@ -175,6 +176,7 @@ let rpcSequence = 0;
   category: 'niche',
   description:
     'AI-rated job listings (AI Level 1-4: how central AI is to the work, not seniority) via the public Level MCP server, RSS feed fallback',
+  crawl: JOBSBYLEVEL_CRAWL_POLICY,
 })
 @Injectable()
 export class JobsByLevelService implements IScraper {

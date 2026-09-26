@@ -29,6 +29,7 @@ import {
   WTTJ_BOARD_FALLBACK_LOCALE,
   WTTJ_BOARD_LOCALE,
   WTTJ_BOARD_WINDOW,
+  WTTJ_BROWSER_UA_CRAWL_POLICY,
   WTTJ_BROWSER_USER_AGENT,
   WTTJ_CREDENTIAL_FETCH_INTERVAL_SECONDS,
   WTTJ_CREDENTIAL_HOSTS,
@@ -308,6 +309,9 @@ export class WelcomeToTheJungleService implements IScraper {
       WTTJ_DEFAULT_TIMEOUT_SECONDS,
     );
     const userAgent = this.resolveUserAgent(input.userAgent);
+    // WTTJ_USER_AGENT_MODE=browser: the plugin UA is only declared (Spec 1690 §4.2), so
+    // the switch also opts the clients into userAgentMode 'plugin'; strict still wins.
+    const uaOptIn = this.browserUserAgentSwitchOn() ? { crawl: WTTJ_BROWSER_UA_CRAWL_POLICY } : {};
     // Pace every request after the first; a caller's slower pacing wins.
     const rateDelayMin = Math.max(input.rateDelayMin ?? 0, WTTJ_RATE_DELAY_MIN_SECONDS);
     const rateDelayMax = Math.max(input.rateDelayMax ?? 0, WTTJ_RATE_DELAY_MAX_SECONDS, rateDelayMin);
@@ -319,6 +323,10 @@ export class WelcomeToTheJungleService implements IScraper {
       userAgent,
       rateDelayMin,
       rateDelayMax,
+      // Since Spec 1690 rateDelayMin is only the plugin layer, which a caller override
+      // replaces; the floor keeps a caller from shortening the pacing.
+      minIntervalFloorMs: rateDelayMin * 1000,
+      ...uaOptIn,
     });
     client.setHeaders({ ...WTTJ_HEADERS, 'User-Agent': userAgent });
 
@@ -334,7 +342,9 @@ export class WelcomeToTheJungleService implements IScraper {
           retries: 0,
           rateDelayMin: WTTJ_CREDENTIAL_FETCH_INTERVAL_SECONDS,
           rateDelayMax: WTTJ_CREDENTIAL_FETCH_INTERVAL_SECONDS,
+          minIntervalFloorMs: WTTJ_CREDENTIAL_FETCH_INTERVAL_SECONDS * 1000,
           allowedRedirectHosts: WTTJ_CREDENTIAL_HOSTS,
+          ...uaOptIn,
         });
         pageClient.setHeaders({
           Accept: 'text/html,application/xhtml+xml',
@@ -359,9 +369,12 @@ export class WelcomeToTheJungleService implements IScraper {
   private resolveUserAgent(requested: string | undefined): string {
     const own = typeof requested === 'string' ? requested.trim() : '';
     if (own) return own;
-    return wttjEnvValue(WTTJ_ENV.USER_AGENT_MODE) === 'browser'
-      ? WTTJ_BROWSER_USER_AGENT
-      : WTTJ_HONEST_USER_AGENT;
+    return this.browserUserAgentSwitchOn() ? WTTJ_BROWSER_USER_AGENT : WTTJ_HONEST_USER_AGENT;
+  }
+
+  /** `WTTJ_USER_AGENT_MODE=browser` is set (Spec 1705 D-05). */
+  private browserUserAgentSwitchOn(): boolean {
+    return wttjEnvValue(WTTJ_ENV.USER_AGENT_MODE) === 'browser';
   }
 
   /**

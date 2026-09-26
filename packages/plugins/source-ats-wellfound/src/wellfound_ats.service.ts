@@ -56,6 +56,9 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
 
     const proxy = input.proxies?.[0] ?? undefined;
     const resultsWanted = input.resultsWanted ?? 100;
+    // Plugins own `offset` (the core does not apply it): collect offset +
+    // resultsWanted listings, then return the requested window.
+    const offset = Math.max(0, Math.floor(Number(input.offset) || 0));
     const timeoutMs = (input.requestTimeout ?? 30) * 1000;
     let page;
 
@@ -133,7 +136,7 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
         Object.assign(remoteConfigKind, this.collectRemoteConfigKind(data));
 
         if (listings.size === before) break; // ?page= ignored or past the end
-        if (listings.size >= resultsWanted) break;
+        if (listings.size >= offset + resultsWanted) break;
         if (declaredPages && pagesRead >= declaredPages) break;
       }
 
@@ -141,7 +144,7 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
         const partial = [...listings.values()];
         if (partial.length) {
           const posts = partial
-            .slice(0, resultsWanted)
+            .slice(offset, offset + resultsWanted)
             .map((l) => this.mapListing(l, startupName, remoteConfigKind, input.descriptionFormat))
             .filter((p): p is JobPostDto => p !== null);
           return new JobResponseDto(posts, new ScrapeDiagnostics('partial', 'Cloudflare challenge mid-pagination'));
@@ -156,7 +159,7 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
       }
 
       const jobPosts = [...listings.values()]
-        .slice(0, resultsWanted)
+        .slice(offset, offset + resultsWanted)
         .map((l) => this.mapListing(l, startupName, remoteConfigKind, input.descriptionFormat))
         .filter((p): p is JobPostDto => p !== null);
 

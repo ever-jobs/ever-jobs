@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-09-26 — Spec 1690 — merge review fixup: pacing floors, User-Agent switches, memo waiter abort
+
+**Change:** Three semantic merge breaks fixed without removing anything. (1) Pacing floors: since Spec 1690 a client's `rateDelayMin` is only the crawl policy's plugin layer, which a search caller's `rateDelayMin` (caller layer, `EVER_JOBS_CRAWL_CALLER_OVERRIDES=any`) replaces, so RemoteOK's `Crawl-delay` (1 s), Welcome to the Jungle's board pacing (0.5 s; 2 s between credential pages) and Simplify's feed spacing (2 s) could be shortened to 50 ms. New additive `HttpClientOptions.minIntervalFloorMs` (milliseconds, copied by `createHttpClient`'s input-shaped branch): the limiter spaces that client's requests by max(policy `minIntervalMs`, robots.txt `Crawl-delay`, floor), like a `Crawl-delay`; the three plugins set it to the spacing they already computed, so a caller may again only lengthen it. (2) User-Agent switches: `WTTJ_USER_AGENT_MODE=browser` and `EVER_JOBS_REMOTEOK_LEGACY=ua` only declared a UA, which the default `identify` mode never sends; while a switch is on, the plugin now passes `crawl: { userAgentMode: 'plugin', userAgentReason }` (`WTTJ_BROWSER_UA_CRAWL_POLICY`, `REMOTEOK_LEGACY_UA_CRAWL_POLICY`), so the browser UA reaches the wire again; `strict` (env, preset) and a caller `userAgent` still win. ZipRecruiter: its header UA is likewise only declared, so the honest configured UA now goes out by default (checked on the wire; the operator opt-in `sites.zip_recruiter.userAgentMode: "plugin"` sends the desktop one); recorded in Q-099, Spec 1713 Q1 and `ziprecruiter.constants.ts` rather than decided in code. (3) A request parked on an identical in-flight request in a Spec 1700 memo scope now rejects on its own abort signal (`memoisedRequest(…, signal)`) instead of waiting for the first request; the first keeps the entry.
+
+**Files:** `packages/common/src/http/{http-client,http-memo}.ts`, plugins `source-remoteok`, `source-ats-wttj`, `source-simplifyjobs` (constants, service), `source-ziprecruiter` (constants comment), tests `packages/common/__tests__/{http-client-crawl-policy,http-memo}.spec.ts`, new `apps/api/src/jobs/__tests__/jobs.service.plugin-crawl.spec.ts` (the real plugins through `JobsService` and the real `HttpClient`, adapter-level wire capture), `.env.example`, `docs/{CRAWL_POLICY,API_CHANGELOG,questions,index,log}.md`, specs 1690 (§9.2, §9.3), 1694 D-11, 1705 NFR-1 and D-05, 1707 D-07 and D-10, 1713 Q1.
+
+**Validation:** `tsc --project tsconfig.typecheck.json --noEmit` clean; `test:core` 92/92 suites, 3,928/3,928 tests; RemoteOK, WTTJ, Simplify, ZipRecruiter, USAJobs, HeadHunter suites 16/16, 682/682; `test:scripts` 15/15, 244/244; `lint:docs` clean. Red controls: with the floor removed from the limiter or the plugins, and with the opt-ins removed, the new floor and switch tests fail (5 of 9 in the `JobsService` file, 2 of 3 floor tests in the client suite) while their controls pass; with the memo waiter reverted, the parked-request test fails.
+
+## 2026-09-26 — Merge — Specs 1690/1691 (crawl policy, `feat/http-politeness`) into Specs 1692-1713
+
+**Change:** `origin/feat/http-politeness` (develop incl. the fork sync + Spec 1689, then Specs 1690/1691 and the 429/503 back-off floor) merged into `feat/new-sources-and-board-fixes`; both sides kept whole. `HttpClient`: the crawl-policy client (identity interceptor, host limiter, egress guard, retries with the throttle floor, redirect-pin composition, proxies, abort) with the Spec 1700 response memo re-applied inside `request()` — after the policy is resolved and the literal egress check, before robots.txt, the limiter and the network, so a memo hit sends nothing and takes no slot and every miss runs the full pipeline; the key adds the wire identity, the per-request `crawl`, the robots/egress regime and allow-list, the redirect pin, insecure TLS and `maxRedirects`; requests with their own transport are not memoised; an aborted scrape gets no memo answer; only 2xx kept, bodies copied per caller, Set-Cookie replayed (as designed). `JobsService`: every location call of a multi-location search goes through `scrapeOne`, i.e. in its own scrape context (site, plugin crawl manifest, the caller crawl override built once per search, caller proxies) with its own `AbortController` aborted at the search deadline (counted in the "abandoned in-flight" warning); `rate_limited` (host cooling down / no slot in time) stops a source's remaining locations like a 429, and the shared `refusalFromScrapeError` / `isRefusalDiagnostics` treat it the same way; the location pause stays on top of the per-host limiter. DTO / GraphQL / MCP / CLI carry both `crawl` and `locations` + exclusions. New plugins declare the pacing their specs designed as `@SourcePlugin({ crawl })`: InHire `{ maxConcurrentPerHost: 2, minIntervalMs: 500 }`, Level `{ 1, 1100 }`, Simplify `{ 1, 2000 }` (no `userAgentMode` opt-ins; local pacers kept). Q-099 option A now holds on this branch (`EVER_JOBS_CRAWL_ROBOTS_TXT` exists); specs 1692, 1693, 1694, 1700 (T15, section 12), 1703, 1713 updated accordingly.
+
+**Files:** `packages/common/src/http/{http-client,http-memo,index}.ts`, `packages/models/src/dtos/scrape-diagnostics.dto.ts`, `packages/plugin/src/interfaces/plugin-metadata.interface.ts`, `apps/api/src/jobs/{jobs.service,jobs.controller,jobs.resolver,gql-types}.ts`, `apps/cli/src/commands/compare.command.ts`, `apps/mcp/src/{index,tools}.ts`, `apps/mcp/README.md`, plugins `source-{ats-inhire,jobsbylevel,simplifyjobs}` (constants, service, new `__tests__/*.crawl.spec.ts`), tests `packages/common/__tests__/http-memo.spec.ts`, `apps/api/src/jobs/__tests__/jobs.service.multi-location.spec.ts`, `packages/models/__tests__/scrape-diagnostics-crawl.spec.ts`, `scripts/__tests__/ci-workflow.spec.ts`, `package.json`, `docs/{API_CHANGELOG,PERFORMANCE_TUNING,questions,index,log}.md`, specs 1692, 1693, 1694, 1700, 1703, 1713.
+
+**Validation:** `tsc --project tsconfig.typecheck.json` and `-p apps/api/tsconfig.build.json` clean; `test:core` 91/91 suites, 3,914/3,914 tests; touched plugin suites (20 plugins incl. Softy, USAJobs, HeadHunter, SimplyHired) 51/51 suites, 2,386/2,386 tests; `test:scripts` 15/15, 244/244; `lint:docs` clean.
+
+---
+
 ## 2026-09-25 — Review fixup — Specs 1692-1713: salary benefit guard, multi-location memo, stop on refusal, opt-in identity changes
 
 **Change:** Salary (1695 D-10/D-11): the extended grammar scans every range instead of the leftmost, skips a `to` range or single bound whose nearest preceding keyword in its clause is a benefit word (bonus, stipend, relocation, commission, referral, 401(k), tuition, ...), and uses an unqualified `to` range only when nothing stronger is in the text; the API description fallback reads an upper-only figure only with a salary word in its clause (`upperBoundNeedsSalaryCue`). Multi-location search (1700 T13/T14): each source's location loop runs in a scoped response memo in the shared HTTP client (`runWithHttpMemo`, GET and POST, `EVER_JOBS_SEARCH_LOCATION_MEMO=off|get`), so whole-board sources cost one fetch for N locations; plugins declare `minRequestIntervalMs` (LinkedIn, Wellfound, Naukri 3 s; Glassdoor, ZipRecruiter 5 s) and the location pause is the larger of that and the operator interval. Refusals: InHire, Level (MCP details, listing pages, feed enrichment) and Internshala detail walks stop at the first 429 / 401 / 403 / 407 / challenge (shared `refusalFromScrapeError` / `isRefusalDiagnostics` in `@ever-jobs/models`), InHire and Internshala also after three failures in a row, Internshala `detail-all` is capped at 100, and Level no longer falls back to the feed after a refused MCP listing. Opt-in until the owner rules on Q-099: WTTJ board mode in `scrape()` (`WTTJ_BOARD_MODE=on`) and the app-shaped ZipRecruiter session event (`ZIPRECRUITER_SESSION_EVENT=form`); the ZipRecruiter geo-block detail no longer suggests a way around the restriction. RemoteOK sends our identifying User-Agent (`EVER_JOBS_REMOTEOK_LEGACY=ua` restores the old one; one live request with it got HTTP 200). Google's page override is clamped to 30. Internshala keeps the `Apply by:` line when a card shows a deadline. The Bayt live test runs in CI again; the multi-location live check moved to `apps/api/__tests__/search-multi-location.e2e-spec.ts` so CI runs it. Docs: Q-099 rewritten (per-plugin request counts, WTTJ and ZipRecruiter rows, Spec 1690 dependency), API changelog (id table, exact legacy switches, country names), PERFORMANCE_TUNING multi-location section, MCP README inputs, `tool_manifest.json` job types, spec bookkeeping (1695 and 1701 done; 1700 T12/T13/T14; 1703 T16 split). Not changed, with reason: HK/MO display overrides (Spec 1699 F2 defers them; adding them would re-split the name and alpha-3 spellings that spec unified).
@@ -232,6 +250,231 @@
 **Files:** `packages/plugins/source-ats-inhire/**` (new: `package.json`, `tsconfig.json`, `src/{index,inhire.module,inhire.service,inhire.constants,inhire.types,inhire.helpers,inhire.state}.ts`, `__tests__/{inhire.service,inhire.helpers}.spec.ts`, `__tests__/inhire.e2e-spec.ts`, synthetic fixtures for a fictional tenant), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `tool_manifest.json`, `README.md`, `.specify/specs/1692-source-ats-inhire/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
 
 **Validation:** 178/178 unit tests (service 69, helpers 109, including the `Site.INHIRE` registration check); the live e2e passed 4/4 when run once; type-check clean; `npm run lint:docs` and `npm run test:scripts` clean.
+
+---
+
+## 2026-09-25 — Spec 1691 — Softy: sitemap discovery, paginated listing, polite detail fetches
+
+**Change:** A polite live check (4 requests, 2 s apart, honest UA) showed `source-ats-softy`
+returned **0 jobs** on the current markup: `/offres` 301-redirects to `/offers`, offer links
+are slug-less `/offers/{ID}`, and the board is paginated (21 cards per page). Rebuilt on the
+current surface, as the site operator asked:
+
+- **Discovery** is the crawl-policy field `discovery` (caller, operator site/host, env):
+  `sitemap` reads `/sitemap.xml`, takes `/offers/{ID}` entries newest `lastmod` first and
+  fetches only the detail pages needed, **one after another**; `listing` reads
+  `/offers?page=1..N` (legacy `/offres` parser kept as fallback); `auto` (default) = sitemap,
+  falling back to listing when the sitemap is missing, empty or unparseable, and listing
+  straight away for `descriptionDepth: board` or when the detail budget is smaller than
+  `offset + resultsWanted`.
+- **Pacing** from the manifest: all of `softy.pro` is one bucket, 1 in flight, 1 s apart.
+  The Chrome/129 UA is only *declared* now (sent in UA mode `plugin`).
+- **Cache** of extracted detail fields keyed `url|lastmod` (500 entries, 6 h), so a repeat
+  search re-reads only changed offers. **Failures:** 4xx/unknown host → empty; 5xx → partial
+  with diagnostic; a 429 after retries, an abort or a crawl-policy refusal stops the scrape
+  and keeps what it has; detail fetches stop after 3 consecutive failures.
+- Six `SOFTY_*` knobs (list pages, detail fetches, cache size/TTL, lastmod as date, failure
+  stop), read per scrape.
+- **Common toolkit:** `parseSitemapXml` (allocation-light scanner: namespaces, CDATA,
+  entities, `<image:loc>` ignored), `parseLastmod` (W3C, `YYYY-MM-DD HH:MM:SS`, RFC 1123;
+  zone-less = UTC), `fetchSitemap` (sitemap indexes, gzip by magic bytes, plain-text
+  sitemaps, size/depth/count bounds, same-domain nested scope) and `BoundedTtlCache`.
+- Spec updated with an "As built" section (§6); plan and tasks added.
+
+**Files:** `packages/common/src/http/crawl/{sitemap,ttl-cache}.ts`,
+`packages/common/__tests__/crawl-{sitemap,ttl-cache}.spec.ts`,
+`packages/plugins/source-ats-softy/src/{softy.service,softy.constants,softy.types,softy.config,softy.parser,index}.ts`,
+`packages/plugins/source-ats-softy/__tests__/{softy.service,softy.parser,softy.policy}.spec.ts`,
+`packages/plugins/source-ats-softy/__tests__/softy.e2e-spec.ts` (reduced),
+`packages/plugins/source-ats-softy/__tests__/fixtures/*` (8 synthetic files),
+`.specify/specs/1691-softy-sitemap-discovery/*`, `docs/index.md` (Spec 374 row annotated).
+
+**Validation:** 228 unit tests green (lane B5); type-check clean for the lane's files.
+Live wire proof (5 requests, captured after the UA interceptor): `auto` → `sitemap.xml` then
+three `/offers/{ID}` pages, all 200, Ever Jobs UA, no `sec-ch-ua`, never more than 1 in
+flight, gaps 1003.1 / 1010.1 / 1006.4 ms, 3 complete jobs (descriptions 3,878 / 6,278 /
+6,705 chars) in 3.6 s; `listing` with `descriptionDepth: board` → one request, 3 jobs. The
+live e2e spec was not run by the lane (no extra traffic to `softy.pro`). `lint:docs` clean.
+
+---
+
+## 2026-09-25 — Spec 1690 — crawl policy: honest identity, per-host pacing, configurable proxies and back-off
+
+**Change:** The operator of the Softy ATS (`*.softy.pro`) reported that `source-ats-softy` was
+impolite: up to 100 detail requests at once, a different proxy per request, a Chrome
+User-Agent that hid who we are, and retries on 429/5xx. The audit found all four were
+defects of the shared `HttpClient`, so they are fixed there, for every plugin, without
+editing plugin call sites:
+
+- **One policy object, six layers.** `CrawlPolicy` (25 knobs) is resolved per request from
+  preset (`polite` default, `legacy` = exact pre-1690 behaviour, `strict`) → `EVER_JOBS_CRAWL_*`
+  env → builtin limits for bulk ATS APIs (Greenhouse, Lever, Ashby, SmartRecruiters) → the
+  plugin (`@SourcePlugin({ crawl })` + client options) → operator per-site / per-host JSON
+  (`EVER_JOBS_CRAWL_POLICIES` / `_POLICY_FILE`) → the search request's `crawl` object, filtered
+  by `EVER_JOBS_CRAWL_CALLER_OVERRIDES` (`any` | `stricter` | `none`). `provenance` records the
+  layer behind every field; `GET /api/sources/:site/crawl-policy` shows it.
+- **Identity.** The client-level UA default used to beat `setHeaders()`, silently discarding
+  every UA 266 plugins declared (USAJobs' *required* e-mail UA included). A request
+  interceptor now sends an honest UA naming the project (contact and `From:` configurable);
+  declared UAs are sent only in mode `plugin` or through a manifest opt-in with a reason
+  (USAJobs, HeadHunter). `BrowserPool` follows the same rules.
+- **Pacing.** One process-wide limiter per host / registrable domain / site: 4 in flight and
+  100 ms between starts by default, adaptive slow-down on 429/503, every retry holds a slot.
+- **Proxies.** `per-host` stable proxy by default (`per-scrape`, `per-request`, `off`
+  available); `DEFAULT_PROXIES`, parsed and never used before, is now the fallback list.
+- **Back-off.** 2 exponential retries with jitter on 429/502/503/504; never earlier than
+  `Retry-After`; beyond 60 s give up and cool the whole bucket (`cap` restores the old retry).
+  A 429/503 without a longer `Retry-After` waits at least `throttleRetryDelayMs` × 2^n
+  (5 s, then 10 s; `strict` 30 s, `legacy` 0 = off) and cools the host that long — added
+  after an operator saw a 429 retried after ~1 s (`EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS`).
+- **Also:** opt-in robots.txt (`crawl-delay` / `respect`); egress guard against private and
+  cluster-internal destinations with DNS-rebinding protection (Q-092 option B, for every
+  plugin); the search deadline now aborts an abandoned source's queued and in-flight
+  requests, and such aborts are circuit-neutral; circuit-breaker cap 250 → 4,096
+  (`EVER_JOBS_CIRCUIT_MAX_SITES`); `rate_limited` scrape reason; MCP `search_jobs` posts
+  camelCase (the snake_case body was stripped by validation, turning every MCP search into a
+  whole-catalogue fan-out); `createHttpClient` keeps a plugin's `timeout` when proxies are set.
+- **Entry points:** REST `crawl`, GraphQL `CrawlPolicyInput`, MCP `crawl`, CLI `--crawl` and
+  convenience flags plus `--crawl-preset` / `--caller-overrides`.
+- **Nothing removed.** Pre-1690 behaviour: `EVER_JOBS_CRAWL_PRESET=legacy`, or one knob at a
+  time. `RETRY_DEFAULT_*` / `RETRY_PER_SOURCE` still honoured.
+- **Docs:** operator guide `docs/CRAWL_POLICY.md`; ADR 0001 amends constitution Art. 5.2,
+  5.4, 6.1, 6.2, 11.2 and adds 11.5 (annotations, no text removed); AGENTS.md rule 10 ("UA
+  rotation" marked superseded), rule 8 and §6; CLAUDE.md house style; README, `.env.example`,
+  `tool_manifest.json`, `docs/API_CHANGELOG.md`, `docs/CLI.md`, `docs/PERFORMANCE_TUNING.md`,
+  `docs/FAQ.md`. Spec updated with an "As built" section (§9) for every deviation; plan and
+  tasks added (plan §4 justifies `robots-parser` and `tldts`, constitution Art. 9.3).
+
+**UA opt-ins:** USAJobs and HeadHunter (API-required UAs) and SimplyHired (A/B evidence: 403 on
+every page with the honest UA — Q-097 option B, so the source keeps working). **Deliberately not
+done:** default pacing numbers are recorded as Q-098; no production env change is needed.
+CI: when this was written no job ran `packages/common/__tests__` (plan §8); since the merge of
+`develop` (Spec 1689) the blocking **Test (Core)** job (`npm run test:core`) runs them, the
+crawl-policy suites included, and — `apps/cli/__tests__` added to `test:core` in that merge —
+the CLI's `crawl-options.spec.ts`.
+
+**Files:** `packages/common/src/http/crawl/*` (+ new `policy-schema.ts`),
+`packages/common/src/http/http-client.ts`, `packages/common/src/browser/{browser-pool,index}.ts`,
+`packages/common/src/context/request-context.ts`, `packages/models/src/dtos/{crawl-policy.dto,scraper-input.dto,scrape-diagnostics.dto,index}.ts`,
+`packages/plugin/src/circuit-breaker/circuit-breaker.service.ts`,
+`packages/plugins/source-{usajobs,headhunter}/src/*`, `apps/api/src/jobs/{jobs.service,jobs.controller,gql-types,jobs.resolver,health.controller,crawl-policy.mapping}.ts`,
+`apps/api/src/config/configuration.ts`, `apps/mcp/src/{tools,index}.ts`,
+`apps/cli/src/commands/{crawl-options,search.command,compare.command}.ts`, `package.json`,
+`package-lock.json`, 22 new or touched test suites, `.specify/specs/1690-crawl-policy/*`,
+`docs/CRAWL_POLICY.md`, `docs/adr/0001-crawl-policy.md`, `.specify/memory/constitution.md`,
+`AGENTS.md`, `CLAUDE.md`, `README.md`, `.env.example`, `tool_manifest.json`,
+`docs/{API_CHANGELOG,CLI,PERFORMANCE_TUNING,FAQ,index,questions}.md`.
+
+**Validation:** `tsc --noEmit -p apps/api/tsconfig.build.json` and `-p tsconfig.base.json`
+(every `.ts` in the repo): 0 errors. Jest, real config: 55/55 suites, 1,769/1,769 tests (all
+new crawl suites plus `softy.service`, `usajobs.crawl`, `headhunter.crawl`); integration,
+CLI, MCP, `softy.parser`, `softy.policy`, `corpus-signals`: 6/6 suites, 88/88;
+`browser-pool.spec.ts` 71/71; `npm run test:scripts` 12/12 suites, 193/193; full plugin sweep
+(fast config) 1,596/1,596 suites, 15,862/15,862 tests. Lanes: B1 415 tests, B2 227, B3 80 new
+(+ mutation check: breaking the interceptor, limiter acquire, egress check, legacy UA
+precedence, the DTO-in-context rule or whole-bucket penalize turns specific tests red), B4
+34 suites / 500 tests, B6 70. Offline default-search simulation (200 ms latency, real
+timers): 800 Greenhouse requests + a 100-wide fan-out to one host in 11.3 s vs the 120 s
+deadline, 0 failures, ≤ 16 / ≤ 3 in flight. Live UA A/B, 30 plugins / 166 requests: 18 work
+with the honest UA, 1 breaks only with it (SimplyHired), 7 broken either way, 4 inconclusive
+(Q-097). `lint:docs` clean.
+
+---
+
+## 2026-09-25 — Spec 1689 — Fork sync hardening: ReDoS, SSRF, shared state, and behaviour the fork removed
+
+**Change:** `fork-sync/makedeeply-2026-09-24` fast-forwards `origin/develop` (`574bd922`) to the
+MakeDeeply fork tip `11c61771` (118 commits: the fork's Specs 5118–5152, including the entries
+directly below this one). A read-only review of the fork in six lanes (supply chain, authorship,
+prompt injection, dangerous code, core, plugins) plus a merge test found no supply-chain or
+provenance compromise, but did find defects that would land with it. Commit `a243b1b9` fixes them
+on top of the fork tip, and keeps every behaviour the fork changed or removed reachable through an
+option or env variable:
+
+- **ReDoS (merge blocker).** The Spec 5124 parser's `remoteIn` regex
+  (`/^(?:remote|hybrid)\b(?:[\s-]*\w+)*?\s+in\s+(.+)$/i`) was exponential on any `Remote …`/
+  `Hybrid …` label without ` in ` — 7.2 s for `Hybrid Washington Metropolitan Area Office`, over
+  60 s at 53 characters — on a path ~978 plugins and `source-authenticjobs`' caller-supplied
+  `location` now reach. Replaced by the linear `matchRemoteInGeo` (0 disagreements with the old
+  regex over 300,000 fuzz strings), plus a per-chunk label cap
+  (`EVER_JOBS_LOCATION_MAX_LABEL_LENGTH`, 256), linear trims, a static country lookup instead of
+  `countryFromString`'s throw path (~4× faster), and the same fix in `scripts/proto`.
+- **Parser readings.** Ambiguous two-letter tails read as the US state (`Downtown, Los Angeles,
+  CA` was Canada; `EVER_JOBS_LOCATION_PREFER_US_STATE`), with vetoes that keep
+  `Bengaluru, KA, IN` in India and `Toronto, Ontario, CA` in Canada; region codes are no longer
+  re-read as countries (`Munich, BY, DE` was Belarus); `Remote, CA` reads as the state only with
+  `EVER_JOBS_LOCATION_PREFER_US_STATE_AFTER_QUALIFIER`. The fork's removed outputs are options
+  with the fork's defaults kept: `EVER_JOBS_LOCATION_REMOTE_CITY` (false, **Q-094**) and
+  `EVER_JOBS_LOCATION_BARE_STATE` (true, **Q-095**).
+- **Dedup.** The canonical key keeps a remote bucket and one spelling per country
+  (`EVER_JOBS_CANONICAL_KEY_REMOTE_BUCKET`, `EVER_JOBS_CANONICAL_KEY_NORMALIZE_COUNTRY`, both on),
+  and `dedup-hybrid` now passes `isRemote`, so a parsed `Remote` / `Remote - US` hash-merges with
+  an iCIMS `{ city: 'Remote' }` again. 🛑 Both options change `canonicalJobId` for remote-only
+  postings and labels ending in a country — one-time duplicates in a persistent store
+  (`store-sqlite-drizzle`, `store-postgres-prisma`); both `false` gives the fork's Spec 5123 key.
+  `CanonicalJob` gains `countryCode`.
+- **SSRF.** New shared `url-guard.ts` (`pinUrlToHosts`, `isPubliclyRoutableHostname`,
+  `describeUrlForLog`). `octbr_ai` spliced `companySlug` into its host and fetched every `job.url`
+  from tenant JSON; it now refuses a slug that is not one DNS label (`bad_input`, no request),
+  pins detail URLs to `{slug}.octbr.ai` and fetches them in batches of 5. The nine company plugins
+  (`4earth_tech`, `ampflame`, `getmaxspace`, `labs_actor`, `mundane_co`, `pulsespace`, `soundryx`,
+  `tau-robotics`, `thermwood`) pin `companyUrl` to their own domain or ignore it, logging the host
+  only. Every redirect hop of those clients is re-pinned (`HttpClientOptions.allowedRedirectHosts`;
+  escape hatch `EVER_JOBS_HTTP_PIN_REDIRECTS=false`).
+- **Shared state.** `mundane_co` closed the process-wide `BrowserPool` after every scrape, killing
+  other plugins' pages; it now closes only its own page (the old behaviour is
+  `MUNDANE_CO_CLOSE_BROWSER_POOL_AFTER_SCRAPE=true`). Idle persistent Chromium contexts are
+  LRU-capped (`EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS`, 4). Eightfold's endpoint and
+  Wellfound's remote-config map are per scrape instead of on the singleton service.
+- **Removed behaviour restored as options.** Dover's optional job-groups call no longer fails the
+  scrape (`DOVER_JOB_URL_STYLE=apply|board`); ADP stops paging at `offset + resultsWanted`
+  (`ADP_MAX_LIST_PAGES`, 100); the Lever/Workday ATS country overlay is back
+  (`EVER_JOBS_ATS_COUNTRY_OVERLAY`, on); PulseSpace's plain-HTTP bundle strategy is back beside
+  the browser one (`PULSESPACE_STRATEGY=rendered|bundle|auto`, default `rendered`) with its
+  fixtures restored; 11 plugins get their pre-Spec-5125 location heuristics back
+  (`<PLUGIN>_LOCATION_HEURISTICS`, on). Catastrophic-backtracking regexes in `tau-robotics`,
+  `4earth_tech`, `labs_actor` and nine quadratic ones elsewhere are linear.
+- **API surfaces.** MCP renders `location` as a string (`EVER_JOBS_MCP_LOCATION_FORMAT`) and
+  sends the camelCase keys the API's whitelist pipe keeps (`EVER_JOBS_MCP_REQUEST_KEYS`) — it was
+  searching with no search term. GraphQL exposes `countryCode`, `locations`, `offices` and the new
+  location fields; `SearchJobsInput` gets class-validator decorators (the whitelist pipe had been
+  stripping it to `{}`) and `country` is resolved to a `Country` or dropped with a warning.
+- **CI / tooling.** Unit shards take `JEST_SOURCE_UNIT_MAX_WORKERS` (5) on `RUNNER_SOURCE_UNIT`
+  instead of `--maxWorkers=75%` of the host; a new blocking `Test (Core)` job (`npm run
+  test:core`, `JEST_CORE_MAX_WORKERS` 3) runs the suites no job ran, and the two stale
+  `apps/api` specs it would have caught are fixed; `JEST_TRANSFORMER=ts-jest` / `npm run
+  test:typed` restore type-checked test runs; docs-lint check 8 flags conflict markers, and the
+  stray `||||||| 062a1346` line in `docs/questions.md` is removed.
+
+Not in scope and recorded: a global SSRF guard and resolved-IP checks for the older plugins, the
+two-label in-cluster hostname gap, caller-supplied `proxies`/`caCert`, and the shared-parser
+mis-splits in **Q-096**.
+
+**Files:** `packages/common/src/{utils/location-parser.ts,utils/url-guard.ts,utils/index.ts,canonical-key.ts,normalize.ts,http/http-client.ts,browser/browser-pool.ts}`,
+`packages/models/src/{interfaces/canonical-job.interface.ts,schemas/canonical-job.schema.ts}`,
+`packages/plugins/dedup-hybrid/src/dedup-hybrid.service.ts`,
+`packages/plugins/source-ats-{adp,catsone,cleverconnect,dover,eightfold,employmenthero,greenhouse,harri,jobsoid,lever,octbr_ai,pinpoint,umantis,wellfound,workday,workstream}/src/*`,
+`packages/plugins/source-company-{4earth_tech,amazon,ampflame,argospace,getmaxspace,labs_actor,mundane_co,pulsespace,soundryx,tau-robotics,thermwood,thinkorbital,zennoastronautics}/src/*`,
+`packages/plugins/source-company-pulsespace/__tests__/fixtures/{bundle.js,careers-bundle-shell.html,principal-avionics-architect.html}`,
+`apps/api/src/jobs/{gql-types.ts,jobs.resolver.ts}`, `apps/mcp/src/tools.ts`,
+`.github/workflows/ci.yml`, `jest.config.js`, `package.json`,
+`scripts/{docs-lint.ts,jest-typed.ts,proto/location-parser-v2.ts}`, the specs beside each of
+those, `apps/api/__tests__/{jobs/corpus-signals.spec.ts,integration/source-ats-batch-1.integration.spec.ts}`,
+`.env.example`, `apps/mcp/README.md`, `docs/questions.md` (Q-094–Q-096, marker removed),
+`.specify/specs/1689-fork-sync-hardening/*`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `npx tsc --project tsconfig.typecheck.json --noEmit` and
+`npx tsc --project apps/api/tsconfig.build.json --noEmit` clean; `npm run lint:docs` clean;
+`npm run test:scripts` 15/15 suites, 241 tests; jest `packages/(common|models|plugin)/` 751/751;
+`apps/(api|mcp)/` 316/316; the 30 touched plugin dirs 665/665; `packages/plugins/source-`
+1,626/1,626 suites, 16,226/16,226 tests. Each fix lane's new tests were run red against the fork's
+code first (e.g. Eightfold 3, Dover 8, ADP 6, MCP 4 failures; the fork parser took 11.2 s on
+`Remote Nationwide Opportunities Available`, the new one 3.9 ms). Known flake: `dedup-perf`
+NFR-1 (1,000 jobs < 250 ms, local budget) failed 2 of 6 runs at 278–284 ms with four workers on a
+loaded host and passed in isolation; the changed tree is ~5–10% slower there, and CI runs that
+suite with a 1,000 ms budget.
+
+**Review follow-ups (PR #91, automated review):** (1) `source-ats-adp` now returns the requested window (`offset` .. `offset + resultsWanted`) and spends detail requests only on it - it previously sliced from row 0, so `offset` was ignored (pre-existing, made visible by the new list budget); `source-ats-wellfound`, `source-ats-nodi_global` and `source-ats-octbr_ai` (new from the fork) honour `offset` too. (2) `BrowserPool` counts launches still in flight against `EVER_JOBS_BROWSER_MAX_PERSISTENT_CONTEXTS` and re-checks after each launch, so a burst of concurrent identities can no longer leave idle contexts over the cap (red control: the new test fails without the fix). (3) CI: every `npm ci` step exports `npm_config_nodedir` = the setup-node install prefix, so `better-sqlite3` (no prebuilt for the runner Node) compiles against local headers instead of fetching them from nodejs.org - that fetch timed out from the ARC runners and failed two whole jobs on this PR (the same fix the Dockerfile has carried since 2026-08-01). Validation: the four plugin suites 66/66, browser-pool 22/22, `tsc --project tsconfig.typecheck.json` clean.
 
 ---
 

@@ -83,6 +83,17 @@ describe('OctbrAiService', () => {
     ]);
   });
 
+  it('returns the offset window and fetches details only for it', async () => {
+    const fetched: string[] = [];
+    const service = serviceWith((url) => {
+      fetched.push(url);
+      return okListing()(url);
+    });
+    const { jobs } = await service.scrape(inputFrom({ offset: 1, resultsWanted: 1 }));
+    expect(jobs.map((j) => j.title)).toEqual(['Lead Electrical Engineer']);
+    expect(fetched.filter((u) => u !== 'https://starcloud.octbr.ai/')).toHaveLength(1);
+  });
+
   it('maps identity, company name, url, and department', async () => {
     const { jobs } = await serviceWith(okListing()).scrape(inputFrom());
     const job = jobs.find((j) => j.title === 'Lead Thermal Engineer')!;

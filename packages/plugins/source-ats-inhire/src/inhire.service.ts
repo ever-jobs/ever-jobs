@@ -48,6 +48,7 @@ import {
   INHIRE_PUBLISHED_STATUS,
   INHIRE_SITE,
   INHIRE_TENANT_HEADER,
+  INHIRE_CRAWL_POLICY,
   INHIRE_USER_AGENT,
   inhireDetailPath,
 } from './inhire.constants';
@@ -134,6 +135,7 @@ type DetailOutcome =
   isAts: true,
   description:
     'InHire (Brazil) hosted career pages, read from the public job-posts JSON API keyed by the X-Tenant header',
+  crawl: INHIRE_CRAWL_POLICY,
 })
 @Injectable()
 export class InhireService implements IScraper {

@@ -9,8 +9,16 @@ import {
   applyJobExclusions, exclusionSpecFromInput, hasExclusionInput,
 } from '@ever-jobs/common';
 import { AnalyticsService } from '@ever-jobs/analytics';
+import {
+  CALLER_OVERRIDES_FLAG_DESCRIPTION,
+  CRAWL_FLAG_DESCRIPTION,
+  CRAWL_PRESET_FLAG_DESCRIPTION,
+  CrawlCliOptions,
+  applyCrawlCliOptions,
+  parseNonNegativeInt,
+} from './crawl-options';
 
-interface SearchOptions {
+interface SearchOptions extends CrawlCliOptions {
   site?: string[];
   searchTerm?: string;
   googleSearchTerm?: string;
@@ -128,7 +136,11 @@ export class SearchCommand extends CommandRunner {
       console.error('JSON stdin input:', JSON.stringify(jsonInput, null, 2));
     }
 
-    const input = new ScraperInputDto(jsonInput as Partial<ScraperInputDto>);
+    // Crawl flags (Spec 1690) merge into the JSON's `crawl`, flags winning.
+    const input = applyCrawlCliOptions(
+      new ScraperInputDto(jsonInput as Partial<ScraperInputDto>),
+      options,
+    );
 
     // CLI flags override JSON values
     if (options.format) { /* handled in output */ }
@@ -149,7 +161,7 @@ export class SearchCommand extends CommandRunner {
       }
     }
 
-    return new ScraperInputDto({
+    const input = new ScraperInputDto({
       siteType: options.site?.map((s: string) => s as Site),
       searchTerm: options.searchTerm,
       googleSearchTerm: options.googleSearchTerm,
@@ -182,6 +194,7 @@ export class SearchCommand extends CommandRunner {
       ...(options.excludeKeyword ? { excludeKeywords: options.excludeKeyword } : {}),
       ...(options.excludePreset ? { excludePresets: options.excludePreset as ExclusionPreset[] } : {}),
     });
+    return applyCrawlCliOptions(input, options);
   }
 
   private async executeAndOutput(input: ScraperInputDto, options: SearchOptions): Promise<void> {
@@ -512,4 +525,36 @@ export class SearchCommand extends CommandRunner {
 
   @Option({ flags: '--upwork-auth-json <json>', description: 'Upwork auth credentials as JSON: \'{"clientId":"...","clientSecret":"...","grantType":"client_credentials"}\'' })
   parseUpworkAuthJson(val: string): string { return val; }
+
+  // ── Crawl policy (Spec 1690) ──
+
+  @Option({ flags: '--crawl <json>', description: CRAWL_FLAG_DESCRIPTION })
+  parseCrawl(val: string): string { return val; }
+
+  @Option({ flags: '--user-agent-mode <mode>', description: 'Which User-Agent goes out: identify (default), strict, plugin' })
+  parseUserAgentMode(val: string): string { return val; }
+
+  @Option({ flags: '--proxy-rotation <mode>', description: 'Proxy rotation: per-host (default), per-scrape, per-request (pre-1690), off' })
+  parseProxyRotation(val: string): string { return val; }
+
+  @Option({ flags: '--max-per-host <n>', description: 'Max requests in flight per host bucket (0 = unlimited)' })
+  parseMaxPerHost(val: string): number { return parseNonNegativeInt(val); }
+
+  @Option({ flags: '--min-interval-ms <ms>', description: 'Minimum gap between request starts per host bucket, ms' })
+  parseMinIntervalMs(val: string): number { return parseNonNegativeInt(val); }
+
+  @Option({ flags: '--crawl-retries <n>', description: 'Retries per request on 429/5xx (crawl policy)' })
+  parseCrawlRetries(val: string): number { return parseNonNegativeInt(val); }
+
+  @Option({ flags: '--robots-txt <mode>', description: 'robots.txt handling: off (default), crawl-delay, respect' })
+  parseRobotsTxt(val: string): string { return val; }
+
+  @Option({ flags: '--discovery <mode>', description: 'Discovery for multi-strategy sources (e.g. Softy): auto (default), sitemap, listing' })
+  parseDiscovery(val: string): string { return val; }
+
+  @Option({ flags: '--crawl-preset <preset>', description: CRAWL_PRESET_FLAG_DESCRIPTION })
+  parseCrawlPreset(val: string): string { return val; }
+
+  @Option({ flags: '--caller-overrides <mode>', description: CALLER_OVERRIDES_FLAG_DESCRIPTION })
+  parseCallerOverrides(val: string): string { return val; }
 }

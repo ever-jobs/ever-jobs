@@ -9,6 +9,16 @@ import { ZipErrorBody } from './ziprecruiter.types';
  * desktop user-agent next to the app's Basic credential and its
  * `x-zr-zva-override`. Spec 1713 adds no header.
  *
+ * Since the Spec 1690 merge (2026-09-26) the `user-agent` below is only a
+ * *declared* UA: under the default crawl policy (`identify`) our configured,
+ * honest UA goes out next to the Basic credential and `x-zr-zva-override`
+ * (checked on the wire), and the declared one is sent only when an operator sets
+ * `EVER_JOBS_CRAWL_POLICIES={"sites":{"zip_recruiter":{"userAgentMode":"plugin"}}}`.
+ * It did not reach the wire before Spec 1690 either: the client's constructor
+ * User-Agent (the caller's, else a Chrome/120 string) beat `setHeaders()`. So by
+ * default the honest user-agent is what goes out now; the open decision below is
+ * whether to opt the app identity back in.
+ *
  * Open decision (owner): send our own honest user-agent or keep the app
  * identity. It needs a verification run from a North-American egress (spec
  * sections 8.1 and 8.3), because every request from our EU egress is refused

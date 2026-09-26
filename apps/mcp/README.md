@@ -54,6 +54,10 @@ Search for jobs across all sources.
 | `exclude_title_terms` | string[] | ❌ | Drop jobs whose title contains any of these words or phrases (up to 50; literal, whole-word, trailing `*` = prefix, never a regex) |
 | `exclude_keywords` | string[] | ❌ | Drop jobs whose title or description contains any of these words or phrases (up to 50; same rules) |
 | `exclude_presets` | string[] | ❌ | Curated exclusion lists; `security_clearance` drops roles that require a security clearance or vetting |
+| `crawl`       | object  | ❌       | Per-request crawl policy (Spec 1690), camelCase    |
+
+`crawl` is forwarded to the API unchanged as the `crawl` field (same key in every
+`EVER_JOBS_MCP_REQUEST_KEYS` style); see [`docs/CRAWL_POLICY.md`](../../docs/CRAWL_POLICY.md).
 
 ### `get_job_details`
 

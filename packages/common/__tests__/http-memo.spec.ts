@@ -2,7 +2,10 @@ import 'reflect-metadata';
 import { createServer, IncomingMessage, Server, ServerResponse } from 'node:http';
 import { AddressInfo } from 'node:net';
 
-import { createHttpClient } from '../src/http/http-client';
+import { HttpClientOptions, createHttpClient } from '../src/http/http-client';
+import { resetCrawlPolicyEnvCache } from '../src/http/crawl/env';
+import { HostLimiter, resetHostLimiter } from '../src/http/crawl/host-limiter';
+import { resetEffectiveCrawlPolicyCache, runWithScrapeContext } from '../src/http/crawl/scrape-context';
 import {
   HTTP_MEMO_ENV,
   HTTP_MEMO_MAX_ENTRIES,
@@ -13,7 +16,14 @@ import {
 /**
  * Spec 1700 (T13) — the scoped response memo in the shared HTTP client.
  * A real local server counts what actually reaches the network.
+ *
+ * The crawl policy's egress guard (Spec 1690 §4.8) refuses loopback on its own,
+ * so every client here exempts the test server with `egressAllowHosts` — the
+ * guard stays ON, as it is in production.
  */
+
+/** The loopback test server, exempt from the crawl egress guard for a client. */
+const LOOPBACK = ['127.0.0.1'];
 
 interface Seen {
   method: string;
@@ -51,10 +61,14 @@ afterAll(async () => {
 beforeEach(() => {
   seen.length = 0;
   respond = defaultRespond;
+  // Spec 1690: fresh crawl-policy state, so pacing from one test never delays the next.
+  resetCrawlPolicyEnvCache();
+  resetEffectiveCrawlPolicyCache();
+  resetHostLimiter();
 });
 
-function client() {
-  return createHttpClient({ retries: 0, timeout: 5 });
+function client(options: HttpClientOptions = {}) {
+  return createHttpClient({ retries: 0, timeout: 5, egressAllowHosts: LOOPBACK, ...options });
 }
 
 describe('runWithHttpMemo — scoped response memo (Spec 1700)', () => {
@@ -206,9 +220,9 @@ describe('runWithHttpMemo — scoped response memo (Spec 1700)', () => {
       defaultRespond(req, res);
     };
     await runWithHttpMemo(async () => {
-      const first = createHttpClient({ retries: 0, timeout: 5, cookies: true });
+      const first = client({ cookies: true });
       await first.get(`${base}/session`);
-      const second = createHttpClient({ retries: 0, timeout: 5, cookies: true });
+      const second = client({ cookies: true });
       await second.get(`${base}/session`); // answered from the memo
       await second.get(`${base}/search`, { params: { l: 'x' } });
     });
@@ -221,6 +235,135 @@ describe('runWithHttpMemo — scoped response memo (Spec 1700)', () => {
     await runWithHttpMemo(async () => {
       await client().post(`${base}/upload`, buffer);
       await client().post(`${base}/upload`, buffer);
+    });
+    expect(seen).toHaveLength(2);
+  });
+});
+
+describe('runWithHttpMemo under the crawl policy (Spec 1690 × Spec 1700)', () => {
+  it('a memo hit takes no rate-limit slot; every miss does', async () => {
+    const limiter = new HostLimiter();
+    const acquire = jest.spyOn(limiter, 'acquire');
+    const { stats } = await runWithHttpMemo(async () => {
+      for (let i = 0; i < 3; i++) await client({ hostLimiter: limiter }).get(`${base}/board`);
+      await client({ hostLimiter: limiter }).get(`${base}/other`);
+    });
+    expect(seen.map((s) => s.url)).toEqual(['/board', '/other']);
+    expect(stats).toEqual({ hits: 2, misses: 2 });
+    expect(acquire).toHaveBeenCalledTimes(2);
+  });
+
+  it('still refuses a private target before the memo is consulted (egress guard)', async () => {
+    await runWithHttpMemo(async () => {
+      await client().get(`${base}/board`);
+      // Same URL, but a client without the loopback exemption: the literal
+      // egress check runs before the memo, so the memo cannot launder it.
+      await expect(createHttpClient({ retries: 0, timeout: 5 }).get(`${base}/board`)).rejects.toMatchObject({
+        code: 'ERR_CRAWL_EGRESS_BLOCKED',
+      });
+    });
+    expect(seen).toHaveLength(1);
+  });
+
+  it('never answers a redirect-pinned client with a response fetched without the pin', async () => {
+    await runWithHttpMemo(async () => {
+      await client().get(`${base}/board`);
+      await client({ allowedRedirectHosts: ['acme.com'] }).get(`${base}/board`);
+      await client({ allowedRedirectHosts: ['acme.com'] }).get(`${base}/board`);
+    });
+    expect(seen).toHaveLength(2);
+  });
+
+  it('keys on the per-request crawl override', async () => {
+    await runWithHttpMemo(async () => {
+      await client().request({ method: 'GET', url: `${base}/board` });
+      await client().request({ method: 'GET', url: `${base}/board`, crawl: { robotsTxt: 'off', retries: 0 } } as never);
+      await client().request({ method: 'GET', url: `${base}/board`, crawl: { retries: 0, robotsTxt: 'off' } } as never);
+    });
+    expect(seen).toHaveLength(2);
+  });
+
+  it('answers nothing, not even from the memo, once the scrape was aborted', async () => {
+    const controller = new AbortController();
+    await runWithHttpMemo(async () => {
+      await runWithScrapeContext({ site: 'memo-test', signal: controller.signal }, async () => {
+        await client().get(`${base}/board`);
+        controller.abort(Object.assign(new Error('deadline'), { name: 'AbortError', code: 'ERR_TEST_ABORT' }));
+        await expect(client().get(`${base}/board`)).rejects.toMatchObject({ code: 'ERR_TEST_ABORT' });
+      });
+    });
+    expect(seen).toHaveLength(1);
+  });
+
+  it('a request parked on an identical in-flight one stops waiting when its own signal aborts', async () => {
+    respond = (req, res) => {
+      setTimeout(() => defaultRespond(req, res), 400);
+    };
+    const controller = new AbortController();
+    const reason = Object.assign(new Error('caller gave up'), { name: 'AbortError', code: 'ERR_TEST_WAITER_ABORT' });
+    const { stats } = await runWithHttpMemo(async () => {
+      const first = client().get(`${base}/board`);
+      const startedAt = Date.now();
+      const parked = client().get(`${base}/board`, { signal: controller.signal });
+      setTimeout(() => controller.abort(reason), 30);
+
+      await expect(parked).rejects.toBe(reason);
+      // Cancelled at the abort (~30 ms), not when the first request answered (~400 ms).
+      expect(Date.now() - startedAt).toBeLessThan(300);
+      // The first request still owns the entry and completes.
+      await expect(first).resolves.toMatchObject({ status: 200 });
+    });
+    expect(seen).toHaveLength(1);
+    expect(stats.hits).toBe(0);
+  });
+
+  it('a parked request whose signal never fires is still answered from the first one', async () => {
+    respond = (req, res) => {
+      setTimeout(() => defaultRespond(req, res), 50);
+    };
+    const controller = new AbortController();
+    const { stats } = await runWithHttpMemo(async () => {
+      const [a, b] = await Promise.all([
+        client().get(`${base}/board`),
+        client().get(`${base}/board`, { signal: controller.signal }),
+      ]);
+      expect(a.data).toEqual(b.data);
+    });
+    expect(seen).toHaveLength(1);
+    expect(stats).toEqual({ hits: 1, misses: 1 });
+  });
+
+  it('does not memoise a request that brings its own transport', async () => {
+    const agent = new (require('node:http').Agent)();
+    await runWithHttpMemo(async () => {
+      await client().get(`${base}/board`, { httpAgent: agent });
+      await client().get(`${base}/board`, { httpAgent: agent });
+    });
+    agent.destroy();
+    expect(seen).toHaveLength(2);
+  });
+
+  it('does not keep a throttled answer the caller accepted through validateStatus', async () => {
+    let calls = 0;
+    respond = (req, res) => {
+      calls++;
+      if (calls === 1) {
+        res.statusCode = 429;
+        res.end('slow down');
+        return;
+      }
+      defaultRespond(req, res);
+    };
+    await runWithHttpMemo(async () => {
+      const first = await client({ crawl: { throttleRetryDelayMs: 0, adaptiveThrottle: false } }).get(`${base}/board`, {
+        validateStatus: () => true,
+      });
+      expect(first.status).toBe(429);
+      resetHostLimiter();
+      const second = await client({ crawl: { throttleRetryDelayMs: 0, adaptiveThrottle: false } }).get(`${base}/board`, {
+        validateStatus: () => true,
+      });
+      expect(second.status).toBe(200);
     });
     expect(seen).toHaveLength(2);
   });

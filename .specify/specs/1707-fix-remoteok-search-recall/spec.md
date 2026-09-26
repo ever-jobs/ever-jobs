@@ -193,7 +193,9 @@ Follow-ups:
   `postedFromTimestamp` also refuses a non-ISO `date` that a plain `slice(0, 10)` would have cut
   into garbage, and falls back to `epoch`.
 - **D-07 — The crawl delay is a floor.** A caller's `rateDelayMin` can lengthen the spacing, never
-  shorten it below the site's `Crawl-delay: 1`.
+  shorten it below the site's `Crawl-delay: 1`. Since the Spec 1690 merge (2026-09-26) the client's
+  `rateDelayMin` is only the crawl policy's plugin layer, which a caller's `rateDelayMin` (caller
+  layer) replaces, so the spacing is also the client's `minIntervalFloorMs`, which no layer shortens.
 - **D-08 — Old behaviour stays reachable.** One env var, whole or per part (§7.1), read on every
   scrape. The browser User-Agent constant is kept and only overridden by `input.userAgent`.
 - **D-09 — File encodings kept.** `remoteok.service.ts` keeps its UTF-8 BOM and LF endings; the new
@@ -202,7 +204,12 @@ Follow-ups:
   `Mozilla/5.0 (compatible; EverJobs/1.0; +https://github.com/ever-jobs/ever-jobs)` like the other
   rewritten boards; one live request with it on 2026-09-25 got HTTP 200 and the JSON feed (99
   jobs). `EVER_JOBS_REMOTEOK_LEGACY=ua` (or `all`) restores the pre-1707 browser User-Agent; a
-  caller's `userAgent` wins in every mode. This supersedes the second sentence of D-08.
+  caller's `userAgent` wins in every mode. This supersedes the second sentence of D-08. Since the
+  Spec 1690 merge (2026-09-26) the header UA is only *declared*: the configured crawl UA goes out
+  under the default `identify` mode, so `ua` also opts the client into `userAgentMode: 'plugin'`
+  (`REMOTEOK_LEGACY_UA_CRAWL_POLICY`); `EVER_JOBS_CRAWL_USER_AGENT_MODE=strict` still sends the
+  configured UA, and a caller's `userAgent` (caller layer, `strict`) wins unless
+  `EVER_JOBS_CRAWL_CALLER_OVERRIDES` refuses it.
 
 ## 11. References
 

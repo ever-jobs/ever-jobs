@@ -1,7 +1,15 @@
 import 'reflect-metadata';
 import { createServer, Server } from 'node:http';
 import { AddressInfo } from 'node:net';
-import { HTTP_MEMO_ENV, createHttpClient } from '@ever-jobs/common';
+import {
+  HTTP_MEMO_ENV,
+  HostCoolingDownError,
+  createHttpClient,
+  getScrapeContext,
+  resetCrawlPolicyEnvCache,
+  resetEffectiveCrawlPolicyCache,
+  resetHostLimiter,
+} from '@ever-jobs/common';
 import {
   ERR_SOURCE_CIRCUIT_OPEN,
   IScraper,
@@ -607,6 +615,12 @@ describe('JobsService — multi-location response memo (Spec 1700, T13)', () => 
   let base: string;
   const hits: string[] = [];
   const savedMemo = process.env[HTTP_MEMO_ENV];
+  /**
+   * The local test server, exempt from the crawl policy's egress guard (Spec
+   * 1690 §4.8) for these clients only — the guard itself stays on.
+   */
+  const LOOPBACK = ['127.0.0.1'];
+  const client = () => createHttpClient({ retries: 0, timeout: 5, egressAllowHosts: LOOPBACK });
 
   beforeAll(async () => {
     server = createServer((req, res) => {
@@ -623,6 +637,10 @@ describe('JobsService — multi-location response memo (Spec 1700, T13)', () => 
   beforeEach(() => {
     hits.length = 0;
     delete process.env[HTTP_MEMO_ENV];
+    // Spec 1690: fresh crawl-policy state, so pacing from one case never delays the next.
+    resetCrawlPolicyEnvCache();
+    resetEffectiveCrawlPolicyCache();
+    resetHostLimiter();
   });
   afterEach(() => {
     if (savedMemo === undefined) delete process.env[HTTP_MEMO_ENV];
@@ -632,7 +650,7 @@ describe('JobsService — multi-location response memo (Spec 1700, T13)', () => 
   /** A company-board plugin: fetches the whole board, filters by location locally. */
   const boardPlugin = () =>
     scraperOf(async (input) => {
-      const res = await createHttpClient({ retries: 0, timeout: 5 }).get(`${base}/board`);
+      const res = await client().get(`${base}/board`);
       const rows = (res.data as { id: string; city: string }[]).filter((r) => r.city === input.location);
       return new JobResponseDto(
         rows.map((r) => new JobPostDto({ id: r.id, title: 'Engineer', jobUrl: `https://x.test/${r.id}` })),
@@ -655,7 +673,7 @@ describe('JobsService — multi-location response memo (Spec 1700, T13)', () => 
 
   it('still sends one request per location for a source that searches by location', async () => {
     const search = scraperOf(async (input) => {
-      await createHttpClient({ retries: 0, timeout: 5 }).get(`${base}/search`, { params: { l: input.location } });
+      await client().get(`${base}/search`, { params: { l: input.location } });
       return new JobResponseDto([]);
     });
     const { service } = createService([[Site.THEMUSE, search]]);
@@ -693,9 +711,9 @@ describe('JobsService — multi-location response memo (Spec 1700, T13)', () => 
 
   it('a single-location search never opens a memo', async () => {
     const board = scraperOf(async () => {
-      const client = createHttpClient({ retries: 0, timeout: 5 });
-      await client.get(`${base}/board`);
-      await client.get(`${base}/board`);
+      const http = client();
+      await http.get(`${base}/board`);
+      await http.get(`${base}/board`);
       return new JobResponseDto([]);
     });
     const { service } = createService([[Site.GREENHOUSE, board]]);
@@ -703,6 +721,85 @@ describe('JobsService — multi-location response memo (Spec 1700, T13)', () => 
     await service.searchJobsWithDiagnostics(new ScraperInputDto({ siteType: [Site.GREENHOUSE], location: NEW_YORK }));
 
     expect(hits).toHaveLength(2);
+  });
+});
+
+describe('JobsService — multi-location search under the crawl policy (Spec 1690 × Spec 1700)', () => {
+  it('runs every location call in its own scrape context: site, plugin manifest, caller crawl, own signal', async () => {
+    const seen: { location?: string; site?: string; plugin?: unknown; caller?: unknown; signal?: AbortSignal }[] = [];
+    const scraper = scraperOf(async (input) => {
+      const ctx = getScrapeContext();
+      seen.push({ location: input.location, site: ctx?.site, plugin: ctx?.plugin, caller: ctx?.caller, signal: ctx?.signal });
+      return new JobResponseDto([]);
+    });
+    const { service } = createService([[Site.THEMUSE, scraper]]);
+    (service as any).registry.getMetadata = () => ({ crawl: { maxConcurrentPerHost: 1, minIntervalMs: 1000 } });
+
+    await service.searchJobsWithDiagnostics(
+      new ScraperInputDto({
+        siteType: [Site.THEMUSE],
+        locations: [NEW_YORK, CHICAGO],
+        crawl: { maxConcurrentPerHost: 2 },
+      } as Partial<ScraperInputDto>),
+    );
+
+    expect(seen.map((s) => s.location)).toEqual([NEW_YORK, CHICAGO]);
+    for (const call of seen) {
+      expect(call.site).toBe(Site.THEMUSE);
+      expect(call.plugin).toEqual({ maxConcurrentPerHost: 1, minIntervalMs: 1000 });
+      expect(call.caller).toEqual(expect.objectContaining({ maxConcurrentPerHost: 2 }));
+      expect(call.signal).toBeInstanceOf(AbortSignal);
+      expect(call.signal?.aborted).toBe(false);
+    }
+    expect(seen[0].signal).not.toBe(seen[1].signal);
+  });
+
+  it('the search deadline aborts the in-flight location call and skips the rest', async () => {
+    let signal: AbortSignal | undefined;
+    const scraper = scraperOf(async (input) => {
+      if (input.location !== NEW_YORK) return new JobResponseDto([]);
+      signal = getScrapeContext()?.signal;
+      await sleep(400);
+      return new JobResponseDto([]);
+    });
+    const { service, warn } = createService([[Site.THEMUSE, scraper]], { deadlineMs: 80 });
+
+    const out = await service.searchJobsWithDiagnostics(
+      new ScraperInputDto({ siteType: [Site.THEMUSE], locations: [NEW_YORK, CHICAGO] }),
+    );
+
+    expect(signal?.aborted).toBe(true);
+    expect(scraper.scrape).toHaveBeenCalledTimes(1);
+    expect(rowsFor(out.perSource, Site.THEMUSE).map((r) => r.location)).toEqual([NEW_YORK, CHICAGO]);
+    expect(warn.mock.calls.map((c) => String(c[0])).some((m) => m.includes('abandoned 1 in-flight source'))).toBe(true);
+  });
+
+  it('a rate_limited refusal (host cooling down) stops the remaining locations', async () => {
+    const scraper = scraperOf(async () => {
+      throw new HostCoolingDownError('host:api.example.com', 120_000, 429);
+    });
+    const { service, inc } = createService([[Site.THEMUSE, scraper]]);
+
+    const out = await service.searchJobsWithDiagnostics(
+      new ScraperInputDto({ siteType: [Site.THEMUSE], locations: [NEW_YORK, CHICAGO, AUSTIN] }),
+    );
+
+    expect(scraper.scrape).toHaveBeenCalledTimes(1);
+    const rows = rowsFor(out.perSource, Site.THEMUSE);
+    expect(rows.map((r) => r.reason)).toEqual(['rate_limited', 'rate_limited', 'rate_limited']);
+    expect(rows[1].detail).toContain('not attempted');
+    expect(inc).toHaveBeenCalledWith({ site: Site.THEMUSE, status: 'location_skipped' });
+  });
+
+  it('a plugin that swallowed a rate_limited outcome also stops the remaining locations', async () => {
+    const scraper = scraperOf(async () => new JobResponseDto([], new ScrapeDiagnostics('rate_limited', 'slot not granted')));
+    const { service } = createService([[Site.THEMUSE, scraper]]);
+
+    await service.searchJobsWithDiagnostics(
+      new ScraperInputDto({ siteType: [Site.THEMUSE], locations: [NEW_YORK, CHICAGO] }),
+    );
+
+    expect(scraper.scrape).toHaveBeenCalledTimes(1);
   });
 });
 

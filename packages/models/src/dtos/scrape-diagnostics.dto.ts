@@ -29,6 +29,13 @@ export type ScrapeReason =
    * `empty` because no request was ever made.
    */
   | 'not_registered'
+  /**
+   * Our own crawl policy held the source back (Spec 1690): the host limiter did
+   * not grant a slot in time, or the host asked us to back off (`Retry-After`)
+   * for longer than we wait. Distinct from `fetch_error` — the site is fine, we
+   * are pacing ourselves.
+   */
+  | 'rate_limited'
   | 'unknown';
 
 /** Reason a single scrape produced the result it did. Optional on a response. */
@@ -73,6 +80,7 @@ export const ACTIONABLE_SCRAPE_REASONS: readonly ScrapeReason[] = [
   'circuit_open',
   'partial',
   'not_registered',
+  'rate_limited',
   'unknown',
 ];
 
@@ -180,10 +188,52 @@ function messageOf(err: unknown): string {
   return String(err ?? '');
 }
 
+/**
+ * The stable `code`s of the crawl-policy errors (`@ever-jobs/common`
+ * `http/crawl/errors.ts`, Spec 1690 §5.5) and the reason each one means:
+ *
+ * - `ERR_CRAWL_QUEUE_TIMEOUT` / `ERR_CRAWL_HOST_COOLING_DOWN` → `rate_limited`:
+ *   we held the request back (no slot in time / the host's `Retry-After`);
+ * - `ERR_CRAWL_ROBOTS_DISALLOWED` → `blocked`: the site's robots.txt refuses us;
+ * - `ERR_CRAWL_EGRESS_BLOCKED` → `bad_input`: the URL points at a private /
+ *   internal address, which no retry will fix.
+ *
+ * Matched on the code, not the message: the messages mention "timeout", "429"
+ * and "blocked", which the text rules below would misread.
+ */
+export const CRAWL_ERROR_SCRAPE_REASONS: Readonly<Record<string, ScrapeReason>> = Object.freeze({
+  ERR_CRAWL_QUEUE_TIMEOUT: 'rate_limited',
+  ERR_CRAWL_HOST_COOLING_DOWN: 'rate_limited',
+  ERR_CRAWL_ROBOTS_DISALLOWED: 'blocked',
+  ERR_CRAWL_EGRESS_BLOCKED: 'bad_input',
+});
+
+/**
+ * The reason for a crawl-policy error code on `err` or on its `cause` chain (an
+ * HTTP library may wrap it, e.g. a DNS-level egress refusal inside an
+ * `AxiosError`), if any.
+ */
+function crawlPolicyReason(err: unknown): ScrapeReason | undefined {
+  let current: unknown = err;
+  for (let depth = 0; depth < 6 && current && typeof current === 'object'; depth++) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === 'string' && Object.prototype.hasOwnProperty.call(CRAWL_ERROR_SCRAPE_REASONS, code)) {
+      return CRAWL_ERROR_SCRAPE_REASONS[code];
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
 export function classifyScrapeError(err: unknown): ScrapeDiagnostics {
   const message = messageOf(err);
   const detail = message.trim().slice(0, MAX_DETAIL) || undefined;
   const m = message.toLowerCase();
+
+  const crawlReason = crawlPolicyReason(err);
+  if (crawlReason) {
+    return new ScrapeDiagnostics(crawlReason, detail);
+  }
 
   if (
     /executable doesn'?t exist|launchpersistentcontext|playwright install|failed to launch|browsertype\.launch|browser has been closed|no usable sandbox|missing dependencies to run browsers/.test(
@@ -237,16 +287,21 @@ const RATE_LIMIT_TEXT = /\b429\b|too many requests|rate[ -]?limit/i;
 
 /**
  * Did this error show the host refusing us: an HTTP 429, 401, 403 or 407, a
- * rate-limit message, or anything {@link classifyScrapeError} calls `blocked`
- * (captcha, challenge, access denied)? Returns the diagnostic to report —
- * `fetch_error` for a rate limit, `blocked` otherwise — or `null` when the
- * error is not a refusal (timeouts, 404s and 5xx are not: the next request may
- * well succeed). A plugin walking detail pages stops at the first refusal
- * instead of spending the rest of its budget on a host that said stop.
+ * rate-limit message, anything {@link classifyScrapeError} calls `blocked`
+ * (captcha, challenge, access denied, a robots.txt refusal under the crawl
+ * policy), or a crawl-policy `rate_limited` (Spec 1690: the host asked us to
+ * back off longer than we wait, or its rate-limit bucket gave no slot in
+ * time)? Returns the diagnostic to report — `rate_limited` for the crawl
+ * policy's own hold-back, `fetch_error` for a rate limit, `blocked`
+ * otherwise — or `null` when the error is not a refusal (timeouts, 404s and
+ * 5xx are not: the next request may well succeed). A plugin walking detail
+ * pages stops at the first refusal instead of spending the rest of its budget
+ * on a host that said stop.
  */
 export function refusalFromScrapeError(err: unknown): ScrapeDiagnostics | null {
   const status = (err as { response?: { status?: unknown } } | null | undefined)?.response?.status;
   const diag = classifyScrapeError(err);
+  if (diag.reason === 'rate_limited') return diag;
   if (status === 429 || (diag.reason !== 'blocked' && RATE_LIMIT_TEXT.test(diag.detail ?? ''))) {
     return new ScrapeDiagnostics('fetch_error', diag.detail ?? 'HTTP 429 Too Many Requests');
   }
@@ -258,10 +313,11 @@ export function refusalFromScrapeError(err: unknown): ScrapeDiagnostics | null {
 
 /**
  * The same test for a diagnostic a plugin already built: `blocked`, an open
- * circuit breaker, or a `fetch_error` whose detail names a rate limit.
+ * circuit breaker, a crawl-policy `rate_limited`, or a `fetch_error` whose
+ * detail names a rate limit.
  */
 export function isRefusalDiagnostics(diag: ScrapeDiagnostics | null | undefined): boolean {
   if (!diag) return false;
-  if (diag.reason === 'blocked' || diag.reason === 'circuit_open') return true;
+  if (diag.reason === 'blocked' || diag.reason === 'circuit_open' || diag.reason === 'rate_limited') return true;
   return diag.reason === 'fetch_error' && RATE_LIMIT_TEXT.test(diag.detail ?? '');
 }

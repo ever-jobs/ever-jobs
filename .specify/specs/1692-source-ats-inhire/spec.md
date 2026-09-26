@@ -199,7 +199,9 @@ Board mode (`descriptionDepth: 'board'`): `id`, `atsId`, `atsType`, `site`, `tit
   is read as the country, as `BR` is. Revisit if a tenant is seen using state codes there.
 - Follow-ups in shared code: BRL support in the salary parser (then drop the `R$` guard); a
   `Brasil` alias in the location parser (then drop the plugin-local rewrite); declare the crawl
-  limits on `@SourcePlugin` once the metadata has a field for them.
+  limits on `@SourcePlugin` once the metadata has a field for them (done at the Spec 1690 merge (`feat/http-politeness`, 2026-09-26):
+  `INHIRE_CRAWL_POLICY` = `{ maxConcurrentPerHost: 2, minIntervalMs: 500 }`; the module-level
+  slot reservation stays).
 
 ## 10. Decisions
 

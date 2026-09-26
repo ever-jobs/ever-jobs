@@ -89,7 +89,7 @@ and nothing tells an operator.
 
 | ID    | Requirement | Target |
 | ----- | ----------- | ------ |
-| NFR-1 | Pacing between index requests of one scrape | 0.5–1.0 s (a caller's slower pacing wins) |
+| NFR-1 | Pacing between index requests of one scrape | 0.5–1.0 s (a caller's slower pacing wins; since the Spec 1690 merge the 0.5 s minimum is also the client's `minIntervalFloorMs`, which no crawl-policy layer shortens) |
 | NFR-2 | Concurrency per scrape | 1 request at a time |
 | NFR-3 | Board requests per scrape | 1 page when `resultsWanted ≤ 100`, else ≤ `ceil(resultsWanted / 100) + 1`; plus at most one `_fr` fallback and one self-heal retry; never more than 50 |
 | NFR-4 | Credential-page fetches | ≤ 3 per refresh, ≥ 2 s apart, ≤ 1 refresh / 10 min / process, no retries, redirects pinned to the site |
@@ -190,7 +190,11 @@ Env switches (read on every call):
 - **D-04 — the window `partial` needs a board that has more.** A request the window cuts short is
   `partial` only when `nbHits` exceeds what was returned; otherwise the board simply ran out.
 - **D-05 — the legacy browser user agent is opt-in only.** It is never switched to automatically
-  on a 403; an operator must set `WTTJ_USER_AGENT_MODE=browser`.
+  on a 403; an operator must set `WTTJ_USER_AGENT_MODE=browser`. Since the Spec 1690 merge
+  (2026-09-26) the plugin's UA is only *declared*: the configured crawl UA goes out under the
+  default `identify` mode, so the switch also opts both clients into `userAgentMode: 'plugin'`
+  (`WTTJ_BROWSER_UA_CRAWL_POLICY`); `EVER_JOBS_CRAWL_USER_AGENT_MODE=strict` still sends the
+  configured UA, and a caller's `userAgent` (caller layer, `strict`) still decides what goes out.
 - **D-06 — no retry with an unchanged key.** If the credential page yields the same key, the query
   is not retried (it would be refused again) and the result is `blocked`.
 - **D-07 — company-mode transport failures now carry a diagnostic.** The jobs are unchanged; the

@@ -1,3 +1,4 @@
+import type { PluginCrawlPolicy } from '@ever-jobs/common';
 import { Site } from '@ever-jobs/models';
 
 /** Site value of this plugin (`Site.SIMPLIFYJOBS = 'simplifyjobs'`). */
@@ -68,6 +69,21 @@ export const SIMPLIFYJOBS_TIMEOUT_SECONDS = 60;
 export const SIMPLIFYJOBS_DEFAULT_RETRIES = 2;
 /** Minimum spacing between two requests of one scrape, in SECONDS; a caller may only lengthen it. */
 export const SIMPLIFYJOBS_MIN_INTERVAL_S = 2;
+
+/**
+ * The plugin's crawl-policy defaults (`@SourcePlugin({ crawl })`, Spec 1690): the
+ * pacing Spec 1694 D-10/D-11 designed (sequential fetches at least
+ * {@link SIMPLIFYJOBS_MIN_INTERVAL_S} seconds apart), now declared for the host
+ * as well, so two concurrent scrapes queue instead of doubling the rate. The
+ * client's `rateDelayMin` is the plugin layer too, which a caller override
+ * replaces inside a scrape context; its `minIntervalFloorMs` is what keeps the
+ * spacing a floor no layer shortens (a caller may only lengthen it). The
+ * identity stays with the global policy.
+ */
+export const SIMPLIFYJOBS_CRAWL_POLICY: PluginCrawlPolicy = {
+  maxConcurrentPerHost: 1,
+  minIntervalMs: SIMPLIFYJOBS_MIN_INTERVAL_S * 1000,
+};
 
 /** Search tokens beyond this many are ignored, which bounds the matching work. */
 export const SIMPLIFYJOBS_MAX_SEARCH_TOKENS = 16;

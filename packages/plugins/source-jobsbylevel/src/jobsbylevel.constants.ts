@@ -1,3 +1,4 @@
+import type { PluginCrawlPolicy } from '@ever-jobs/common';
 import { Site } from '@ever-jobs/models';
 
 /**
@@ -80,6 +81,18 @@ export const JOBSBYLEVEL_MAX_PAGES_CEILING = 25;
  * about 60 requests per minute per IP (`x-ratelimit-limit: 60`).
  */
 export const JOBSBYLEVEL_MIN_INTERVAL_MS = 1_100;
+
+/**
+ * The plugin's crawl-policy defaults (`@SourcePlugin({ crawl })`, Spec 1690), as
+ * Spec 1693 D-12 designed them: one request in flight per host, at least
+ * {@link JOBSBYLEVEL_MIN_INTERVAL_MS} between starts. The module-level pacer is
+ * kept as well (it also paces calls made outside a scrape context); retiring it
+ * is a separate decision. The identity stays with the global policy.
+ */
+export const JOBSBYLEVEL_CRAWL_POLICY: PluginCrawlPolicy = {
+  maxConcurrentPerHost: 1,
+  minIntervalMs: JOBSBYLEVEL_MIN_INTERVAL_MS,
+};
 
 /** Detail fetches per `descriptionDepth`. The default stays below the repo-wide 25. */
 export const JOBSBYLEVEL_DETAIL_BUDGET: Readonly<Record<'board' | 'detail-25' | 'detail-all', number>> = {

@@ -131,6 +131,7 @@ describe('test:core coverage (Spec 1689)', () => {
     'apps/api/__tests__/integration/source-ats-batch-1.integration.spec.ts',
     'apps/mcp/__tests__/tools.spec.ts',
     'apps/cli/__tests__/search-filters.command.spec.ts',
+    'apps/cli/__tests__/crawl-options.spec.ts',
   ])('includes %s', (file) => {
     expect(include.test(file)).toBe(true);
   });
@@ -140,6 +141,7 @@ describe('test:core coverage (Spec 1689)', () => {
     'packages/plugins/dedup-hybrid/__tests__/dedup-perf.spec.ts',
     'apps/api/__tests__/search.e2e-spec.ts',
     'apps/api/__tests__/e2e/source-ats-batch-1.e2e-spec.ts',
+    'apps/cli/__tests__/search.e2e-spec.ts',
     'scripts/__tests__/docs-lint.spec.ts',
   ])('leaves %s to its own job', (file) => {
     const ignored = file.includes('e2e-spec');

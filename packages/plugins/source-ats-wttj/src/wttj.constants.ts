@@ -1,3 +1,5 @@
+import type { PluginCrawlPolicy } from '@ever-jobs/common';
+
 /**
  * Constants for the Welcome to the Jungle (WTTJ) careers platform.
  *
@@ -166,6 +168,22 @@ export const WTTJ_BROWSER_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129 Safari/537.36';
 
 /**
+ * The crawl-policy opt-in (Spec 1690 §4.2) both clients get only while
+ * `WTTJ_USER_AGENT_MODE=browser` is set. The plugin's User-Agent (the `userAgent`
+ * option and `setHeaders()`) is a *declared* UA: under the default `identify` mode
+ * the configured crawl UA goes out instead unless the plugin layer opts into
+ * `userAgentMode: 'plugin'`. With it, the switch sends {@link WTTJ_BROWSER_USER_AGENT}
+ * again. `strict` still wins: `EVER_JOBS_CRAWL_USER_AGENT_MODE=strict` (or the `strict`
+ * preset) sends the configured UA, and a caller's `userAgent` is sent as the caller
+ * layer (`strict`).
+ */
+export const WTTJ_BROWSER_UA_CRAWL_POLICY: PluginCrawlPolicy = {
+  userAgentMode: 'plugin',
+  userAgentReason:
+    'WTTJ_USER_AGENT_MODE=browser set by the operator: send the pre-Spec-1705 browser User-Agent (Spec 1705 D-05).',
+};
+
+/**
  * Default request headers. The Algolia DSN allow-lists the WTTJ web origin via the
  * Referer header (a query without it is rejected as "Method not allowed with this
  * referer"); the search credentials travel in the `x-algolia-*` headers. Each query also
@@ -186,7 +204,9 @@ export const WTTJ_HEADERS: Record<string, string> = {
 /**
  * Pacing between requests from one scrape, in seconds (Spec 1705 A3). The shared
  * HttpClient waits a random delay in this range before every request after the first.
- * A caller's larger `rateDelayMin` / `rateDelayMax` wins.
+ * A caller's larger `rateDelayMin` / `rateDelayMax` wins. Since the Spec 1690 merge the
+ * range is the crawl policy's plugin layer (a caller override replaces it), so the
+ * minimum is also the client's `minIntervalFloorMs`, which no layer shortens.
  */
 export const WTTJ_RATE_DELAY_MIN_SECONDS = 0.5;
 export const WTTJ_RATE_DELAY_MAX_SECONDS = 1.0;

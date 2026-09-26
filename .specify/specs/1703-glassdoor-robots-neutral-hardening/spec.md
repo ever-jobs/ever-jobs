@@ -150,8 +150,11 @@ parseCompensation(header, fallbackCurrency = 'USD') // default unchanged for exi
   disallows, whenever the homepage is not challenged (for example through a caller's proxy). If
   that is not acceptable, gate Glassdoor out of the defaults behind a flag; do not delete it.
   (default — proceeding: unchanged.)
-- The crawl manifest (`maxConcurrentPerHost: 1, minIntervalMs: 5000`) waits for the `crawl`
-  field on `@SourcePlugin`.
+- The crawl manifest (`maxConcurrentPerHost: 1, minIntervalMs: 5000`) waited for the `crawl`
+  field on `@SourcePlugin`, which exists since the Spec 1690 merge (`feat/http-politeness`, 2026-09-26); declaring it is a follow-up.
+  robots.txt compliance for `/graph` is available through the crawl policy
+  (`EVER_JOBS_CRAWL_ROBOTS_TXT=respect`, or per site
+  `EVER_JOBS_CRAWL_POLICIES={"sites":{"glassdoor":{"robotsTxt":"respect"}}}`), see Q-099.
 
 ## 10. Decisions
 

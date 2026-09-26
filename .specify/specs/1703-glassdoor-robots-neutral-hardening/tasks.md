@@ -18,4 +18,4 @@
 - [x] T14 — Red control: disabling the fail-fast fails 4 service cases; disabling the three pagination stops fails 5 A3 cases.
 - [x] T15 — Tests: utils 66/66, service 46/46; `tsc --project tsconfig.typecheck.json` clean for this plugin.
 - [x] T16a — Integrator: `docs/index.md` / `docs/log.md` rows added (2026-09-25).
-- [ ] T16b — Owner decision: keep Glassdoor in the default site list or gate it behind a flag (spec §9). Recorded as Q-099 in `docs/questions.md`, open. Default A relies on `EVER_JOBS_CRAWL_ROBOTS_TXT=respect`, which arrives with Spec 1690 (branch `feat/http-politeness`, not merged here): until that branch merges, the switch does nothing.
+- [ ] T16b — Owner decision: keep Glassdoor in the default site list or gate it behind a flag (spec §9). Recorded as Q-099 in `docs/questions.md`, open. Default A relies on `EVER_JOBS_CRAWL_ROBOTS_TXT=respect` (Spec 1690), which this branch carries since the `feat/http-politeness` merge (2026-09-26): with it set, the disallowed `/graph` POST is refused before it is sent and reported as `blocked`.

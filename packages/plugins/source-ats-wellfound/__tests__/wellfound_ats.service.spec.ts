@@ -174,6 +174,19 @@ describe('WellfoundAtsService', () => {
     expect(res.jobs).toHaveLength(2);
   });
 
+  it('honors offset (returns the requested window)', async () => {
+    stub([
+      {
+        html: '<html></html>',
+        nextData: apolloPage([listing({ id: 'a' }), listing({ id: 'b' }), listing({ id: 'c' })]),
+      },
+    ]);
+    const res = await service.scrape(
+      new ScraperInputDto({ companySlug: 'chipmotors', resultsWanted: 1, offset: 1 }),
+    );
+    expect(res.jobs.map((j) => j.atsId)).toEqual(['b']);
+  });
+
   it('reports blocked when the page is a Cloudflare challenge', async () => {
     stub([
       {

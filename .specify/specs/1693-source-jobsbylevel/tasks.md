@@ -11,6 +11,6 @@
 - [x] T8 — Live e2e (two host requests). Acceptance: non-empty results with `jobsbylevel-` ids, canonical links, levels in 1-4, remote search all remote.
 - [x] T9 — (integrator) Register `Site.JOBSBYLEVEL`, the plugin module, the path alias, the jest mapper and the manifest entry; switch `JOBSBYLEVEL_SITE` to `Site.JOBSBYLEVEL`.
 - [x] T10 — (integrator) Declare `aiLevel?: number | null` on `JobPostDto`; GraphQL field as a follow-up.
-- [ ] T11 — (follow-up) When `@SourcePlugin` gains a crawl manifest, declare `maxConcurrentPerHost: 1, minIntervalMs: 1100` and retire the local pacer.
+- [ ] T11 — (follow-up) When `@SourcePlugin` gains a crawl manifest, declare `maxConcurrentPerHost: 1, minIntervalMs: 1100` and retire the local pacer. Manifest declared at the Spec 1690 merge (2026-09-26: `JOBSBYLEVEL_CRAWL_POLICY`, `__tests__/jobsbylevel.crawl.spec.ts`); the local pacer is kept (it also paces calls outside a scrape context; retiring it is a removal left to the owner).
 
 Integration 2026-09-25: registered as `Site.JOBSBYLEVEL` / `JobsByLevelModule`; `aiLevel?: number | null` declared on `JobPostDto` (GraphQL field still a follow-up); `docs/index.md` / `docs/log.md` rows added.

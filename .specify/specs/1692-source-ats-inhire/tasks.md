@@ -51,7 +51,7 @@
 
 - Tests import the service by relative path until the path alias is registered.
 - Follow-ups (not in this spec): BRL in the shared salary parser, a `Brasil` alias in the location
-  parser, crawl limits on `@SourcePlugin` once the metadata supports them, multi-career-page
+  parser, crawl limits on `@SourcePlugin` once the metadata supports them (done at the Spec 1690 merge, 2026-09-26: `INHIRE_CRAWL_POLICY` = at most 2 in flight, 500 ms apart), multi-career-page
   tenants (Q2).
 
 Integration 2026-09-25: registered as `Site.INHIRE` / `InhireModule` (site enum, plugin index, `tsconfig.base.json`, `jest.config.js`, `tool_manifest.json`, README); the specs use `Site.INHIRE` and the package alias; `docs/index.md` / `docs/log.md` rows added.

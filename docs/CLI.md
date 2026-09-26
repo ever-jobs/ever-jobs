@@ -101,8 +101,8 @@ ever-jobs search -s linkedin -s indeed -q "Backend" --analyze
 | `--timeout`                    | —     | `<seconds>`  | 60       | Request timeout per source                       |
 | `--proxy`                      | `-p`  | `[urls...]`  | —        | Proxy URLs for rotation                          |
 | `--ca-cert`                    | —     | `<path>`     | —        | CA certificate path for proxies                  |
-| `--user-agent`                 | —     | `<ua>`       | —        | Custom User-Agent string                         |
-| `--rate-delay-min`             | —     | `<seconds>`  | —        | Minimum delay between requests                   |
+| `--user-agent`                 | —     | `<ua>`       | —        | Custom User-Agent string (implies `--user-agent-mode strict` unless one is given) |
+| `--rate-delay-min`             | —     | `<seconds>`  | —        | Minimum delay between requests (per host bucket) |
 | `--rate-delay-max`             | —     | `<seconds>`  | —        | Maximum delay between requests                   |
 | `--format`                     | `-f`  | `<format>`   | json     | `json`, `csv`, `table`, `summary`                |
 | `--output`                     | `-o`  | `<file>`     | stdout   | Write output to file                             |
@@ -113,6 +113,16 @@ ever-jobs search -s linkedin -s indeed -q "Backend" --analyze
 | `--stdin`                      | —     | —            | false    | Read JSON input from stdin                       |
 | `--company-slug`               | —     | `<slug>`     | —        | Company slug for ATS board scraping              |
 | `--upwork-auth-json`           | —     | `<json>`     | —        | Upwork auth as JSON string                       |
+| `--crawl`                      | —     | `<json>`     | —        | Per-request crawl policy (any field; see [CRAWL_POLICY.md](./CRAWL_POLICY.md)) |
+| `--user-agent-mode`            | —     | `<mode>`     | identify | `identify`, `strict`, `plugin`                   |
+| `--proxy-rotation`             | —     | `<mode>`     | per-host | `per-host`, `per-scrape`, `per-request`, `off`   |
+| `--max-per-host`               | —     | `<n>`        | 4        | Max requests in flight per host bucket (0 = unlimited) |
+| `--min-interval-ms`            | —     | `<ms>`       | 100      | Minimum gap between request starts per host bucket |
+| `--crawl-retries`              | —     | `<n>`        | 2        | Retries per request on 429/5xx                   |
+| `--robots-txt`                 | —     | `<mode>`     | off      | `off`, `crawl-delay`, `respect`                  |
+| `--discovery`                  | —     | `<mode>`     | auto     | `auto`, `sitemap`, `listing` (e.g. Softy)        |
+| `--crawl-preset`               | —     | `<preset>`   | polite   | `polite`, `legacy` (pre-1690), `strict` — sets `EVER_JOBS_CRAWL_PRESET` for this run |
+| `--caller-overrides`           | —     | `<mode>`     | any      | `any`, `stricter`, `none` — sets `EVER_JOBS_CRAWL_CALLER_OVERRIDES` for this run |
 
 `--job-type` (here and on `compare`) takes one of: `fulltime`, `parttime`, `contract`, `temporary`,
 `internship`, `permanent`, `apprenticeship`, `perdiem`, `nights`, `summer`, `volunteer`, `other`.
@@ -166,6 +176,7 @@ The compare command outputs:
 | `--job-type`       | —     | `<type>`     | —                 | Job type filter      |
 | `--rate-delay-min` | —     | `<seconds>`  | —                 | Min request delay    |
 | `--rate-delay-max` | —     | `<seconds>`  | —                 | Max request delay    |
+| `--crawl` and the other crawl flags | — | — | — | Same as `search` (`--crawl`, `--user-agent-mode`, `--proxy-rotation`, `--max-per-host`, `--min-interval-ms`, `--crawl-retries`, `--robots-txt`, `--discovery`, `--crawl-preset`, `--caller-overrides`) |
 | `--output`         | `-o`  | `<file>`     | stdout            | Write output to file |
 | `--verbose`        | `-v`  | —            | false             | Verbose output       |
 
@@ -258,4 +269,5 @@ Direct company career page scrapers (Amazon, Apple, Microsoft, Nvidia, etc.).
 | ------------------------------ | ------------------------------------------------------ |
 | `EVER_JOBS_API_URL`            | API base URL (default: `http://localhost:3001`)        |
 | `HTTP_PROXY` / `HTTPS_PROXY`   | Global proxy configuration                             |
+| `EVER_JOBS_CRAWL_*`            | Crawl policy (identity, pacing, proxies, retries, robots.txt, egress guard) — the CLI obeys the same variables as the API; full list in [CRAWL_POLICY.md](./CRAWL_POLICY.md) |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Set to `0` to skip TLS verification (development only) |

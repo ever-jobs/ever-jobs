@@ -61,6 +61,8 @@ export class OctbrAiService implements IScraper {
 
     const jobs: JobPostDto[] = [];
     const resultsWanted = input.resultsWanted ?? 100;
+    // Plugins own `offset` (the core does not apply it).
+    const offset = Math.max(0, Math.floor(Number(input.offset) || 0));
 
     try {
       // Spec 1689 — no caller `caCert`: the shared client turns ANY caCert
@@ -82,11 +84,14 @@ export class OctbrAiService implements IScraper {
       const listed: { job: OctbrAiListJob; department: string }[] = [];
       for (const group of groups) {
         for (const job of group.jobs ?? []) {
-          if (listed.length >= resultsWanted) break;
+          if (listed.length >= offset + resultsWanted) break;
           if (!job?.title) continue;
           listed.push({ job, department: group.department ?? '' });
         }
       }
+
+      // Only the requested window gets detail requests.
+      listed.splice(0, offset);
 
       const detailUrls = listed.map(({ job }) => this.detailUrl(job, company));
       const details = await this.fetchDetails(client, detailUrls);

@@ -8,10 +8,13 @@ import {
 import {
   postProcessCompensation, postedSortKey, siteFromDomain, deriveSiteToken, resolveCompanyUrl,
   resolveSearchLocations, clampMaxLocations, runWithHttpMemo, httpMemoMethodsFromEnv,
+  runWithScrapeContext, readCrawlPolicyEnv, getEffectiveCrawlPolicy, crawlCallerProxiesAllowed,
+  type CrawlPolicyOverride, type PluginCrawlPolicy, type ScrapeContext,
 } from '@ever-jobs/common';
 import { ConfigService } from '@nestjs/config';
-import { PluginRegistry, CircuitBreakerInterceptor } from '@ever-jobs/plugin';
+import { PluginRegistry, CircuitBreakerInterceptor, CircuitBreakerService } from '@ever-jobs/plugin';
 import { MetricsService } from '../metrics/metrics.service';
+import { buildCallerCrawlOverride } from './crawl-policy.mapping';
 
 /**
  * Default ceiling on simultaneously-dispatched sources (Spec 5026).
@@ -54,6 +57,25 @@ export const DEFAULT_SEARCH_DEADLINE_MS = 120_000;
 export const MAX_SEARCH_CONCURRENCY = 512;
 
 /**
+ * `code` of the `AbortSignal` reason a scrape receives when the search deadline
+ * abandons it (Spec 1690 §4.6). HttpClient/BrowserPool see the signal through
+ * the scrape context and cancel queued and in-flight requests.
+ */
+export const ERR_SCRAPE_DEADLINE_ABORTED = 'ERR_SCRAPE_DEADLINE_ABORTED';
+
+/** Per-dispatch options for {@link JobsService} `scrapeOne` (Spec 1690). */
+interface ScrapeOneOptions {
+  /**
+   * The caller's crawl override, built once per search. When the key is absent
+   * it is built from `input` (a direct call); `undefined` means "caller set
+   * nothing".
+   */
+  callerCrawl?: CrawlPolicyOverride;
+  /** Aborted when the search deadline abandons this source. */
+  signal?: AbortSignal;
+}
+
+/**
  * Normalise a configured concurrency into `[1, MAX_SEARCH_CONCURRENCY]`.
  * Non-finite or out-of-range input resolves to
  * {@link DEFAULT_SEARCH_CONCURRENCY} — silently honouring `Infinity` would
@@ -76,11 +98,15 @@ export function clampConcurrency(raw: unknown): number {
  * `searchJobs` handler is pinned — exactly the zombie-handler failure mode the
  * deadline was added to prevent.
  *
- * The underlying `scrapeOne` promise cannot be cancelled (no AbortSignal in
- * the plugin contract yet — see spec task T11), so it keeps running detached
- * until it settles or its own HTTP timeout fires. What this guarantees is that
- * the *handler* returns and the response is sent, rather than the request
- * living as long as the slowest hung socket.
+ * The plugin contract has no AbortSignal (see Spec 5026 task T11), so the
+ * `scrapeOne` promise itself cannot be cancelled. Since Spec 1690 `onExpire`
+ * fires when the deadline abandons the source: `JobsService` uses it to abort
+ * the scrape's `AbortController`, which the scrape context hands to every
+ * HttpClient/BrowserPool call, so queued and in-flight requests stop instead of
+ * running on detached (`EVER_JOBS_CRAWL_ABORT_ON_DEADLINE=false` restores the
+ * detached behaviour). Either way this guarantees that the *handler* returns
+ * and the response is sent, rather than the request living as long as the
+ * slowest hung socket.
  *
  * The timer is always cleared, so a fast source leaves nothing behind.
  */
@@ -88,16 +114,23 @@ function withDeadline<T>(
   promise: Promise<T>,
   deadlineAt: number,
   site: Site,
+  onExpire?: () => void,
 ): Promise<T> {
   const remaining = deadlineAt - Date.now();
   if (!Number.isFinite(remaining)) return promise;
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expiry = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`${site}: abandoned (search deadline exceeded mid-flight)`)),
-      Math.max(0, remaining),
-    );
+    timer = setTimeout(() => {
+      // Reject first so the handler always sees the deadline error, not
+      // whatever the aborted scrape rejects with a few microtasks later.
+      reject(new Error(`${site}: abandoned (search deadline exceeded mid-flight)`));
+      try {
+        onExpire?.();
+      } catch {
+        // An abort hook must never turn a deadline into an uncaught exception.
+      }
+    }, Math.max(0, remaining));
   });
 
   return Promise.race([promise, expiry]).finally(() => {
@@ -128,6 +161,13 @@ export const SEARCH_LOCATION_INTERVAL_ENV = 'EVER_JOBS_SEARCH_LOCATION_INTERVAL_
  * locally, so N locations fetch the same board N times. The calls are already
  * sequential per source; this spaces them so a board never sees a burst from
  * one search. Sources still run in parallel with each other.
+ *
+ * Since Spec 1690 the crawl policy's host limiter also paces every request per
+ * host (bucket concurrency, minimum interval, whole-bucket back-off after a
+ * 429/503), and the Spec 1700 response memo answers repeated board fetches
+ * without a request. This pause is kept on top of both as a per-source gap
+ * between location calls; `EVER_JOBS_SEARCH_LOCATION_INTERVAL_MS=0` leaves the
+ * pacing to the limiter (and a plugin's declared `minRequestIntervalMs`) alone.
  */
 export const DEFAULT_SEARCH_LOCATION_INTERVAL_MS = 500;
 
@@ -209,15 +249,22 @@ interface LocationOutcome {
   readonly notAttempted?: LocationRefusal;
   /** Set when the call was not made because the search deadline had passed. */
   readonly deadlineSkipped?: boolean;
+  /**
+   * Set when the search deadline abandoned the call mid-flight and its scrape's
+   * outstanding requests were aborted (Spec 1690 §4.6).
+   */
+  readonly deadlineAborted?: boolean;
 }
 
 const RATE_LIMIT_TEXT = /\b429\b|too many requests|rate[ -]?limit/i;
 
 /**
  * Did this thrown error show the source refusing us (Spec 1700)? A 429, an
- * open circuit breaker, or anything `classifyScrapeError` calls `blocked`
- * (401/403/407, captcha, challenge). Timeouts, 5xx and 404s are not refusals:
- * the next location may well succeed.
+ * open circuit breaker, anything `classifyScrapeError` calls `blocked`
+ * (401/403/407, captcha, challenge, a robots.txt refusal under the crawl
+ * policy) or `rate_limited` (Spec 1690: the host asked us to back off longer
+ * than we wait, or its rate-limit bucket gave no slot in time). Timeouts, 5xx
+ * and 404s are not refusals: the next location may well succeed.
  */
 function refusalFromError(err: unknown): ScrapeReason | undefined {
   const e = err as { code?: unknown; response?: { status?: unknown } } | null | undefined;
@@ -225,6 +272,7 @@ function refusalFromError(err: unknown): ScrapeReason | undefined {
   if (e?.response?.status === 429) return 'fetch_error';
   const diag = classifyScrapeError(err);
   if (diag.reason === 'blocked') return 'blocked';
+  if (diag.reason === 'rate_limited') return 'rate_limited';
   if (diag.reason === 'fetch_error' && RATE_LIMIT_TEXT.test(diag.detail ?? '')) return 'fetch_error';
   return undefined;
 }
@@ -235,7 +283,9 @@ function refusalFromError(err: unknown): ScrapeReason | undefined {
  */
 function refusalFromDiagnostics(diag: ScrapeDiagnostics | undefined): ScrapeReason | undefined {
   if (!diag) return undefined;
-  if (diag.reason === 'blocked' || diag.reason === 'circuit_open') return diag.reason;
+  if (diag.reason === 'blocked' || diag.reason === 'circuit_open' || diag.reason === 'rate_limited') {
+    return diag.reason;
+  }
   if (diag.reason === 'fetch_error' && RATE_LIMIT_TEXT.test(diag.detail ?? '')) return 'fetch_error';
   return undefined;
 }
@@ -468,6 +518,18 @@ export class JobsService implements OnModuleInit {
         `): ${selectedScrapers.map((s) => s.site).join(', ')}`,
     );
 
+    // Spec 1690 §4.1 — the caller's crawl policy (the `crawl` object plus the
+    // legacy flat fields the caller actually sent), built and validated once
+    // per search. One shared object also lets the policy resolver memoise per
+    // caller instead of per source.
+    const callerCrawl = this.buildCallerCrawl(input);
+    if (input.proxies?.length && this.callerProxies(input) === undefined) {
+      this.logger.warn(
+        `Search proxies ignored (${input.proxies.length} supplied): EVER_JOBS_CRAWL_CALLER_PROXIES=none ` +
+          `(the default unless EVER_JOBS_CRAWL_CALLER_OVERRIDES=any)`,
+      );
+    }
+
     const results: PromiseSettledResult<JobResponseDto>[] = new Array(
       selectedScrapers.length,
     );
@@ -478,6 +540,7 @@ export class JobsService implements OnModuleInit {
       : [];
     let cursor = 0;
     let skipped = 0;
+    let aborted = 0;
 
     // Shared-cursor worker pool — same shape as
     // `LivenessHttpService.checkBatch` (Spec 721), which is the established
@@ -501,8 +564,10 @@ export class JobsService implements OnModuleInit {
             searchLocations,
             deadlineAt,
             intervalMs,
+            callerCrawl,
           );
           skipped += outcomes.filter((o) => o.deadlineSkipped).length;
+          aborted += outcomes.filter((o) => o.deadlineAborted).length;
           locationOutcomes[index] = outcomes;
           continue;
         }
@@ -522,6 +587,10 @@ export class JobsService implements OnModuleInit {
           continue;
         }
 
+        // Spec 1690 §4.6 — one AbortController per scrape. Its signal travels in
+        // the scrape context; the deadline aborts it so the abandoned source's
+        // queued and in-flight requests stop.
+        const controller = new AbortController();
         try {
           // Race against the deadline as well as checking it before starting:
           // a source that never settles would otherwise keep this worker (and
@@ -529,9 +598,12 @@ export class JobsService implements OnModuleInit {
           results[index] = {
             status: 'fulfilled',
             value: await withDeadline(
-              this.scrapeOne(site, scraper, input),
+              this.scrapeOne(site, scraper, input, { callerCrawl, signal: controller.signal }),
               deadlineAt,
               site,
+              () => {
+                if (this.abortAtDeadline(site, controller)) aborted++;
+              },
             ),
           };
         } catch (err) {
@@ -555,6 +627,13 @@ export class JobsService implements OnModuleInit {
           : `Search deadline (${deadlineMs}ms) exceeded — skipped ${skipped} of ` +
               `${selectedScrapers.length} sources. Raise EVER_JOBS_SEARCH_DEADLINE_MS ` +
               `or narrow siteType to cover more of the catalogue.`,
+      );
+    }
+    if (aborted > 0) {
+      this.logger.warn(
+        `Search deadline (${deadlineMs}ms) abandoned ${aborted} in-flight source(s); ` +
+          `their outstanding requests were aborted (EVER_JOBS_CRAWL_ABORT_ON_DEADLINE=false ` +
+          `lets them run on detached).`,
       );
     }
     // Aggregate results from fulfilled searches + derive a per-source outcome
@@ -689,11 +768,12 @@ export class JobsService implements OnModuleInit {
     locations: readonly string[],
     deadlineAt: number,
     intervalMs: number,
+    callerCrawl?: CrawlPolicyOverride,
   ): Promise<LocationOutcome[]> {
     // Optional call: test doubles of the registry often omit getMetadata.
     const pauseMs = locationPauseMs(intervalMs, this.registry.getMetadata?.(site)?.minRequestIntervalMs);
     const { result, stats } = await runWithHttpMemo(
-      () => this.runLocationLoop(site, scraper, input, locations, deadlineAt, pauseMs),
+      () => this.runLocationLoop(site, scraper, input, locations, deadlineAt, pauseMs, callerCrawl),
       { methods: httpMemoMethodsFromEnv() },
     );
     if (stats.hits > 0) {
@@ -705,7 +785,16 @@ export class JobsService implements OnModuleInit {
     return result;
   }
 
-  /** The body of {@link scrapeSiteAcrossLocations}, inside its memo scope. */
+  /**
+   * The body of {@link scrapeSiteAcrossLocations}, inside its memo scope.
+   *
+   * Spec 1690: every location call goes through `scrapeOne`, so it runs in its
+   * own scrape context (site, plugin crawl manifest, the caller's crawl override
+   * built once per search, caller proxies) with its own `AbortController`, which
+   * the search deadline aborts exactly as in the single-location pool — queued
+   * and in-flight requests of an abandoned location stop, and the remaining
+   * locations are skipped by the deadline check.
+   */
   private async runLocationLoop(
     site: Site,
     scraper: IScraper,
@@ -713,6 +802,7 @@ export class JobsService implements OnModuleInit {
     locations: readonly string[],
     deadlineAt: number,
     intervalMs: number,
+    callerCrawl?: CrawlPolicyOverride,
   ): Promise<LocationOutcome[]> {
     const out: LocationOutcome[] = [];
     let refusal: LocationRefusal | undefined;
@@ -740,17 +830,22 @@ export class JobsService implements OnModuleInit {
       }
       attempted = true;
       const perLocation = new ScraperInputDto({ ...input, location, locations: undefined });
+      const controller = new AbortController();
+      let deadlineAborted = false;
       try {
         const value = await withDeadline(
-          this.scrapeOne(site, scraper, perLocation),
+          this.scrapeOne(site, scraper, perLocation, { callerCrawl, signal: controller.signal }),
           deadlineAt,
           site,
+          () => {
+            deadlineAborted = this.abortAtDeadline(site, controller);
+          },
         );
         out.push({ location, settled: { status: 'fulfilled', value } });
         const reason = refusalFromDiagnostics(value.diagnostics);
         if (reason) refusal = { reason, trigger: location };
       } catch (err) {
-        out.push({ location, settled: { status: 'rejected', reason: err } });
+        out.push({ location, settled: { status: 'rejected', reason: err }, deadlineAborted });
         const reason = refusalFromError(err);
         if (reason) refusal = { reason, trigger: location };
       }
@@ -830,27 +925,62 @@ export class JobsService implements OnModuleInit {
 
   /**
    * Dispatch a single source. Extracted from the fan-out loop by Spec 5026 so
-   * the worker pool has a plain unit of work to schedule; the body is
-   * unchanged from the prior inline closure.
+   * the worker pool has a plain unit of work to schedule.
+   *
+   * Spec 1690 §4.1/§4.6: the scrape runs inside a scrape context carrying the
+   * site, the plugin's `@SourcePlugin({ crawl })` defaults, the caller's crawl
+   * override, the deadline `AbortSignal` and the caller's proxies — every
+   * HttpClient/BrowserPool call the plugin makes reads its policy from there.
    */
   private async scrapeOne(
     site: Site,
     scraper: IScraper,
     input: ScraperInputDto,
+    options: ScrapeOneOptions = {},
   ): Promise<JobResponseDto> {
-    // Resolve retry policy for this source
+    // Resolve retry policy for this source. Kept for backward compatibility:
+    // plugins still receive a DTO with these filled in. Inside the scrape
+    // context HttpClient ignores them (the context carries the policy), and
+    // these FILLED values never become caller overrides — only what the
+    // caller actually sent does (`callerCrawl`, built from `input`).
     const globalRetry = this.configService.get('retry');
     const perSourceRetry = globalRetry.perSource?.[site] || {};
 
+    // Spec 1690 §4.4: a caller's proxies reach every plugin client through the
+    // scrape context — unless the operator refuses them
+    // (EVER_JOBS_CRAWL_CALLER_PROXIES=none; the default whenever caller
+    // overrides are not `any`). Refused proxies reach neither the context nor the
+    // DTO a plugin could forward to createHttpClient.
+    const proxies = this.callerProxies(input);
     const scraperInput = new ScraperInputDto({
       ...input,
+      proxies,
       retries: input.retries ?? perSourceRetry.retries ?? globalRetry.defaultRetries,
       retryDelay: input.retryDelay ?? perSourceRetry.delayMs ?? globalRetry.defaultDelayMs,
       retryBackoff: input.retryBackoff ?? perSourceRetry.backoff ?? globalRetry.defaultBackoff,
       retryMaxDelay: input.retryMaxDelay ?? perSourceRetry.maxDelayMs ?? 30000,
     });
 
-    this.logger.log(`Starting search for ${site} (retries=${scraperInput.retries}, backoff=${scraperInput.retryBackoff})`);
+    const signal = options.signal;
+    const scrapeContext: ScrapeContext = {
+      site,
+      plugin: this.pluginCrawlPolicy(site),
+      caller: 'callerCrawl' in options ? options.callerCrawl : this.buildCallerCrawl(input),
+      signal,
+      proxies,
+    };
+    // Spec 1690 §4.6 — once the deadline aborted this scrape, its failure says
+    // nothing about the source's health: mark it circuit-neutral so the
+    // breaker counts it neither as a failure nor as a success.
+    const dispatch = async (): Promise<JobResponseDto> => {
+      try {
+        return await runWithScrapeContext(scrapeContext, () => scraper.scrape(scraperInput));
+      } catch (err) {
+        throw signal?.aborted ? CircuitBreakerService.markNeutral(err) : err;
+      }
+    };
+
+    this.logger.log(`Starting search for ${site} (${this.describeEffectivePolicy(scrapeContext, scraperInput)})`);
     const scraperStop = this.metrics.scraperDuration.startTimer({ site });
     try {
       // Spec 005 / T04 — wrap the per-source dispatch in the circuit
@@ -860,8 +990,8 @@ export class JobsService implements OnModuleInit {
       // operators can distinguish "source down" from "we stopped
       // calling source" on the dashboard.
       const response = this.circuitBreaker
-        ? await this.circuitBreaker.wrap(site, () => scraper.scrape(scraperInput))
-        : await scraper.scrape(scraperInput);
+        ? await this.circuitBreaker.wrap(site, dispatch)
+        : await dispatch();
       scraperStop();
       // Derive the metric from the diagnostic rather than from the promise
       // settling. A plugin that swallows its error resolves normally, so a
@@ -881,20 +1011,91 @@ export class JobsService implements OnModuleInit {
     } catch (err: any) {
       scraperStop();
       const isCircuitOpen = err?.code === ERR_SOURCE_CIRCUIT_OPEN;
+      // Spec 1690 §4.6 — we cancelled it at the search deadline; nobody is
+      // waiting for this result any more.
+      const isDeadlineAbort = !isCircuitOpen && signal?.aborted === true;
       this.metrics.scraperRequestsTotal.inc({
         site,
-        status: isCircuitOpen ? 'circuit_open' : 'error',
+        status: isCircuitOpen ? 'circuit_open' : isDeadlineAbort ? 'deadline_aborted' : 'error',
       });
       if (isCircuitOpen) {
         // Breaker short-circuits are an *expected* fan-out outcome
         // for a degraded source — log at warn, not error, and keep
         // the message terse so logs stay readable.
         this.logger.warn(`${site}: skipped (circuit open)`);
+      } else if (isDeadlineAbort) {
+        this.logger.warn(`${site}: aborted at the search deadline (${err?.message ?? err})`);
       } else {
         this.logger.error(`${site} search failed: ${err.message}`);
       }
       throw err;
     }
+  }
+
+  /**
+   * The caller's crawl override for a search (Spec 1690 §4.1): the `crawl`
+   * object plus the legacy flat fields the caller actually sent, validated.
+   * Problems are logged once here rather than once per source.
+   */
+  private buildCallerCrawl(input: ScraperInputDto): CrawlPolicyOverride | undefined {
+    const { override, warnings } = buildCallerCrawlOverride(input);
+    if (warnings.length > 0) {
+      this.logger.warn(`Search crawl policy: ${warnings.join('; ')}`);
+    }
+    return override;
+  }
+
+  /**
+   * The caller's `proxies`, when the operator lets callers supply them
+   * (`EVER_JOBS_CRAWL_CALLER_PROXIES`, Spec 1690 §4.4); otherwise `undefined`.
+   */
+  private callerProxies(input: ScraperInputDto): string[] | undefined {
+    if (!input.proxies?.length) return input.proxies;
+    return crawlCallerProxiesAllowed(readCrawlPolicyEnv()) ? input.proxies : undefined;
+  }
+
+  /**
+   * The retry/pacing figures this source actually runs under — the crawl policy
+   * resolved for the site in its scrape context (Spec 1690), not the DTO values
+   * filled in for backward compatibility, which HttpClient ignores inside the
+   * context. Falls back to those, labelled, if the policy cannot be resolved.
+   */
+  private describeEffectivePolicy(scrapeContext: ScrapeContext, scraperInput: ScraperInputDto): string {
+    try {
+      const policy = runWithScrapeContext(scrapeContext, () => getEffectiveCrawlPolicy());
+      return (
+        `retries=${policy.retries}, backoff=${policy.retryBackoff}, ` +
+        `maxPerHost=${policy.maxConcurrentPerHost}, minIntervalMs=${policy.minIntervalMs}`
+      );
+    } catch {
+      return `DTO retries=${scraperInput.retries}, DTO backoff=${scraperInput.retryBackoff}`;
+    }
+  }
+
+  /**
+   * The plugin's `@SourcePlugin({ crawl })` defaults, if it declares any. The
+   * optional call keeps registry stand-ins without `getMetadata` (test stubs)
+   * working.
+   */
+  private pluginCrawlPolicy(site: Site): PluginCrawlPolicy | undefined {
+    return this.registry.getMetadata?.(site)?.crawl;
+  }
+
+  /**
+   * Abort a scrape the search deadline just abandoned (Spec 1690 §4.6), unless
+   * `EVER_JOBS_CRAWL_ABORT_ON_DEADLINE=false`. Returns whether it aborted.
+   */
+  private abortAtDeadline(site: Site, controller: AbortController): boolean {
+    if (controller.signal.aborted || !readCrawlPolicyEnv().abortOnDeadline) {
+      return false;
+    }
+    const reason = Object.assign(
+      new Error(`${site}: aborted (search deadline exceeded)`),
+      { name: 'AbortError', code: ERR_SCRAPE_DEADLINE_ABORTED, site },
+    );
+    controller.abort(reason);
+    this.logger.debug(`${site}: search deadline passed — aborted its outstanding requests`);
+    return true;
   }
 
   /**

@@ -31,7 +31,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { searchJobs, getJobDetails, listSources, searchRemoteJobs, getSalaryInsights, compareSources, JobSearchParams } from './tools';
+import { searchJobs, getJobDetails, listSources, searchRemoteJobs, getSalaryInsights, compareSources, JobSearchParams, CRAWL_POLICY_INPUT_SCHEMA, normalizeMcpCrawl } from './tools';
 
 const SERVER_NAME = 'ever-jobs';
 const SERVER_VERSION = '0.1.0';
@@ -123,6 +123,7 @@ function createServer(): Server {
                 'Curated exclusion lists matched against title + description. security_clearance drops roles ' +
                 'that require (or ask the candidate to obtain) a security clearance or vetting.',
             },
+            crawl: CRAWL_POLICY_INPUT_SCHEMA,
           },
           required: ['query'],
         },
@@ -244,6 +245,7 @@ function createServer(): Server {
             excludeTitleTerms: (args as any)?.exclude_title_terms,
             excludeKeywords: (args as any)?.exclude_keywords,
             excludePresets: (args as any)?.exclude_presets,
+            crawl: normalizeMcpCrawl((args as any)?.crawl),
           };
           const result = await searchJobs(params);
           return {

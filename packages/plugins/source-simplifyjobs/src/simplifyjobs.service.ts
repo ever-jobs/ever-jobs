@@ -12,6 +12,7 @@ import {
 import { createHttpClient } from '@ever-jobs/common';
 import {
   SIMPLIFYJOBS_BRANCH_RE,
+  SIMPLIFYJOBS_CRAWL_POLICY,
   SIMPLIFYJOBS_DEFAULT_RETRIES,
   SIMPLIFYJOBS_DEFAULT_TTL_MS,
   SIMPLIFYJOBS_DEFAULTS,
@@ -86,6 +87,7 @@ const MAX_DETAIL = 500;
     "Simplify's public, community-curated lists of new-grad roles and internships, read from the listings " +
     'files it publishes on GitHub. Only factual fields are used (title, company, locations, dates, category, ' +
     'terms and the employer apply URL); the lists carry no job descriptions.',
+  crawl: SIMPLIFYJOBS_CRAWL_POLICY,
 })
 @Injectable()
 export class SimplifyJobsService implements IScraper {
@@ -231,6 +233,9 @@ export class SimplifyJobsService implements IScraper {
       retryMaxDelay: input.retryMaxDelay,
       rateDelayMin: minDelay,
       rateDelayMax: Math.max(minDelay, finiteOr(input.rateDelayMax, minDelay)),
+      // Since Spec 1690 rateDelayMin is only the plugin layer, which a caller override
+      // replaces; the floor keeps a caller from shortening the D-11 spacing.
+      minIntervalFloorMs: minDelay * 1000,
       allowedRedirectHosts: [SIMPLIFYJOBS_RAW_HOST],
     });
   }

@@ -89,6 +89,100 @@ export interface JobSearchParams {
   excludeKeywords?: string[];
   /** Spec 1700 — curated exclusion lists (e.g. `security_clearance`). */
   excludePresets?: string[];
+  /**
+   * Per-request crawl policy (Spec 1690), forwarded to the API unchanged as the
+   * camelCase `crawl` object (e.g. `{ maxConcurrentPerHost: 1, minIntervalMs: 1000 }`).
+   * The API validates it and applies the operator's `EVER_JOBS_CRAWL_CALLER_OVERRIDES`.
+   */
+  crawl?: McpCrawlPolicy;
+}
+
+/** A crawl-policy object as the API's `crawl` field accepts it (camelCase keys). */
+export type McpCrawlPolicy = Record<string, unknown>;
+
+// ── Crawl policy (Spec 1690) ───────────────────────────────────────────
+//
+// The MCP server is packaged on its own (`apps/mcp`, rootDir `src`), so it
+// cannot import `@ever-jobs/models`; the allowed values mirror
+// `CRAWL_POLICY_DTO_VALUES` there. `apps/mcp/__tests__/crawl.spec.ts` fails if
+// the two drift apart.
+
+/** Allowed values of the enum-like crawl-policy fields. */
+export const MCP_CRAWL_ENUMS = {
+  userAgentMode: ['identify', 'strict', 'plugin'],
+  proxyRotation: ['per-request', 'per-scrape', 'per-host', 'off'],
+  rateLimitScope: ['host', 'domain', 'site'],
+  retryBackoff: ['exponential', 'linear', 'constant'],
+  retryAfterOverMax: ['give-up', 'cap'],
+  robotsTxt: ['off', 'crawl-delay', 'respect'],
+  discovery: ['auto', 'sitemap', 'listing'],
+} as const;
+
+const nonNegativeInt = (description: string) => ({ type: 'integer', minimum: 0, description });
+
+/**
+ * JSON Schema of the `crawl` argument of the `search_jobs` tool. Every field
+ * is optional; the API is the authority on validation.
+ */
+export const CRAWL_POLICY_INPUT_SCHEMA = {
+  type: 'object',
+  description:
+    'Optional per-request crawl policy (Spec 1690), sent to the API as `crawl` with camelCase keys, ' +
+    'e.g. {"maxConcurrentPerHost":1,"minIntervalMs":1000,"discovery":"sitemap"}. ' +
+    'The operator may restrict what a caller can change (EVER_JOBS_CRAWL_CALLER_OVERRIDES); ' +
+    'the preset (EVER_JOBS_CRAWL_PRESET) is server-wide and cannot be chosen here.',
+  additionalProperties: false,
+  properties: {
+    userAgent: { type: 'string', description: 'User-Agent to send (keywords: default, browser).' },
+    userAgentMode: { type: 'string', enum: [...MCP_CRAWL_ENUMS.userAgentMode] },
+    from: { type: 'string', description: 'From: request header (contact address).' },
+    stripClientHints: { type: 'boolean' },
+    proxyRotation: { type: 'string', enum: [...MCP_CRAWL_ENUMS.proxyRotation] },
+    rateLimitScope: { type: 'string', enum: [...MCP_CRAWL_ENUMS.rateLimitScope] },
+    maxConcurrentPerHost: nonNegativeInt('Max requests in flight per host/domain/site bucket. 0 = unlimited.'),
+    minIntervalMs: nonNegativeInt('Minimum gap between request starts in a bucket, ms.'),
+    jitterMs: nonNegativeInt('Random extra 0..jitterMs per gap, ms.'),
+    maxQueueWaitMs: nonNegativeInt('Longest wait for a slot before failing fast, ms. 0 = no limit.'),
+    adaptiveThrottle: { type: 'boolean' },
+    retries: nonNegativeInt('Retries per request on a retryable status.'),
+    retryStatuses: { type: 'array', items: { type: 'integer', minimum: 100, maximum: 599 } },
+    retryBackoff: { type: 'string', enum: [...MCP_CRAWL_ENUMS.retryBackoff] },
+    retryBaseDelayMs: nonNegativeInt('Base retry delay, ms.'),
+    retryMaxDelayMs: nonNegativeInt('Cap on one retry delay, ms.'),
+    retryJitter: { type: 'boolean' },
+    retryOnNetworkError: { type: 'boolean' },
+    respectRetryAfter: { type: 'boolean' },
+    maxRetryAfterMs: nonNegativeInt('A Retry-After longer than this triggers retryAfterOverMax, ms.'),
+    retryAfterOverMax: { type: 'string', enum: [...MCP_CRAWL_ENUMS.retryAfterOverMax] },
+    throttleRetryDelayMs: nonNegativeInt(
+      'Back-off floor after a 429/503, ms: retry n waits at least this x 2^n; also the minimum host cool-down. 0 = no floor.',
+    ),
+    robotsTxt: { type: 'string', enum: [...MCP_CRAWL_ENUMS.robotsTxt] },
+    blockPrivateNetworks: { type: 'boolean' },
+    discovery: { type: 'string', enum: [...MCP_CRAWL_ENUMS.discovery] },
+  },
+} as const;
+
+/**
+ * Accept the tool's `crawl` argument as an object or as a JSON-object string
+ * (some clients stringify nested arguments). Returns `undefined` when absent or
+ * empty; throws on anything else so the tool reports the mistake instead of
+ * silently searching with the server defaults.
+ */
+export function normalizeMcpCrawl(raw: unknown): McpCrawlPolicy | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  let value: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      throw new Error('crawl must be an object (or a JSON object string)');
+    }
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('crawl must be an object (or a JSON object string)');
+  }
+  return Object.keys(value as object).length > 0 ? { ...(value as McpCrawlPolicy) } : undefined;
 }
 
 /** Largest `locations` list the API accepts (Spec 1700); longer lists are cut here instead of 400ing. */
@@ -608,7 +702,15 @@ export function compareSources(): {
 
 /**
  * Build the `POST /api/jobs/search` body for {@link searchJobs}. See
- * {@link SearchRequestKeyStyle} for why camelCase is the default.
+ * {@link SearchRequestKeyStyle} for why camelCase is the default (Specs 1689,
+ * 1690 §4.9).
+ *
+ * An absent source or company is omitted, not sent as an `undefined` key, so an
+ * unfiltered search stays exactly `{ searchTerm, location, resultsWanted }`. The
+ * per-request `crawl` object (Spec 1690) is added unchanged when given — its key
+ * is spelled the same in every style, and its own keys are the camelCase ones
+ * the API's `CrawlPolicyDto` declares. `locations` and the exclusion lists
+ * (Spec 1700) are added, cleaned, only when non-empty, in the chosen style.
  */
 export function buildSearchRequestBody(
   params: JobSearchParams,
@@ -621,17 +723,18 @@ export function buildSearchRequestBody(
   const camel: Record<string, unknown> = {
     searchTerm: params.query,
     location,
-    siteType,
-    companySlug: params.company,
+    ...(siteType ? { siteType } : {}),
+    ...(params.company ? { companySlug: params.company } : {}),
     resultsWanted,
   };
   const snake: Record<string, unknown> = {
     search_term: params.query,
     location,
-    site_type: siteType,
-    company_slug: params.company,
+    ...(siteType ? { site_type: siteType } : {}),
+    ...(params.company ? { company_slug: params.company } : {}),
     results_wanted: resultsWanted,
   };
+  const crawl = params.crawl ? { crawl: params.crawl } : {};
 
   // Spec 1700 — added only when non-empty, so a plain search body stays
   // byte-identical. `locations` is one word, so both spellings agree.
@@ -651,9 +754,9 @@ export function buildSearchRequestBody(
     snake[snakeKey] = list;
   }
 
-  if (style === 'snake') return snake;
-  if (style === 'both') return { ...snake, ...camel };
-  return camel;
+  if (style === 'snake') return { ...snake, ...crawl };
+  if (style === 'both') return { ...snake, ...camel, ...crawl };
+  return { ...camel, ...crawl };
 }
 
 /**

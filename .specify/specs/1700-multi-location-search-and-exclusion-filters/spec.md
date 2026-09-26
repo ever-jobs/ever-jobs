@@ -174,7 +174,9 @@ Recorded for `docs/questions.md` (integrator), each with the default this change
 - Q-D Allow `locations` with the catalogue-wide default site selection — **allowed**; the deadline
   bounds it and skips appear in diagnostics.
 - Q-E Default pause between one source's location calls — **500 ms**, until the crawl-policy host
-  limiter and a shared GET memo land.
+  limiter and a shared GET memo land. (Both have landed: the memo in the review fixup, the host
+  limiter with the Spec 1690 merge on 2026-09-26. The 500 ms default is kept as an extra per-source
+  gap on top of the limiter; `0` leaves the pacing to the limiter and the plugin's declared gap.)
 
 ## 10. Decisions
 
@@ -210,3 +212,33 @@ Recorded for `docs/questions.md` (integrator), each with the default this change
 - `packages/common/src/utils/search-locations.ts`, `packages/common/src/utils/job-exclusion.ts`.
 - Spec 5026 (bounded fan-out), 5082 / 1680 (diagnostics), 5095 (`companyDomain:` rows), 1689
   (GraphQL validators).
+
+## 12. Merge with Spec 1690 — crawl policy (2026-09-26)
+
+`feat/http-politeness` (Specs 1690/1691) was merged into this branch. What changed for this spec:
+
+- **Memo inside the crawl-policy client.** `HttpClient.request` resolves the request's crawl
+  policy and runs the literal egress check, then consults the memo, then robots.txt, the host
+  limiter, retries and the network. A memo hit sends nothing and takes no rate-limit slot; a miss
+  runs the whole crawl pipeline, so the memo never bypasses the egress guard, the redirect pin or
+  the pacing for a real request. The key adds, beyond method / URL / query / body / headers: the
+  wire identity (User-Agent, `From`, client-hint stripping), the per-request `crawl` override,
+  `robotsTxt`, `blockPrivateNetworks` and the client's egress allow-list, the redirect pin's
+  hosts, insecure TLS and `maxRedirects`. A request with its own agents, axios `proxy`,
+  `beforeRedirect` or adapter is not memoised. Only 2xx answers are kept (a 429 the caller
+  accepted through `validateStatus` is not); bodies are copied per caller and `Set-Cookie` is
+  replayed into the calling client's jar, as before.
+- **Location calls in the scrape context.** Every per-location call goes through `scrapeOne`, so
+  it runs in its own scrape context — site, the plugin's `@SourcePlugin({ crawl })` manifest, the
+  caller's crawl override (built once per search from the fields the caller actually sent), the
+  caller's proxies — with its own `AbortController`. The search deadline aborts the in-flight
+  location's requests (`EVER_JOBS_CRAWL_ABORT_ON_DEADLINE`) and the remaining locations are
+  skipped by the deadline check; the aborted call is circuit-neutral and counted in the
+  "abandoned N in-flight source(s)" warning.
+- **Polite stop.** `rate_limited` — the crawl policy's `HostCoolingDownError` /
+  `CrawlQueueTimeoutError`, thrown or reported in a swallowed diagnostic — stops a source's
+  remaining locations like a 429 or a block; a robots.txt refusal (`blocked`) does too. The shared
+  `refusalFromScrapeError` / `isRefusalDiagnostics` helpers that plugins use for their own detail
+  walks treat `rate_limited` the same way.
+- **Pacing.** The location pause (`EVER_JOBS_SEARCH_LOCATION_INTERVAL_MS`, raised to the plugin's
+  `minRequestIntervalMs`) is kept; the per-host limiter now paces every request on top of it.

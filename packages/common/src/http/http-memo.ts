@@ -1,6 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 
+import { abortReasonOf } from './crawl/host-limiter';
+
 /**
  * Scoped response memo for the shared {@link HttpClient} (Spec 1700, T13).
  *
@@ -22,6 +24,13 @@ import { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse } from 'axios
  *   `response.data` cannot change what the next location sees.
  * - Streams, form data and other bodies that cannot be copied or keyed are
  *   never memoised.
+ * - Crawl policy (Spec 1690): the client consults the memo after it resolved
+ *   the request's policy and ran the literal egress check, and before
+ *   robots.txt, the host limiter and the network. A hit sends nothing and takes
+ *   no rate-limit slot; a miss goes through the whole policy (pacing, retries,
+ *   egress guard, redirect pin). The client adds the wire identity and the
+ *   refusal regime to the key (`keyExtra`), so a hit only answers a request
+ *   that would have been sent the same way.
  */
 
 /** Env var: `off` disables the memo, `get` limits it to GET; default GET and POST. */
@@ -110,26 +119,36 @@ export async function runWithHttpMemo<T>(
  * Outside a scope, or for a request that cannot be keyed, this is just
  * `send()`. `onHit` sees every answer served from the memo, so the client can
  * replay what its response interceptors would have done (the cookie jar).
+ * `keyExtra` is further key material the caller vouches for (plain data; a
+ * value that cannot be keyed makes the request unmemoisable). `signal` is this
+ * request's own cancellation (its signal combined with the scrape's): a request
+ * parked on an identical one still in flight stops waiting when it fires and
+ * rejects with its reason, as a queued request would (Spec 1690 §4.6); the
+ * first request keeps the entry.
  */
 export async function memoisedRequest<T>(
   config: AxiosRequestConfig,
   defaultHeaders: unknown,
   send: () => Promise<AxiosResponse<T>>,
   onHit?: (response: AxiosResponse<T>) => void,
+  keyExtra?: unknown,
+  signal?: AbortSignal,
 ): Promise<AxiosResponse<T>> {
   const scope = storage.getStore();
-  const key = scope ? memoKey(scope, config, defaultHeaders) : undefined;
+  const key = scope ? memoKey(scope, config, defaultHeaders, keyExtra) : undefined;
   if (!scope || key === undefined) return send();
 
   const cached = scope.entries.get(key);
   if (cached) {
     try {
-      const snapshot = await cached;
+      const snapshot = await untilAborted(cached, signal);
       scope.stats.hits++;
       const restored = restore<T>(snapshot, config);
       onHit?.(restored);
       return restored;
     } catch {
+      // Cancelled while waiting: this request is abandoned, not re-sent.
+      if (signal?.aborted) throw abortReasonOf(signal);
       // The first request failed after this one looked it up: fall through
       // and send it, as the loop did before the memo.
     }
@@ -162,10 +181,39 @@ export async function memoisedRequest<T>(
 }
 
 /**
- * The memo key: method, base URL, URL, query, body and both header sets.
- * `undefined` when the method is not memoised or any part cannot be keyed.
+ * `pending`, unless `signal` fires first: then a rejection with its reason.
+ * The listener is removed once either settles.
  */
-function memoKey(scope: MemoScope, config: AxiosRequestConfig, defaultHeaders: unknown): string | undefined {
+function untilAborted<V>(pending: Promise<V>, signal: AbortSignal | undefined): Promise<V> {
+  if (!signal) return pending;
+  if (signal.aborted) return Promise.reject(abortReasonOf(signal));
+  return new Promise<V>((resolve, reject) => {
+    const onAbort = (): void => reject(abortReasonOf(signal));
+    signal.addEventListener('abort', onAbort, { once: true });
+    pending.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
+ * The memo key: method, base URL, URL, query, body, both header sets and the
+ * caller's extra key material. `undefined` when the method is not memoised or
+ * any part cannot be keyed.
+ */
+function memoKey(
+  scope: MemoScope,
+  config: AxiosRequestConfig,
+  defaultHeaders: unknown,
+  keyExtra: unknown,
+): string | undefined {
   const method = (config.method ?? 'GET').toUpperCase();
   if (!scope.methods.has(method)) return undefined;
   if (config.responseType === 'stream') return undefined;
@@ -173,7 +221,14 @@ function memoKey(scope: MemoScope, config: AxiosRequestConfig, defaultHeaders: u
   const body = stableValue(config.data);
   const headers = headerSignature(config.headers);
   const defaults = headerSignature(defaultHeaders);
-  if (params === undefined || body === undefined || headers === undefined || defaults === undefined) {
+  const extra = stableValue(keyExtra);
+  if (
+    params === undefined ||
+    body === undefined ||
+    headers === undefined ||
+    defaults === undefined ||
+    extra === undefined
+  ) {
     return undefined;
   }
   return JSON.stringify([
@@ -185,6 +240,7 @@ function memoKey(scope: MemoScope, config: AxiosRequestConfig, defaultHeaders: u
     headers,
     defaults,
     config.responseType ?? '',
+    extra,
   ]);
 }
 

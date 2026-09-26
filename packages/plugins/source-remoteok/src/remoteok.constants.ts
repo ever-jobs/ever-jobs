@@ -1,3 +1,5 @@
+import type { PluginCrawlPolicy } from '@ever-jobs/common';
+
 export const REMOTEOK_API_URL = 'https://remoteok.com/api';
 
 /**
@@ -10,6 +12,21 @@ export const REMOTEOK_USER_AGENT =
 /** The browser User-Agent sent before; `EVER_JOBS_REMOTEOK_LEGACY=ua` restores it. */
 export const REMOTEOK_LEGACY_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129 Safari/537.36';
+
+/**
+ * The crawl-policy opt-in (Spec 1690 §4.2) the client gets only while
+ * `EVER_JOBS_REMOTEOK_LEGACY` includes `ua`. The User-Agent header the plugin sets
+ * is a *declared* UA: under the default `identify` mode the configured crawl UA
+ * goes out instead unless the plugin layer opts into `userAgentMode: 'plugin'`.
+ * With it, the switch sends {@link REMOTEOK_LEGACY_USER_AGENT} again. `strict` still
+ * wins: `EVER_JOBS_CRAWL_USER_AGENT_MODE=strict` (or the `strict` preset) sends the
+ * configured UA, and a caller's `userAgent` is sent as the caller layer (`strict`).
+ */
+export const REMOTEOK_LEGACY_UA_CRAWL_POLICY: PluginCrawlPolicy = {
+  userAgentMode: 'plugin',
+  userAgentReason:
+    'EVER_JOBS_REMOTEOK_LEGACY=ua set by the operator: send the pre-Spec-1707 browser User-Agent (Spec 1707 FR-15).',
+};
 
 export const REMOTEOK_HEADERS: Record<string, string> = {
   Accept: 'application/json',
@@ -30,6 +47,9 @@ export const REMOTEOK_HOSTS: readonly string[] = ['remoteok.com', 'remoteok.io']
  * robots.txt asks every agent for `Crawl-delay: 1`. A scrape makes at most two
  * sequential requests; the client spaces them by at least this many seconds,
  * and a caller's `rateDelayMin` can only lengthen the gap, never shorten it.
+ * Since the Spec 1690 merge `rateDelayMin` is only the plugin layer of the crawl
+ * policy (a caller override replaces it), so the gap is also the client's
+ * `minIntervalFloorMs`, which no layer shortens.
  */
 export const REMOTEOK_CRAWL_DELAY_S = 1;
 /** Default client spacing (seconds) when the caller sets none. */

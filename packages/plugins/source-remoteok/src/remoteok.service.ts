@@ -29,6 +29,7 @@ import {
   REMOTEOK_CRAWL_DELAY_S,
   REMOTEOK_DEFAULT_LIMIT,
   REMOTEOK_HEADERS,
+  REMOTEOK_LEGACY_UA_CRAWL_POLICY,
   REMOTEOK_LEGACY_USER_AGENT,
   REMOTEOK_USER_AGENT,
   REMOTEOK_HOSTS,
@@ -112,6 +113,7 @@ export class RemoteOkService implements IScraper {
     }
 
     try {
+      const spacing = crawlSpacing(input.rateDelayMin, input.rateDelayMax);
       const http = createHttpClient({
         proxies: input.proxies,
         caCert: input.caCert,
@@ -124,7 +126,13 @@ export class RemoteOkService implements IScraper {
         retryDelay: input.retryDelay,
         retryBackoff: input.retryBackoff,
         retryMaxDelay: input.retryMaxDelay,
-        ...crawlSpacing(input.rateDelayMin, input.rateDelayMax),
+        ...spacing,
+        // The spacing is also a floor no crawl-policy layer shortens: since Spec 1690
+        // rateDelayMin is only the plugin layer, which a caller override replaces.
+        minIntervalFloorMs: spacing.rateDelayMin * 1000,
+        // EVER_JOBS_REMOTEOK_LEGACY=ua: let the declared browser UA reach the wire
+        // under the default identify mode (an operator or caller strict still wins).
+        ...(legacy.has('ua') ? { crawl: REMOTEOK_LEGACY_UA_CRAWL_POLICY } : {}),
         allowedRedirectHosts: REMOTEOK_HOSTS,
       });
       const headers = buildHeaders(input.userAgent, legacy.has('ua'));

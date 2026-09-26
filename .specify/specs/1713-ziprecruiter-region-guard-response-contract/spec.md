@@ -66,8 +66,11 @@ a request known to fail. The only e2e test asserted nothing when zero jobs came 
 - No job-detail fetch. robots.txt disallows `/jobs/` for every agent, so the description and links
   come from the list payload only, and `jobUrlDirect` stays `null` unless that payload carries one.
 - No new header, user-agent or device identity. The header set is unchanged (section 9, Q1).
-- No `crawl` manifest field on `@SourcePlugin`; another branch is adding the field. Suggested value
-  for when it exists: `{ maxConcurrentPerHost: 1, minIntervalMs: 5000 }`.
+- No `crawl` manifest on `@SourcePlugin` in this spec. When it was written the field did not exist
+  here; since the Spec 1690 merge (`feat/http-politeness`, 2026-09-26) it does (`IPluginMetadata.crawl`). Declaring the suggested value
+  `{ maxConcurrentPerHost: 1, minIntervalMs: 5000 }` is a follow-up; until then the plugin's own
+  5-10 s page spacing and the global crawl policy (per-host limiter, back-off floor on 429/503)
+  govern it.
 - No change outside `packages/plugins/source-ziprecruiter` (the MCP tool description is left to
   its owner, section 9, Q4).
 
@@ -169,7 +172,14 @@ apart). Recorded for `docs/questions.md` by the integrator.
 
 - **Q1 — Request identity.** Does the search answer 200 with our honest user-agent plus the Basic
   credential? If it is 403 from the US too, the app identity is required, and whether to send it is an
-  owner decision given the robots stance. (default — proceeding: headers unchanged)
+  owner decision given the robots stance. (default — proceeding: headers unchanged) Since the
+  Spec 1690 merge (2026-09-26) the header set is still unchanged, but its `user-agent` is only a
+  declared UA: the crawl policy's default `identify` mode sends our honest configured UA next to the
+  Basic credential (checked on the wire), and the declared desktop UA goes out only with the
+  operator opt-in `EVER_JOBS_CRAWL_POLICIES={"sites":{"zip_recruiter":{"userAgentMode":"plugin"}}}`.
+  (Before Spec 1690 the client's constructor UA, a Chrome/120 string unless the caller sent one,
+  beat it.) The honest UA is therefore the default this question tests; opting the app identity
+  back in stays the owner's call.
 - **Q2 — Contract.** Confirm `continue` / `continue_from` and the page size (assumed about 20).
 - **Q3 — Credential.** Confirm the Basic credential is accepted. On 401 it needs refreshing.
 - **Q4 — Filter values.** Confirm `employment_type` values for contract, temporary and internship.

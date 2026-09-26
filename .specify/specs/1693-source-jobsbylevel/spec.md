@@ -216,7 +216,8 @@ The parser also accepts a JSON string, an SSE-framed body and `result.structured
   detail budget, so depth `board` with one of them is `bad_input`.
 - **D-12 — Pacing is module level** with synchronous slot reservation, so concurrent scrapes
   queue instead of racing. When `@SourcePlugin` gains a crawl manifest, declare
-  `maxConcurrentPerHost: 1, minIntervalMs: 1100` and retire the local pacer.
+  `maxConcurrentPerHost: 1, minIntervalMs: 1100` and retire the local pacer. (Since the Spec 1690 merge (`feat/http-politeness`, 2026-09-26)
+  the manifest is declared, `JOBSBYLEVEL_CRAWL_POLICY`; the local pacer stays for now.)
 - **D-13 — Feed fallback on any MCP listing failure**, including a 404 (the endpoint moving is
   exactly when the fallback helps), **except a refusal** (review fixup, 2026-09-25): after a 429,
   a 401/403/407, a block or challenge, or a rate-limit tool error, the feed on the same host is

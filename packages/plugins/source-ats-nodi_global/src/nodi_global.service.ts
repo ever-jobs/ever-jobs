@@ -68,10 +68,17 @@ export class NodiGlobalService implements IScraper {
       const companyUrl = info?.website ?? null;
 
       const resultsWanted = input.resultsWanted ?? 100;
+      // Plugins own `offset` (the core does not apply it): skip that many
+      // usable offers, then take resultsWanted.
+      let toSkip = Math.max(0, Math.floor(Number(input.offset) || 0));
       const jobs: JobPostDto[] = [];
       for (const offer of offers ?? []) {
         if (jobs.length >= resultsWanted) break;
         if (!offer?.title || !offer.id) continue;
+        if (toSkip > 0) {
+          toSkip--;
+          continue;
+        }
         jobs.push(this.toJobPost(offer, company, companyName, companyUrl));
       }
 

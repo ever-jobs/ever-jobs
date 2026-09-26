@@ -370,6 +370,19 @@ describe('AdpService list pagination budget and page cap', () => {
     expect(listCalls()).toHaveLength(2);
   });
 
+  it('returns the requested window (offset .. offset + resultsWanted), not the first rows', async () => {
+    mockApiPaged(bigBoard(), 2000);
+
+    const res = await service.scrape(input({ resultsWanted: 10, offset: 30 }));
+
+    expect(res.jobs).toHaveLength(10);
+    expect(res.jobs[0].title).toBe('Job 30');
+    expect(res.jobs[9].title).toBe('Job 39');
+    // detail requests are spent only on the returned window
+    const detailCalls = mockGet.mock.calls.map(([u]) => u as string).filter((u) => DETAIL_RE.test(u));
+    expect(detailCalls).toHaveLength(10);
+  });
+
   it('caps list pages at the default of 100 even when resultsWanted is larger', async () => {
     mockApiPaged(Array.from({ length: 150 }, (_, n) => pageOf(n * 20, 20)), 3000);
 
