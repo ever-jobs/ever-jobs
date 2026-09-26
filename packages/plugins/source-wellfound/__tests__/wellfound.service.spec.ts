@@ -14,6 +14,8 @@ jest.mock('@ever-jobs/common', () => ({
   BrowserPool: {
     getPage: (...args: unknown[]) => mockGetPage(...args),
     close: (...args: unknown[]) => mockBrowserClose(...args),
+    // The real navigate() ends in page.goto; the fake page records it.
+    navigate: (page: { goto: (url: string, opts?: unknown) => unknown }, url: string, opts?: unknown) => page.goto(url, opts),
   },
 }));
 

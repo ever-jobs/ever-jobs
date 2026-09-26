@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { getMetadataStorage } from 'class-validator';
-import { CRAWL_POLICY_DTO_VALUES, CrawlPolicyDto } from '@ever-jobs/models';
+import { CRAWL_POLICY_DTO_VALUES, CrawlPolicyDto, MAX_CRAWL_RETRIES } from '@ever-jobs/models';
 
 const mockPost = jest.fn();
 jest.mock('axios', () => ({
@@ -11,6 +11,7 @@ jest.mock('axios', () => ({
 import {
   CRAWL_POLICY_INPUT_SCHEMA,
   MCP_CRAWL_ENUMS,
+  MCP_MAX_CRAWL_RETRIES,
   MCP_REQUEST_KEYS_ENV_VAR,
   normalizeMcpCrawl,
   searchJobs,
@@ -43,6 +44,12 @@ describe('MCP crawl schema (Spec 1690)', () => {
     for (const [field, values] of Object.entries(MCP_CRAWL_ENUMS)) {
       expect(props[field].enum).toEqual(values);
     }
+  });
+
+  it('bounds retries at MAX_CRAWL_RETRIES, like the DTO', () => {
+    const props = CRAWL_POLICY_INPUT_SCHEMA.properties as Record<string, { minimum?: number; maximum?: number }>;
+    expect(MCP_MAX_CRAWL_RETRIES).toBe(MAX_CRAWL_RETRIES);
+    expect(props.retries).toMatchObject({ type: 'integer', minimum: 0, maximum: MAX_CRAWL_RETRIES });
   });
 
   it('is an object schema that rejects unknown keys', () => {

@@ -5,4 +5,9 @@ export {
   redactBrowserIdentityKey,
   resolveBrowserUserAgent,
 } from './browser-pool';
-export type { BrowserPageOptions, BrowserUserAgentChoice, BrowserUserAgentSource } from './browser-pool';
+export type {
+  BrowserNavigateOptions,
+  BrowserPageOptions,
+  BrowserUserAgentChoice,
+  BrowserUserAgentSource,
+} from './browser-pool';

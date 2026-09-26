@@ -8,6 +8,7 @@ import {
   EGRESS_GUARD_ENV,
   assertPublicHostname,
   assertPublicProxy,
+  assertPublicResolution,
   assertPublicUrl,
   createGuardedLookup,
   egressBlockReason,
@@ -467,5 +468,61 @@ describe('getGuardedAgents', () => {
       expect(result).toEqual({ status: 200 });
       expect(hits).toBe(before + 1);
     });
+  });
+});
+
+describe('assertPublicResolution — the pre-navigation DNS check (BrowserPool.navigate)', () => {
+  const answers = (addresses: Array<{ address: string; family: number }>, err?: NodeJS.ErrnoException): jest.Mock =>
+    jest.fn(((_host, _opts, cb) => cb(err ?? null, err ? [] : addresses)) as BaseLookup);
+
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    delete process.env[EGRESS_GUARD_ENV.ALLOW_HOSTS];
+  });
+
+  it('resolves for public answers', async () => {
+    const lookup = answers([{ address: '93.184.216.34', family: 4 }]);
+    await expect(assertPublicResolution('example.com', {}, lookup)).resolves.toBeUndefined();
+    expect(lookup.mock.calls[0][1]).toMatchObject({ all: true });
+  });
+
+  it('rejects with EgressBlockedError when any answer is private (the address is not echoed)', async () => {
+    const lookup = answers([
+      { address: '93.184.216.34', family: 4 },
+      { address: '10.0.0.7', family: 4 },
+    ]);
+    const err = await assertPublicResolution('rebound.example.com', {}, lookup).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(EgressBlockedError);
+    expect((err as Error).message).toContain('rebound.example.com');
+    expect((err as Error).message).not.toContain('10.0.0.7');
+  });
+
+  it('a failed lookup resolves quietly (the connection reports its own error)', async () => {
+    const notFound = Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' });
+    await expect(assertPublicResolution('nope.example.com', {}, answers([], notFound))).resolves.toBeUndefined();
+  });
+
+  it('skips IP literals and allow-listed hosts (no lookup)', async () => {
+    const lookup = answers([{ address: '127.0.0.1', family: 4 }]);
+    await assertPublicResolution('93.184.216.34', {}, lookup);
+    await assertPublicResolution('mock.test', { allowHosts: ['*.test'] }, lookup);
+    process.env[EGRESS_GUARD_ENV.ALLOW_HOSTS] = 'dev.example.org';
+    await assertPublicResolution('dev.example.org', {}, lookup);
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('uses dns.lookup by default', async () => {
+    const spy = jest.spyOn(dnsModule, 'lookup').mockImplementation(((
+      _host: string,
+      _opts: unknown,
+      cb: (err: null, addresses: Array<{ address: string; family: number }>) => void,
+    ) => cb(null, [{ address: '169.254.169.254', family: 4 }])) as unknown as typeof dnsModule.lookup);
+
+    await expect(assertPublicResolution('metadata.example.com')).rejects.toBeInstanceOf(EgressBlockedError);
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

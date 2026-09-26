@@ -119,7 +119,7 @@ export class SimplyHiredService implements IScraper, OnModuleDestroy {
       if (input.location) url.searchParams.set('l', input.location);
 
       this.logger.log(`SimplyHired Playwright: navigating to ${url.toString()}`);
-      await page.goto(url.toString(), {
+      await BrowserPool.navigate(page, url.toString(), {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });

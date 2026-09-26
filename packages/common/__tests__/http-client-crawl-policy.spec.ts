@@ -1,15 +1,18 @@
 import 'reflect-metadata';
 import type * as dns from 'dns';
 import axios, { AxiosError, AxiosHeaders, CanceledError, InternalAxiosRequestConfig } from 'axios';
-import { ScraperInputDto } from '@ever-jobs/models';
+import { MAX_CRAWL_RETRIES, ScraperInputDto, classifyScrapeError } from '@ever-jobs/models';
 
 import {
   HttpClient,
+  MIN_RETRY_DELAY_MS,
+  crawlAcquireOptions,
   createHttpClient,
   crawlOverrideFromClientOptions,
   isRetryableNetworkError,
   parseRetryAfter,
   penalizesBucket,
+  recordAnswerOutcome,
   retryBackoffMs,
   retryDecision,
   selectWireUserAgent,
@@ -806,6 +809,95 @@ describe('retries and back-off (Spec 1690 §4.5)', () => {
     expect(h.sent).toHaveLength(2);
   });
 
+  it('gives up with HostCoolingDownError (not the raw 429) even with retries: 0 — diagnostic rate_limited', async () => {
+    const client = new HttpClient({ retries: 0 });
+    const h = attach(client, () => ({ status: 429, headers: { 'retry-after': '120' } }));
+
+    const err = (await settle(client.get(URL_A), 0)) as HostCoolingDownError;
+
+    expect(err).toBeInstanceOf(HostCoolingDownError);
+    expect(err.retryAfterMs).toBe(120_000);
+    expect(err.status).toBe(429);
+    expect((err as Error & { cause?: AxiosError }).cause?.response?.status).toBe(429);
+    expect(h.sent).toHaveLength(1);
+    expect(getHostLimiter().coolingDownUntil('host:acme.example.com') - Date.now()).toBe(120_000);
+    expect(classifyScrapeError(err).reason).toBe('rate_limited');
+  });
+
+  it('gives up with HostCoolingDownError on the last attempt too (retries used up)', async () => {
+    const client = new HttpClient({ retries: 1, crawl: { retryJitter: false } });
+    const h = attach(client, (_c, i) => (i === 0 ? { status: 503 } : { status: 503, headers: { 'retry-after': '600' } }));
+
+    const err = await settle(client.get(URL_A));
+
+    expect(err).toBeInstanceOf(HostCoolingDownError);
+    expect((err as HostCoolingDownError).status).toBe(503);
+    expect(h.sent).toHaveLength(2);
+  });
+
+  it('a 429 that is not retryable (retryStatuses none) still gives up with HostCoolingDownError over the max', async () => {
+    const client = new HttpClient({ crawl: { retryStatuses: [] } });
+    attach(client, () => ({ status: 429, headers: { 'retry-after': '120' } }));
+
+    expect(await settle(client.get(URL_A), 0)).toBeInstanceOf(HostCoolingDownError);
+  });
+
+  it('a Retry-After on a non-retryable, non-throttling answer (404) still raises the raw error', async () => {
+    const client = new HttpClient({ retries: 0 });
+    attach(client, () => ({ status: 404, headers: { 'retry-after': '120' } }));
+
+    const err = await settle(client.get(URL_A), 0);
+
+    expect(err).toBeInstanceOf(AxiosError);
+    expect(getHostLimiter().coolingDownUntil('host:acme.example.com')).toBe(0);
+  });
+
+  it(`retries: 10 with 0 ms delays waits at least MIN_RETRY_DELAY_MS (${MIN_RETRY_DELAY_MS} ms) per retry`, async () => {
+    const client = new HttpClient({ retries: 10, retryDelay: 0, crawl: { retryJitter: false, minIntervalMs: 0, adaptiveThrottle: false } });
+    const h = attach(client, () => ({ status: 502 }));
+
+    await settle(client.get(URL_A));
+
+    expect(h.sent).toHaveLength(11);
+    expect(gaps(h.sent)).toEqual(Array(10).fill(MIN_RETRY_DELAY_MS));
+  });
+
+  it('retryMaxDelayMs: 0 is bounded the same way; a tiny base only until its back-off passes the minimum', async () => {
+    const zeroCap = new HttpClient({ retries: 3, crawl: { retryMaxDelayMs: 0, minIntervalMs: 0, adaptiveThrottle: false } });
+    const hz = attach(zeroCap, () => ({ status: 504 }));
+    await settle(zeroCap.get(URL_A));
+    expect(gaps(hz.sent)).toEqual([100, 100, 100]);
+
+    const tiny = new HttpClient({
+      retries: 9,
+      crawl: { retryBaseDelayMs: 1, retryJitter: false, minIntervalMs: 0, adaptiveThrottle: false },
+    });
+    const ht = attach(tiny, () => ({ status: 502 }));
+    await settle(tiny.get('https://tiny.example.com/'));
+    expect(gaps(ht.sent)).toEqual([100, 100, 100, 100, 100, 100, 100, 128, 256]);
+  });
+
+  it('legacy: 0 ms delays retry immediately, as before 1690', async () => {
+    setEnv({ [CRAWL_ENV.PRESET]: 'legacy' });
+    const client = new HttpClient({ retries: 3, retryDelay: 0 });
+    const h = attach(client, () => ({ status: 502 }));
+
+    await settle(client.get(URL_A));
+
+    // A 0 ms timer fires on the next 1 ms tick.
+    expect(h.sent).toHaveLength(4);
+    for (const gap of gaps(h.sent)) expect(gap).toBeLessThanOrEqual(1);
+  });
+
+  it(`a caller's retries are capped at MAX_CRAWL_RETRIES (${MAX_CRAWL_RETRIES})`, async () => {
+    const client = new HttpClient({ crawl: { retryJitter: false, retryBaseDelayMs: 0, minIntervalMs: 0, adaptiveThrottle: false } });
+    const h = attach(client, () => ({ status: 502 }));
+
+    await settle(inScrape({ site: 'x', caller: { retries: 50 } }, () => client.get(URL_A)));
+
+    expect(h.sent).toHaveLength(MAX_CRAWL_RETRIES + 1);
+  });
+
   it('a hostile Retry-After cools the bucket for at most EVER_JOBS_CRAWL_MAX_COOLDOWN_MS (default 1 h)', async () => {
     const client = new HttpClient({ retries: 0 });
     attach(client, () => ({ status: 429, headers: { 'retry-after': '99999999999' } }));
@@ -1347,6 +1439,67 @@ describe('proxy rotation (Spec 1690 §4.4)', () => {
     ]);
   });
 
+  it('per-scrape inside a scrape context: every client of the scrape shares one proxy (token + data client)', async () => {
+    setEnv({ [CRAWL_ENV.PROXY_ROTATION]: 'per-scrape' });
+    resetProxyScrapeSeed(0);
+    // Clients built before the scrape (a plugin's constructor) and inside it both follow the scrape's pin.
+    const tokenClient = new HttpClient({ proxies });
+    const tokenSent = attach(tokenClient).sent;
+    const dataSent: Sent[] = [];
+
+    await inScrape({ site: 'navjobs' }, async () => {
+      await settle(tokenClient.post('https://auth.example.com/token'));
+      const dataClient = new HttpClient({ proxies });
+      const h = attach(dataClient);
+      await settle(dataClient.get(URL_A));
+      await settle(dataClient.get('https://other.example.org/page/2'));
+      dataSent.push(...h.sent);
+    });
+
+    const used = [...tokenSent, ...dataSent].map(via);
+    expect(used).toHaveLength(3);
+    expect(new Set(used).size).toBe(1);
+  });
+
+  it('per-scrape: two scrapes are pinned separately (spread over the list), whatever their clients', async () => {
+    setEnv({ [CRAWL_ENV.PROXY_ROTATION]: 'per-scrape' });
+    resetProxyScrapeSeed(0);
+    const scrape = async (): Promise<string[]> =>
+      inScrape({ site: 'francetravail' }, async () => {
+        const token = new HttpClient({ proxies });
+        const data = new HttpClient({ proxies });
+        const ht = attach(token);
+        const hd = attach(data);
+        await settle(token.post('https://auth.example.com/token'));
+        await settle(data.get(URL_A));
+        return [...ht.sent, ...hd.sent].map(via);
+      });
+
+    const first = await scrape();
+    const second = await scrape();
+
+    expect(new Set(first).size).toBe(1);
+    expect(new Set(second).size).toBe(1);
+    expect(first[0]).not.toBe(second[0]);
+  });
+
+  it('per-scrape: clients of one scrape given different lists each stay within their own list', async () => {
+    setEnv({ [CRAWL_ENV.PROXY_ROTATION]: 'per-scrape' });
+    const other = ['http://q1.example:8080', 'http://q2.example:8080'];
+    const seen = await inScrape({ site: 'x' }, async () => {
+      const a = new HttpClient({ proxies });
+      const b = new HttpClient({ proxies: other });
+      const ha = attach(a);
+      const hb = attach(b);
+      await settle(a.get(URL_A));
+      await settle(b.get(URL_A));
+      return { a: via(ha.sent[0]), b: via(hb.sent[0]) };
+    });
+
+    expect(proxies.map((p) => new URL(p).host)).toContain(seen.a);
+    expect(other.map((p) => new URL(p).host)).toContain(seen.b);
+  });
+
   it('a caller (non-env) proxy on a private address is refused by the egress guard; an env proxy is trusted', async () => {
     const callerProxy = new HttpClient();
     const hc = attach(callerProxy);
@@ -1588,6 +1741,59 @@ describe('helpers', () => {
     const cap = policy({ retryJitter: false, retryAfterOverMax: 'cap' });
     expect(retryDecision(cap, 0, 45_000)).toEqual({ delayMs: 45_000 });
     expect(retryDecision(cap, 0, 120_000)).toEqual({ delayMs: 60_000 });
+  });
+
+  it('retryDecision minDelayMs: a floor only when the un-jittered back-off is below it; 0 = off', () => {
+    const zero = policy({ retryBaseDelayMs: 0, retryJitter: false });
+    expect(retryDecision(zero, 0, null)).toEqual({ delayMs: 0 });
+    expect(retryDecision(zero, 5, null, Math.random, 502, 100)).toEqual({ delayMs: 100 });
+    expect(retryDecision({ ...zero, retryMaxDelayMs: 0 }, 0, null, Math.random, undefined, 100)).toEqual({ delayMs: 100 });
+    // A longer Retry-After (within the max) still wins; a give-up is unchanged.
+    expect(retryDecision(zero, 0, 2000, Math.random, 502, 100)).toEqual({ delayMs: 2000 });
+    expect(retryDecision(zero, 0, 120_000, Math.random, 429, 100)).toEqual({ giveUpAfterMs: 120_000 });
+    // A normal back-off keeps its full jitter (a draw of 0 stays 0).
+    const jittered = policy({ retryJitter: true });
+    expect(retryDecision(jittered, 0, null, () => 0, 502, 100)).toEqual({ delayMs: 0 });
+    // 429/503 already wait the throttle floor, far above the minimum.
+    expect(retryDecision({ ...zero, throttleRetryDelayMs: 5000 }, 0, null, Math.random, 429, 100)).toEqual({ delayMs: 5000 });
+  });
+
+  it('crawlAcquireOptions: the policy as limiter options, Crawl-delay raising the interval', () => {
+    const signal = new AbortController().signal;
+    expect(crawlAcquireOptions(POLITE_CRAWL_POLICY, signal, 2000)).toEqual({
+      maxConcurrent: 4,
+      minIntervalMs: 2000,
+      jitterMs: 0,
+      maxWaitMs: 0,
+      adaptive: true,
+      maxCoolDownWaitMs: 60_000,
+      signal,
+    });
+    expect(crawlAcquireOptions({ ...POLITE_CRAWL_POLICY, maxQueueWaitMs: 5000 })).toMatchObject({
+      minIntervalMs: 100,
+      maxWaitMs: 5000,
+      maxCoolDownWaitMs: 0,
+    });
+  });
+
+  it('recordAnswerOutcome: 429/503 throttle and back off (give-up for the full Retry-After); others are ok', () => {
+    const limiter = new HostLimiter();
+    const record = jest.spyOn(limiter, 'recordOutcome');
+    const penalize = jest.spyOn(limiter, 'penalize');
+
+    expect(recordAnswerOutcome(limiter, 'host:a', POLITE_CRAWL_POLICY, 0, 200, {})).toEqual({ throttled: false });
+    expect(recordAnswerOutcome(limiter, 'host:a', POLITE_CRAWL_POLICY, 0, 429, { 'Retry-After': '300' })).toEqual({
+      throttled: true,
+      giveUpAfterMs: 300_000,
+    });
+    expect(recordAnswerOutcome(limiter, 'host:b', POLITE_CRAWL_POLICY, 0, 503, {})).toEqual({ throttled: true, backOffMs: 5000 });
+    expect(recordAnswerOutcome(limiter, 'host:c', LEGACY_CRAWL_POLICY, 0, 429, {})).toEqual({ throttled: true });
+
+    expect(record.mock.calls.map((c) => c[1])).toEqual(['ok', 'throttled', 'throttled', 'throttled']);
+    expect(penalize.mock.calls).toEqual([
+      ['host:a', 300_000],
+      ['host:b', 5000],
+    ]);
   });
 
   it('penalizesBucket: any pacing at all (concurrency, interval or adaptive); never for an unpaced policy', () => {

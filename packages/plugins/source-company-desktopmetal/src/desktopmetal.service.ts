@@ -139,7 +139,7 @@ export class DesktopmetalService implements IScraper, OnModuleDestroy {
     const readyMs = DESKTOPMETAL_READY_TIMEOUT_SECONDS * 1000;
     const page = await BrowserPool.getPage({ proxy, stealth: true, headful: true });
     try {
-      await page.goto(DESKTOPMETAL_CAREERS_URL, {
+      await BrowserPool.navigate(page, DESKTOPMETAL_CAREERS_URL, {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });

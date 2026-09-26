@@ -242,7 +242,8 @@
           "retries": {
             "type": "integer",
             "minimum": 0,
-            "description": "Retries per request on a retryable status.",
+            "maximum": 10,
+            "description": "Retries per request on a retryable status, 0-10 (a larger value is rejected).",
             "default": 2
           },
           "retryStatuses": {

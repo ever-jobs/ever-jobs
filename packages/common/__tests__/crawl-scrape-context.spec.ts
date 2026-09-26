@@ -71,8 +71,8 @@ describe('scrape context (Spec 1690)', () => {
       runWithRequestId('req-1', () => {
         runWithScrapeContext({ site: 'softy' }, () => {
           expect(getRequestId()).toBe('req-1');
-          expect(getScrapeContext()).toEqual({ site: 'softy' });
-          expect(getRequestContext()).toEqual({ requestId: 'req-1', scrape: { site: 'softy' } });
+          expect(getScrapeContext()).toEqual({ site: 'softy', proxyPin: {} });
+          expect(getRequestContext()).toEqual({ requestId: 'req-1', scrape: { site: 'softy', proxyPin: {} } });
         });
         expect(getScrapeContext()).toBeUndefined();
         expect(getRequestId()).toBe('req-1');
@@ -113,7 +113,7 @@ describe('scrape context (Spec 1690)', () => {
       const plugin: PluginCrawlPolicy = { maxConcurrentPerHost: 1 };
       runWithScrapeContext({ site: 'outer', caller, plugin, proxies: ['http://p:1'] }, () => {
         runWithScrapeContext({ site: 'inner' }, () => {
-          expect(getScrapeContext()).toEqual({ site: 'inner', caller, plugin, proxies: ['http://p:1'] });
+          expect(getScrapeContext()).toEqual({ site: 'inner', caller, plugin, proxies: ['http://p:1'], proxyPin: expect.any(Object) });
         });
         runWithScrapeContext({ plugin: undefined }, () => {
           const ctx = getScrapeContext();
@@ -122,6 +122,20 @@ describe('scrape context (Spec 1690)', () => {
         });
         expect(getScrapeContext()?.site).toBe('outer');
       });
+    });
+
+    it('each new scrape gets its own per-scrape proxy pin; a nested context shares its parent\'s', () => {
+      const pins: unknown[] = [];
+      runWithScrapeContext({ site: 'a' }, () => {
+        const outer = getScrapeContext()?.proxyPin;
+        pins.push(outer);
+        runWithScrapeContext({ site: 'inner' }, () => expect(getScrapeContext()?.proxyPin).toBe(outer));
+      });
+      runWithScrapeContext({ site: 'b' }, () => pins.push(getScrapeContext()?.proxyPin));
+
+      expect(pins[0]).toBeDefined();
+      expect(pins[1]).toBeDefined();
+      expect(pins[0]).not.toBe(pins[1]);
     });
 
     it('an inner signal aborts when the outer one does (deadline still reaches nested work)', () => {

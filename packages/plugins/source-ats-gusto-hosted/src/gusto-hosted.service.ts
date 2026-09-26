@@ -193,7 +193,7 @@ export class GustoHostedService implements IScraper, OnModuleDestroy {
     const readyMs = GUSTO_HOSTED_READY_TIMEOUT_SECONDS * 1000;
     const page = await BrowserPool.getPage({ proxy, stealth: true, headful: true });
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      await BrowserPool.navigate(page, url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
       if (opts.waitForSelector) {
         await page
           .waitForSelector(opts.waitForSelector, { timeout: readyMs })

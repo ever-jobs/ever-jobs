@@ -390,7 +390,7 @@ All settings are configurable via environment variables. Copy `.env.example` to 
 | `EVER_JOBS_CRAWL_MIN_INTERVAL_MS` | `100` | Minimum gap between request starts per host       |
 | `EVER_JOBS_CRAWL_PROXY_ROTATION` | `per-host` | `per-host`, `per-scrape`, `per-request`, `off` |
 | `EVER_JOBS_CRAWL_PROXIES` | (empty) | Proxy list; falls back to `DEFAULT_PROXIES`          |
-| `EVER_JOBS_CRAWL_RETRIES` | `2`     | Retries on `EVER_JOBS_CRAWL_RETRY_STATUSES` (`429,502,503,504`) |
+| `EVER_JOBS_CRAWL_RETRIES` | `2`     | Retries on `EVER_JOBS_CRAWL_RETRY_STATUSES` (`429,502,503,504`); at most `10` |
 | `EVER_JOBS_CRAWL_MAX_RETRY_AFTER_MS` | `60000` | Longer `Retry-After` → give up and cool the host |
 | `EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS` | `5000` | A `429`/`503` waits at least this (doubling per retry) and cools the host that long; `0` = no floor |
 | `EVER_JOBS_CRAWL_ROBOTS_TXT` | `off` | `off`, `crawl-delay`, `respect`                        |
@@ -551,7 +551,7 @@ All parameters are optional. When `siteType` is omitted, search + company scrape
 | `minIntervalMs` / `jitterMs` | `integer` | `100` / `0` | Gap between request starts, plus random jitter |
 | `maxQueueWaitMs` | `integer` | `0` | Longest wait for a slot before failing fast (0 = no limit) |
 | `adaptiveThrottle` | `boolean` | `true` | Slow a host down after 429/503, recover on success |
-| `retries` / `retryStatuses` | `integer` / `integer[]` | `2` / `[429,502,503,504]` | Retry count and statuses |
+| `retries` / `retryStatuses` | `integer` / `integer[]` | `2` / `[429,502,503,504]` | Retry count (0–10) and statuses |
 | `retryBackoff` | `string` | `exponential` | `exponential`, `linear`, `constant` |
 | `retryBaseDelayMs` / `retryMaxDelayMs` | `integer` | `1000` / `30000` | Back-off base and cap |
 | `retryJitter` / `retryOnNetworkError` | `boolean` | `true` / `false` | Full jitter; also retry connection errors |

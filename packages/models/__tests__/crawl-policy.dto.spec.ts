@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CRAWL_POLICY_DTO_VALUES, CrawlPolicyDto, ScraperInputDto } from '../src';
+import { CRAWL_POLICY_DTO_VALUES, CrawlPolicyDto, MAX_CRAWL_RETRIES, ScraperInputDto } from '../src';
 
 /**
  * Spec 1690 §5.2 — `ScraperInputDto.crawl` / `CrawlPolicyDto` validation.
@@ -77,6 +77,13 @@ describe('CrawlPolicyDto (Spec 1690)', () => {
     expect(await errorsFor({ [field]: -1 })).toEqual([field]);
     expect(await errorsFor({ [field]: 1.5 })).toEqual([field]);
     expect(await errorsFor({ [field]: '5' })).toEqual([field]);
+  });
+
+  it(`retries: at most MAX_CRAWL_RETRIES (${MAX_CRAWL_RETRIES})`, async () => {
+    expect(MAX_CRAWL_RETRIES).toBe(10);
+    expect(await errorsFor({ retries: MAX_CRAWL_RETRIES })).toEqual([]);
+    expect(await errorsFor({ retries: MAX_CRAWL_RETRIES + 1 })).toEqual(['retries']);
+    expect(await errorsFor({ retries: 2_147_483_647 })).toEqual(['retries']);
   });
 
   it.each([

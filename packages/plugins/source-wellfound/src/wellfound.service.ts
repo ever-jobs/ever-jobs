@@ -325,7 +325,8 @@ export class WellfoundService implements IScraper, OnModuleDestroy {
   private async fetchWithBrowser(run: ScrapeRun, url: string): Promise<PageFetch> {
     if (!run.page) run.page = await BrowserPool.getPage({ proxy: run.input.proxies?.[0] ?? undefined });
     this.logger.debug(`Wellfound: navigating to ${url}`);
-    const response = await run.page.goto(url, { waitUntil: 'domcontentloaded', timeout: run.timeoutMs });
+    // Through the crawl policy (Spec 1690): pacing, egress guard, robots.txt, abort.
+    const response = await BrowserPool.navigate(run.page, url, { waitUntil: 'domcontentloaded', timeout: run.timeoutMs });
     const status = response?.status() ?? 200;
     // The payload is server-rendered: it is in the DOM as soon as the document is.
     const json = (await run.page.evaluate(NEXT_DATA_SCRIPT)) as string | null;

@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
+import { MAX_CRAWL_RETRIES } from '@ever-jobs/models';
 
 import {
   CRAWL_ENV,
@@ -13,6 +14,7 @@ import {
   CRAWL_EXTRA_ENV,
   CRAWL_POLICY_ENV_VARS,
   LEGACY_RETRY_ENV,
+  crawlBrowserNavigationEnabled,
   crawlBuiltinHostsEnabled,
   crawlCallerProxiesAllowed,
   crawlPluginManifestsEnabled,
@@ -41,6 +43,7 @@ describe('crawl policy env (Spec 1690)', () => {
         builtinHosts: true,
         pluginManifests: true,
         callerProxies: 'any',
+        browserNavigation: true,
       });
     });
 
@@ -163,7 +166,6 @@ describe('crawl policy env (Spec 1690)', () => {
       [CRAWL_ENV.MIN_INTERVAL_MS, 'minIntervalMs'],
       [CRAWL_ENV.JITTER_MS, 'jitterMs'],
       [CRAWL_ENV.MAX_QUEUE_WAIT_MS, 'maxQueueWaitMs'],
-      [CRAWL_ENV.RETRIES, 'retries'],
       [CRAWL_ENV.RETRY_BASE_DELAY_MS, 'retryBaseDelayMs'],
       [CRAWL_ENV.RETRY_MAX_DELAY_MS, 'retryMaxDelayMs'],
       [CRAWL_ENV.MAX_RETRY_AFTER_MS, 'maxRetryAfterMs'],
@@ -190,6 +192,33 @@ describe('crawl policy env (Spec 1690)', () => {
         const huge = parse({ [name]: '99999999999' });
         expect(huge.global[field]).toBe(2_147_483_647);
         expect(huge.warnings).toEqual([expect.stringContaining('clamped')]);
+      });
+    });
+
+    describe(`${CRAWL_ENV.RETRIES} (int 0..${MAX_CRAWL_RETRIES})`, () => {
+      it.each([
+        ['0', 0],
+        ['3', 3],
+        [' 10 ', 10],
+      ])('%j → %d', (raw, expected) => {
+        const cfg = parse({ [CRAWL_ENV.RETRIES]: raw });
+        expect(cfg.global.retries).toBe(expected);
+        expect(cfg.warnings).toEqual([]);
+      });
+      it.each(['11', '250', '99999999999'])('clamps %j to MAX_CRAWL_RETRIES, with a warning', (raw) => {
+        const cfg = parse({ [CRAWL_ENV.RETRIES]: raw });
+        expect(cfg.global.retries).toBe(MAX_CRAWL_RETRIES);
+        expect(cfg.warnings).toEqual([expect.stringMatching(new RegExp(`^${CRAWL_ENV.RETRIES}: .*clamped to ${MAX_CRAWL_RETRIES}`))]);
+      });
+      it('the pre-1690 RETRY_DEFAULT_RETRIES is bounded the same way', () => {
+        const cfg = parse({ [LEGACY_RETRY_ENV.RETRIES]: '50' });
+        expect(cfg.global.retries).toBe(MAX_CRAWL_RETRIES);
+        expect(cfg.warnings).toEqual([expect.stringContaining(LEGACY_RETRY_ENV.RETRIES)]);
+      });
+      it('ignores a negative or non-numeric value with a warning; rounds a fraction down', () => {
+        expect(parse({ [CRAWL_ENV.RETRIES]: '-1' }).global.retries).toBeUndefined();
+        expect(parse({ [CRAWL_ENV.RETRIES]: 'abc' }).warnings).toEqual([expect.stringContaining(CRAWL_ENV.RETRIES)]);
+        expect(parse({ [CRAWL_ENV.RETRIES]: '2.9' }).global.retries).toBe(2);
       });
     });
 
@@ -360,6 +389,16 @@ describe('crawl policy env (Spec 1690)', () => {
       expect(cfg.policies.hosts).toEqual({ 'ok.example': {} });
       expect(cfg.warnings).toHaveLength(7);
       expect(cfg.warnings.every((w) => w.startsWith(CRAWL_ENV.POLICIES))).toBe(true);
+    });
+
+    it(`clamps an operator's retries to MAX_CRAWL_RETRIES (${MAX_CRAWL_RETRIES}), per site and per host, with a warning`, () => {
+      const cfg = parse({
+        [CRAWL_ENV.POLICIES]: JSON.stringify({ sites: { softy: { retries: 25 } }, hosts: { '*.softy.pro': { retries: '1000' } } }),
+      });
+      expect(cfg.policies.sites).toEqual({ softy: { retries: MAX_CRAWL_RETRIES } });
+      expect(cfg.policies.hosts).toEqual({ '*.softy.pro': { retries: MAX_CRAWL_RETRIES } });
+      expect(cfg.warnings).toHaveLength(2);
+      expect(cfg.warnings.every((w) => w.includes(`clamped to ${MAX_CRAWL_RETRIES}`))).toBe(true);
     });
 
     it('never lets a key reach Object.prototype', () => {
@@ -534,6 +573,17 @@ describe('crawl policy env (Spec 1690)', () => {
       expect(cfg.warnings).toEqual([expect.stringContaining(CRAWL_EXTRA_ENV.PLUGIN_MANIFESTS)]);
     });
 
+    it('browser navigation policy: on by default, off under legacy, settable either way', () => {
+      expect(parse({}).browserNavigation).toBe(true);
+      expect(parse({ [CRAWL_ENV.PRESET]: 'strict' }).browserNavigation).toBe(true);
+      expect(parse({ [CRAWL_ENV.PRESET]: 'legacy' }).browserNavigation).toBe(false);
+      expect(parse({ [CRAWL_ENV.PRESET]: 'legacy', [CRAWL_EXTRA_ENV.BROWSER_NAVIGATION]: 'on' }).browserNavigation).toBe(true);
+      expect(parse({ [CRAWL_EXTRA_ENV.BROWSER_NAVIGATION]: 'false' }).browserNavigation).toBe(false);
+      const bad = parse({ [CRAWL_EXTRA_ENV.BROWSER_NAVIGATION]: 'sometimes' });
+      expect(bad.browserNavigation).toBe(true);
+      expect(bad.warnings).toEqual([expect.stringContaining(CRAWL_EXTRA_ENV.BROWSER_NAVIGATION)]);
+    });
+
     it('caller proxies: "any" only when caller overrides are "any", unless set', () => {
       expect(parse({}).callerProxies).toBe('any');
       expect(parse({ [CRAWL_ENV.CALLER_OVERRIDES]: 'stricter' }).callerProxies).toBe('none');
@@ -550,6 +600,8 @@ describe('crawl policy env (Spec 1690)', () => {
       expect(crawlBuiltinHostsEnabled(bare as never)).toBe(false);
       expect(crawlPluginManifestsEnabled(bare as never)).toBe(false);
       expect(crawlCallerProxiesAllowed(bare as never)).toBe(false);
+      expect(crawlBrowserNavigationEnabled(bare as never)).toBe(false);
+      expect(crawlBrowserNavigationEnabled({ ...bare, preset: 'polite' } as never)).toBe(true);
       expect(crawlBuiltinHostsEnabled({ ...bare, preset: 'polite' } as never)).toBe(true);
       expect(crawlCallerProxiesAllowed({ ...bare, callerOverrides: 'any' } as never)).toBe(true);
     });

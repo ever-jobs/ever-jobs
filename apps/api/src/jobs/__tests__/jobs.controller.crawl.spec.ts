@@ -56,7 +56,8 @@ describe('JobsController — crawl policy plumbing (Spec 1690)', () => {
 
     expect(LIVENESS_CRAWL_SITE).toBe('liveness-http');
     expect(liveness.checkBatch).toHaveBeenCalledWith(['https://jobs.example/1', 'https://jobs.example/2']);
-    expect(seen.ctx).toEqual({ site: 'liveness-http', signal: expect.any(AbortSignal) });
+    // `proxyPin`: every scrape context carries its own per-scrape proxy pin.
+    expect(seen.ctx).toEqual({ site: 'liveness-http', signal: expect.any(AbortSignal), proxyPin: expect.any(Object) });
     expect(result.jobs.every((j) => j.liveness?.state === 'active')).toBe(true);
     // The context does not leak past the enrichment.
     expect(getScrapeContext()).toBeUndefined();
@@ -100,7 +101,7 @@ describe('JobsController — crawl policy plumbing (Spec 1690)', () => {
 
       await withLiveness(controller, new ScraperInputDto({ searchTerm: 'x' }));
 
-      expect(seen.ctx).toEqual({ site: 'liveness-http' });
+      expect(seen.ctx).toEqual({ site: 'liveness-http', proxyPin: expect.any(Object) });
     });
 
     it('livenessDeadlineMs: default 60 s, invalid values ignored', () => {

@@ -26,7 +26,12 @@ import {
   getHostLimiter,
 } from './crawl/host-limiter';
 import { sanitizeHeaderValue } from './crawl/policy-schema';
-import { ProxyRotationState, createProxyRotationState, selectProxy } from './crawl/proxy-selector';
+import {
+  ProxyRotationState,
+  createProxyRotationState,
+  scrapeProxyRotationState,
+  selectProxy,
+} from './crawl/proxy-selector';
 import { RobotsFetcher, RobotsTxtCache, getRobotsTxtCache } from './crawl/robots';
 import { getEffectiveCrawlPolicy, getEffectiveProxies, getScrapeContext, runWithScrapeContext } from './crawl/scrape-context';
 import { CrawlPolicy, CrawlPolicyOverride, HostLimiterAcquireOptions, ResolvedCrawlPolicy, ScrapeContext } from './crawl/types';
@@ -468,6 +473,18 @@ export function retryBackoffMs(
 const THROTTLE_STATUSES: ReadonlySet<number> = new Set([429, 503]);
 
 /**
+ * Shortest wait before a retry when the configured back-off would leave (almost)
+ * none, ms (Spec 1690 §4.5): retry number n + 1 waits at least this long whenever
+ * the un-jittered back-off for it is shorter — `retryBaseDelayMs` or
+ * `retryMaxDelayMs` 0, or a base of a few ms — so `retries: 10` with 0 ms delays
+ * cannot hammer a host in a tight loop. A normal back-off (≥ this) keeps its full
+ * jitter. `HttpClient` applies it under every preset except `legacy` (pre-1690
+ * retried a 0 ms back-off immediately); 429/503 already wait the (longer)
+ * `throttleRetryDelayMs` floor.
+ */
+export const MIN_RETRY_DELAY_MS = 100;
+
+/**
  * The back-off floor for retry number `attempt + 1` after a throttling answer
  * (`throttleRetryDelayMs`, Spec 1690 §4.5): `throttleRetryDelayMs × 2^attempt`,
  * capped at `max(retryMaxDelayMs, throttleRetryDelayMs)`. 0 when `status` is not
@@ -508,6 +525,11 @@ export function throttleRetryFloorMs(
  * 0–1 s, i.e. retrying faster instead of backing off. The give-up decision is
  * unchanged. `throttleRetryDelayMs: 0` (the `legacy` preset) is the arithmetic
  * above exactly.
+ *
+ * `minDelayMs` (default 0 = off; `HttpClient` passes `MIN_RETRY_DELAY_MS` unless
+ * the preset is `legacy`): when the un-jittered backoff for this attempt is
+ * shorter, "the backoff" is at least `minDelayMs` — a retry never follows its
+ * failure in a tight loop because the configured delays are 0.
  */
 export function retryDecision(
   policy: Pick<
@@ -525,8 +547,12 @@ export function retryDecision(
   retryAfterMs: number | null,
   random: () => number = Math.random,
   status?: number,
+  minDelayMs = 0,
 ): RetryDecision {
-  const backoff = Math.max(retryBackoffMs(policy, attempt, random), throttleRetryFloorMs(policy, attempt, status));
+  let backoff = Math.max(retryBackoffMs(policy, attempt, random), throttleRetryFloorMs(policy, attempt, status));
+  if (minDelayMs > 0 && retryBackoffMs({ ...policy, retryJitter: false }, attempt) < minDelayMs) {
+    backoff = Math.max(backoff, minDelayMs);
+  }
   if (!policy.respectRetryAfter || retryAfterMs === null) return { delayMs: backoff };
   const maxRetryAfter = Math.max(0, policy.maxRetryAfterMs);
   if (retryAfterMs <= maxRetryAfter) return { delayMs: Math.max(backoff, retryAfterMs) };
@@ -551,6 +577,75 @@ export function penalizesBucket(
     policy.adaptiveThrottle ||
     (policy.throttleRetryDelayMs ?? 0) > 0
   );
+}
+
+/** What `recordAnswerOutcome` did to the bucket (for the caller's log line). */
+export interface AnswerOutcome {
+  /** The answer was a 429/503. */
+  throttled: boolean;
+  /** Set when a `Retry-After` over `maxRetryAfterMs` cooled the bucket for this long (`give-up`). */
+  giveUpAfterMs?: number;
+  /** Set when the (paced) bucket backs off this long after a 429/503. */
+  backOffMs?: number;
+}
+
+/**
+ * Feed an answer that is handed back to its caller rather than retried — an
+ * axios response accepted through `validateStatus`, or a browser navigation
+ * (`BrowserPool.navigate`) — to the limiter (Spec 1690 §4.5): a 429/503 counts
+ * as throttling (adaptive slow-down) and backs the bucket off — the full
+ * `Retry-After` when it exceeds `maxRetryAfterMs` under `give-up`, else the
+ * back-off (never less than the throttle floor) when the bucket is paced
+ * (`penalizesBucket`); any other status is an `ok` outcome.
+ */
+export function recordAnswerOutcome(
+  limiter: HostLimiter,
+  bucket: string,
+  policy: CrawlPolicy,
+  attempt: number,
+  status: number | undefined,
+  headers: unknown,
+): AnswerOutcome {
+  if (status === undefined || !THROTTLE_STATUSES.has(status)) {
+    limiter.recordOutcome(bucket, 'ok');
+    return { throttled: false };
+  }
+  limiter.recordOutcome(bucket, 'throttled');
+  const retryAfter = policy.respectRetryAfter ? parseRetryAfter(headerValue(headers, 'retry-after')) : null;
+  const decision = retryDecision(policy, attempt, retryAfter, undefined, status);
+  if ('giveUpAfterMs' in decision) {
+    limiter.penalize(bucket, decision.giveUpAfterMs);
+    return { throttled: true, giveUpAfterMs: decision.giveUpAfterMs };
+  }
+  if (penalizesBucket(policy)) {
+    limiter.penalize(bucket, decision.delayMs);
+    return { throttled: true, backOffMs: decision.delayMs };
+  }
+  return { throttled: true };
+}
+
+/**
+ * Host-limiter options for one request (attempt) under `policy` (Spec 1690
+ * §4.3/§4.5) — shared by `HttpClient` and `BrowserPool.navigate`. `crawlDelayMs`
+ * (a robots.txt `Crawl-delay`) raises the bucket's interval for this request.
+ * With no `maxQueueWaitMs`, a request still never waits out a bucket cool-down
+ * longer than `maxRetryAfterMs` — the most it would ever wait for the server
+ * itself — and fails fast with `HostCoolingDownError` instead.
+ */
+export function crawlAcquireOptions(
+  policy: CrawlPolicy,
+  signal?: AbortSignal,
+  crawlDelayMs = 0,
+): HostLimiterAcquireOptions & HostLimiterAcquireExtraOptions {
+  return {
+    maxConcurrent: policy.maxConcurrentPerHost,
+    minIntervalMs: Math.max(policy.minIntervalMs, crawlDelayMs),
+    jitterMs: policy.jitterMs,
+    maxWaitMs: policy.maxQueueWaitMs,
+    adaptive: policy.adaptiveThrottle,
+    maxCoolDownWaitMs: policy.maxQueueWaitMs > 0 ? 0 : Math.max(1, policy.maxRetryAfterMs),
+    ...(signal ? { signal } : {}),
+  };
 }
 
 /**
@@ -688,6 +783,11 @@ export class HttpClient {
   private readonly client: AxiosInstance;
   /** Proxies this client was given; empty = the scrape context's, else the env's (`getEffectiveProxies`). */
   private readonly proxies: string[];
+  /**
+   * Per-client rotation state: `per-request` round-robin, and the `per-scrape`
+   * pin when no scrape context is in scope (inside one, the context's
+   * `proxyPin` is shared by every client of the scrape).
+   */
   private readonly rotation: ProxyRotationState;
   /**
    * The pre-1690 option values, with their pre-1690 defaults — kept for
@@ -970,8 +1070,16 @@ export class HttpClient {
   private async sendUnderPolicy<T = any>(axiosConfig: AxiosRequestConfig, plan: RequestPlan): Promise<AxiosResponse<T>> {
     const { target, policy, site, bucket, signal, axiosSignal, identity } = plan;
 
-    // Chosen once per request, so retries reuse it (as before Spec 1690).
-    const proxy = selectProxy(getEffectiveProxies(this.proxies), policy.proxyRotation, this.rotation, bucket ?? '');
+    // Chosen once per request, so retries reuse it (as before Spec 1690). Under
+    // `per-scrape` the pin lives in the scrape context, so every client of one
+    // scrape (a token client and a data client…) keeps the same origin; outside
+    // any scrape context it is per client, as before. (A memo hit never gets
+    // here, so it consumes no pick.)
+    const ctx = getScrapeContext();
+    const proxies = getEffectiveProxies(this.proxies);
+    const rotation =
+      policy.proxyRotation === 'per-scrape' && ctx?.proxyPin ? scrapeProxyRotationState(ctx.proxyPin, proxies) : this.rotation;
+    const proxy = selectProxy(proxies, policy.proxyRotation, rotation, bucket ?? '');
     const transport = this.transportFor(proxy, policy, axiosConfig, target);
     const limiter = this.hostLimiter;
 
@@ -987,6 +1095,9 @@ export class HttpClient {
 
     const limits = this.acquireOptions(policy, signal, crawlDelayMs);
     const retries = Math.max(0, Math.floor(policy.retries));
+    // Pre-1690 (`legacy`) retried a 0 ms back-off immediately; every other preset
+    // waits at least MIN_RETRY_DELAY_MS between a failure and its retry.
+    const minRetryDelay = readCrawlPolicyEnv().preset === 'legacy' ? 0 : MIN_RETRY_DELAY_MS;
 
     for (let attempt = 0; ; attempt++) {
       const release = bucket ? await limiter.acquire(bucket, limits) : undefined;
@@ -1020,8 +1131,9 @@ export class HttpClient {
         status !== undefined && policy.respectRetryAfter
           ? this.retryAfterMs((error as { response?: { headers?: unknown } }).response?.headers)
           : null;
-      // A 429/503 gets the throttle floor (`throttleRetryDelayMs`) under its wait.
-      const decision = retryDecision(policy, attempt, retryAfter, undefined, status);
+      // A 429/503 gets the throttle floor (`throttleRetryDelayMs`) under its wait;
+      // any retry at least `MIN_RETRY_DELAY_MS` when the configured delays are ~0.
+      const decision = retryDecision(policy, attempt, retryAfter, undefined, status, minRetryDelay);
       const willRetry = retryable && attempt < retries;
 
       if ('giveUpAfterMs' in decision) {
@@ -1030,9 +1142,11 @@ export class HttpClient {
         if (!retryable && !throttled) throw error;
         // The server asked for longer than we wait: never retry early, and hold
         // every request of the bucket for the full Retry-After (up to the
-        // limiter's `maxCooldownMs`).
+        // limiter's `maxCooldownMs`). The bucket is cooled whether or not a retry
+        // was left, so the request always fails with `HostCoolingDownError`
+        // (diagnostic `rate_limited`, the raw answer as its `cause`) — with
+        // `retries: 0` or on the last attempt too.
         if (bucket) limiter.penalize(bucket, decision.giveUpAfterMs);
-        if (!willRetry) throw error;
         this.logger.warn(
           `${this.describeRequest(axiosConfig)} failed ${status}, Retry-After ${decision.giveUpAfterMs}ms exceeds ` +
             `maxRetryAfterMs ${policy.maxRetryAfterMs}ms; not retrying (${bucket ?? 'no bucket'} cooling down)`,
@@ -1088,27 +1202,15 @@ export class HttpClient {
 
   // ── crawl policy ────────────────────────────────────────────────────────────
 
-  /**
-   * Limiter options for one attempt. With no `maxQueueWaitMs`, a request still
-   * never waits out a bucket cool-down longer than `maxRetryAfterMs` — the most
-   * it would ever wait for the server itself — and fails fast with
-   * `HostCoolingDownError` instead (Spec 1690 §4.5).
-   */
+  /** Limiter options for one attempt — `crawlAcquireOptions` (Spec 1690 §4.3/§4.5). */
   private acquireOptions(
     policy: CrawlPolicy,
     signal: AbortSignal | undefined,
     crawlDelayMs = 0,
   ): HostLimiterAcquireOptions & HostLimiterAcquireExtraOptions {
-    return {
-      maxConcurrent: policy.maxConcurrentPerHost,
-      // The client's floor (`minIntervalFloorMs`) bounds every layer, a caller's included.
-      minIntervalMs: Math.max(policy.minIntervalMs, crawlDelayMs, this.minIntervalFloorMs),
-      jitterMs: policy.jitterMs,
-      maxWaitMs: policy.maxQueueWaitMs,
-      adaptive: policy.adaptiveThrottle,
-      maxCoolDownWaitMs: policy.maxQueueWaitMs > 0 ? 0 : Math.max(1, policy.maxRetryAfterMs),
-      ...(signal ? { signal } : {}),
-    };
+    const options = crawlAcquireOptions(policy, signal, crawlDelayMs);
+    // The client's floor (`minIntervalFloorMs`) bounds every layer, a caller's included.
+    return { ...options, minIntervalMs: Math.max(options.minIntervalMs, this.minIntervalFloorMs) };
   }
 
   /**
@@ -1126,24 +1228,15 @@ export class HttpClient {
     response: AxiosResponse,
     config: AxiosRequestConfig,
   ): void {
-    const limiter = this.hostLimiter;
     const status = response?.status;
-    if (status !== 429 && status !== 503) {
-      limiter.recordOutcome(bucket, 'ok');
-      return;
-    }
-    limiter.recordOutcome(bucket, 'throttled');
-    const retryAfter = policy.respectRetryAfter ? this.retryAfterMs(response.headers) : null;
-    const decision = retryDecision(policy, attempt, retryAfter, undefined, status);
-    if ('giveUpAfterMs' in decision) {
-      limiter.penalize(bucket, decision.giveUpAfterMs);
+    const outcome = recordAnswerOutcome(this.hostLimiter, bucket, policy, attempt, status, response?.headers);
+    if (outcome.giveUpAfterMs !== undefined) {
       this.logger.warn(
-        `${this.describeRequest(config)} answered ${status}, Retry-After ${decision.giveUpAfterMs}ms exceeds ` +
+        `${this.describeRequest(config)} answered ${status}, Retry-After ${outcome.giveUpAfterMs}ms exceeds ` +
           `maxRetryAfterMs ${policy.maxRetryAfterMs}ms (${bucket} cooling down)`,
       );
-    } else if (penalizesBucket(policy)) {
-      limiter.penalize(bucket, decision.delayMs);
-      this.logger.debug(`${this.describeRequest(config)} answered ${status}; ${bucket} backs off ${decision.delayMs}ms`);
+    } else if (outcome.backOffMs !== undefined) {
+      this.logger.debug(`${this.describeRequest(config)} answered ${status}; ${bucket} backs off ${outcome.backOffMs}ms`);
     }
   }
 
