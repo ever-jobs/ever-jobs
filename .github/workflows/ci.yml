@@ -139,11 +139,12 @@ jobs:
         run: npx jest --testPathPatterns 'apps/api/__tests__/health' --verbose
 
   # Hermetic core suites (Spec 1689): packages/{common,plugin,models,analytics},
-  # apps/api/src, apps/api/__tests__/{jobs,integration} and apps/mcp. None of
-  # them ran in any job before — `test-fast` covers only the apps/api health
-  # spec and `test-e2e` the live search/analyze/CLI specs — so two apps/api
-  # suites sat red unnoticed (a stale JobsService stub, and a Gem call count
-  # from before Spec 5035). BLOCKING: no continue-on-error.
+  # apps/api/src, apps/api/__tests__/{jobs,integration}, apps/mcp and the
+  # apps/cli unit specs (crawl-options, Spec 1690; the CLI e2e spec stays in
+  # test-e2e). None of them ran in any job before — `test-fast` covers only
+  # the apps/api health spec and `test-e2e` the live search/analyze/CLI specs
+  # — so two apps/api suites sat red unnoticed (a stale JobsService stub, and
+  # a Gem call count from before Spec 5035). BLOCKING: no continue-on-error.
   #
   # The path list lives in the `test:core` npm script so a local
   # `npm run test:core` and this job cannot drift. `*.e2e-spec.ts` is excluded,

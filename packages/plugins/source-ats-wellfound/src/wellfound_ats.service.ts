@@ -77,7 +77,7 @@ export class WellfoundAtsService implements IScraper, OnModuleDestroy {
       for (let pageNum = 1; pageNum <= WELLFOUND_ATS_MAX_PAGES; pageNum++) {
         const url = this.boardUrl(slug, pageNum);
         this.logger.log(`Wellfound ATS: navigating to ${url}`);
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+        await BrowserPool.navigate(page, url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
         await this.delay(WELLFOUND_ATS_HYDRATE_MS);
 
         const html = (await page.content().catch(() => '')) as string;

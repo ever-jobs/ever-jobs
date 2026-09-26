@@ -1,5 +1,36 @@
 # API Changelog
 
+### [Unreleased] - 2026-09-25 (Specs 1690, 1691)
+
+#### Added
+
+- **`crawl` on `POST /api/jobs/search` and `POST /api/jobs/analyze`** (`ScraperInputDto.crawl`, `CrawlPolicyDto`): an optional per-request crawl policy — `userAgent`, `userAgentMode`, `from`, `stripClientHints`, `proxyRotation`, `rateLimitScope`, `maxConcurrentPerHost`, `minIntervalMs`, `jitterMs`, `maxQueueWaitMs`, `adaptiveThrottle`, `retries` (0–10), `retryStatuses`, `retryBackoff`, `retryBaseDelayMs`, `retryMaxDelayMs`, `retryJitter`, `retryOnNetworkError`, `respectRetryAfter`, `maxRetryAfterMs`, `retryAfterOverMax`, `throttleRetryDelayMs`, `robotsTxt`, `blockPrivateNetworks`, `discovery`. Every field optional and validated; the operator decides how much a caller may change (`EVER_JOBS_CRAWL_CALLER_OVERRIDES` = `any` | `stricter` | `none`); `blockPrivateNetworks` can only be turned on by a caller. See [CRAWL_POLICY.md](./CRAWL_POLICY.md).
+- **GraphQL:** `SearchJobsInput.crawl` of the new input type `CrawlPolicyInput` (same fields; enum-like fields are `String`s).
+- **MCP:** `search_jobs` accepts `crawl` (object or JSON-object string).
+- **CLI:** `search` and `compare` accept `--crawl <json>`, `--user-agent-mode`, `--proxy-rotation`, `--max-per-host`, `--min-interval-ms`, `--crawl-retries`, `--robots-txt`, `--discovery`, and the process-wide `--crawl-preset`, `--caller-overrides`.
+- **`GET /api/sources/:site/crawl-policy?host=&crawl=`**: the resolved crawl policy of a source (optionally for one host, optionally previewing a caller override) with the layer that set each field (`provenance`), the plugin's `userAgentReason`, operator-policy matches and configuration warnings (credentials redacted). 404 for an unknown site, 400 for an unparseable `host`/`crawl`.
+- **Diagnostics:** new per-source reason **`rate_limited`** (actionable): our own crawl policy held the source back — no slot within `maxQueueWaitMs`, or the host asked us to back off (`Retry-After`) for longer than we wait. robots.txt refusals report `blocked`; private/internal destinations report `bad_input`.
+- **Environment:** 47 `EVER_JOBS_CRAWL_*` variables (preset, identity, proxies, pacing, retries, robots.txt, egress guard, discovery, operator per-site/per-host JSON policies, caller rules), `EVER_JOBS_CIRCUIT_MAX_SITES`, `EVER_JOBS_LIVENESS_DEADLINE_MS`, and `SOFTY_*` knobs — all listed in [CRAWL_POLICY.md §5](./CRAWL_POLICY.md#5-environment-variables) and `.env.example`.
+
+#### Changed
+
+- **Outbound identity:** by default every request carries `Mozilla/5.0 (compatible; EverJobs/1.0; +https://github.com/ever-jobs/ever-jobs)` instead of a desktop Chrome UA; plugins send their own UA only with a stated reason (USAJobs, HeadHunter). `EVER_JOBS_CRAWL_PRESET=legacy` (or `EVER_JOBS_CRAWL_USER_AGENT=browser`) restores the old identity.
+- **Pacing:** requests are paced per host process-wide (default 4 in flight, 100 ms between starts; higher builtin limits for the Greenhouse, Lever, Ashby and SmartRecruiters APIs). `rateDelayMin`/`rateDelayMax` now space concurrent requests too (per host bucket).
+- **Proxies:** default rotation is one stable proxy per host (`per-host`) instead of round-robin per request; `DEFAULT_PROXIES` is now used as the fallback list.
+- **Retries:** default 2 retries on `429,502,503,504` with exponential back-off and jitter (was 3 linear on `429,500,502,503,504`); never earlier than `Retry-After`; a `Retry-After` over 60 s gives up and cools the whole host instead of being cut to 30 s.
+- **Legacy flat fields** (`userAgent`, `rateDelayMin`/`Max`, `retries`, `retryDelay`, `retryBackoff`, `retryMaxDelay`) map into the caller layer only when sent; a sent `userAgent` implies `userAgentMode: "strict"`. `crawl` wins over them.
+- **Search deadline:** an abandoned source's queued and in-flight requests are cancelled (`EVER_JOBS_CRAWL_ABORT_ON_DEADLINE=false` restores the old behaviour); such aborts no longer count against the source's circuit breaker, which now tracks up to 4,096 sites (was 250).
+- **Egress guard:** requests to loopback / private / link-local / cluster-internal destinations are refused by default (`EVER_JOBS_CRAWL_BLOCK_PRIVATE_NETWORKS=false` or `EVER_JOBS_CRAWL_EGRESS_ALLOW_HOSTS` for local mocks).
+- **Softy (`softy`):** works on the current `/offers` markup again, discovers offers from `/sitemap.xml` (`crawl.discovery` = `auto` | `sitemap` | `listing`), reads paginated listings, fetches detail pages one at a time at ~1 req/s across `softy.pro`.
+
+#### Fixed
+
+- **MCP `search_jobs`** posted snake_case keys that the API's validation whitelist stripped, so every MCP search ran as an unfiltered whole-catalogue fan-out; it now posts the camelCase fields the API accepts.
+- **Plugin-declared User-Agents** (e.g. USAJobs' required registered e-mail) were silently replaced by the client's default UA; they now reach the wire where the resolved mode allows.
+- `createHttpClient` no longer drops a plugin's own `timeout` when proxies are set.
+
+---
+
 ### [v0.7.0-alpha] - 2026-07-27
 
 #### Added

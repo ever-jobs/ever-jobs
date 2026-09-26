@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic sitemap index pointing at the offers sitemap (Spec 1691 test plan). -->
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>https://acme.softy.pro/sitemap-offers.xml</loc>
+    <lastmod>2026-09-24</lastmod>
+  </sitemap>
+</sitemapindex>

@@ -6,6 +6,7 @@ import { JobType } from '../enums/job-type.enum';
 import { DescriptionFormat } from '../enums/description-format.enum';
 import { Country } from '../enums/country.enum';
 import { ScraperAuthDto } from './auth/scraper-auth.dto';
+import { CrawlPolicyDto } from './crawl-policy.dto';
 
 export class ScraperInputDto {
   @ApiPropertyOptional({ enum: Site, isArray: true, description: 'Sites to scrape (default: search + company scrapers; omit or pass explicit values to override)' })
@@ -99,9 +100,16 @@ export class ScraperInputDto {
   @IsNumber()
   requestTimeout?: number;
 
-  @ApiPropertyOptional({ description: 'Proxy URLs', isArray: true })
+  @ApiPropertyOptional({
+    description:
+      'Proxy URLs. Used by every source of the search (crawl.proxyRotation picks among them) unless the operator ' +
+      'set EVER_JOBS_CRAWL_CALLER_PROXIES=none; each is egress-checked (no private / internal proxy hosts) (Spec 1690).',
+    isArray: true,
+    type: String,
+  })
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
   proxies?: string[];
 
   @ApiPropertyOptional({ description: 'Custom CA certificate path' })
@@ -109,7 +117,7 @@ export class ScraperInputDto {
   @IsString()
   caCert?: string;
 
-  @ApiPropertyOptional({ description: 'Custom user agent string' })
+  @ApiPropertyOptional({ description: 'Custom user agent string. Maps to crawl.userAgent and, unless crawl.userAgentMode is also set, crawl.userAgentMode=strict so this UA is what goes on the wire (Spec 1690).' })
   @IsOptional()
   @IsString()
   userAgent?: string;
@@ -124,12 +132,12 @@ export class ScraperInputDto {
   @IsBoolean()
   enforceAnnualSalary?: boolean;
 
-  @ApiPropertyOptional({ description: 'Minimum delay between requests in seconds (rate limiting)' })
+  @ApiPropertyOptional({ description: 'Minimum delay between requests in seconds (rate limiting). Maps to crawl.minIntervalMs = rateDelayMin × 1000, enforced per rate-limit bucket across concurrent requests (Spec 1690).' })
   @IsOptional()
   @IsNumber()
   rateDelayMin?: number;
 
-  @ApiPropertyOptional({ description: 'Maximum delay between requests in seconds (rate limiting)' })
+  @ApiPropertyOptional({ description: 'Maximum delay between requests in seconds (rate limiting). Maps to crawl.jitterMs = (rateDelayMax − rateDelayMin) × 1000 (Spec 1690).' })
   @IsOptional()
   @IsNumber()
   rateDelayMax?: number;
@@ -163,29 +171,29 @@ export class ScraperInputDto {
   @ApiPropertyOptional({
     enum: ['board', 'detail-25', 'detail-all'],
     description:
-      'Tesla per-job description fetch budget (Spec 013 / Q-031 / FR-11). `board` skips per-job GETs (descriptions remain empty); `detail-25` (default) caps follow-ups at 25 to honour NFR-2; `detail-all` fetches every job (multi-hour cost — opt-in only).',
+      'Tesla per-job description fetch budget (Spec 013 / Q-031 / FR-11). `board` skips per-job GETs (descriptions remain empty); `detail-25` (default) caps follow-ups at 25 to honour NFR-2; `detail-all` fetches every job (multi-hour cost — opt-in only). Also honoured by Softy (Spec 1691), where unset means every wanted offer and `board` also selects listing discovery under `crawl.discovery=auto`.',
     default: 'detail-25',
   })
   @IsOptional()
   @IsString()
   descriptionDepth?: 'board' | 'detail-25' | 'detail-all';
 
-  @ApiPropertyOptional({ description: 'Number of retries for failed requests', default: 3 })
+  @ApiPropertyOptional({ description: 'Number of retries for failed requests. Maps to crawl.retries when sent (Spec 1690).', default: 3 })
   @IsOptional()
   @IsNumber()
   retries?: number;
 
-  @ApiPropertyOptional({ description: 'Delay between retries in milliseconds', default: 1000 })
+  @ApiPropertyOptional({ description: 'Delay between retries in milliseconds. Maps to crawl.retryBaseDelayMs when sent (Spec 1690).', default: 1000 })
   @IsOptional()
   @IsNumber()
   retryDelay?: number;
 
-  @ApiPropertyOptional({ enum: ['linear', 'exponential'], description: 'Backoff strategy for retries', default: 'linear' })
+  @ApiPropertyOptional({ enum: ['linear', 'exponential'], description: 'Backoff strategy for retries. Maps to crawl.retryBackoff when sent (Spec 1690).', default: 'linear' })
   @IsOptional()
   @IsString()
   retryBackoff?: 'linear' | 'exponential';
 
-  @ApiPropertyOptional({ description: 'Maximum delay between retries in milliseconds', default: 30000 })
+  @ApiPropertyOptional({ description: 'Maximum delay between retries in milliseconds. Maps to crawl.retryMaxDelayMs when sent (Spec 1690).', default: 30000 })
   @IsOptional()
   @IsNumber()
   retryMaxDelay?: number;
@@ -198,6 +206,16 @@ export class ScraperInputDto {
   @ValidateNested()
   @Type(() => ScraperAuthDto)
   auth?: ScraperAuthDto;
+
+  @ApiPropertyOptional({
+    type: () => CrawlPolicyDto,
+    description:
+      'Per-request crawl policy (Spec 1690): identity, pacing, proxy rotation, retries, robots.txt and discovery. Highest-precedence layer, subject to the operator setting EVER_JOBS_CRAWL_CALLER_OVERRIDES (any | stricter | none). Where a field is also set through a legacy flat field (userAgent, rateDelayMin/Max, retries, retryDelay, retryBackoff, retryMaxDelay), the value here wins. The preset (EVER_JOBS_CRAWL_PRESET) is process-wide and cannot be chosen per request.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CrawlPolicyDto)
+  crawl?: CrawlPolicyDto;
 
   constructor(partial?: Partial<ScraperInputDto>) {
     this.resultsWanted = 15;

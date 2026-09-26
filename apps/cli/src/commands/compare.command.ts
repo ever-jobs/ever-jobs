@@ -6,8 +6,16 @@ import {
   DescriptionFormat, JobType, SiteComparisonDto,
 } from '@ever-jobs/models';
 import { AnalyticsService } from '@ever-jobs/analytics';
+import {
+  CALLER_OVERRIDES_FLAG_DESCRIPTION,
+  CRAWL_FLAG_DESCRIPTION,
+  CRAWL_PRESET_FLAG_DESCRIPTION,
+  CrawlCliOptions,
+  applyCrawlCliOptions,
+  parseNonNegativeInt,
+} from './crawl-options';
 
-interface CompareOptions {
+interface CompareOptions extends CrawlCliOptions {
   searchTerm?: string;
   location?: string;
   results?: number;
@@ -42,7 +50,7 @@ export class CompareCommand extends CommandRunner {
     console.error(`Comparing "${searchTerm}" across ${sites.length} sites...\n`);
 
     // Build common input (minus siteType)
-    const baseInput = new ScraperInputDto({
+    const baseInput = applyCrawlCliOptions(new ScraperInputDto({
       searchTerm,
       location: options.location,
       resultsWanted: options.results ?? 15,
@@ -53,7 +61,7 @@ export class CompareCommand extends CommandRunner {
       jobType: options.jobType as JobType | undefined,
       rateDelayMin: options.rateDelayMin,
       rateDelayMax: options.rateDelayMax,
-    });
+    }), options);
 
     // Scrape each site individually (sequentially to avoid rate-limiting)
     const allJobs = [];
@@ -151,4 +159,36 @@ export class CompareCommand extends CommandRunner {
 
   @Option({ flags: '-v, --verbose', description: 'Verbose output' })
   parseVerbose(): boolean { return true; }
+
+  // ── Crawl policy (Spec 1690) ──
+
+  @Option({ flags: '--crawl <json>', description: CRAWL_FLAG_DESCRIPTION })
+  parseCrawl(val: string): string { return val; }
+
+  @Option({ flags: '--user-agent-mode <mode>', description: 'Which User-Agent goes out: identify (default), strict, plugin' })
+  parseUserAgentMode(val: string): string { return val; }
+
+  @Option({ flags: '--proxy-rotation <mode>', description: 'Proxy rotation: per-host (default), per-scrape, per-request (pre-1690), off' })
+  parseProxyRotation(val: string): string { return val; }
+
+  @Option({ flags: '--max-per-host <n>', description: 'Max requests in flight per host bucket (0 = unlimited)' })
+  parseMaxPerHost(val: string): number { return parseNonNegativeInt(val); }
+
+  @Option({ flags: '--min-interval-ms <ms>', description: 'Minimum gap between request starts per host bucket, ms' })
+  parseMinIntervalMs(val: string): number { return parseNonNegativeInt(val); }
+
+  @Option({ flags: '--crawl-retries <n>', description: 'Retries per request on 429/5xx (crawl policy)' })
+  parseCrawlRetries(val: string): number { return parseNonNegativeInt(val); }
+
+  @Option({ flags: '--robots-txt <mode>', description: 'robots.txt handling: off (default), crawl-delay, respect' })
+  parseRobotsTxt(val: string): string { return val; }
+
+  @Option({ flags: '--discovery <mode>', description: 'Discovery for multi-strategy sources (e.g. Softy): auto (default), sitemap, listing' })
+  parseDiscovery(val: string): string { return val; }
+
+  @Option({ flags: '--crawl-preset <preset>', description: CRAWL_PRESET_FLAG_DESCRIPTION })
+  parseCrawlPreset(val: string): string { return val; }
+
+  @Option({ flags: '--caller-overrides <mode>', description: CALLER_OVERRIDES_FLAG_DESCRIPTION })
+  parseCallerOverrides(val: string): string { return val; }
 }

@@ -106,7 +106,7 @@ export class CareerBuilderService implements IScraper, OnModuleDestroy {
       if (input.location) url.searchParams.set('location', input.location);
 
       this.logger.log(`CareerBuilder Playwright: navigating to ${url.toString()}`);
-      await page.goto(url.toString(), {
+      await BrowserPool.navigate(page, url.toString(), {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });

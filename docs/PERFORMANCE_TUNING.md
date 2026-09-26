@@ -12,6 +12,20 @@
 - Reduce `DEFAULT_RESULTS_WANTED` to lower per-source load
 - Limit `DEFAULT_SITE_NAMES` to only the boards you need
 
+## Per-Host Pacing (crawl policy, Spec 1690)
+
+- Sources run in parallel, but requests to any one host are paced by a process-wide
+  limiter: by default 4 in flight and at least 100 ms between request starts per host
+  (`EVER_JOBS_CRAWL_MAX_CONCURRENT_PER_HOST`, `EVER_JOBS_CRAWL_MIN_INTERVAL_MS`), with
+  higher builtin limits for the Greenhouse, Lever, Ashby and SmartRecruiters APIs.
+- A default search stays well inside the 120 s deadline (simulated: 800 Greenhouse requests
+  plus a 100-wide fan-out to one host in 11.3 s). If a slow host dominates, raise its limit
+  with an operator host policy (`EVER_JOBS_CRAWL_POLICIES`) rather than globally.
+- The limiter is per process: with N replicas a host sees up to N × the per-host limit.
+- Inspect a source with `GET /api/sources/:site/crawl-policy?host=<host>`.
+- `EVER_JOBS_CRAWL_PRESET=legacy` removes pacing entirely (pre-1690 behaviour).
+- Details: [CRAWL_POLICY.md](./CRAWL_POLICY.md) §9 and §18.
+
 ## Logging
 
 - Use `LOG_LEVEL=warn` or `LOG_LEVEL=error` in production to reduce I/O

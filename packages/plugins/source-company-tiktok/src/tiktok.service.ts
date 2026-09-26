@@ -47,7 +47,7 @@ export class TikTokService implements IScraper, OnModuleDestroy {
       const timeoutMs = ((input.requestTimeout ?? 30) * 1000);
 
       this.logger.log(`Navigating to ${url.toString()} (timeout=${timeoutMs}ms)`);
-      await page.goto(url.toString(), {
+      await BrowserPool.navigate(page, url.toString(), {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });

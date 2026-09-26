@@ -146,7 +146,7 @@ export class MonsterService implements IScraper, OnModuleDestroy {
       url.searchParams.set('page', '1');
 
       this.logger.log(`Monster Playwright: navigating to ${url.toString()}`);
-      await page.goto(url.toString(), {
+      await BrowserPool.navigate(page, url.toString(), {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });

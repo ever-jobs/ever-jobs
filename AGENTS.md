@@ -52,10 +52,21 @@ job scraping & analysis. It must be:
    e2e tests collocate under `apps/api/__tests__/e2e/` or `apps/<app>/__tests__/e2e/`.
 8. **Performance.** Default to: streaming responses, async iterators, connection pools,
    bounded concurrency (`p-limit`/`Promise.allSettled`), Redis cache, structured indexes.
+   *Since Spec 1690:* load on any one host is bounded centrally by the crawl-policy
+   per-host limiter in `@ever-jobs/common`; plugins declare site needs in
+   `@SourcePlugin({ crawl })` instead of hand-rolling delays.
 9. **No deletion.** Do not delete user-authored files; *move* or *improve* in place.
    Mark deprecated code with `@deprecated` and a removal target.
-10. **Security.** All HTTP I/O goes through `@ever-jobs/common` HTTP client (UA rotation,
+10. **Security.** All HTTP I/O goes through `@ever-jobs/common` HTTP client (~~UA rotation~~,
     timeouts, retries, redacted logging). Never log secrets.
+    *Amended 2026-09-25 (Spec 1690) — "UA rotation" is superseded by:* a **configurable
+    honest identity** (by default a User-Agent naming Ever Jobs; a plugin sends its own
+    UA only through a manifest opt-in with `userAgentReason`) and the **crawl policy**
+    (per-host pacing, stable proxy per site, back-off that honours `Retry-After`,
+    optional robots.txt, an egress guard against private destinations). The old
+    browser identity (and the browser pool's rotating UAs) stays available as
+    `EVER_JOBS_CRAWL_PRESET=legacy`.
+    Operator guide: [`docs/CRAWL_POLICY.md`](docs/CRAWL_POLICY.md).
 11. **Be exhaustive.** Don't summarize — write full specs, full task lists, full test plans.
 
 ---
@@ -195,11 +206,22 @@ and they are imported by the consumer module directly, not via
 ## 6. Performance Mandates
 
 - **Concurrency.** Use `p-limit` or `Promise.allSettled` w/ a configured limit per source.
+  *Since Spec 1690* every request through `HttpClient` is also paced by the process-wide
+  **per-host limiter** (default 4 in flight and ≥ 100 ms between starts per host; bulk
+  ATS APIs higher) — do not add sleeps for politeness. Declare site-specific pacing in
+  `@SourcePlugin({ crawl })`, and fetch detail pages of fragile sites **sequentially**
+  rather than fanning out hundreds of requests.
 - **Timeouts.** Every external call: connect 3 s, total 12 s, configurable per plugin.
 - **Caching.** Default 5-min TTL; per-source override via `getCacheTTL()`. Redis when set,
   in-memory LRU otherwise.
 - **Retry.** Exponential backoff w/ jitter; max 3 retries; circuit-break after 5 consecutive
   failures (per source).
+  *Since Spec 1690* retries live in `HttpClient`, resolved from the crawl policy (default 2
+  on 429/502/503/504, never earlier than `Retry-After`; a `Retry-After` over 60 s gives
+  up and cools the whole host bucket; a 429/503 without `Retry-After` waits at least
+  `throttleRetryDelayMs` — 5 s, then 10 s — and cools the host bucket just as long).
+  Never add a plugin-level retry loop that re-requests a 429 sooner. A scrape aborted
+  at the search deadline does not count toward the circuit breaker.
 - **Parsing.** Stream HTML through Cheerio when possible; reuse `Turndown` instance.
 - **JSON.** Use `JSON.parse` only on validated payloads; prefer `Zod.parse` for shape.
 - **Memory.** Bound result-set size per source (`maxResults`), enforce it in the plugin.
@@ -259,4 +281,4 @@ Before opening a commit, verify:
 
 ---
 
-_Last revised: 2026-04-26 (scheduled run #6)_
+_Last revised: 2026-09-25 (Spec 1690: crawl policy — rules 8 and 10, §6)_

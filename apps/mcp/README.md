@@ -50,6 +50,10 @@ Search for jobs across all sources.
 | `company`     | string  | ❌       | Company slug for ATS sources (e.g. "stripe")       |
 | `limit`       | number  | ❌       | Max results (default: 20, max: 100)                |
 | `remote_only` | boolean | ❌       | Filter to remote positions only                    |
+| `crawl`       | object  | ❌       | Per-request crawl policy (Spec 1690), camelCase    |
+
+`crawl` is forwarded to the API unchanged as the `crawl` field (same key in every
+`EVER_JOBS_MCP_REQUEST_KEYS` style); see [`docs/CRAWL_POLICY.md`](../../docs/CRAWL_POLICY.md).
 
 ### `get_job_details`
 
