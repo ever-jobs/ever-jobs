@@ -7,7 +7,7 @@
 | Status         | done                                     |
 | Owner          | agent                                    |
 | Created        | 2026-09-24                               |
-| Last updated   | 2026-09-25                               |
+| Last updated   | 2026-09-26                               |
 | Supersedes     | (none)                                   |
 | Related specs  | 003, 5025, 5026, 1720, 1723              |
 
@@ -85,8 +85,9 @@ In addition:
 | FR-16 | Counting. `sourcesSkipped` = selected sources that contributed nothing because the fan-out stopped: not started at the deadline, not started at the job ceiling, or abandoned mid-flight at the deadline (`FanoutDeadlineError`). `sourcesFailed` = sources that **ran** and ended with a failure reason (`blocked`, `browser_unavailable`, `fetch_error`, `timeout`, `bad_input`, `circuit_open`, `not_registered`, `unknown`); `ok`, `empty` and `partial` (jobs AND an error) are not failures, and a skipped source is never also counted as failed. Failures never make a crawl incomplete. Keyword-only sources that list mode does not dispatch (Spec 1720) are neither skipped nor failed. The per-source rows keep their existing reasons (an abandoned source is still `timeout`). Once the deadline has abandoned a source, no further source starts: the deadline timer is scheduled against libuv's cached loop time and can fire a few ms before `Date.now()` reaches the deadline, which used to let the worker start one more source after the deadline had already cut one short. | must |
 | FR-17 | Cache (storage superseded by FR-19: one entry). A fresh fan-out writes the completeness record next to the raw set, under the same cache parameters with `endpoint: "search-completeness"`, so every change to the search cache key moves both. A cache hit reports the record of the crawl that produced it. On the NDJSON path a hit whose record is missing or malformed (written before FR-15, or evicted on its own) is treated as a **miss** — the fan-out runs and both entries are rewritten — so the `end` line never guesses. The JSON path serves such a hit as before and never reads the record (it does not report completeness). | must |
 | FR-19 | (second review, 2026-09-25 — supersedes FR-17's two entries) The raw set and its completeness record are ONE cache entry, `{ jobs, completeness? }`, under the new `endpoint: "search-v2"` (the same parameters otherwise). With `CACHE_MAX_ITEMS=1` — every deployed environment — FR-17's second entry evicted the raw set from the LRU, so page 2 of a paginated search ran the fan-out again. Both paths read both from the one entry; the JSON path serves an entry without a (valid) record, the NDJSON path treats it as a miss (FR-17 unchanged). Entries of the old layout (`search`, `search-completeness`) are never read again and expire on their TTL. | must |
-| FR-20 | (second review, 2026-09-25) The `end` line gains, additively, `sourcesPartial` (count of sources that ran and ended `partial`), `problemSources` (at most **200** `{ site, reason }`, in fan-out order) and `problemSourcesTotal` (the uncapped count). `problemSources` lists every selected source whose result must not be used to expire its postings: a failure reason (the row's own), `partial`, `skipped` (not started or abandoned because of a bound), `results_wanted` (an otherwise clean source returned at least `resultsWanted` jobs) and `keyword_required` (list mode did not query it, Spec 1720). Documented consumer rule: decide expiry **per source** — only a selected source not in `problemSources` ran cleanly and was not cut by `resultsWanted`; a truncated list (`problemSourcesTotal` > length) means no unlisted source may be assumed clean. An **incomplete** crawl (`complete: false`) is never cached (JSON and NDJSON). | must |
+| FR-20 | (second review, 2026-09-25) The `end` line gains, additively, `sourcesPartial` (count of sources that ran and ended `partial`), `problemSources` (at most **200** `{ site, reason }`, in fan-out order — raised to 2500 by FR-21) and `problemSourcesTotal` (the uncapped count). `problemSources` lists every selected source whose result must not be used to expire its postings: a failure reason (the row's own), `partial`, `skipped` (not started or abandoned because of a bound), `results_wanted` (an otherwise clean source returned at least `resultsWanted` jobs) and `keyword_required` (list mode did not query it, Spec 1720). Documented consumer rule: decide expiry **per source** — only a selected source not in `problemSources` ran cleanly and was not cut by `resultsWanted`; a truncated list (`problemSourcesTotal` > length) means no unlisted source may be assumed clean. An **incomplete** crawl (`complete: false`) is never cached (JSON and NDJSON). | must |
 | FR-18 | A `JobsService` that reports no completeness (not the shipped one) gets the four fields **omitted** from the `end` line and a warning logged — never a guessed value. Consumers must therefore treat a missing `complete` (also what servers older than FR-15 send) as "not known to be complete". | must |
+| FR-21 | (third review, 2026-09-26) `MAX_PROBLEM_SOURCES` is **2500**, not 200, so the `problemSources` of a catalogue-wide crawl are never truncated: every selected source appears at most once, and the catalogue registers ~1 860 sources (`Object.values(Site)`), so even a crawl in which every source is a problem fits. The 200 cap truncated exactly the crawls a consumer most needs (a deadline-cut crawl skips hundreds of sources), and a truncated list means "expire nothing". `problemSourcesTotal` stays: it still reports the uncapped count if the catalogue outgrows the cap, and a test fails first. A cached record written under the 200 cap still reads back. The consumer rule gains two documented limits: (a) decide expiry on a **`dedup=false`** crawl — with `dedup=true` a posting of a clean source can be missing merely because it was merged into another source's record (the kept job of a cluster carries the first member's `site`/`id`); (b) `results_wanted` cannot detect a source that stops **below** `resultsWanted` because of its own paging limit (a plugin reading a fixed number of pages, an upstream API capping its results), so absence from one clean crawl is evidence, not proof. | must |
 
 ## 6. Non-Functional Requirements
 
@@ -112,7 +113,7 @@ In addition:
 A crawl the deadline cut short (FR-15) — every job it did collect is still streamed:
 
 ```text
-{"type":"end","total":14022,"deduped":true,"durationMs":120412,"complete":false,"stopReason":"deadline","sourcesSkipped":611,"sourcesFailed":35,"sourcesPartial":2,"problemSources":[…200 entries…],"problemSourcesTotal":659}
+{"type":"end","total":14022,"deduped":true,"durationMs":120412,"complete":false,"stopReason":"deadline","sourcesSkipped":611,"sourcesFailed":35,"sourcesPartial":2,"problemSources":[…659 entries…],"problemSourcesTotal":659}
 ```
 
 Failure: `…{"type":"error","message":"<reason>"}` then EOF, no `end`.
@@ -134,7 +135,7 @@ export interface SearchCompleteness {
   sourcesSkipped: number;             // not started, or abandoned mid-flight, because of a bound
   sourcesFailed: number;              // ran and ended with a failure reason (not ok/empty/partial)
   sourcesPartial: number;             // FR-20 — ran, returned jobs, then failed
-  problemSources: ProblemSource[];    // FR-20 — at most MAX_PROBLEM_SOURCES (200), fan-out order
+  problemSources: ProblemSource[];    // FR-20 — at most MAX_PROBLEM_SOURCES (2500 since FR-21), fan-out order
   problemSourcesTotal: number;        // FR-20 — uncapped count
 }
 export type ProblemSourceReason = ScrapeReason | 'skipped' | 'results_wanted' | 'keyword_required';
@@ -206,6 +207,13 @@ class JobPostDto { dedupKey?: string | null }
   reads the completeness from the same entry. Writing a second entry after the first (FR-17's
   layout) fails both. `search-cache.spec.ts`: namespace, JSON round-trip, omitted and malformed
   records, bare array, rejected values.
+- FR-21 — helpers (`search-completeness.spec.ts`, "the problemSources cap fits a catalogue-wide
+  crawl"): the cap is at least `Object.values(Site).length`; a problem entry for every registered
+  source is carried untruncated (total equals length, fan-out order kept); a cached record at the
+  cap and one written under the former 200 cap both read back. Service
+  (`jobs.service.list-mode.spec.ts`): a fan-out over one fake plugin per registered source, each
+  blocked, lists every source with `problemSourcesTotal` equal to the list length. Red control:
+  the cap set back to 200 fails 3 of them.
 
 ## 9. Open Questions
 
@@ -258,6 +266,13 @@ class JobPostDto { dedupKey?: string | null }
   original ask) is what tells a consumer that the 200-entry list was truncated.
 - D-11 (FR-20) — **Incomplete crawls are not cached**: a retry within the TTL would otherwise be
   served the truncated set and never reach the sources the bound left out.
+- D-12 (FR-21) — **Size the cap to the catalogue, keep the total.** Options were (A) no cap, (B) a
+  cap derived at runtime from the registry size, (C) a fixed cap above the catalogue with the
+  total kept. (A) lets a registry bug or a future fan-out over duplicated sites grow one `end` line
+  without bound; (B) makes the cache guard depend on the registry, so a record written by a pod
+  with a larger catalogue would be rejected by one with a smaller catalogue. Chose C: 2500 (~1 860
+  sources today, ~40 bytes an entry, ~100 KB at worst); a test fails when the catalogue outgrows it,
+  and `problemSourcesTotal` still makes an overflow visible to the consumer.
 - D-08 (FR-17) — **An NDJSON hit without a record re-runs the fan-out** rather than reporting
   "unknown". The window is one cache TTL after an upgrade, only for Redis-backed caches (the
   in-memory cache starts empty), and it lets a consumer of this version rely on the fields always

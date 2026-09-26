@@ -487,6 +487,10 @@ curl -X POST "http://localhost:3001/api/jobs/search?paginate=true&page=1&page_si
   -d '{"searchTerm": "developer"}'
 ```
 
+Each page is its own search request. Pages share one crawl only through the search cache
+(`ENABLE_CACHE=true` and a raw set within `EVER_JOBS_CACHE_MAX_JOBS`); without it every page
+re-runs the whole fan-out and pages can disagree — see "Getting ALL jobs (list mode)" below.
+
 #### Paginated Response
 
 ```json
@@ -517,11 +521,20 @@ curl -N -X POST "http://localhost:3001/api/jobs/search?format=ndjson" \
   -d '{"resultsWanted": 100}'
 ```
 
-**Use NDJSON (or pagination) for list mode.** `?format=ndjson` streams the result line by
-line; `?paginate=true` returns one page at a time. An **unpaginated JSON** (or CSV) list-mode
-response builds the whole body as one string and is capped only by
-`EVER_JOBS_MAX_JOBS_PER_SEARCH` (40 000 raw jobs by default) — at a few KB per job that is a
-string of 100 MB or more on top of the jobs themselves.
+**Use NDJSON for list mode.** `?format=ndjson` streams the whole result of **one** crawl line by
+line. An **unpaginated JSON** (or CSV) list-mode response builds the whole body as one string and
+is capped only by `EVER_JOBS_MAX_JOBS_PER_SEARCH` (40 000 raw jobs by default) — at a few KB per
+job that is a string of 100 MB or more on top of the jobs themselves.
+
+**Pagination is not a substitute.** Every `?paginate=true` page is a separate search request;
+the pages come from one crawl only while the search cache holds that crawl's raw set, which needs
+**all** of: the cache is enabled (`ENABLE_CACHE=true` — off by default), the raw set holds at most
+`EVER_JOBS_CACHE_MAX_JOBS` jobs (5 000 by default; a catalogue-wide list-mode crawl holds
+20–30 k), the crawl was complete (an incomplete one is never cached), and the entry has not
+expired or been evicted by another search (`CACHE_MAX_ITEMS`). Otherwise **every page re-runs the
+whole fan-out** — each page costs a full crawl, and consecutive pages come from different crawls,
+so they can disagree: a job can appear on two pages or on none, and `count` / `total_pages` can
+change from one page to the next.
 
 **Memory.** The whole result is held in memory until it has been deduplicated, even when
 streamed (NDJSON only serialises line by line): a catalogue-wide list-mode crawl returns
@@ -575,7 +588,7 @@ before raising either.
 | `sourcesSkipped` | sources that contributed nothing because the fan-out stopped: not started, or abandoned mid-flight at the deadline. Keyword-only sources that list mode does not call are not counted |
 | `sourcesFailed` | sources that ran and failed (`blocked`, `fetch_error`, `timeout`, `bad_input`, …). Failures do **not** make a crawl incomplete — a catalogue-wide crawl always has some |
 | `sourcesPartial` | sources that returned some jobs and then failed (`partial`) — not failures, but their lists are incomplete |
-| `problemSources` | `[{"site","reason"}]`, in fan-out order, at most 200: every selected source whose result must **not** be used to expire its postings. `reason` is a failure reason (`blocked`, `fetch_error`, `timeout`, …), `partial`, `skipped` (a bound left it unstarted or abandoned it), `results_wanted` (it returned at least `resultsWanted` jobs, so its list was probably cut there) or `keyword_required` (list mode does not query it) |
+| `problemSources` | `[{"site","reason"}]`, in fan-out order, at most 2 500 (the whole catalogue fits): every selected source whose result must **not** be used to expire its postings. `reason` is a failure reason (`blocked`, `fetch_error`, `timeout`, …), `partial`, `skipped` (a bound left it unstarted or abandoned it), `results_wanted` (it returned at least `resultsWanted` jobs, so its list was probably cut there) or `keyword_required` (list mode does not query it) |
 | `problemSourcesTotal` | how many sources qualified before the cap; larger than `problemSources.length` means the list was truncated |
 
 A cache hit reports the completeness of the crawl that produced the cached set. An incomplete
@@ -590,17 +603,30 @@ at `resultsWanted` — and only its postings may be expired by their absence. If
 nothing from that crawl. A `complete: true` crawl can still list problem sources (failures do not
 make a crawl incomplete).
 
+- **Decide expiry on a `dedup=false` crawl.** With `dedup=true` (the default) a posting of a clean
+  source can be missing merely because dedup merged it into another source's record: the kept job
+  of a merged cluster is the cluster's first job in output order, carrying that source's `site`
+  and `id` (and, after a fuzzy merge, possibly a different `dedupKey`). `?dedup=false` returns
+  every observation as its own job, so absence means the source did not return it.
+- **A clean source can still be cut short by its own paging limit.** The `results_wanted` check
+  only sees a source that returned **at least** `resultsWanted` jobs. A source that stops earlier
+  because of a limit of its own — a plugin that reads a fixed number of pages, or an upstream API
+  that caps its result count — returns fewer, is not listed, and yet did not list its whole board.
+  The server cannot tell that apart from a board that really has that few postings, so treat
+  absence from one clean crawl as evidence, not proof (e.g. require it across consecutive crawls,
+  or check the posting's URL) before closing a posting.
+
 ```text
-{"type":"end","total":14022,"deduped":true,"durationMs":120412,"complete":false,"stopReason":"deadline","sourcesSkipped":611,"sourcesFailed":35,"sourcesPartial":4,"problemSources":[{"site":"indeed","reason":"blocked"},{"site":"remoteok","reason":"partial"},…],"problemSourcesTotal":650}
+{"type":"end","total":14022,"deduped":false,"durationMs":120412,"complete":false,"stopReason":"deadline","sourcesSkipped":611,"sourcesFailed":35,"sourcesPartial":4,"problemSources":[{"site":"indeed","reason":"blocked"},{"site":"remoteok","reason":"partial"},…],"problemSourcesTotal":650}
 ```
 
 Consumer rules: **treat a missing `end` line as a truncated, failed result**; **only treat a crawl
 as complete when `complete` is `true`** — never infer "this posting is gone" from a crawl whose
 `end` line says `false` or has no `complete` field (servers before FR-15 do not send it); **expire
-per source only** (above; servers before FR-20 send no `problemSources` — then expire nothing); and
-ignore line types and fields you do not know (new ones may be added). Input the search rejects before scraping (an
-unknown `siteCategories` value, a `companyDomain` that maps to no plugin) is answered with a
-plain **400** before any line is sent. If the client disconnects, the server stops starting
+per source only, from a `dedup=false` crawl** (above; servers before FR-20 send no `problemSources` —
+then expire nothing); and ignore line types and fields you do not know (new ones may be added).
+Input the search rejects before scraping (an unknown `siteCategories` value, a `companyDomain`
+that maps to no plugin) is answered with a plain **400** before any line is sent. If the client disconnects, the server stops starting
 new sources (in-flight ones finish) and discards the partial result — it is not cached, so a
 retry never receives a truncated set. `paginate`, `page` and `page_size` are ignored;
 `dedup`, `liveness` and `legitimacy` behave exactly as for JSON. Lines are written one at a time

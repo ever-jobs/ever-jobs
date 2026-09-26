@@ -5,6 +5,45 @@
 
 ---
 
+## 2026-09-26 — Spec 1721 (with 1720) — third review: list mode means NDJSON, a problemSources cap that fits the catalogue, two limits of the expiry rule
+
+**Why:** a third review of the list-mode branch found that README, the OpenAPI description,
+`.env.example` and Spec 1720 FR-13(c) offered `?paginate=true` as an equal alternative to NDJSON
+for list mode. It is not: every page is a separate search request, and pages share one crawl only
+while the search cache holds its raw set — the cache enabled (`ENABLE_CACHE`, off by default)
+**and** the raw set within `EVER_JOBS_CACHE_MAX_JOBS` (5000 by default; a catalogue-wide list-mode
+crawl holds 20–30 k). Otherwise every page re-runs the whole fan-out and pages can disagree. The
+review also found the 200-entry `problemSources` cap too small for a catalogue-wide crawl and two
+gaps in the documented expiry rule.
+
+**Spec 1720 FR-13(c) — corrected.** List mode means NDJSON. README ("Pagination" and "Getting ALL
+jobs"), `.env.example`, the OpenAPI `search` and `paginate` descriptions and the tool manifest now
+say that pagination is not a substitute and when it does reuse one crawl (cache enabled, raw set
+within `EVER_JOBS_CACHE_MAX_JOBS`, crawl complete, entry not expired or evicted). T13.
+
+**Spec 1721 FR-21 — cap and expiry limits.** `MAX_PROBLEM_SOURCES` 200 → 2500: every selected
+source appears at most once and the catalogue registers ~1 860, so a crawl in which every source
+is a problem is no longer truncated (a truncated list tells the consumer to expire nothing — the
+200 cap hit exactly the deadline-cut crawls that skip hundreds of sources). `problemSourcesTotal`
+stays; a record cached under the old cap still reads back (D-12). The expiry rule now says:
+decide expiry on a `dedup=false` crawl — with `dedup=true` a posting of a clean source can be
+missing merely because it was merged into another source's record — and the `results_wanted`
+check cannot detect a source that stops below `resultsWanted` because of its own paging limit, so
+absence from one clean crawl is evidence, not proof. T15.
+
+**Validation:** new tests — the cap is at least `Object.values(Site).length`; a problem entry for
+every registered source is carried untruncated; a record at the cap and one written under the old
+200 cap read back; a service fan-out over one blocked fake plugin per registered source lists
+every source. Red control: the cap set back to 200 fails 3 of them.
+
+**Files:** `apps/api/src/jobs/{search-completeness.ts,jobs.controller.ts}`,
+`apps/api/src/jobs/__tests__/{search-completeness.spec.ts,jobs.service.list-mode.spec.ts}`,
+`README.md`, `.env.example`, `tool_manifest.json`,
+`.specify/specs/1720-list-mode-site-categories/{spec,tasks}.md`,
+`.specify/specs/1721-ndjson-search-stream/{spec,tasks}.md`, `docs/index.md`, this log.
+
+---
+
 ## 2026-09-25 — Spec 1724 (with 1720–1722) — second review: dedup keeps per-office postings, one key input, one cache entry, list-mode memory, per-source expiry detail
 
 **Why:** a second review of the list-mode branch, and a live crawl through it, found that the

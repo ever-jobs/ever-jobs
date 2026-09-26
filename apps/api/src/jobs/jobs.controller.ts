@@ -112,9 +112,13 @@ export class JobsController {
       'Supports caching, CSV export (via ?format=csv), NDJSON streaming (via ?format=ndjson), pagination ' +
       '(via ?paginate=true), and cross-source deduplication (default ?dedup=true; pass ?dedup=false to opt out). ' +
       'Omit `searchTerm` for LIST MODE: every selected source returns what it can list without a keyword, ' +
-      'up to `resultsWanted` per source. Use ?format=ndjson (streamed) or ?paginate=true for list mode: an ' +
-      'unpaginated JSON or CSV body is built as one string and is capped only by EVER_JOBS_MAX_JOBS_PER_SEARCH ' +
-      '(default 40000 raw jobs). Every job carries a stable cross-source `dedupKey`.',
+      'up to `resultsWanted` per source. Use ?format=ndjson for list mode: it streams the whole result of one crawl. ' +
+      'An unpaginated JSON or CSV body is built as one string and is capped only by EVER_JOBS_MAX_JOBS_PER_SEARCH ' +
+      '(default 40000 raw jobs). ?paginate=true is not a substitute: each page is a separate request, and pages share ' +
+      'one crawl only while the search cache holds its raw set (ENABLE_CACHE=true, off by default, AND the raw set ' +
+      'within EVER_JOBS_CACHE_MAX_JOBS, default 5000; incomplete crawls are never cached). Otherwise every page re-runs ' +
+      'the whole fan-out, and pages can disagree (a job on two pages or on none, count changing between pages). ' +
+      'Every job carries a stable cross-source `dedupKey`.',
   })
   @ApiQuery({
     name: 'format',
@@ -128,14 +132,25 @@ export class JobsController {
       '"sourcesSkipped":n,"sourcesFailed":n,"sourcesPartial":n,"problemSources":[{"site":"…","reason":"…"}],"problemSourcesTotal":n} ' +
       '— complete=false means the fan-out deadline or the job ceiling left sources unscraped, so a job missing from this result ' +
       'may still be open. Decide expiry PER SOURCE: only a selected source that is not in problemSources (failed, partial, ' +
-      'skipped, cut at resultsWanted, or not queried in list mode — at most 200 listed; problemSourcesTotal > its length means ' +
-      'truncated, then assume none clean) ran cleanly and may expire its postings. Incomplete crawls are never cached. ' +
+      'skipped, cut at resultsWanted, or not queried in list mode — at most 2500 listed, which fits the whole catalogue; ' +
+      'problemSourcesTotal > its length means truncated, then assume none clean) ran cleanly and may expire its postings. ' +
+      'Decide expiry on a dedup=false crawl: with dedup=true a posting can be missing merely because it was merged into ' +
+      "another source's record. A source that stops below resultsWanted because of its own paging limit is not listed, " +
+      'so absence from one clean crawl is evidence, not proof. Incomplete crawls are never cached. ' +
       'On failure after headers: {"type":"error","message":"…"} ' +
       'and NO end line — treat a missing end line as a truncated result. Ignore unknown line types. ' +
       'paginate/page/page_size are ignored in ndjson mode.',
     example: 'json',
   })
-  @ApiQuery({ name: 'paginate', required: false, type: Boolean, description: 'Enable pagination' })
+  @ApiQuery({
+    name: 'paginate',
+    required: false,
+    type: Boolean,
+    description:
+      'Enable pagination. Each page is a separate search: pages share one crawl only while the search cache holds its ' +
+      'raw set (ENABLE_CACHE=true and at most EVER_JOBS_CACHE_MAX_JOBS raw jobs); otherwise every page re-runs the ' +
+      'whole fan-out. Use format=ndjson for list mode.',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (when paginate=true)' })
   @ApiQuery({ name: 'page_size', required: false, type: Number, description: 'Results per page (1-100, default 10)' })
   @ApiQuery({

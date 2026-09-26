@@ -36,9 +36,9 @@
         "MCP server for AI assistant integration",
         "List mode: omit searchTerm to get every job each selected source can list (Spec 1720)",
         "Source selection by plugin category via siteCategories (Spec 1720)",
-        "NDJSON streaming of the full result set via ?format=ndjson (Spec 1721)",
+        "NDJSON streaming of the full result set via ?format=ndjson (Spec 1721) - the way to fetch a list-mode result; ?paginate=true re-runs the whole fan-out per page unless the raw set is cached (ENABLE_CACHE=true and within EVER_JOBS_CACHE_MAX_JOBS)",
         "NDJSON end line reports crawl completeness: complete, stopReason (deadline | job_ceiling), sourcesSkipped, sourcesFailed (Spec 1721 / FR-15)",
-        "NDJSON end line lists the sources whose postings must not be expired: sourcesPartial, problemSources [{site, reason}] (max 200), problemSourcesTotal; incomplete crawls are never cached (Spec 1721 / FR-20)",
+        "NDJSON end line lists the sources whose postings must not be expired: sourcesPartial, problemSources [{site, reason}] (max 2500, the whole catalogue fits), problemSourcesTotal; decide expiry per source from a dedup=false crawl; incomplete crawls are never cached (Spec 1721 / FR-20, FR-21)",
         "Stable cross-source dedupKey on every job (Spec 1721)",
         "Optional persistence to memory, SQLite or Postgres selected by EVER_JOBS_STORE (Spec 1722)"
       ]

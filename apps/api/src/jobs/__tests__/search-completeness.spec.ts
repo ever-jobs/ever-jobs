@@ -1,3 +1,4 @@
+import { Site } from '@ever-jobs/models';
 import type { ScrapeReason } from '@ever-jobs/models';
 import {
   COMPLETE_SEARCH,
@@ -92,6 +93,59 @@ describe('search-completeness (Spec 1721 / FR-15, FR-20)', () => {
       expect(record.problemSources[1]).toEqual({ site: 's1', reason: 'skipped' });
       expect(record.problemSourcesTotal).toBe(MAX_PROBLEM_SOURCES + 5);
       expect(isSearchCompleteness(record)).toBe(true);
+    });
+  });
+
+  describe('the problemSources cap fits a catalogue-wide crawl (FR-21)', () => {
+    /** Every registered source — the most a crawl can select, each at most once. */
+    const catalogue = Object.values(Site) as string[];
+
+    it('is at least the number of registered sources', () => {
+      // Red when the catalogue outgrows the cap: raise MAX_PROBLEM_SOURCES then.
+      expect(catalogue.length).toBeGreaterThan(1000);
+      expect(MAX_PROBLEM_SOURCES).toBeGreaterThanOrEqual(catalogue.length);
+    });
+
+    it('carries a problem entry for every registered source, untruncated', () => {
+      // A deadline-cut crawl where every source is a problem: the worst case.
+      const problems: ProblemSource[] = catalogue.map((site, i) => ({
+        site,
+        reason: i % 3 === 0 ? 'blocked' : 'skipped',
+      }));
+      const record = buildSearchCompleteness('deadline', problems.length, [], problems);
+
+      expect(record.problemSources).toHaveLength(catalogue.length);
+      expect(record.problemSourcesTotal).toBe(catalogue.length);
+      // Not truncated ⇔ total equals the list's length: a consumer may expire.
+      expect(record.problemSourcesTotal).toBe(record.problemSources.length);
+      expect(record.problemSources.map((p) => p.site)).toEqual(catalogue);
+      expect(isSearchCompleteness(record)).toBe(true);
+    });
+
+    it('the cached record of a catalogue-wide crawl reads back', () => {
+      const atCap = {
+        complete: false,
+        stopReason: 'deadline',
+        sourcesSkipped: MAX_PROBLEM_SOURCES,
+        sourcesFailed: 0,
+        sourcesPartial: 0,
+        problemSources: Array.from({ length: MAX_PROBLEM_SOURCES }, (_, i) => ({ site: `s${i}`, reason: 'skipped' })),
+        problemSourcesTotal: MAX_PROBLEM_SOURCES,
+      };
+      expect(isSearchCompleteness(atCap)).toBe(true);
+    });
+
+    it('a record written under the former 200-entry cap still reads back', () => {
+      const legacy = {
+        complete: true,
+        stopReason: null,
+        sourcesSkipped: 0,
+        sourcesFailed: 650,
+        sourcesPartial: 0,
+        problemSources: Array.from({ length: 200 }, (_, i) => ({ site: `s${i}`, reason: 'blocked' })),
+        problemSourcesTotal: 650,
+      };
+      expect(isSearchCompleteness(legacy)).toBe(true);
     });
   });
 

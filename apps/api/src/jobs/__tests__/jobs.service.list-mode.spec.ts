@@ -603,6 +603,28 @@ describe('JobsService — crawl completeness (Spec 1721 / FR-15)', () => {
     expect(completeness.problemSourcesTotal).toBe(1);
   });
 
+  it('FR-21 — a catalogue-wide crawl in which every source fails lists every source, untruncated', async () => {
+    // One plugin per registered source, each blocked: the most problem sources
+    // a crawl can have. Under the former 200-entry cap this list was cut to
+    // 200 of ~1 860, and a truncated list tells the consumer to expire nothing.
+    const plugins = (Object.values(Site) as Site[]).map((site) =>
+      scripted(site, async () => new JobResponseDto([], new ScrapeDiagnostics('blocked', 'captcha'))),
+    );
+    const service = createService(plugins);
+
+    const { completeness } = await service.searchJobsWithDiagnostics(new ScraperInputDto({}));
+
+    expect(completeness).toMatchObject({
+      complete: true,
+      sourcesFailed: plugins.length,
+      problemSourcesTotal: plugins.length,
+    });
+    expect(completeness.problemSources).toHaveLength(plugins.length);
+    expect(bySite(completeness.problemSources)).toEqual(
+      bySite(plugins.map((p) => ({ site: p.site, reason: 'blocked' }))),
+    );
+  });
+
   it('a fan-out that ran every source is complete; failures are counted, not treated as a stop', async () => {
     const circuitOpen = Object.assign(new Error('circuit open'), { code: ERR_SOURCE_CIRCUIT_OPEN });
     const plugins = [

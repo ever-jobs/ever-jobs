@@ -4,7 +4,7 @@
 | ------------ | ---------- |
 | Spec ID      | 1721       |
 | Status       | done       |
-| Last updated | 2026-09-25 |
+| Last updated | 2026-09-26 |
 
 - [x] T1 — `formatJobLocation` + `dedupKeyForJob` in `@ever-jobs/common`; `dedup-hybrid` uses the shared formatter. Acceptance: same posting from two sources → same key; equals `canonicalJobId`; class and plain location → same key; dedup-hybrid suites unchanged.
 - [x] T2 — `JobPostDto.dedupKey`; aggregator stamps keys on every exit path. Acceptance: aggregator tests for dedup on / off / no engine / empty.
@@ -33,3 +33,7 @@ Review fixes, second round (2026-09-25):
   the 3-field input fails 5 tests; FR-10 records the one-time key change for those postings.
 - [x] T13 — One cache entry (FR-19). `search-cache.ts` (`search-v2`, `toCachedSearch`, `readCachedSearch`); `runSearch` reads and writes `{ jobs, completeness? }` once. Acceptance: with a real `lruSize: 1` store page 2 is a cache hit and NDJSON after JSON needs no fan-out; the FR-17 two-entry write fails both tests; the two develop controller tests that asserted the bare-array value now assert `{ jobs }`.
 - [x] T14 — Per-source detail on the `end` line and no caching of incomplete crawls (FR-20). `SearchCompleteness` gains `sourcesPartial`, `problemSources` (max 200) and `problemSourcesTotal`; the fan-out lists failed, partial, skipped, `results_wanted` and `keyword_required` sources in fan-out order; `runSearch` skips the cache write for `complete: false`; README / OpenAPI / tool manifest state the per-source expiry rule. Acceptance: service, controller and helper tests (spec §8); the mutations listed there fail.
+
+Third review (2026-09-26):
+
+- [x] T15 — `MAX_PROBLEM_SOURCES` 200 → 2500 so a catalogue-wide crawl's `problemSources` is never truncated; `problemSourcesTotal` kept (FR-21, D-12). README / OpenAPI / tool manifest state the new cap and the two limits of the expiry rule: decide expiry on a `dedup=false` crawl, and `results_wanted` cannot see a source cut below `resultsWanted` by its own paging limit. Acceptance: the FR-21 tests in spec §8 pass; the cap set back to 200 fails 3 of them.

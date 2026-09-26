@@ -47,8 +47,19 @@ export interface ProblemSource {
   reason: ProblemSourceReason;
 }
 
-/** Most entries {@link SearchCompleteness.problemSources} carries (FR-20). */
-export const MAX_PROBLEM_SOURCES = 200;
+/**
+ * Most entries {@link SearchCompleteness.problemSources} carries (FR-20).
+ *
+ * Sized for a catalogue-wide crawl (Spec 1721 / FR-21): every selected source
+ * appears at most once, and the catalogue registers ~1 860 sources, so a crawl
+ * in which every one of them is a problem still fits. The first value, 200,
+ * truncated exactly the crawls a consumer most needs to expire from (a
+ * deadline-cut crawl skips hundreds of sources), and a truncated list means
+ * "expire nothing". An entry is ~40 bytes, so a full list is ~100 KB on one
+ * `end` line. {@link SearchCompleteness.problemSourcesTotal} still reports the
+ * uncapped count should the catalogue ever outgrow the cap.
+ */
+export const MAX_PROBLEM_SOURCES = 2500;
 
 export interface SearchCompleteness {
   /**
