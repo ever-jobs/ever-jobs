@@ -91,6 +91,9 @@ const REQUEST_CALLEE = /^(?:get|post|put|patch|head|request|fetch|goto)$|^(?:fet
 /** Logger calls: a URL passed to one is neither fetched nor linked. */
 const LOG_CALLEE = /^(?:log|warn|error|debug|verbose|info|trace)$/;
 
+/** Predicates (`isAllowedUrl(url)`, `hasQuery(url)`): the URL is tested, not used. */
+const PREDICATE_CALLEE = /^(?:is|has|can|should)[A-Z]/;
+
 /**
  * Members of a URL string / `URL` whose result is still that URL
  * (`u.toString()`, `tpl.replace(…)`); any other member read (`url.length`,
@@ -457,6 +460,8 @@ function carrierOf(expr: ts.Expression): ts.Expression {
       e = p;
     } else if (ts.isPropertyAccessExpression(p) && p.expression === e && URL_CARRYING_MEMBERS.has(p.name.text)) {
       e = ts.isCallExpression(p.parent) && p.parent.expression === p ? p.parent : p;
+    } else if (ts.isElementAccessExpression(p) && p.expression === e) {
+      e = p; // `urls[feed]` — one entry of a record of URLs
     } else {
       return e;
     }
@@ -510,7 +515,13 @@ function usesOf(
   }
   if ((ts.isCallExpression(p) || ts.isNewExpression(p)) && p.arguments?.includes(e)) {
     const name = calleeName(p);
-    out.push(name && REQUEST_CALLEE.test(name) ? 'request' : name && LOG_CALLEE.test(name) ? 'inert' : 'other');
+    out.push(
+      name && REQUEST_CALLEE.test(name)
+        ? 'request'
+        : name && (LOG_CALLEE.test(name) || PREDICATE_CALLEE.test(name))
+          ? 'inert'
+          : 'other',
+    );
     return;
   }
   // `client.request({ url: helper(), method: 'GET' })` / `{ url, headers }`
@@ -520,6 +531,15 @@ function usesOf(
     isRequestConfig(p.parent)
   ) {
     out.push('request');
+    return;
+  }
+  // `{ newgrad: feedUrl(…) }` — the record carries the URL; follow the record
+  // (a record copied into a job, or returned to nobody, stays `other`)
+  if (
+    ((ts.isPropertyAssignment(p) && p.initializer === e) || ts.isShorthandPropertyAssignment(p)) &&
+    ts.isObjectLiteralExpression(p.parent)
+  ) {
+    usesOf(p.parent, callSites, depth + 1, seenFns, out);
     return;
   }
   if (ts.isVariableDeclaration(p) && p.initializer === e && ts.isIdentifier(p.name)) {
@@ -543,6 +563,12 @@ function usesOf(
     return;
   }
   out.push('other');
+}
+
+/** Declared `: boolean` or a type predicate (`x is Foo`) — a test, not a link builder. */
+function returnsBooleanOnly(fn: ts.FunctionLikeDeclaration): boolean {
+  const type = fn.type;
+  return !!type && (type.kind === ts.SyntaxKind.BooleanKeyword || ts.isTypePredicateNode(type));
 }
 
 /** True when a URL-named helper only ever builds a request target. */
@@ -643,6 +669,8 @@ export function scanPlugin(
   // unless every caller only fetches it.
   for (const [name, fns] of index.functions) {
     if (!URL_HELPER_NAME.test(name)) continue;
+    // `isAllowedUrl(raw): boolean` tests a URL; it never builds one
+    if (fns.every(returnsBooleanOnly)) continue;
     if (isFetchHelper(name, callSites)) {
       fetchHelpers += 1;
       continue;
@@ -859,6 +887,45 @@ describe('plugin job links never point at an API (Spec 1751)', () => {
       // five URL-named helpers exempted as fetch helpers, none judged as links
       expect(result.fetchHelpers).toBe(5);
       expect(result.urlHelpers).toBe(0);
+    });
+
+    it('does not flag a boolean URL test or a record of feed URLs that is only fetched by key', () => {
+      const result = scanPlugin('fixture', [{
+        file: 'fixture.service.ts',
+        text: `
+        const BLOCKED = ['/api/', '/admin/'];
+        const RAW = 'https://raw.githubusercontent.com';
+        export function isAllowedUrl(raw: string): boolean {
+          return !BLOCKED.some((p) => new URL(raw).pathname.startsWith(p));
+        }
+        export function feedUrl(repo: string): string { return \`\${RAW}/\${repo}/.github/scripts/listings.json\`; }
+        class S {
+          resolveFeedUrls() { return { newgrad: feedUrl('a/b'), interns: feedUrl('c/d') }; }
+          async run(client: any, feed: 'newgrad' | 'interns', id: string) {
+            const urls = this.resolveFeedUrls();
+            const url = urls[feed];
+            if (!isAllowedUrl(url)) return null;
+            const rows = await this.feeds.get(url, (etag: string) => this.fetchFeed(client, url, etag));
+            return { jobUrl: \`https://careers.acme.com/jobs/\${id}\`, rows };
+          }
+        }`,
+      }]);
+      expect(result.findings).toEqual([]);
+      expect(result.fetchHelpers).toBe(2); // feedUrl, resolveFeedUrls
+      expect(result.urlHelpers).toBe(0);
+    });
+
+    it('control: the same record of URLs copied into a job link is still judged', () => {
+      const findings = scanSnippet(`
+        export function feedUrl(repo: string): string { return \`https://api.github.com/repos/\${repo}/contents\`; }
+        class S {
+          resolveFeedUrls() { return { newgrad: feedUrl('a/b') }; }
+          map(feed: 'newgrad', id: string) {
+            const urls = this.resolveFeedUrls();
+            return { jobUrl: urls[feed], id };
+          }
+        }`);
+      expect(findings.map((f) => f.field).sort()).toEqual(['helper feedUrl()', 'helper resolveFeedUrls()', 'jobUrl']);
     });
 
     it('ignores type declarations and public hosts', () => {
