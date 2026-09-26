@@ -14,6 +14,7 @@ import { JobsResolver } from '../jobs.resolver';
 import { JobsAggregator } from '../jobs.aggregator';
 import { SearchJobsInput } from '../gql-types';
 import { searchCacheParams } from '../search-cache-params';
+import { SEARCH_CACHE_ENDPOINT } from '../search-cache';
 
 /**
  * Spec 1700 — the REST, GraphQL and cache-key surface of multi-location
@@ -177,7 +178,7 @@ describe('JobsController — Spec 1700', () => {
     await search(controller, { searchTerm: 'node', location: 'Berlin' });
     expect(cacheService.get).toHaveBeenCalledWith({
       ...new ScraperInputDto({ searchTerm: 'node', location: 'Berlin' }),
-      endpoint: 'search',
+      endpoint: SEARCH_CACHE_ENDPOINT,
     });
   });
 

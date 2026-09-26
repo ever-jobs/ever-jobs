@@ -3,6 +3,7 @@ import { CrawlPolicyDto, JobPostDto, ScraperInputDto } from '@ever-jobs/models';
 import { ScrapeContext, getScrapeContext } from '@ever-jobs/common';
 import { DEFAULT_LIVENESS_DEADLINE_MS, LIVENESS_DEADLINE_ENV, livenessDeadlineMs } from '../crawl-policy.mapping';
 import { JobsController, LIVENESS_CRAWL_SITE } from '../jobs.controller';
+import { SEARCH_CACHE_ENDPOINT } from '../search-cache';
 
 /**
  * Spec 1690 — REST controller plumbing: liveness enrichment runs inside its own
@@ -135,6 +136,6 @@ describe('JobsController — crawl policy plumbing (Spec 1690)', () => {
 
     await controller.searchJobs(new ScraperInputDto({ searchTerm: 'x', crawl }));
 
-    expect(cache.get.mock.calls[0][0]).toMatchObject({ endpoint: 'search', crawl: { discovery: 'sitemap' } });
+    expect(cache.get.mock.calls[0][0]).toMatchObject({ endpoint: SEARCH_CACHE_ENDPOINT, crawl: { discovery: 'sitemap' } });
   });
 });
