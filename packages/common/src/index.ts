@@ -7,3 +7,5 @@ export * from './browser';
 export * from './normalize';
 export * from './canonical-key';
 export * from './cooperative';
+export * from './utils/search-locations';
+export * from './utils/job-exclusion';

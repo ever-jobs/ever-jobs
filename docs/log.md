@@ -5,6 +5,11 @@
 
 ---
 
+## 2026-09-26 — Merge — Specs 1720-1724 (with develop's Specs 1690-1713) into Spec 1730
+
+- The aggregator runs dedup, the Spec 1700 exclusions, dedup keys, then career-level classification and the `careerLevels` filter: a job must pass both filters. `AggregateRawOptions` still requires the `careerLevels` key, so every call site passes it next to `exclusions` (REST/NDJSON `runSearch`, GraphQL).
+- The cache key blanks `careerLevels` through `searchCacheParams`' extra argument (it filters after the cache, like the exclusions).
+
 ## 2026-09-26 — Spec 1730 FR-12 — classify only the jobs a search returns; rebased onto the list-mode second review; live-sample ladder nouns
 
 **Why:** the classifier branch was rebased onto the list-mode branch after its second review
@@ -47,6 +52,13 @@ The ladder nouns were red first (14 failing).
 
 ---
 
+## 2026-09-26 — Merge — develop (Specs 1690-1713: crawl policy, multi-location search, exclusions, board fixes) into Specs 1720-1724
+
+- `searchJobsWithDiagnostics` runs both feature sets: list mode, `siteCategories`, the job ceiling, caller cancellation, NDJSON progress and the completeness record (Specs 1720/1721) now also cover multi-location searches (Spec 1700) and the crawl-policy scrape context with its deadline abort (Spec 1690). The deadline race rejects with `FanoutDeadlineError` and still calls the abort hook.
+- Completeness counts SOURCES in both modes: a multi-location source cut short by the deadline, or not started by a bound, counts once in `sourcesSkipped` and appears once in `problemSources` (`skipped`); a source that ran reports its first problem location. `mergeLocationOutcomes` returns each source's rows for this.
+- The shared REST/NDJSON `runSearch` keys the cache with `searchCacheParams` (exclusions blanked, `locations` keyed in order) and applies the exclusion filter, so NDJSON streams only the kept jobs. `requiresSearchTerm` and `minRequestIntervalMs` both stay on `IPluginMetadata`; Naukri declares both.
+
+
 ## 2026-09-26 — Spec 1721 (with 1720) — third review: list mode means NDJSON, a problemSources cap that fits the catalogue, two limits of the expiry rule
 
 **Why:** a third review of the list-mode branch found that README, the OpenAPI description,
@@ -83,6 +95,24 @@ every source. Red control: the cap set back to 200 fails 3 of them.
 `README.md`, `.env.example`, `tool_manifest.json`,
 `.specify/specs/1720-list-mode-site-categories/{spec,tasks}.md`,
 `.specify/specs/1721-ndjson-search-stream/{spec,tasks}.md`, `docs/index.md`, this log.
+
+---
+
+## 2026-09-26 — Spec 1690 — merge review fixup: pacing floors, User-Agent switches, memo waiter abort
+
+**Change:** Three semantic merge breaks fixed without removing anything. (1) Pacing floors: since Spec 1690 a client's `rateDelayMin` is only the crawl policy's plugin layer, which a search caller's `rateDelayMin` (caller layer, `EVER_JOBS_CRAWL_CALLER_OVERRIDES=any`) replaces, so RemoteOK's `Crawl-delay` (1 s), Welcome to the Jungle's board pacing (0.5 s; 2 s between credential pages) and Simplify's feed spacing (2 s) could be shortened to 50 ms. New additive `HttpClientOptions.minIntervalFloorMs` (milliseconds, copied by `createHttpClient`'s input-shaped branch): the limiter spaces that client's requests by max(policy `minIntervalMs`, robots.txt `Crawl-delay`, floor), like a `Crawl-delay`; the three plugins set it to the spacing they already computed, so a caller may again only lengthen it. (2) User-Agent switches: `WTTJ_USER_AGENT_MODE=browser` and `EVER_JOBS_REMOTEOK_LEGACY=ua` only declared a UA, which the default `identify` mode never sends; while a switch is on, the plugin now passes `crawl: { userAgentMode: 'plugin', userAgentReason }` (`WTTJ_BROWSER_UA_CRAWL_POLICY`, `REMOTEOK_LEGACY_UA_CRAWL_POLICY`), so the browser UA reaches the wire again; `strict` (env, preset) and a caller `userAgent` still win. ZipRecruiter: its header UA is likewise only declared, so the honest configured UA now goes out by default (checked on the wire; the operator opt-in `sites.zip_recruiter.userAgentMode: "plugin"` sends the desktop one); recorded in Q-099, Spec 1713 Q1 and `ziprecruiter.constants.ts` rather than decided in code. (3) A request parked on an identical in-flight request in a Spec 1700 memo scope now rejects on its own abort signal (`memoisedRequest(…, signal)`) instead of waiting for the first request; the first keeps the entry.
+
+**Files:** `packages/common/src/http/{http-client,http-memo}.ts`, plugins `source-remoteok`, `source-ats-wttj`, `source-simplifyjobs` (constants, service), `source-ziprecruiter` (constants comment), tests `packages/common/__tests__/{http-client-crawl-policy,http-memo}.spec.ts`, new `apps/api/src/jobs/__tests__/jobs.service.plugin-crawl.spec.ts` (the real plugins through `JobsService` and the real `HttpClient`, adapter-level wire capture), `.env.example`, `docs/{CRAWL_POLICY,API_CHANGELOG,questions,index,log}.md`, specs 1690 (§9.2, §9.3), 1694 D-11, 1705 NFR-1 and D-05, 1707 D-07 and D-10, 1713 Q1.
+
+**Validation:** `tsc --project tsconfig.typecheck.json --noEmit` clean; `test:core` 92/92 suites, 3,928/3,928 tests; RemoteOK, WTTJ, Simplify, ZipRecruiter, USAJobs, HeadHunter suites 16/16, 682/682; `test:scripts` 15/15, 244/244; `lint:docs` clean. Red controls: with the floor removed from the limiter or the plugins, and with the opt-ins removed, the new floor and switch tests fail (5 of 9 in the `JobsService` file, 2 of 3 floor tests in the client suite) while their controls pass; with the memo waiter reverted, the parked-request test fails.
+
+## 2026-09-26 — Merge — Specs 1690/1691 (crawl policy, `feat/http-politeness`) into Specs 1692-1713
+
+**Change:** `origin/feat/http-politeness` (develop incl. the fork sync + Spec 1689, then Specs 1690/1691 and the 429/503 back-off floor) merged into `feat/new-sources-and-board-fixes`; both sides kept whole. `HttpClient`: the crawl-policy client (identity interceptor, host limiter, egress guard, retries with the throttle floor, redirect-pin composition, proxies, abort) with the Spec 1700 response memo re-applied inside `request()` — after the policy is resolved and the literal egress check, before robots.txt, the limiter and the network, so a memo hit sends nothing and takes no slot and every miss runs the full pipeline; the key adds the wire identity, the per-request `crawl`, the robots/egress regime and allow-list, the redirect pin, insecure TLS and `maxRedirects`; requests with their own transport are not memoised; an aborted scrape gets no memo answer; only 2xx kept, bodies copied per caller, Set-Cookie replayed (as designed). `JobsService`: every location call of a multi-location search goes through `scrapeOne`, i.e. in its own scrape context (site, plugin crawl manifest, the caller crawl override built once per search, caller proxies) with its own `AbortController` aborted at the search deadline (counted in the "abandoned in-flight" warning); `rate_limited` (host cooling down / no slot in time) stops a source's remaining locations like a 429, and the shared `refusalFromScrapeError` / `isRefusalDiagnostics` treat it the same way; the location pause stays on top of the per-host limiter. DTO / GraphQL / MCP / CLI carry both `crawl` and `locations` + exclusions. New plugins declare the pacing their specs designed as `@SourcePlugin({ crawl })`: InHire `{ maxConcurrentPerHost: 2, minIntervalMs: 500 }`, Level `{ 1, 1100 }`, Simplify `{ 1, 2000 }` (no `userAgentMode` opt-ins; local pacers kept). Q-099 option A now holds on this branch (`EVER_JOBS_CRAWL_ROBOTS_TXT` exists); specs 1692, 1693, 1694, 1700 (T15, section 12), 1703, 1713 updated accordingly.
+
+**Files:** `packages/common/src/http/{http-client,http-memo,index}.ts`, `packages/models/src/dtos/scrape-diagnostics.dto.ts`, `packages/plugin/src/interfaces/plugin-metadata.interface.ts`, `apps/api/src/jobs/{jobs.service,jobs.controller,jobs.resolver,gql-types}.ts`, `apps/cli/src/commands/compare.command.ts`, `apps/mcp/src/{index,tools}.ts`, `apps/mcp/README.md`, plugins `source-{ats-inhire,jobsbylevel,simplifyjobs}` (constants, service, new `__tests__/*.crawl.spec.ts`), tests `packages/common/__tests__/http-memo.spec.ts`, `apps/api/src/jobs/__tests__/jobs.service.multi-location.spec.ts`, `packages/models/__tests__/scrape-diagnostics-crawl.spec.ts`, `scripts/__tests__/ci-workflow.spec.ts`, `package.json`, `docs/{API_CHANGELOG,PERFORMANCE_TUNING,questions,index,log}.md`, specs 1692, 1693, 1694, 1700, 1703, 1713.
+
+**Validation:** `tsc --project tsconfig.typecheck.json` and `-p apps/api/tsconfig.build.json` clean; `test:core` 91/91 suites, 3,914/3,914 tests; touched plugin suites (20 plugins incl. Softy, USAJobs, HeadHunter, SimplyHired) 51/51 suites, 2,386/2,386 tests; `test:scripts` 15/15, 244/244; `lint:docs` clean.
 
 ---
 
@@ -465,6 +495,370 @@ Q-103 (`dedupKey` derivation), Q-104 (JSON result order).
 
 **Validation:** see the four specs' tasks; real PostgreSQL 16 (throwaway `initdb` cluster):
 `store:postgres:migrate` applied `0_init`, boot-path test 4/4, conformance suite 46/46.
+
+## 2026-09-25 — Review fixup — Specs 1692-1713: salary benefit guard, multi-location memo, stop on refusal, opt-in identity changes
+
+**Change:** Salary (1695 D-10/D-11): the extended grammar scans every range instead of the leftmost, skips a `to` range or single bound whose nearest preceding keyword in its clause is a benefit word (bonus, stipend, relocation, commission, referral, 401(k), tuition, ...), and uses an unqualified `to` range only when nothing stronger is in the text; the API description fallback reads an upper-only figure only with a salary word in its clause (`upperBoundNeedsSalaryCue`). Multi-location search (1700 T13/T14): each source's location loop runs in a scoped response memo in the shared HTTP client (`runWithHttpMemo`, GET and POST, `EVER_JOBS_SEARCH_LOCATION_MEMO=off|get`), so whole-board sources cost one fetch for N locations; plugins declare `minRequestIntervalMs` (LinkedIn, Wellfound, Naukri 3 s; Glassdoor, ZipRecruiter 5 s) and the location pause is the larger of that and the operator interval. Refusals: InHire, Level (MCP details, listing pages, feed enrichment) and Internshala detail walks stop at the first 429 / 401 / 403 / 407 / challenge (shared `refusalFromScrapeError` / `isRefusalDiagnostics` in `@ever-jobs/models`), InHire and Internshala also after three failures in a row, Internshala `detail-all` is capped at 100, and Level no longer falls back to the feed after a refused MCP listing. Opt-in until the owner rules on Q-099: WTTJ board mode in `scrape()` (`WTTJ_BOARD_MODE=on`) and the app-shaped ZipRecruiter session event (`ZIPRECRUITER_SESSION_EVENT=form`); the ZipRecruiter geo-block detail no longer suggests a way around the restriction. RemoteOK sends our identifying User-Agent (`EVER_JOBS_REMOTEOK_LEGACY=ua` restores the old one; one live request with it got HTTP 200). Google's page override is clamped to 30. Internshala keeps the `Apply by:` line when a card shows a deadline. The Bayt live test runs in CI again; the multi-location live check moved to `apps/api/__tests__/search-multi-location.e2e-spec.ts` so CI runs it. Docs: Q-099 rewritten (per-plugin request counts, WTTJ and ZipRecruiter rows, Spec 1690 dependency), API changelog (id table, exact legacy switches, country names), PERFORMANCE_TUNING multi-location section, MCP README inputs, `tool_manifest.json` job types, spec bookkeeping (1695 and 1701 done; 1700 T12/T13/T14; 1703 T16 split). Not changed, with reason: HK/MO display overrides (Spec 1699 F2 defers them; adding them would re-split the name and alpha-3 spellings that spec unified).
+
+**Files:** `packages/common/src/utils/helpers.ts`, `packages/common/src/http/{http-client,http-memo,index}.ts`, `packages/models/src/dtos/scrape-diagnostics.dto.ts`, `packages/plugin/src/interfaces/plugin-metadata.interface.ts`, `apps/api/src/jobs/jobs.service.ts`, plugins `source-{linkedin,wellfound,naukri,glassdoor,ziprecruiter,ats-inhire,jobsbylevel,internshala,ats-wttj,google,remoteok,bayt}`, tests (`packages/common/__tests__/{salary,http-memo,description-converter,posted-time}.spec.ts`, `apps/api/src/jobs/__tests__/{jobs.service.multi-location,plugin-request-gaps}.spec.ts`, `apps/mcp/__tests__/tool-manifest.spec.ts`, the plugin suites above), `docs/{questions,API_CHANGELOG,PERFORMANCE_TUNING,index,log}.md`, `apps/mcp/README.md`, `tool_manifest.json`, `.env.example`, specs 1692, 1693, 1695, 1700, 1701, 1703, 1705, 1706, 1707, 1713.
+
+**Validation:** core suites 2713/2713, touched plugin suites 2333/2333, salary-helper plugin suites 1012/1012, scripts 242/242; `tsc --project tsconfig.typecheck.json --noEmit` clean; `lint:docs` clean; the moved multi-location live check passed (2 requests).
+
+---
+
+## 2026-09-25 — Spec 1713 — `source-ziprecruiter`: region guard, geo-block diagnostics and the jobs-app response contract
+
+**Change:** A country the board cannot serve (anything but USA, Canada, US+Canada, worldwide or unset) returns `bad_input` before any client exists. A 403 whose body names the regional firewall returns `blocked` with a detail naming the geo restriction and the fix (a US/CA egress); everything else goes through `classifyScrapeError`. The geo-block verdict is remembered per proxy list for 30 minutes (injectable clock, at most 64 entries), so a fleet outside North America stops repeating the refused request; a different proxy list is not suppressed. The session event is form-encoded with repeated `property` entries on a cookie-enabled client; search sends `radius`, `days`, `remote`, `zipapply` and `continue_from`; pages follow the `continue` token sequentially 5-10 s apart, capped at `min(10, ceil(target/20)+1)`, with a guard against a token that returns nothing new, and a failing page keeps what was collected. `offset` is honoured and `hoursOld` is applied exactly on our side. Ids are `zr-<listing_key>`; a country code is turned into a name before location parsing. Switches: `ZIPRECRUITER_REGION_GUARD`, `ZIPRECRUITER_GEO_BLOCK_TTL_MS`, `ZIPRECRUITER_MAX_PAGES`, `ZIPRECRUITER_LEGACY_PARAMS`, `ZIPRECRUITER_HOURS_FILTER`.
+
+**Files:** `packages/plugins/source-ziprecruiter/src/{ziprecruiter.service,ziprecruiter.constants}.ts`, `src/ziprecruiter.types.ts` (new), `__tests__/ziprecruiter.service.spec.ts` (new), `__tests__/fixtures/{jobs-page1,jobs-page2,forbidden-cf-waf}.json` (new, synthetic), `__tests__/ziprecruiter.e2e-spec.ts`, `.specify/specs/1713-ziprecruiter-region-guard-response-contract/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `ziprecruiter.service.spec.ts` 54/54; type-check clean. The fixtures are synthetic: verification from a US/CA egress (spec §9, Q1-Q4) and the EU-fleet decision (Q6) remain owner tasks.
+
+---
+
+## 2026-09-25 — Spec 1712 — `source-naukri`: captcha gate reported as `blocked`, label parsing fixed
+
+**Change:** The board's captcha refusal (a 406 with a reCAPTCHA body, or the same body in a 200) is `blocked` instead of `bad_input`; jobs from earlier pages are kept and other failures still use `classifyScrapeError`. New pure parsers (`naukri.parsers.ts`) read every salary shape in INR with an interval, a work-mode qualifier plus a comma-split city list fed to `parseLocationList` (India as the fallback country; the description is never scanned) and IST dates, where `createdDate` wins over an open-ended label such as "30+ Days Ago". `requestTimeout` defaults to 20 s and survives proxies, the caller's User-Agent wins, the offset remainder is skipped (skipped rows still count for dedup), `noOfJobs` is a stop hint, `hoursOld` filters locally, links resolve with `URL`, and skills/rating/reviews/vacancy are cleaned. The old methods are kept unchanged behind `NAUKRI_PARSER=legacy` and `NAUKRI_DIAGNOSTICS=legacy`. No new headers or user agents.
+
+**Files:** `packages/plugins/source-naukri/src/{naukri.service,naukri.constants}.ts`, `src/{naukri.types,naukri.parsers}.ts` (new), `__tests__/{naukri.parsers,naukri.service}.spec.ts` (new), `__tests__/fixtures/{naukri-search-page1,naukri-search-406-recaptcha}.json` (new, synthetic), `__tests__/naukri.e2e-spec.ts`, `.specify/specs/1712-naukri-captcha-gate-and-label-parsing/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `naukri.parsers.spec.ts` 90/90 and `naukri.service.spec.ts` 40/40; the e2e now fails on zero jobs with no diagnostic; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1711 — `source-bdjobs`: the public JSON search and details API
+
+**Change:** The plugin reads the board's public JSON search and details endpoints by default: honest User-Agent (`input.userAgent` wins), JSON `Accept`, redirects pinned to `bdjobs.com`, the timeout passed as `timeout` and `requestTimeout` (30 s default) so it survives proxies. Pages are fetched one at a time 2-4 s apart; page 1 merges premium and normal rows by id; `offset` picks the start page and skips rows on it; paging stops at enough jobs, the reported page count, an empty or no-new-id page or the cap. `isRemote`, `jobType` and `hoursOld` filter before any details call; the details pass runs one job at a time over kept jobs only, within `descriptionDepth` (0 / 25 / all) and a 45 s budget. The deadline is never used as the posting date, no date is built with `new Date(text)`, the education snippet is never a description, and a non-JSON 200 is a diagnostic instead of an empty board. The earlier HTML scraper is kept in `bdjobs.legacy-html.ts` behind `BDJOBS_MODE=html` (alias `BDJOBS_STRATEGY=legacy-html`), never as an automatic fallback.
+
+**Files:** `packages/plugins/source-bdjobs/src/{bdjobs.service,bdjobs.constants,index}.ts`, `src/{bdjobs.parse,bdjobs.types,bdjobs.legacy-html}.ts` (new), `__tests__/{bdjobs.parse,bdjobs.service,bdjobs.legacy-html}.spec.ts` (new), `__tests__/fixtures/*` (new, synthetic or trimmed; the details sample's IP is zeroed), `__tests__/bdjobs.e2e-spec.ts`, `.specify/specs/1711-bdjobs-public-json-api/*`, `README.md` (BDJobs row and section), `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 145/145 unit tests (parse 88, service 45, legacy HTML 12); the live e2e passed once against the board (1 search + 2 details requests); type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1710 — `source-bayt`: correct search URLs and card mapping; a challenge is never an empty board
+
+**Change:** The plugin builds only robots-allowed URLs: the slug is lower-cased, accent-folded (`ß→ss`, `æ→ae`, `ø→o`) and stripped of symbols, and a term that normalises to nothing returns `bad_input` without a request; the path is scoped to a Bayt market (`country` when it is one of 8 markets, else the market read from `location`, else `international`) and `page` is the only query parameter. Cards map to an id from `data-job-id` (URL digits, then a hash), an absolute `jobUrl` without query or fragment, `companyUrl` when the card links a company page, a whitespace-collapsed title and a city/country split by the shared parser (`·` as a separator, regional countries promoted, never a fabricated `WORLDWIDE`), with `isRemote` / `workFromHomeType` from it. Pages are sequential 2-5 s apart, ids deduplicated, capped at 10 (`EVER_JOBS_BAYT_MAX_PAGES`); `offset` is honoured and `hoursOld` filters locally, keeping undated cards. A 403 with `cf-mitigated: challenge` or a 200 challenge page is `blocked` with a precise detail. The HTTP client now gets `requestTimeout` and `userAgent` plus HTML `Accept` headers; no User-Agent or `sec-*` headers are added. `EVER_JOBS_BAYT_LEGACY_MAPPING`, `EVER_JOBS_BAYT_LEGACY_SLUG` and `EVER_JOBS_BAYT_COUNTRY_SCOPE=false` restore the old behaviour.
+
+**Files:** `packages/plugins/source-bayt/src/bayt.service.ts`, `src/{bayt.constants,bayt.parse}.ts` (new), `__tests__/{bayt.parse,bayt.service}.spec.ts` (new), `__tests__/fixtures/*` (five synthetic pages), `__tests__/bayt.e2e-spec.ts`, `.specify/specs/1710-bayt-board-correctness-and-diagnostics/*`, `README.md` (Bayt section), `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 116/116 offline tests (parse 86, service 30); type-check clean. The site still blocks us, so live runs report `blocked`; F1-F5 in `tasks.md` are follow-ups.
+
+---
+
+## 2026-09-25 — Spec 1709 — `source-solidjobs`: every division, paging, client-side filters, full mapping
+
+**Change:** Extends Spec 718 from the IT division to all eight divisions by default; search-term hints move a division to the front and `SOLIDJOBS_DIVISIONS` still overrides (operator order kept, hints ignored). Requests carry `campaign`, `pageSize` and `pageIndex`, with every stop condition from the design including 20 pages per division and a 90 s budget (`SOLIDJOBS_TIME_BUDGET_MS`). At most 2 requests are in flight and pages within a division are sequential; a new division starts only once the server's `totalCount` shows the ones in flight cannot fill the request, so a default search costs one request. Results merge in division order and are deduplicated before `offset`; token search ignores accents (including `ł`); location, `isRemote`, `jobType` and `hoursOld` filter locally (country is deliberately ignored); every payload field is mapped; the honest User-Agent is used unless `input.userAgent` is set. `SOLIDJOBS_PAGINATE=false`, `SOLIDJOBS_SEARCH_MODE=phrase` and `SOLIDJOBS_INPUT_FILTERS=false` restore Spec 718 behaviour.
+
+**Files:** `packages/plugins/source-solidjobs/src/{solidjobs.constants,solidjobs.types,solidjobs.service}.ts`, `src/solidjobs.filters.ts` (new), `__tests__/{solidjobs.service.spec,solidjobs.e2e-spec}.ts`, `__tests__/{solidjobs.coverage,solidjobs.filters}.spec.ts` (new), `__tests__/fixtures/solidjobs-{it-page0,it-page1,sales-page0}.json` (new, invented data in the live wire shapes), `.specify/specs/1709-solidjobs-full-coverage/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 137/137 unit tests (coverage 57, filters 58, service 22); the live e2e passed 4/4; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1708 — `source-wellfound`: search reads the server-rendered landing pages
+
+**Change:** The plugin returns real jobs over plain HTTP by reading robots-allowed landing pages (`/role/r/...`, `/role/l/.../...`, `/role/...`, `/location/...`, `/jobs`, `?page=N`) and never sends `q=`, `/search`, `role=` or `jobId=`. A route is skipped on a 404/410, an `/_error` page, a page with no results or a role page that resolves to a different role; the fallback routes apply the term, location or remote filter locally. Listings come from the page's data cache in site order, with company, remote setting (inline or by reference), CAD-aware compensation, epoch-second dates, `/jobs/{id}-{slug}` URLs and Markdown descriptions (converted locally to plain text or safe HTML). Pages are fetched one at a time with `randomSleep(3000, 7000)` between them, deduplicated by id, stopping at the declared page count, 10 pages, a page with nothing new or enough matches. Each page is checked for the data payload before any challenge marker; all proxies rotate through `createHttpClient`; no per-run state lives on the service. `WELLFOUND_FETCH_MODE=browser`, `WELLFOUND_ROUTE_MODE=feed`, `WELLFOUND_DESCRIPTION_SOURCE=html` and `WELLFOUND_JOB_URL_STYLE=slug` restore the old behaviour.
+
+**Files:** `packages/plugins/source-wellfound/src/{wellfound.constants,wellfound.types,wellfound.service,index}.ts`, `src/wellfound.parser.ts` (new), `__tests__/{wellfound.parser,wellfound.service}.spec.ts` and `__tests__/wellfound.e2e-spec.ts` (new), `__tests__/fixtures/*` (new, invented data with the real key names), `.specify/specs/1708-wellfound-landing-page-search/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 121/121 unit tests (parser 88, service 33); a live check on 2026-09-25 returned 3 jobs with company, compensation and posting time for a term search and a term + location search (one GET each, honest User-Agent); type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1707 — `source-remoteok`: search recall, text repair, hoursOld and direct-URL semantics
+
+**Change:** The plugin asks the tag feed for one word chosen from the search term and uses the main feed when that is empty or fails (at most 2 sequential requests). Search words match whole-word and all must be present; title matches rank first, then company or description, then tags. Garbled UTF-8 is repaired in titles, companies, locations, tags and descriptions, including triple-encoded and cut-off text (`remoteok.text.ts`, pure). `hoursOld`, `offset` and `resultsWanted` (1-200, default 100) work; a caller's User-Agent replaces the built-in one; `jobUrlDirect` is set only when the apply link leaves the board; implausible salary pairs (30-36, 10000-750000) are dropped so the description fallback can run; the timeout works with proxies; the metadata row is skipped by shape; errors come back as `partial` / `blocked` / `fetch_error` / `timeout`. No second request is sent after the tag feed is blocked. `EVER_JOBS_REMOTEOK_LEGACY` (`true`/`all` or `search,text,urls,salary,location`) restores the old behaviour.
+
+**Files:** `packages/plugins/source-remoteok/src/{remoteok.service,remoteok.constants,remoteok.types}.ts`, `src/remoteok.text.ts` (new), `__tests__/{remoteok.text,remoteok.service}.spec.ts` and `__tests__/remoteok.e2e-spec.ts` (new), `__tests__/fixtures/remoteok-feed.fixture.ts` (new, synthetic), `.specify/specs/1707-fix-remoteok-search-recall/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 171/171 unit tests (text 116, service 55); the live e2e passed 3/3 - `python` returned 100 jobs instead of 4 and `senior python` 55 instead of 0, with no garbled text; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1706 — `source-internshala`: a search that searches, one posting per card, honest paging
+
+**Change:** Fixes the 13 root causes in the design. The keyword listing (`/{jobs,internships}/keywords-{kw}/`) and the narrow city / work-from-home paths are built from the search; a canonical guard discards a filtered request answered with the bare root and switches a narrow stream to the keyword form. Each `div.individual_internship` card becomes one posting, read through the lower-case `internshipid` attribute (`is-<internshipId>`). Without `jobType` internships and jobs are returned together, alternating one page per round; `INTERNSHIP` / `FULL_TIME` narrow to one stream and other types return `empty` with no request. Locations are split per city with India stamped (blank on "International" cards); remote/hybrid come from the location row only; INR pay from the pay row only, never the post-internship offer; `datePosted` from the posted label, refined by the detail-link epoch only inside the label's age window. Client-side filters cover remote, city, part-time and `hoursOld`; `offset` works. Paging stops on the last, highest, empty or no-new-id page or 10 pages per stream; details are fetched one at a time within `descriptionDepth`, degrading to partial results with diagnostics. A robots.txt guard checks every URL; requests are 2-5 s apart; the default User-Agent is our honest one. `INTERNSHALA_DEFAULT_STREAMS=job` and `INTERNSHALA_ID_SCHEME=url-hash` restore the old default and ids.
+
+**Files:** `packages/plugins/source-internshala/src/{internshala.service,index}.ts`, `src/{internshala.constants,internshala.types,internshala.parser}.ts` (new), `tsconfig.json` (new), `__tests__/{internshala.parser,internshala.service}.spec.ts` (new), `__tests__/fixtures/*` (new, synthetic), `__tests__/internshala.e2e-spec.ts`, `.specify/specs/1706-internshala-search-parsing-pagination/*`, `README.md` (Internshala section), `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 91/91 unit tests (parser 57, service 34); both live e2e tests passed against the site; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1705 — `source-ats-wttj`: board-wide search, mapping fixes, credential self-heal
+
+**Change:** Mapping (B): remote from the remote token (`fulltime` remote, `partial`/`punctual` hybrid, `no` wins over the title, else the title regex); description = summary, missions as a list, then profile; structured salary first and never without a currency, then `resolveCompensation` on the text; `jobType`, `countryCode`, every office as `locations[]`, company logo/headcount/description/industry, `jobFunction`, `experienceRange` and a URL-locale guard. Board search (A): a public `scrapeBoard(input)`; `scrape()` switches to it only when there is no company and at least one search criterion; company mode sends exactly the same request body as before. Board mode queries the English index (falling back to French on 404/400), one page at a time 0.5-1.0 s apart, and never reads past the 1,000-hit window (`bad_input` for an offset at or past it; `partial` when the window cuts a request short). Credentials (C): a refused search key is re-read from a public detail page's runtime config (at most 3 fetches per refresh, one refresh per 10 minutes per process, redirects pinned). Switches: `WTTJ_BOARD_MODE`, `WTTJ_REMOTE_MODE`, `WTTJ_DESCRIPTION_LAYOUT`, `WTTJ_URL_LOCALE_GUARD`, `WTTJ_USER_AGENT_MODE`, `WTTJ_CREDENTIAL_REFRESH`, `WTTJ_CREDENTIALS_SEED_URL`. The separate job-board registration `Site.WELCOMETOTHEJUNGLE` (T17) is a follow-up.
+
+**Files:** `packages/plugins/source-ats-wttj/src/{wttj.service,wttj.constants,wttj.types}.ts`, `src/{wttj.mapper,wttj.query,wttj.credentials}.ts` (new), `__tests__/{wttj.mapper,wttj.query,wttj.credentials,wttj.service}.spec.ts` (new), `__tests__/fixtures/{wttj-hits.json,wttj-detail-runtime-config.html}` (new, invented), `__tests__/wttj.e2e-spec.ts`, `.specify/specs/1705-wttj-board-search-mapping-credentials/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 153/153 unit tests (service 55, mapper 44, query 28, credentials 26); two tolerant board-search e2e cases added; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1704 — `source-google`: rows come from one record each, or not at all
+
+**Change:** Rows are built from a single job record instead of pairing titles and URLs by position. The new pure `google.parser.ts` tries the known payload key first; if it yields nothing, any 9-digit key whose value has the job-record shape is accepted and a warning names the key. Records are read with a bracket-matching scan that understands JSON strings; the same shape check guards both paths, and a record without an http(s) URL is skipped, so no search URL is ever invented. Ids are `go-<record id>`, with a URL hash only when the id is missing; `location` (always an object) and `locations` come from `parseLocationList`. When the first page yields nothing the result is `blocked` for a challenge page or an interstitial (429, a `/sorry/` final URL, "unusual traffic", an `enablejs` redirect) and `unknown` otherwise, with a detail. The pagination loop is kept but runs only with a forward cursor (`EVER_JOBS_GOOGLE_MAX_PAGES`). `EVER_JOBS_GOOGLE_LEGACY_PARSER=true` restores the old parser. The live e2e is gated on `RUN_NETWORK_E2E` and was not run: the request path is disallowed by robots.txt (Q-099).
+
+**Files:** `packages/plugins/source-google/src/{google.service,index}.ts`, `src/{google.parser,google.constants}.ts` (new), `__tests__/{google.parser,google.service}.spec.ts` (new), `__tests__/fixtures/*` (six synthetic pages), `__tests__/google.e2e-spec.ts`, `.specify/specs/1704-google-jobs-record-extraction/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 65/65 unit tests (parser 38, service 27); type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1703 — `source-glassdoor`: fail fast, say why, stop paginating forever
+
+**Change:** A challenged homepage (a thrown 403 or a 200 challenge page) returns `blocked` (`homepage challenge (HTTP 403, cf-mitigated: challenge)`) and sends no `/graph` request; any other homepage failure keeps the old warn-and-continue with the fallback token. GraphQL errors are surfaced: errors with no data are `fetch_error` with the message, an empty body `unknown`, a challenge body `blocked`; errors next to data are ignored; rows from earlier pages are kept. Pagination is bounded (no cursor, no new ids, or `min(30, ceil((offset+rw)/30)+1)` pages); `resultsWanted` is capped at 900; `offset` is supported, cursors merge across pages and there is no sleep after the last request. Ids are `gd-<listingId>`, the job URL is the listing form, `companyUrl` is added and every URL join uses `new URL()`. `isRemote` is true only for the remote pseudo-location, remote location text or `input.isRemote`. The location post-filter never fetches extra pages; if it removes every row the result is `empty` with a count. Headers are built per request (`origin`/`referer` from the country domain, no per-request `user-agent`). `EVER_JOBS_GLASSDOOR_LEGACY` restores behaviours by name; `EVER_JOBS_GLASSDOOR_MAX_PAGES` caps pages. Keeping Glassdoor in the default site list is Q-099.
+
+**Files:** `packages/plugins/source-glassdoor/src/{glassdoor.service,glassdoor.utils,glassdoor.constants}.ts`, `__tests__/{glassdoor.utils,glassdoor.service}.spec.ts` (new), `__tests__/fixtures/*` (five synthetic files), `__tests__/glassdoor.e2e-spec.ts`, `.specify/specs/1703-glassdoor-robots-neutral-hardening/*`, `.env.example`, `docs/index.md`, `docs/log.md`, `docs/questions.md` (Q-099).
+
+**Validation:** 112/112 unit tests (utils 66, service 46); the updated live e2e passed; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1702 — `source-indeed`: remote, job type and location from the right fields; no silent empty results
+
+**Change:** Only response reading changes; the GraphQL document, variables, filters, headers, key and user agent are unchanged, and a service test asserts that. `isRemote` and a new `workFromHomeType` (`Remote` / `Hybrid`) come only from the remote attribute key, an attribute label that is entirely a workplace word, or the start of `formatted.long`; skill labels, the description and the title are never read; remote wins over hybrid; the old `remotejob` key still counts. Job types map from the four known keys, or from another attribute only when its whole label is a job-type word; old `job-types*` keys still resolve. Structured location fields come first (`countryCode` as the country fallback), `formatted.long` is kept as `text`, `postalCode` is carried, and the label is parsed only without structured parts, after stripping a "Remote in" prefix and a US ZIP. A block page (403 or 200), CSRF or auth refusal is `blocked`; a 400 is `bad_input` naming the field; a 200 with no job data, or a page where every job fails to parse, is `unknown`; earlier pages are kept. `datePublished` (else `dateOnSite`) keeps its exact instant through the Spec 1696 helpers. `EVER_JOBS_INDEED_ATTRIBUTE_MAPPING=false`, `EVER_JOBS_INDEED_FORMATTED_LOCATION=false` and `EVER_JOBS_INDEED_MAX_PAGES` (10) are the switches.
+
+**Files:** `packages/plugins/source-indeed/src/{indeed.service,indeed.utils,indeed.constants}.ts`, `src/indeed.diagnostics.ts` (new), `__tests__/{indeed.utils,indeed.service,indeed.diagnostics}.spec.ts` (new), `__tests__/fixtures/*` (new, synthetic), `__tests__/indeed.e2e-spec.ts`, `.specify/specs/1702-indeed-attribute-mapping-and-diagnostics/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 69/69 unit tests (utils 28, service 23, diagnostics 18). The one live e2e run (two POSTs, 2026-09-25) came back as a block page, which the plugin now reports as `blocked`; the new mapping has only seen synthetic data shaped like the fields our document requests. Type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1701 — `source-linkedin`: pagination, stable ids, pay, detail fields and company enrichment
+
+**Change:** `start` advances by the number of cards on the page (0, 10, 20), and the loop stops on an empty page, before `start=1000`, after two pages with no new id, at `resultsWanted` or on an error; search, detail and company requests share one pacer (one at a time, 3-7 s apart). Ids are `li-<digits>` from the card's job id (fallback: the digits at the end of the link); job and company URLs are canonical; logos are only taken from the CDN host. A new `parseLinkedInPay` reads the shown currency symbols and codes, K/M suffixes, per-amount periods, `+`, `up to` and single values, using the Spec 1695 helpers. The detail page adds `companySourceId`, `applicantsCount` and `applicantsCountBound` (now declared on `JobPostDto`), the base-pay block and the offsite apply URL; card labels go through the Spec 1696 helpers. Company enrichment is opt-in (`linkedinFetchCompanyDetails` on `ScraperInputDto`, the CLI flag `--linkedin-fetch-company-details`, or `EVER_JOBS_LINKEDIN_FETCH_COMPANY_DETAILS`; the input wins): one sequential GET per unique company, capped at 25, cached per call, filling only empty fields. `EVER_JOBS_LINKEDIN_LEGACY` (`pagination,ids,pay,detail,remote` or `all`) restores the old behaviour, including the old `li-<slug>-<id>` ids.
+
+**Files:** `packages/plugins/source-linkedin/src/{linkedin.service,linkedin.utils,linkedin.constants}.ts`, `src/{linkedin.parser,linkedin.types}.ts` (new), `__tests__/{linkedin.utils,linkedin.parser,linkedin.service}.spec.ts` (new), `__tests__/fixtures/*` (new, fictional companies), `__tests__/linkedin.e2e-spec.ts`, `packages/models/src/dtos/{job-post,scraper-input}.dto.ts`, `packages/models/__tests__/job-post-board-fields.spec.ts` (new), `apps/cli/src/commands/search.command.ts`, `apps/cli/__tests__/linkedin-company-details.command.spec.ts` (new), `docs/CLI.md`, `.specify/specs/1701-source-linkedin-guest-parsing/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 177/177 plugin unit tests (utils 97, parser 36, service 44); CLI flag 3/3 (the key stays unset without the flag, so the env var still decides); DTO 4/4 (the input flag survives `ValidationPipe({ whitelist: true })`); type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1700 — Multi-location search and exclusion filters
+
+**Change:** `ScraperInputDto` gains `locations`, `excludeTitleTerms`, `excludeKeywords` and `excludePresets` with validators, plus exported limits (`HARD_MAX_SEARCH_LOCATIONS=25`, `DEFAULT_MAX_SEARCH_LOCATIONS=10`, `MAX_SEARCH_LOCATION_LENGTH=200`, `MAX_EXCLUSION_TERMS=50`, `MAX_EXCLUSION_TERM_LENGTH=100`); `resultsWanted` and `offset` now apply per source and per location. The fan-out runs inside `JobsService.searchJobsWithDiagnostics`, so REST, GraphQL, CLI, MCP, `/analyze` and the aggregator all get it: with `locations` absent the same input object goes through the old code; the pool still runs one site at a time and each site runs its locations one after another (`EVER_JOBS_SEARCH_LOCATION_INTERVAL_MS`, 500 ms), each call with a fresh copy of the caller's `offset` / `resultsWanted`; each location fails on its own, and a 429, a `blocked` result or an open circuit stops that source's remaining locations; same-source duplicates are removed; locations over `EVER_JOBS_SEARCH_MAX_LOCATIONS` come back as `bad_input` rows. Exclusions (`job-exclusion.ts`, new `ExclusionPreset` enum with `security_clearance`) are whole-word, case- and accent-insensitive, negation-aware literal matches with a trailing `*` as a prefix, applied after dedup; the cache and stored corpus are unaffected. One cache-key builder (`search-cache-params.ts`) is shared by REST and GraphQL. CLI (`--locations`, `--exclude-title`, `--exclude-keyword`, `--exclude-preset`), MCP tools and `tool_manifest.json` expose the fields.
+
+**Files:** `packages/models/src/dtos/scraper-input.dto.ts`, `packages/models/src/enums/{exclusion-preset.enum,index}.ts`, `packages/common/src/utils/{search-locations,job-exclusion}.ts` (new), `packages/common/src/index.ts`, `apps/api/src/jobs/{jobs.service,jobs.aggregator,jobs.controller,jobs.resolver,gql-types}.ts`, `apps/api/src/jobs/search-cache-params.ts` (new), `apps/cli/src/commands/{search,compare}.command.ts`, `apps/mcp/src/{index,tools}.ts`, `tool_manifest.json`, `package.json` (`test:core` includes `apps/cli/__tests__`), `scripts/__tests__/ci-workflow.spec.ts`, tests (`packages/common/__tests__/{search-locations,job-exclusion}.spec.ts`, `packages/models/__tests__/scraper-input-search-filters.spec.ts`, `apps/api/src/jobs/__tests__/{jobs.service.multi-location,jobs.aggregator.exclusions,search-filters.api}.spec.ts`, `multi-location.e2e-spec.ts`, `fixtures/multi-location.fixture.ts`, `apps/cli/__tests__/search-filters.command.spec.ts`, `apps/mcp/__tests__/tools-search-filters.spec.ts`), `.specify/specs/1700-multi-location-search-and-exclusion-filters/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 190/190 unit tests (search-locations 25, job-exclusion 59, DTO 9, service multi-location 28, aggregator exclusions 12, API 34, CLI 10, MCP 13); the API, MCP and CLI suites around them stay green; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1699 — Country coverage: Slovenia's code, Sri Lanka, the ISO 3166 table
+
+**Change:** Slovenia's code is `si` (it was `sl`, Sierra Leone) in every mode; `Country.SRILANKA` (`sri lanka,srilanka`, `lk`) is added; `getCountryDisplayName` capitalises every word ("Sri Lanka", "Costa Rica"). `iso3166.ts` holds a frozen table of the 249 official codes plus Kosovo (`XK`/`XKX`), its inverse and two lookup helpers, with no display names. The location parser gains an ISO country-name map, a new lookup order, guards so US towns that share a country name, the state of Georgia and `&` are not misread as countries; existing hardening and options are unchanged. `ParseLocationOptions.isoCountryNames` / `EVER_JOBS_LOCATION_ISO_COUNTRY_NAMES` (default `true`, read once per process like the other `EVER_JOBS_LOCATION_*` switches) set to `false` restores the configured-countries-only lookup, the old alpha-3 spellings and the old readings; `normalizeCountryOnly` and `canonicalCountryName` accept it as an optional second argument. The `source-company-block` spec asserted the old whole-label city for "San Francisco, CA, United States of America"; it now asserts the city/state split and a new case pins the legacy switch.
+
+**Files:** `packages/models/src/enums/country.enum.ts`, `packages/common/src/utils/{location-parser,index}.ts`, `packages/common/src/utils/iso3166.ts` (new), `packages/common/__tests__/iso3166.spec.ts` (new), `packages/common/__tests__/location-parser.spec.ts`, `packages/plugins/source-company-block/__tests__/block.service.spec.ts`, `.specify/specs/1699-country-coverage-iso3166/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `iso3166.spec.ts` 333/333, `location-parser.spec.ts` 537/537, `block.service.spec.ts` 9/9; the full plugin unit run showed no other change; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1698 — Markdown emphasis and line-break fidelity
+
+**Change:** The shared converter keeps bold/italic markers directly on the text they wrap, keeps headings on one line (a blank line folds to one space: `<h4><p>a</p><p>b</p></h4>` gives `#### a b`) and collapses blank-line noise; zero-width-only lines count as blank so emphasis is never split across a paragraph. Three rules are added through turndown's public `addRule`, `wrapInlineEmphasis` is exported, markers are read from turndown's options when each rule runs, and a private `tidyMarkdown` pass is skipped when the HTML contains `<pre`. The design's trailing-space regex was quadratic on long `&nbsp;` runs (48 s on the test input), so padding is handled by a backward character scan and headings by splitting on newlines; a 200k-character test pins linear time. `markdownConverter(html, { edgeSafe })` and `EVER_JOBS_MARKDOWN_EDGE_SAFE` (read on every call; the option wins) restore the old output byte for byte with `false`.
+
+**Files:** `packages/common/src/converters/description-converter.ts`, `packages/common/__tests__/description-converter.spec.ts` (new), `.specify/specs/1698-markdown-emphasis-line-breaks/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `description-converter.spec.ts` 38/38 - all 17 cases in the design table give the proposed output, and the legacy switch is compared byte for byte; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1697 — French/EU contract vocabulary for job types
+
+**Change:** `JobType.PERMANENT` and `JobType.APPRENTICESHIP` are appended (existing values unchanged) with aliases in natural spelling for French, German, Dutch, Spanish, Italian and Portuguese contract labels. One normaliser (`normalizeJobTypeKey`) serves aliases and inputs, and the lookup index is built once. `stage` resolves to an internship only with a `fr`, `nl` or `it` locale. `getJobTypeFromString(value, { locale, mode })`: `mode: 'token'` ignores prose-ambiguous aliases ("permanent residency", "interim results", "a vast contract portfolio") for plugins that scan words out of prose; `jobTypeScanOptions(process.env)` reads `EVER_JOBS_JOB_TYPE_SCAN_MODE` (`label` restores the old trust). The atlasspace and launchpadbuild_ai word scans use it; argospace and hlaboratories gain the two labels. `getEnumFromJobType(str, options?)` now passes the options through. The CLI `--job-type` help is built from `Object.values(JobType)` and `docs/CLI.md` lists the values. A live drift e2e sends one facet-only request with an honest User-Agent and checks every contract key resolves or is known-unmapped.
+
+**Files:** `packages/models/src/enums/job-type.enum.ts`, `packages/common/src/utils/helpers.ts` (`getEnumFromJobType`), `packages/plugins/source-company-{argospace,atlasspace,launchpadbuild_ai,hlaboratories}/src/*.service.ts`, comment fixes in `source-solidjobs`, `source-ats-gusto-hosted` and `source-jsonld`, `apps/cli/src/commands/{search,compare}.command.ts`, `docs/CLI.md`, tests (`packages/models/__tests__/job-type.enum.spec.ts`, `packages/common/__tests__/get-enum-from-job-type.spec.ts`, the four company-plugin job-type specs, `source-ats-wttj/__tests__/wttj-contract-vocabulary.e2e-spec.ts`), `.specify/specs/1697-eu-contract-job-types/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `job-type.enum.spec.ts` 263/263, the company-plugin job-type specs 16/16, `get-enum-from-job-type.spec.ts` 3/3; the unit suites of the 52 plugins that call `getJobTypeFromString` stay green; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1696 — Posted-time precision
+
+**Change:** `datePosted` stays the date-only canonical value. `JobPostDto` gains `datePostedAt` (ISO-8601 UTC, only when a source gives finer-than-day information), `datePostedPrecision` and `datePostedBasis` (`DatePostedPrecision` / `DatePostedBasis` enums). `posted-time.ts` exports `PostedTime`, `NO_POSTED_TIME`, `parseRelativeAge`, `relativeAgeToMs`, `postedFromTimestamp`, `postedFromRelativeLabel`, `postedFromAgeInDays`, `postedTimeFields` and `postedSortKey`: pure, never throwing, with the time as a parameter. Values outside 2000 to now+36 h (checked by day for date-only values) keep their date but claim no precision; relative estimates before 2000 return nulls; impossible calendar dates and `Date` objects get no precision. The board plugins (LinkedIn, Indeed, Glassdoor and the other fixed boards and new sources) use the helpers. `JobsService` now orders same-site results by `postedSortKey`: the instant when present, else the start of the day, and an unparseable date sorts last instead of making the comparator return `NaN`. `EVER_JOBS_POSTED_TIME_DETAIL=false` emits `datePosted` only. The GraphQL / MCP / CLI surfaces (T14) are a follow-up.
+
+**Files:** `packages/common/src/converters/{posted-time,index}.ts` (`posted-time.ts` new), `packages/models/src/enums/{date-posted.enum,index}.ts` (`date-posted.enum.ts` new), `packages/models/src/dtos/job-post.dto.ts`, `apps/api/src/jobs/{jobs.service,jobs.aggregator}.ts`, `packages/common/__tests__/posted-time.spec.ts` (new), `apps/api/src/jobs/__tests__/jobs.service.spec.ts`, `.specify/specs/1696-posted-time-precision/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `posted-time.spec.ts` 160/160; `jobs.service.spec.ts` 55/55 including the new same-day ordering case; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1695 — Salary parsing hardening
+
+**Change:** `parseCurrency` returns `null` instead of `NaN` and reads a trailing K. `convertToAnnual` scales only the bounds present, returns whether it changed anything, reuses `ANNUALIZATION_FACTORS`, normalises the interval name and rounds to cents. New `intervalFromPeriodToken` plus a pay-period vocabulary (`mon` excluded so "Mon-Fri" is not monthly). The three range builders use named groups; interval precedence is caller hint, then a period token in the text, then magnitude, and two different periods on one range (`$20/hr - $40,000/yr`) return nothing; single bounds read a period too (`$25/hr+`, `up to $4,000/mo`). `to` is a range separator when both amounts carry a currency, and amounts followed by "million"/"billion" (any case) are rejected as bounds. Whitespace is matched by exactly one part of each pattern, so a 20k-space run takes ~3 ms instead of 0.4-2.3 s (a test pins 50k spaces under 500 ms). The post-scrape rule is the pure `postProcessCompensation`, now wired into `JobsService.postProcessSalary`: a single direct bound counts as direct data, a compensation without an amount no longer blocks the USA description fallback, an upper-only description figure counts, and `enforceAnnualSalary` annualises single bounds without mutating the scraper's object. `EVER_JOBS_SALARY_GRAMMAR=legacy` (or `grammar: 'legacy'`) restores the earlier grammar and rules exactly.
+
+**Files:** `packages/common/src/utils/helpers.ts`, `packages/common/__tests__/salary.spec.ts` (new), `packages/common/__tests__/helpers.spec.ts` (the `from $X to $Y` case now reads the full range; legacy keeps the no-match), `apps/api/src/jobs/jobs.service.ts`, `apps/api/src/jobs/__tests__/jobs.service.spec.ts`, `.specify/specs/1695-salary-parsing-hardening/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** `salary.spec.ts` 192/192, `helpers.spec.ts` 95/95, `jobs.service.spec.ts` 55/55 (five new wiring cases, one of them pinning the legacy switch); type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1694 — `source-simplifyjobs`: Simplify new-grad and internship lists
+
+**Change:** New source plugin `source-simplifyjobs` (`Site.SIMPLIFYJOBS = 'simplifyjobs'`) serving the two community-curated early-career lists Simplify publishes as `listings.json` (new grad ~3.1k live rows, internships ~4.6k; each body ~13 MB). The body is never held as one string: `simplifyjobs.feed-parser.ts` splits the stream into rows and trims each live row to the fields we map, so heap cost follows the rows kept. `simplifyjobs.feed-cache.ts` is an ETag/TTL cache shared by concurrent scrapes; both lists are fetched one after the other with one conditional GET per list per window; on a failure the cached copy is served for up to 6 h with a `partial` diagnostic, and a feed that has not moved in 14 days logs a warning. robots.txt is checked (`simplifyjobs.robots.ts`). Job-type routing answers unsupported types with no request and an `empty` diagnostic; search, location (with clean-up rules), remote, `hoursOld` (midnight rule), sorting, dedup and paging run locally; the mapper detects the ATS from the apply link. `SIMPLIFYJOBS_NEWGRAD_REPO`, `SIMPLIFYJOBS_INTERNSHIPS_REPO` and `SIMPLIFYJOBS_BRANCH` override the source files.
+
+**Files:** `packages/plugins/source-simplifyjobs/**` (new: `package.json`, `tsconfig.json`, `src/{index,simplifyjobs.module,simplifyjobs.service,simplifyjobs.constants,simplifyjobs.types,simplifyjobs.feed-parser,simplifyjobs.feed-cache,simplifyjobs.robots,simplifyjobs.mapper,simplifyjobs.query}.ts`, `__tests__/*` with synthetic fixtures of invented companies), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `tool_manifest.json`, `README.md`, `.specify/specs/1694-source-simplifyjobs/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 280/280 offline tests (parser 46, cache 13, robots 8, mapper 90, query 57, service 66, including the `Site.SIMPLIFYJOBS` registration check); the gated live e2e passed against the real files; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1693 — `source-jobsbylevel`: Level, AI-rated listings
+
+**Change:** New job-board plugin `source-jobsbylevel` (`Site.JOBSBYLEVEL = 'jobsbylevel'`, distinct from `Site.HIGHLEVEL`) for Level (jobsbylevel.com), which rates every listing with an AI level from 1 to 4 (how central AI is to the work, not seniority). robots.txt disallows `/api/` for every user agent, so the plugin never calls the documented REST API: it reads the operator's published MCP server (`search_jobs` for listings, `get_job` for details) by default, and falls back to the RSS feed plus the JSON-LD on each listing page when `JOBSBYLEVEL_TRANSPORT=feed` or when the MCP listing fails before any job (`JOBSBYLEVEL_FEED_FALLBACK`). Requests are strictly sequential and paced; listing pages are capped (`JOBSBYLEVEL_MAX_PAGES`, 10); responses are cached (`JOBSBYLEVEL_CACHE_TTL_MS`). The search term, remote, city, company and AI-level range go to the server and are re-checked locally; categories filter locally only; location labels are cleaned before parsing. Ids are `jobsbylevel-<slug>` so the fallback keeps them stable; `jobUrl` is kept exactly as served. The rating is emitted as `aiLevel`, now declared on `JobPostDto` (`JOBSBYLEVEL_EMIT_AI_LEVEL=false` leaves it off). The operator never returns the ATS link, so no ATS fields are set on the MCP path.
+
+**Files:** `packages/plugins/source-jobsbylevel/**` (new), `packages/models/src/enums/site.enum.ts`, `packages/models/src/dtos/job-post.dto.ts` (`aiLevel`), `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `tool_manifest.json`, `README.md`, `.specify/specs/1693-source-jobsbylevel/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 181/181 unit tests (service 79, helpers 102, including the `Site.JOBSBYLEVEL` registration check); the live e2e passed 2/2; type-check clean.
+
+---
+
+## 2026-09-25 — Spec 1692 — `source-ats-inhire`: InHire (Brazil)
+
+**Change:** New multi-tenant ATS plugin `source-ats-inhire` (`Site.INHIRE = 'inhire'`, `InhireModule`). Every InHire tenant's career page loads its openings from one public JSON API (`https://api.inhire.app`) selected by an `X-Tenant` header. The tenant comes from `companySlug` or a `{tenant}.inhire.com.br` `companyUrl`; anything else is `bad_input` with no request. One fixed API origin, our honest User-Agent, redirects pinned to the API host, a request pacer shared across the process (`INHIRE_MIN_INTERVAL_MS`, raise-only) and detail records one at a time by default (`INHIRE_DETAIL_CONCURRENCY`, max 2). List rows are capped at 500, cleaned and deduplicated; the title search is accent-insensitive; detail budgets are 50 by default (25 / 200 by `descriptionDepth`); board mode and the post-detail filters follow the design. Output mapping pins URLs with a canonical fallback, builds Brazilian location labels (state codes never read as countries), maps contract labels (`CLT`, `PJ`, `Estágio`...) to job types and never reads an `R$` salary as USD. `scrape()` never throws; failures return partial results with `classifyScrapeError` diagnostics.
+
+**Files:** `packages/plugins/source-ats-inhire/**` (new: `package.json`, `tsconfig.json`, `src/{index,inhire.module,inhire.service,inhire.constants,inhire.types,inhire.helpers,inhire.state}.ts`, `__tests__/{inhire.service,inhire.helpers}.spec.ts`, `__tests__/inhire.e2e-spec.ts`, synthetic fixtures for a fictional tenant), `packages/models/src/enums/site.enum.ts`, `packages/plugins/index.ts`, `tsconfig.base.json`, `jest.config.js`, `tool_manifest.json`, `README.md`, `.specify/specs/1692-source-ats-inhire/*`, `.env.example`, `docs/index.md`, `docs/log.md`.
+
+**Validation:** 178/178 unit tests (service 69, helpers 109, including the `Site.INHIRE` registration check); the live e2e passed 4/4 when run once; type-check clean; `npm run lint:docs` and `npm run test:scripts` clean.
+
+---
+
+## 2026-09-25 — Spec 1691 — Softy: sitemap discovery, paginated listing, polite detail fetches
+
+**Change:** A polite live check (4 requests, 2 s apart, honest UA) showed `source-ats-softy`
+returned **0 jobs** on the current markup: `/offres` 301-redirects to `/offers`, offer links
+are slug-less `/offers/{ID}`, and the board is paginated (21 cards per page). Rebuilt on the
+current surface, as the site operator asked:
+
+- **Discovery** is the crawl-policy field `discovery` (caller, operator site/host, env):
+  `sitemap` reads `/sitemap.xml`, takes `/offers/{ID}` entries newest `lastmod` first and
+  fetches only the detail pages needed, **one after another**; `listing` reads
+  `/offers?page=1..N` (legacy `/offres` parser kept as fallback); `auto` (default) = sitemap,
+  falling back to listing when the sitemap is missing, empty or unparseable, and listing
+  straight away for `descriptionDepth: board` or when the detail budget is smaller than
+  `offset + resultsWanted`.
+- **Pacing** from the manifest: all of `softy.pro` is one bucket, 1 in flight, 1 s apart.
+  The Chrome/129 UA is only *declared* now (sent in UA mode `plugin`).
+- **Cache** of extracted detail fields keyed `url|lastmod` (500 entries, 6 h), so a repeat
+  search re-reads only changed offers. **Failures:** 4xx/unknown host → empty; 5xx → partial
+  with diagnostic; a 429 after retries, an abort or a crawl-policy refusal stops the scrape
+  and keeps what it has; detail fetches stop after 3 consecutive failures.
+- Six `SOFTY_*` knobs (list pages, detail fetches, cache size/TTL, lastmod as date, failure
+  stop), read per scrape.
+- **Common toolkit:** `parseSitemapXml` (allocation-light scanner: namespaces, CDATA,
+  entities, `<image:loc>` ignored), `parseLastmod` (W3C, `YYYY-MM-DD HH:MM:SS`, RFC 1123;
+  zone-less = UTC), `fetchSitemap` (sitemap indexes, gzip by magic bytes, plain-text
+  sitemaps, size/depth/count bounds, same-domain nested scope) and `BoundedTtlCache`.
+- Spec updated with an "As built" section (§6); plan and tasks added.
+
+**Files:** `packages/common/src/http/crawl/{sitemap,ttl-cache}.ts`,
+`packages/common/__tests__/crawl-{sitemap,ttl-cache}.spec.ts`,
+`packages/plugins/source-ats-softy/src/{softy.service,softy.constants,softy.types,softy.config,softy.parser,index}.ts`,
+`packages/plugins/source-ats-softy/__tests__/{softy.service,softy.parser,softy.policy}.spec.ts`,
+`packages/plugins/source-ats-softy/__tests__/softy.e2e-spec.ts` (reduced),
+`packages/plugins/source-ats-softy/__tests__/fixtures/*` (8 synthetic files),
+`.specify/specs/1691-softy-sitemap-discovery/*`, `docs/index.md` (Spec 374 row annotated).
+
+**Validation:** 228 unit tests green (lane B5); type-check clean for the lane's files.
+Live wire proof (5 requests, captured after the UA interceptor): `auto` → `sitemap.xml` then
+three `/offers/{ID}` pages, all 200, Ever Jobs UA, no `sec-ch-ua`, never more than 1 in
+flight, gaps 1003.1 / 1010.1 / 1006.4 ms, 3 complete jobs (descriptions 3,878 / 6,278 /
+6,705 chars) in 3.6 s; `listing` with `descriptionDepth: board` → one request, 3 jobs. The
+live e2e spec was not run by the lane (no extra traffic to `softy.pro`). `lint:docs` clean.
+
+---
+
+## 2026-09-25 — Spec 1690 — crawl policy: honest identity, per-host pacing, configurable proxies and back-off
+
+**Change:** The operator of the Softy ATS (`*.softy.pro`) reported that `source-ats-softy` was
+impolite: up to 100 detail requests at once, a different proxy per request, a Chrome
+User-Agent that hid who we are, and retries on 429/5xx. The audit found all four were
+defects of the shared `HttpClient`, so they are fixed there, for every plugin, without
+editing plugin call sites:
+
+- **One policy object, six layers.** `CrawlPolicy` (25 knobs) is resolved per request from
+  preset (`polite` default, `legacy` = exact pre-1690 behaviour, `strict`) → `EVER_JOBS_CRAWL_*`
+  env → builtin limits for bulk ATS APIs (Greenhouse, Lever, Ashby, SmartRecruiters) → the
+  plugin (`@SourcePlugin({ crawl })` + client options) → operator per-site / per-host JSON
+  (`EVER_JOBS_CRAWL_POLICIES` / `_POLICY_FILE`) → the search request's `crawl` object, filtered
+  by `EVER_JOBS_CRAWL_CALLER_OVERRIDES` (`any` | `stricter` | `none`). `provenance` records the
+  layer behind every field; `GET /api/sources/:site/crawl-policy` shows it.
+- **Identity.** The client-level UA default used to beat `setHeaders()`, silently discarding
+  every UA 266 plugins declared (USAJobs' *required* e-mail UA included). A request
+  interceptor now sends an honest UA naming the project (contact and `From:` configurable);
+  declared UAs are sent only in mode `plugin` or through a manifest opt-in with a reason
+  (USAJobs, HeadHunter). `BrowserPool` follows the same rules.
+- **Pacing.** One process-wide limiter per host / registrable domain / site: 4 in flight and
+  100 ms between starts by default, adaptive slow-down on 429/503, every retry holds a slot.
+- **Proxies.** `per-host` stable proxy by default (`per-scrape`, `per-request`, `off`
+  available); `DEFAULT_PROXIES`, parsed and never used before, is now the fallback list.
+- **Back-off.** 2 exponential retries with jitter on 429/502/503/504; never earlier than
+  `Retry-After`; beyond 60 s give up and cool the whole bucket (`cap` restores the old retry).
+  A 429/503 without a longer `Retry-After` waits at least `throttleRetryDelayMs` × 2^n
+  (5 s, then 10 s; `strict` 30 s, `legacy` 0 = off) and cools the host that long — added
+  after an operator saw a 429 retried after ~1 s (`EVER_JOBS_CRAWL_THROTTLE_RETRY_DELAY_MS`).
+- **Also:** opt-in robots.txt (`crawl-delay` / `respect`); egress guard against private and
+  cluster-internal destinations with DNS-rebinding protection (Q-092 option B, for every
+  plugin); the search deadline now aborts an abandoned source's queued and in-flight
+  requests, and such aborts are circuit-neutral; circuit-breaker cap 250 → 4,096
+  (`EVER_JOBS_CIRCUIT_MAX_SITES`); `rate_limited` scrape reason; MCP `search_jobs` posts
+  camelCase (the snake_case body was stripped by validation, turning every MCP search into a
+  whole-catalogue fan-out); `createHttpClient` keeps a plugin's `timeout` when proxies are set.
+- **Entry points:** REST `crawl`, GraphQL `CrawlPolicyInput`, MCP `crawl`, CLI `--crawl` and
+  convenience flags plus `--crawl-preset` / `--caller-overrides`.
+- **PR #93 review:** browser navigations now go through the policy too (`BrowserPool.navigate`:
+  abort, egress guard with a best-effort DNS pre-check, robots.txt, a host-limiter slot for the
+  whole navigation, 429/503 back-off; the 18 direct `page.goto` calls of 15 plugins migrated;
+  switch `EVER_JOBS_CRAWL_BROWSER_NAVIGATION`, off under `legacy`), the `per-scrape` proxy pin
+  is shared by every client of a scrape, `retries` is capped at 10 at every layer with at least
+  100 ms before any retry (except `legacy`), and an over-limit `Retry-After` always raises
+  `HostCoolingDownError` (`rate_limited`), also with `retries: 0`.
+- **Nothing removed.** Pre-1690 behaviour: `EVER_JOBS_CRAWL_PRESET=legacy`, or one knob at a
+  time. `RETRY_DEFAULT_*` / `RETRY_PER_SOURCE` still honoured.
+- **Docs:** operator guide `docs/CRAWL_POLICY.md`; ADR 0001 amends constitution Art. 5.2,
+  5.4, 6.1, 6.2, 11.2 and adds 11.5 (annotations, no text removed); AGENTS.md rule 10 ("UA
+  rotation" marked superseded), rule 8 and §6; CLAUDE.md house style; README, `.env.example`,
+  `tool_manifest.json`, `docs/API_CHANGELOG.md`, `docs/CLI.md`, `docs/PERFORMANCE_TUNING.md`,
+  `docs/FAQ.md`. Spec updated with an "As built" section (§9) for every deviation; plan and
+  tasks added (plan §4 justifies `robots-parser` and `tldts`, constitution Art. 9.3).
+
+**UA opt-ins:** USAJobs and HeadHunter (API-required UAs) and SimplyHired (A/B evidence: 403 on
+every page with the honest UA — Q-097 option B, so the source keeps working). **Deliberately not
+done:** default pacing numbers are recorded as Q-098; no production env change is needed.
+CI: when this was written no job ran `packages/common/__tests__` (plan §8); since the merge of
+`develop` (Spec 1689) the blocking **Test (Core)** job (`npm run test:core`) runs them, the
+crawl-policy suites included, and — `apps/cli/__tests__` added to `test:core` in that merge —
+the CLI's `crawl-options.spec.ts`.
+
+**Files:** `packages/common/src/http/crawl/*` (+ new `policy-schema.ts`),
+`packages/common/src/http/http-client.ts`, `packages/common/src/browser/{browser-pool,index}.ts`,
+`packages/common/src/context/request-context.ts`, `packages/models/src/dtos/{crawl-policy.dto,scraper-input.dto,scrape-diagnostics.dto,index}.ts`,
+`packages/plugin/src/circuit-breaker/circuit-breaker.service.ts`,
+`packages/plugins/source-{usajobs,headhunter}/src/*`, `apps/api/src/jobs/{jobs.service,jobs.controller,gql-types,jobs.resolver,health.controller,crawl-policy.mapping}.ts`,
+`apps/api/src/config/configuration.ts`, `apps/mcp/src/{tools,index}.ts`,
+`apps/cli/src/commands/{crawl-options,search.command,compare.command}.ts`, `package.json`,
+`package-lock.json`, 22 new or touched test suites, `.specify/specs/1690-crawl-policy/*`,
+`docs/CRAWL_POLICY.md`, `docs/adr/0001-crawl-policy.md`, `.specify/memory/constitution.md`,
+`AGENTS.md`, `CLAUDE.md`, `README.md`, `.env.example`, `tool_manifest.json`,
+`docs/{API_CHANGELOG,CLI,PERFORMANCE_TUNING,FAQ,index,questions}.md`.
+
+**Validation:** `tsc --noEmit -p apps/api/tsconfig.build.json` and `-p tsconfig.base.json`
+(every `.ts` in the repo): 0 errors. Jest, real config: 55/55 suites, 1,769/1,769 tests (all
+new crawl suites plus `softy.service`, `usajobs.crawl`, `headhunter.crawl`); integration,
+CLI, MCP, `softy.parser`, `softy.policy`, `corpus-signals`: 6/6 suites, 88/88;
+`browser-pool.spec.ts` 71/71; `npm run test:scripts` 12/12 suites, 193/193; full plugin sweep
+(fast config) 1,596/1,596 suites, 15,862/15,862 tests. Lanes: B1 415 tests, B2 227, B3 80 new
+(+ mutation check: breaking the interceptor, limiter acquire, egress check, legacy UA
+precedence, the DTO-in-context rule or whole-bucket penalize turns specific tests red), B4
+34 suites / 500 tests, B6 70. Offline default-search simulation (200 ms latency, real
+timers): 800 Greenhouse requests + a 100-wide fan-out to one host in 11.3 s vs the 120 s
+deadline, 0 failures, ≤ 16 / ≤ 3 in flight. Live UA A/B, 30 plugins / 166 requests: 18 work
+with the honest UA, 1 breaks only with it (SimplyHired), 7 broken either way, 4 inconclusive
+(Q-097). `lint:docs` clean.
+
 
 ---
 

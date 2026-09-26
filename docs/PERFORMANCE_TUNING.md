@@ -12,6 +12,51 @@
 - Reduce `DEFAULT_RESULTS_WANTED` to lower per-source load
 - Limit `DEFAULT_SITE_NAMES` to only the boards you need
 
+## Multi-location search (Spec 1700)
+
+A search with `locations` runs every selected source once per location, so the work is roughly
+**sources × locations** calls. The knobs:
+
+- `EVER_JOBS_SEARCH_MAX_LOCATIONS` (default 10, clamped to 1-25) caps the locations searched;
+  the rest come back as `location:<text>` `bad_input` rows.
+- A source's locations run one after another (sources still run in parallel under
+  `EVER_JOBS_SEARCH_CONCURRENCY`), `EVER_JOBS_SEARCH_LOCATION_INTERVAL_MS` apart (default 500,
+  `0` disables). A plugin that declares its own request gap (`minRequestIntervalMs` on
+  `@SourcePlugin`: LinkedIn, Wellfound and Naukri 3 s, Glassdoor and ZipRecruiter 5 s) is never
+  asked sooner than that, whatever the interval says.
+- Each source's location loop runs inside a scoped response memo
+  (`EVER_JOBS_SEARCH_LOCATION_MEMO`, default GET and POST; `get` for GET only; `off` to disable).
+  The roughly 850 company and ATS plugins that fetch the whole board and filter by location
+  locally send the same request for every location, and every repeat is answered from the memo,
+  so N locations cost one board fetch (the board is still parsed N times). A source that sends
+  the location to its host builds a different request per location and still makes one request
+  each. The memo lives only for that loop; failed requests are never kept.
+- Every location call counts against `EVER_JOBS_SEARCH_DEADLINE_MS` (default 120 s). With the
+  catalogue-wide default site selection, narrow `siteType` or `locations` if the diagnostics show
+  `timeout` rows for skipped locations.
+- A source that refuses one location (429, a block, an open circuit breaker) is not asked for the
+  rest; those rows say `not attempted`. Since Spec 1690 a `rate_limited` answer (the host asked us to
+  back off longer than we wait, or its rate-limit bucket gave no slot in time) counts as a refusal too.
+- With the crawl policy (next section) every location call runs in its own scrape context: the
+  host limiter paces each request per host on top of the location interval, a memo hit sends
+  nothing and takes no limiter slot, and the search deadline aborts the in-flight location's
+  requests. The location interval is kept as an extra per-source gap between location calls;
+  set it to `0` to leave the pacing to the limiter (and a plugin's declared gap) alone.
+
+## Per-Host Pacing (crawl policy, Spec 1690)
+
+- Sources run in parallel, but requests to any one host are paced by a process-wide
+  limiter: by default 4 in flight and at least 100 ms between request starts per host
+  (`EVER_JOBS_CRAWL_MAX_CONCURRENT_PER_HOST`, `EVER_JOBS_CRAWL_MIN_INTERVAL_MS`), with
+  higher builtin limits for the Greenhouse, Lever, Ashby and SmartRecruiters APIs.
+- A default search stays well inside the 120 s deadline (simulated: 800 Greenhouse requests
+  plus a 100-wide fan-out to one host in 11.3 s). If a slow host dominates, raise its limit
+  with an operator host policy (`EVER_JOBS_CRAWL_POLICIES`) rather than globally.
+- The limiter is per process: with N replicas a host sees up to N × the per-host limit.
+- Inspect a source with `GET /api/sources/:site/crawl-policy?host=<host>`.
+- `EVER_JOBS_CRAWL_PRESET=legacy` removes pacing entirely (pre-1690 behaviour).
+- Details: [CRAWL_POLICY.md](./CRAWL_POLICY.md) §9 and §18.
+
 ## Logging
 
 - Use `LOG_LEVEL=warn` or `LOG_LEVEL=error` in production to reduce I/O

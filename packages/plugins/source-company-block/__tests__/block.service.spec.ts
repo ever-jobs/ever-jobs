@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Test } from '@nestjs/testing';
 import { JobResponseDto, ScraperInputDto, Site } from '@ever-jobs/models';
+import { resetLocationParserEnvCache } from '@ever-jobs/common';
 
 // Mock createHttpClient so the scraper hits a controlled fixture
 // rather than the live Greenhouse public API.
@@ -91,9 +92,11 @@ describe('BlockService — Spec 042 / T04', () => {
       expect(eng?.jobUrl).toBe(
         'http://block.xyz/careers/jobs/5199076008?gh_jid=5199076008',
       );
-      expect(eng?.location?.city).toBe(
-        'San Francisco, CA, United States of America',
-      );
+      // Spec 1699: "United States of America" is read as the country, so the
+      // label splits into city / state instead of landing whole in `city`.
+      expect(eng?.location?.city).toBe('San Francisco');
+      expect(eng?.location?.state).toBe('CA');
+      expect(eng?.location?.country).toBeTruthy();
       expect(eng?.department).toBe('Engineering');
       expect(eng?.isRemote).toBe(false);
       // The HTML stripper removes tags but preserves text content.
@@ -108,6 +111,32 @@ describe('BlockService — Spec 042 / T04', () => {
       const calledUrls = mockGet.mock.calls.map((c) => c[0] as string);
       expect(calledUrls[0]).toBe(
         'https://api.greenhouse.io/v1/boards/block/jobs?content=true',
+      );
+    });
+  });
+
+  describe('location label — Spec 1699 legacy switch', () => {
+    const ENV = 'EVER_JOBS_LOCATION_ISO_COUNTRY_NAMES';
+    const original = process.env[ENV];
+    afterEach(() => {
+      if (original === undefined) delete process.env[ENV];
+      else process.env[ENV] = original;
+      // The parser reads EVER_JOBS_LOCATION_* once per process.
+      resetLocationParserEnvCache();
+    });
+
+    it('EVER_JOBS_LOCATION_ISO_COUNTRY_NAMES=false keeps the earlier whole-label city', async () => {
+      process.env[ENV] = 'false';
+      resetLocationParserEnvCache();
+      mockGet.mockResolvedValueOnce({ data: clone(JOBS_PAGE_RAW) });
+      const service = new BlockService();
+      const dto = (await service.scrape({
+        siteType: [Site.BLOCK],
+        resultsWanted: 100,
+      } as ScraperInputDto)) as JobResponseDto;
+      const eng = dto.jobs.find((j) => j.id === 'block-5199076008');
+      expect(eng?.location?.city).toBe(
+        'San Francisco, CA, United States of America',
       );
     });
   });

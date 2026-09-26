@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<!-- Synthetic fixture shaped like a live Softy detail page (/offers/{ID}, Spec 1691 section 2).
+     __ID__ and __TITLE__ are replaced by the tests. -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>__TITLE__ - ACME</title>
+  <meta name="description" content="Rejoignez ACME en tant que __TITLE__.">
+  <meta property="og:title" content="__TITLE__ - ACME">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://acme.softy.pro">
+  <meta property="og:description" content="Rejoignez ACME en tant que __TITLE__.">
+  <meta property="og:site_name" content="ACME">
+  <script>window.__boot = "<div class='prose'>not the description</div>";</script>
+  <style>.prose { color: red; }</style>
+</head>
+<body>
+  <div id="app" data-page="{&quot;component&quot;:&quot;Offers/Show&quot;}">
+    <nav><a href="https://acme.softy.pro/offers">Toutes les offres</a></nav>
+    <main>
+      <div class="flex flex-col">
+        <h1 class="text-3xl font-bold">__TITLE__</h1>
+        <div data-slot="joboffer-locations" class="flex"><div class="flex"><div class="flex"><svg aria-hidden="true"></svg><p class="text-sm">Toulouse</p></div></div></div>
+      </div>
+      <div class="flex flex-col gap-6">
+        <div class="section">
+          <h2 class="text-xl"><div class="icon"><div><svg aria-hidden="true"></svg></div></div>L'entreprise</h2>
+          <div class="prose prose-slate max-w-none"><div><p><strong>ACME</strong> conçoit des logiciels &amp; services.</p><p>Écrivez-nous : jobs@acme.example</p></div></div>
+        </div>
+        <div class="section">
+          <h2 class="text-xl">Vos missions</h2>
+          <div class="prose prose-slate max-w-none" style="color: red"><ul><li>Concevoir des API</li><li>Livrer en continu</li></ul><script>alert("x")</script><button type="button">Voir plus</button></div>
+        </div>
+        <div class="section">
+          <h2 class="text-xl">Profil recherché</h2>
+          <div class="prose prose-slate max-w-none"><p>Trois ans d'expérience. <a href="https://acme.example/about" class="link" onclick="evil()">En savoir plus</a> <a href="javascript:evil()">non</a></p></div>
+        </div>
+        <div class="section">
+          <h2 class="text-xl">Compétences requises</h2>
+          <div class="flex flex-wrap">
+            <span data-slot="badge" class="rounded-xl">Contract management</span>
+            <span data-slot="badge" class="rounded-xl">TypeScript</span>
+          </div>
+        </div>
+        <div class="section">
+          <h2 class="text-xl">Caractéristiques du poste</h2>
+          <div class="flex flex-wrap">
+            <span data-slot="badge" class="rounded-xl">CDI</span>
+            <span data-slot="badge" class="rounded-xl">Temps plein</span>
+            <span data-slot="badge" class="rounded-xl">Expérience exigée</span>
+          </div>
+        </div>
+      </div>
+      <a data-slot="button" href="https://acme.softy.pro/offers/__ID__/apply">Postuler</a>
+    </main>
+  </div>
+</body>
+</html>

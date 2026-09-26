@@ -1,5 +1,8 @@
 import 'reflect-metadata';
+import { StreamableFile } from '@nestjs/common';
 import {
+  DatePostedBasis,
+  DatePostedPrecision,
   ScraperInputDto,
   JobPostDto,
   JobAnalysisDto,
@@ -233,6 +236,40 @@ describe('JobsController', () => {
       );
       // Result should be a StreamableFile
       expect(result).toBeDefined();
+    });
+
+    it('carries the Spec 1696 posted-time columns, empty for a job without them', async () => {
+      const jobs = [
+        makeJob({
+          id: 'li-1',
+          datePosted: '2026-09-24',
+          datePostedAt: '2026-09-24T19:34:00.000Z',
+          datePostedPrecision: DatePostedPrecision.MINUTE,
+          datePostedBasis: DatePostedBasis.RELATIVE,
+        }),
+        makeJob({ id: 'lever-1', datePosted: '2026-09-20' }),
+      ];
+      const { controller } = createController({ jobs });
+      const file = await controller.searchJobs(
+        new ScraperInputDto({ searchTerm: 'node' }),
+        'csv',
+        undefined, undefined, undefined, undefined, undefined, undefined,
+        { setHeader: jest.fn() } as any,
+      ) as StreamableFile;
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of file.getStream()) chunks.push(Buffer.from(chunk));
+      const [header, first, second] = Buffer.concat(chunks).toString('utf8').trimEnd().split('\n');
+      const columns = header.split(',');
+      const cell = (row: string, name: string) => row.split(',')[columns.indexOf(name)];
+      for (const name of ['datePostedAt', 'datePostedPrecision', 'datePostedBasis']) {
+        expect(columns).toContain(name);
+      }
+      expect(cell(first, 'datePostedAt')).toBe('2026-09-24T19:34:00.000Z');
+      expect(cell(first, 'datePostedPrecision')).toBe('minute');
+      expect(cell(first, 'datePostedBasis')).toBe('relative');
+      expect(cell(second, 'datePostedAt')).toBe('');
+      expect(cell(second, 'datePosted')).toBe('2026-09-20');
     });
   });
 

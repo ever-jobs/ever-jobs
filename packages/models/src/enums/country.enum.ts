@@ -72,6 +72,7 @@ export enum Country {
   SOUTHAFRICA = 'SOUTHAFRICA',
   SOUTHKOREA = 'SOUTHKOREA',
   SPAIN = 'SPAIN',
+  SRILANKA = 'SRILANKA',
   SWEDEN = 'SWEDEN',
   SWITZERLAND = 'SWITZERLAND',
   TAIWAN = 'TAIWAN',
@@ -145,10 +146,12 @@ export const COUNTRY_CONFIG: Record<Country, CountryConfig> = {
   [Country.SAUDIARABIA]: { names: 'saudi arabia', indeed: 'sa' },
   [Country.SINGAPORE]: { names: 'singapore', indeed: 'sg', glassdoor: 'sg' },
   [Country.SLOVAKIA]: { names: 'slovakia', indeed: 'sk' },
-  [Country.SLOVENIA]: { names: 'slovenia', indeed: 'sl' },
+  // 'SI' is Slovenia; 'SL' would be Sierra Leone
+  [Country.SLOVENIA]: { names: 'slovenia', indeed: 'si' },
   [Country.SOUTHAFRICA]: { names: 'south africa', indeed: 'za' },
   [Country.SOUTHKOREA]: { names: 'south korea', indeed: 'kr' },
   [Country.SPAIN]: { names: 'spain', indeed: 'es', glassdoor: 'es' },
+  [Country.SRILANKA]: { names: 'sri lanka,srilanka', indeed: 'lk' },
   [Country.SWEDEN]: { names: 'sweden', indeed: 'se' },
   [Country.SWITZERLAND]: { names: 'switzerland', indeed: 'ch', glassdoor: 'de:ch' },
   [Country.TAIWAN]: { names: 'taiwan', indeed: 'tw' },
@@ -212,7 +215,8 @@ export function getGlassdoorUrl(country: Country): string {
 }
 
 /**
- * Get the display name for a Country.
+ * Get the display name for a Country: the first configured name with every
+ * word capitalised ('sri lanka' -> 'Sri Lanka'); 'usa' / 'uk' upper-cased.
  */
 export function getCountryDisplayName(country: Country): string {
   const config = COUNTRY_CONFIG[country];
@@ -220,5 +224,7 @@ export function getCountryDisplayName(country: Country): string {
   if (['usa', 'uk'].includes(firstName)) {
     return firstName.toUpperCase();
   }
-  return firstName.charAt(0).toUpperCase() + firstName.slice(1);
+  return firstName.replace(/(^|\s)(\S)/g, (_, space: string, first: string) =>
+    space + first.toUpperCase(),
+  );
 }

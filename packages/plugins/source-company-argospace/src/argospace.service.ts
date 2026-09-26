@@ -303,6 +303,8 @@ export class ArgospaceService implements IScraper {
       [JobType.OTHER]: 'Other',
       [JobType.SUMMER]: 'Summer',
       [JobType.VOLUNTEER]: 'Volunteer',
+      [JobType.PERMANENT]: 'Permanent',
+      [JobType.APPRENTICESHIP]: 'Apprenticeship',
     };
 
     return { jobTypes: [type], employmentType: labels[type] ?? text };

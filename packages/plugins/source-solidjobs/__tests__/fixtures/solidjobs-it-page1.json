@@ -1,0 +1,62 @@
+{
+  "jobs": [
+    {
+      "jobOfferKey": "0b8f5d3e-1a11-4c7a-9e01-000000000003",
+      "title": "Stażysta – Tester Automatyzujący",
+      "division": "IT",
+      "category": "Tester",
+      "subCategory": "TestAutomationEngineer",
+      "company": "Przykład Logistyka",
+      "companyLogoUrl": "https://cdn.solid.jobs/companies/logos/00000000000000000000000000000003.webp",
+      "salary": {
+        "from": 2700,
+        "to": 3400,
+        "currency": "PLN",
+        "period": "Month",
+        "employmentType": "UZ"
+      },
+      "secondarySalary": {
+        "from": 2700,
+        "to": 3400,
+        "currency": "PLN",
+        "period": "Month",
+        "employmentType": "B2B"
+      },
+      "contractTime": "part_time",
+      "locations": [
+        "Łódź"
+      ],
+      "benefits": [
+        "Szkolenia wewnętrzne"
+      ],
+      "isRemote": false,
+      "isHybrid": false,
+      "url": "https://solid.jobs/o/przyk003/api",
+      "experienceLevel": "Junior",
+      "skills": [
+        {
+          "level": "Advanced",
+          "name": "Selenium"
+        },
+        {
+          "level": "Basic",
+          "name": "Playwright"
+        }
+      ],
+      "languages": [
+        {
+          "level": "Advanced",
+          "name": "Angielski"
+        }
+      ],
+      "description": "<div class=\"well job - description\"><p><strong>Czym będziesz się zajmować?</strong><br><br><ul><li>Automatyzacja testów</li><li>Współpraca z zespołem produktowym</li></ul></p><h3>Wymagania:</h3><ul><li>Komunikatywność</li></ul><p>Kontakt: rekrutacja@example.com</p></div>",
+      "validFrom": "2026-09-14T08:00:00.5000000+02:00",
+      "validTo": "2026-10-15T08:00:00.5000000+02:00",
+      "updatedAt": "2026-09-14T07:59:00.1000000+02:00"
+    }
+  ],
+  "pageIndex": 1,
+  "pageSize": 2,
+  "totalCount": 3,
+  "totalPages": 2
+}
