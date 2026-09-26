@@ -154,5 +154,15 @@ describe('ReliefWebService — API v2 (Spec 1752)', () => {
       const html = (await scrape({ descriptionFormat: DescriptionFormat.HTML })).jobs[2].description;
       expect(html).toBe('Lead partnerships.');
     });
+
+    it('plain text from a Markdown body without body-html keeps no Markdown markers (PR #100 review)', async () => {
+      const data = JSON.parse(JSON.stringify(jobsFixture));
+      const fields = data.data[2].fields;
+      delete fields['body-html'];
+      fields.body = '## Role\n\n**Lead** [partnerships](https://reliefweb.int/x) in _the region_.';
+      mockGet.mockResolvedValueOnce({ data });
+      const plain = (await scrape({ descriptionFormat: DescriptionFormat.PLAIN })).jobs[2].description;
+      expect(plain).toBe('Role\n\nLead partnerships in the region.');
+    });
   });
 });

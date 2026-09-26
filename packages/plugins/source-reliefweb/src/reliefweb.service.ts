@@ -15,6 +15,7 @@ import {
 import {
   createHttpClient,
   htmlToPlainText,
+  markdownToPlainText,
   markdownConverter,
   extractEmails,
   parseLocationList,
@@ -172,8 +173,13 @@ export class ReliefWebService implements IScraper {
     if (descriptionFormat === DescriptionFormat.HTML) {
       description = bodyHtml ?? description;
     } else if (descriptionFormat === DescriptionFormat.PLAIN) {
-      const source = bodyHtml ?? description;
-      description = source ? htmlToPlainText(source) : null;
+      // The Markdown `body` needs its own conversion: htmlToPlainText would keep
+      // its heading, emphasis and link markers (PR #100 review).
+      description = bodyHtml
+        ? htmlToPlainText(bodyHtml)
+        : description
+          ? markdownToPlainText(description)
+          : null;
     } else if (description && descriptionFormat === DescriptionFormat.MARKDOWN) {
       if (/<[^>]+>/.test(description)) {
         description = markdownConverter(description) ?? description;

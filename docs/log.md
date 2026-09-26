@@ -5,6 +5,12 @@
 
 ---
 
+## 2026-09-26 — Spec 1752 — PR #100 review: plain ReliefWeb text from Markdown; guard exceptions excuse only their documented findings
+
+- **ReliefWeb (Spec 1752).** With no `body-html`, `descriptionFormat: plain` now converts the Markdown `body` with a new `markdownToPlainText` (`@ever-jobs/common`, next to `htmlToPlainText`): headings, emphasis, inline code, quotes and rules lose their markers, links and images keep their text. `htmlToPlainText` alone left `##`, `**` and `[text](url)` in place.
+- **Guard (Spec 1751).** `KNOWN_EXCEPTIONS` now lists, per plugin, the exact findings it excuses (file, sink, API host fragment). Any other finding in an excused plugin fails the tree check, and an excused finding that disappears fails the staleness check. Before, one excused finding hid every other API link in the same plugin.
+- New tests fail on the previous code; guard 20/20, ReliefWeb + helper 19/19.
+
 ## 2026-09-26 — Spec 1751 — guard: boolean URL tests and fetched URL records are not links
 
 - After merging develop (Specs 1690-1713) the tree check failed on three helpers in the new plugins, none a link: `source-jobsbylevel` `isAllowedJobsByLevelUrl()` (a `: boolean` robots/host test whose disallowed-prefix list contains `/api/`), and `source-simplifyjobs` `feedUrl()` / `resolveFeedUrls()` (the raw GitHub feed, returned as a `{ newgrad, internships }` record and fetched by key).

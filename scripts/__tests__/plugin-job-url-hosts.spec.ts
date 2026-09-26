@@ -114,18 +114,67 @@ const REQUEST_CONFIG_KEYS = new Set(['method', 'headers', 'params', 'data', 'bod
  * link remains. An entry that no longer produces a finding fails the suite, so
  * a fixed plugin cannot stay excused.
  */
-export const KNOWN_EXCEPTIONS: Readonly<Record<string, string>> = {
-  'source-ats-bullhorn':
-    'Bullhorn exposes no public posting page for a corp token; the REST entity URL is used only when the caller gives no companyUrl (Q-110).',
-  'source-ats-ceipal':
-    'A bare Ceipal portal key names no public page; the JSON detail resource is used only when apply_job, companyUrl and the syndication links are all absent (Q-110).',
-  'source-ats-hiringthing':
-    'No public posting pattern is known for a HiringThing account; the api host link is used only when the API omits `url` and no companyUrl is given (Q-110).',
-  'source-ats-loxo':
-    'No public posting pattern is known for a Loxo agency; the API resource is used only when `url`, `apply_url` and companyUrl are all absent (Q-110).',
-  'source-ats-zwayam':
-    'buildJobUrl() builds https://api.zwayam.com/job_preview/?jobUrl=…&host=… into the record `url`; zwayam.constants.ts documents it as the share link seen in real job posts AND as the JSON detail endpoint. Unverified live; visible to the guard since T11 (Q-110, Spec 1751 T10).',
+/**
+ * One documented fallback the guard still reports: the file, the sink (`jobUrl`,
+ * `helper buildJobUrl()`, `record url`, ...) and a fragment of the API URL it
+ * names. An exception excuses exactly these findings (PR #100 review): any
+ * other finding in the same plugin fails the tree check, and an expected
+ * finding that disappears fails the staleness check.
+ */
+export interface ExpectedFinding {
+  readonly file: string;
+  readonly field: string;
+  readonly host: string;
+}
+
+export interface KnownException {
+  readonly why: string;
+  readonly findings: ReadonlyArray<ExpectedFinding>;
+}
+
+const P = 'packages/plugins';
+
+export const KNOWN_EXCEPTIONS: Readonly<Record<string, KnownException>> = {
+  'source-ats-bullhorn': {
+    why: 'Bullhorn exposes no public posting page for a corp token; the REST entity URL is used only when the caller gives no companyUrl (Q-110).',
+    findings: [
+      { file: `${P}/source-ats-bullhorn/src/bullhorn.service.ts`, field: 'jobUrl', host: 'bullhornstaffing.com/rest-services' },
+    ],
+  },
+  'source-ats-ceipal': {
+    why: 'A bare Ceipal portal key names no public page; the JSON detail resource is used only when apply_job, companyUrl and the syndication links are all absent (Q-110).',
+    findings: [
+      { file: `${P}/source-ats-ceipal/src/ceipal.service.ts`, field: 'jobUrl', host: 'api.ceipal.com' },
+      { file: `${P}/source-ats-ceipal/src/ceipal.service.ts`, field: 'applyUrl', host: 'api.ceipal.com' },
+      { file: `${P}/source-ats-ceipal/src/ceipal.service.ts`, field: 'helper buildJobUrl()', host: 'api.ceipal.com' },
+    ],
+  },
+  'source-ats-hiringthing': {
+    why: 'No public posting pattern is known for a HiringThing account; the api host link is used only when the API omits `url` and no companyUrl is given (Q-110).',
+    findings: [
+      { file: `${P}/source-ats-hiringthing/src/hiringthing.service.ts`, field: 'jobUrl', host: 'api.hiringthing.com' },
+    ],
+  },
+  'source-ats-loxo': {
+    why: 'No public posting pattern is known for a Loxo agency; the API resource is used only when `url`, `apply_url` and companyUrl are all absent (Q-110).',
+    findings: [
+      { file: `${P}/source-ats-loxo/src/loxo.service.ts`, field: 'jobUrl', host: 'app.loxo.co/api' },
+    ],
+  },
+  'source-ats-zwayam': {
+    why: 'buildJobUrl() builds https://api.zwayam.com/job_preview/?jobUrl=…&host=… into the record `url`; zwayam.constants.ts documents it as the share link seen in real job posts AND as the JSON detail endpoint. Unverified live; visible to the guard since T11 (Q-110, Spec 1751 T10).',
+    findings: [
+      { file: `${P}/source-ats-zwayam/src/zwayam.service.ts`, field: 'helper buildJobUrl()', host: 'api.zwayam.com' },
+      { file: `${P}/source-ats-zwayam/src/zwayam.service.ts`, field: 'record url', host: 'api.zwayam.com' },
+    ],
+  },
 };
+
+/** Is this finding one of its plugin's documented exceptions? */
+export function isExpectedFinding(f: JobUrlFinding): boolean {
+  const exception = KNOWN_EXCEPTIONS[f.plugin];
+  return !!exception?.findings.some((e) => e.file === f.file && e.field === f.field && f.reason.includes(e.host));
+}
 
 export interface JobUrlFinding {
   plugin: string;
@@ -958,15 +1007,34 @@ describe('plugin job links never point at an API (Spec 1751)', () => {
 
     it('no plugin wires an API URL or API field into a link field, a record url/link/href or a URL-named helper', () => {
       const unexpected = result.findings
-        .filter((f) => !(f.plugin in KNOWN_EXCEPTIONS))
+        .filter((f) => !isExpectedFinding(f))
         .map((f) => `${f.file}:${f.line} ${f.field} — ${f.reason}`);
       expect(unexpected).toEqual([]);
     });
 
     it('every documented exception still applies (a fixed plugin loses its excuse)', () => {
-      const flagged = new Set(result.findings.map((f) => f.plugin));
-      const stale = Object.keys(KNOWN_EXCEPTIONS).filter((p) => !flagged.has(p));
+      const stale = Object.entries(KNOWN_EXCEPTIONS).flatMap(([plugin, e]) =>
+        e.findings
+          .filter((x) => !result.findings.some((f) => f.plugin === plugin && f.file === x.file && f.field === x.field && f.reason.includes(x.host)))
+          .map((x) => `${plugin}: ${x.file} ${x.field} (${x.host})`),
+      );
       expect(stale).toEqual([]);
+    });
+
+    it('an exception excuses only its documented findings (PR #100 review)', () => {
+      // A new API link anywhere else in an excused plugin is not excused.
+      const planted: JobUrlFinding = {
+        plugin: 'source-ats-bullhorn',
+        file: `${P}/source-ats-bullhorn/src/bullhorn.helpers.ts`,
+        line: 1,
+        field: 'applyUrl',
+        reason: 'API-shaped URL "https://rest.bullhornstaffing.com/rest-services/x"',
+      };
+      expect(isExpectedFinding(planted)).toBe(false);
+      expect(isExpectedFinding({ ...planted, file: `${P}/source-ats-bullhorn/src/bullhorn.service.ts` })).toBe(false);
+      expect(
+        isExpectedFinding({ ...planted, file: `${P}/source-ats-bullhorn/src/bullhorn.service.ts`, field: 'jobUrl' }),
+      ).toBe(true);
     });
 
     it('source-ats-smartrecruiters is clean (Spec 1750)', () => {
