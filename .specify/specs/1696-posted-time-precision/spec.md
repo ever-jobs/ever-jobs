@@ -4,7 +4,7 @@
 | -------------- | ---------------------------------------- |
 | Spec ID        | 1696                                     |
 | Slug           | posted-time-precision                    |
-| Status         | in-progress                              |
+| Status         | done                                     |
 | Owner          | agent                                    |
 | Created        | 2026-09-25                               |
 | Last updated   | 2026-09-26                               |
