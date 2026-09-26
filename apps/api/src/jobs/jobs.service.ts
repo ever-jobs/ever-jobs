@@ -12,9 +12,54 @@ import {
   type CrawlPolicyOverride, type PluginCrawlPolicy, type ScrapeContext,
 } from '@ever-jobs/common';
 import { ConfigService } from '@nestjs/config';
-import { PluginRegistry, CircuitBreakerInterceptor, CircuitBreakerService } from '@ever-jobs/plugin';
+import { PluginRegistry, CircuitBreakerInterceptor, CircuitBreakerService, IPluginMetadata } from '@ever-jobs/plugin';
 import { MetricsService } from '../metrics/metrics.service';
 import { buildCallerCrawlOverride } from './crawl-policy.mapping';
+import {
+  SearchRunOptions,
+  clampResultsWanted,
+  describeTerm,
+  isListMode,
+  normalizeSearchInput,
+  parseSiteCategories,
+} from './search-input';
+import { DEFAULT_MAX_JOBS_PER_SEARCH, DEFAULT_MAX_RESULTS_WANTED } from '../config/search-config';
+import {
+  COMPLETE_SEARCH,
+  ProblemSource,
+  SearchCompleteness,
+  SearchStopReason,
+  buildSearchCompleteness,
+  problemOfRanSource,
+} from './search-completeness';
+
+/**
+ * Detail carried by the per-source row of a plugin that was not dispatched
+ * because it needs a keyword and the request is in list mode (Spec 1720).
+ */
+export const LIST_MODE_SKIPPED_DETAIL =
+  'requires a searchTerm; not queried in list mode (Spec 1720)';
+
+/**
+ * Detail of a source not started because the fan-out already holds
+ * EVER_JOBS_MAX_JOBS_PER_SEARCH raw jobs (Spec 1720 / FR-12). Carries no
+ * number and no site name: `classifyScrapeError` would read e.g. "=500" as an
+ * HTTP 5xx, so the row is classified `unknown` (actionable) with this detail.
+ */
+export const JOB_CAP_SKIPPED_DETAIL =
+  'skipped: per-search job ceiling reached (EVER_JOBS_MAX_JOBS_PER_SEARCH)';
+
+/**
+ * The 400 message for `companyDomain` values that map to no plugin. One
+ * builder for the search and for {@link JobsService.assertSearchable}, so the
+ * NDJSON pre-check and the search can never word it differently.
+ */
+function unresolvedDomainsMessage(domains: ReadonlyArray<string>): string {
+  return domains
+    .map((domain) => `domain \`${domain}\` → token \`${deriveSiteToken(domain)}\` is not a registered plugin`)
+    .join('; ');
+}
+
 
 /**
  * Default ceiling on simultaneously-dispatched sources (Spec 5026).
@@ -43,7 +88,8 @@ export const DEFAULT_SEARCH_CONCURRENCY = 64;
  * Sources already in flight are allowed to finish.
  *
  * `0` (or negative) disables the deadline. Override with
- * `EVER_JOBS_SEARCH_DEADLINE_MS`.
+ * `EVER_JOBS_FANOUT_DEADLINE_MS` (Spec 1721; the older
+ * `EVER_JOBS_SEARCH_DEADLINE_MS` still works as a fallback).
  */
 export const DEFAULT_SEARCH_DEADLINE_MS = 120_000;
 
@@ -90,6 +136,20 @@ export function clampConcurrency(raw: unknown): number {
 }
 
 /**
+ * Rejection of a source still in flight when the fan-out deadline passes
+ * (Spec 5026). Its own class so the fan-out can count the source as skipped
+ * in the crawl-completeness record (Spec 1721 / FR-15); the message is the
+ * one this rejection always carried, so the per-source row still classifies
+ * as `timeout`.
+ */
+export class FanoutDeadlineError extends Error {
+  constructor(site: Site) {
+    super(`${site}: abandoned (search deadline exceeded mid-flight)`);
+    this.name = 'FanoutDeadlineError';
+  }
+}
+
+/**
  * Reject `promise` once `deadlineAt` passes (Spec 5026).
  *
  * The deadline check in the worker loop only stops us *starting* new sources.
@@ -124,7 +184,7 @@ function withDeadline<T>(
     timer = setTimeout(() => {
       // Reject first so the handler always sees the deadline error, not
       // whatever the aborted scrape rejects with a few microtasks later.
-      reject(new Error(`${site}: abandoned (search deadline exceeded mid-flight)`));
+      reject(new FanoutDeadlineError(site));
       try {
         onExpire?.();
       } catch {
@@ -394,6 +454,26 @@ export class JobsService implements OnModuleInit {
   }
 
   /**
+   * Spec 1721 / FR-13 — reject, before anything is streamed, the input that
+   * {@link searchJobsWithDiagnostics} would reject before scraping: an unknown
+   * `siteCategories` value, or `companyDomain` values that resolve to no
+   * plugin while nothing else selects a source. Throws the same
+   * `BadRequestException` (same message) the search itself would, so the
+   * NDJSON path can answer 400 instead of `201` + an `error` line.
+   *
+   * Pure: unlike the search it does not normalise or mutate `input`, so the
+   * caller's cache key is unaffected.
+   */
+  assertSearchable(input: ScraperInputDto): void {
+    parseSiteCategories(input.siteCategories);
+    const { resolved, unresolved } = this.resolveCompanyDomains(input.companyDomain);
+    if (unresolved.length === 0) return;
+    const selected = this.buildEffectiveSites(input.siteType, resolved);
+    if (selected.length > 0 || resolveCompanyUrl(input.companyUrl).site) return;
+    throw new BadRequestException(unresolvedDomainsMessage(unresolved));
+  }
+
+  /**
    * Like {@link searchJobs} but also returns a per-source outcome breakdown
    * (Spec 5082): one {@link SourceDiagnosticDto} per fanned-out source with its
    * count and a categorized `reason`, so a caller can tell an empty board apart
@@ -405,10 +485,47 @@ export class JobsService implements OnModuleInit {
    * own `offset` and `resultsWanted`. The rows become one
    * {@link LocatedSourceDiagnosticDto} per (source, location). With `locations`
    * absent nothing here changes.
+   *
+   * Spec 1720/1721: list mode (no keyword), `siteCategories`, the per-search
+   * job ceiling, caller cancellation, progress and the crawl-completeness
+   * record apply in both modes; the completeness counters are per SOURCE (a
+   * multi-location source cut short by a bound counts once).
    */
   async searchJobsWithDiagnostics(
     input: ScraperInputDto,
-  ): Promise<{ jobs: JobPostDto[]; perSource: SourceDiagnosticDto[] }> {
+    options: SearchRunOptions = {},
+  ): Promise<{
+    jobs: JobPostDto[];
+    perSource: SourceDiagnosticDto[];
+    /** Spec 1721 / FR-15 — did the fan-out run every selected source? */
+    completeness: SearchCompleteness;
+    cancelled?: true;
+  }> {
+    // Spec 1720 — one keyword semantics for every entry point: omitted, null,
+    // "" and whitespace-only all mean list mode and reach plugins as an absent
+    // `searchTerm`, never as "undefined"/"null"/"   ".
+    normalizeSearchInput(input);
+    const listMode = isListMode(input);
+    const categories = parseSiteCategories(input.siteCategories);
+
+    // Spec 1720 / FR-12 — server-side result-size bounds, for every entry
+    // point (the controller clamps too, before its cache key; idempotent).
+    const maxResultsWanted = this.configService.get<number>(
+      'search.maxResultsWanted',
+      DEFAULT_MAX_RESULTS_WANTED,
+    );
+    const maxJobsPerSearch = this.configService.get<number>(
+      'search.maxJobsPerSearch',
+      DEFAULT_MAX_JOBS_PER_SEARCH,
+    );
+    const asked = clampResultsWanted(input, maxResultsWanted);
+    if (asked !== undefined) {
+      this.logger.warn(
+        `resultsWanted ${asked} clamped to ${maxResultsWanted} per source (EVER_JOBS_MAX_RESULTS_WANTED)`,
+      );
+    }
+
+    // After normalising, so a single-location clone carries the normalised term.
     const plan = this.planLocations(input);
     input = plan.input;
     const searchLocations = plan.locations;
@@ -441,11 +558,7 @@ export class JobsService implements OnModuleInit {
     }
 
     if (effectiveSites.length === 0 && unresolvedDomains.length > 0) {
-      const messages = unresolvedDomains.map(
-        (domain) =>
-          `domain \`${domain}\` → token \`${deriveSiteToken(domain)}\` is not a registered plugin`,
-      );
-      throw new BadRequestException(messages.join('; '));
+      throw new BadRequestException(unresolvedDomainsMessage(unresolvedDomains));
     }
 
     let sites: Site[];
@@ -463,20 +576,59 @@ export class JobsService implements OnModuleInit {
       );
     }
 
-    const selectedScrapers: { site: Site; scraper: IScraper }[] = [];
-
-    for (const site of sites) {
-      const scraper = this.registry.getScraper(site);
-      if (scraper) {
-        selectedScrapers.push({ site, scraper });
+    // Spec 1720 — plugin metadata drives both the category filter and the
+    // list-mode keyword check. One pass per request (~1.9k entries).
+    const metadataBySite = new Map<string, IPluginMetadata>(
+      this.registry.listSources().map((meta) => [meta.site, meta]),
+    );
+    if (categories) {
+      if (effectiveSites.length) {
+        this.logger.debug(
+          `siteCategories [${[...categories].join(', ')}] ignored: siteType/companyDomain selection wins`,
+        );
       } else {
-        this.logger.warn(`Unknown site: ${site}`);
+        // Narrow the DEFAULT selection computed above, so ATS plugins keep
+        // needing a companySlug exactly as they do without the filter.
+        sites = sites.filter((site) => {
+          const category = metadataBySite.get(site)?.category;
+          return category !== undefined && categories.has(category);
+        });
       }
     }
 
+    const selectedScrapers: { site: Site; scraper: IScraper }[] = [];
+    const keywordSkipped: Site[] = [];
+
+    for (const site of sites) {
+      const scraper = this.registry.getScraper(site);
+      if (!scraper) {
+        this.logger.warn(`Unknown site: ${site}`);
+        continue;
+      }
+      if (listMode && metadataBySite.get(site)?.requiresSearchTerm) {
+        this.logger.debug(`${site}: ${LIST_MODE_SKIPPED_DETAIL}`);
+        keywordSkipped.push(site);
+        continue;
+      }
+      selectedScrapers.push({ site, scraper });
+    }
+    const keywordSkippedRows = keywordSkipped.map(
+      (site) => new SourceDiagnosticDto(site, 0, 'empty', LIST_MODE_SKIPPED_DETAIL),
+    );
+    // Spec 1721 / FR-20 — a source list mode does not query cannot be used to
+    // expire its postings, although it neither failed nor was skipped.
+    const keywordProblems: ProblemSource[] = keywordSkipped.map((site) => ({
+      site,
+      reason: 'keyword_required',
+    }));
+
     if (selectedScrapers.length === 0) {
       this.logger.warn('No valid scrapers selected');
-      return { jobs: [], perSource: [] };
+      return {
+        jobs: [],
+        perSource: keywordSkippedRows,
+        completeness: buildSearchCompleteness(null, 0, [], keywordProblems),
+      };
     }
 
     // Spec 5026 — bounded fan-out. Previously this was a bare
@@ -515,7 +667,8 @@ export class JobsService implements OnModuleInit {
       `Running ${selectedScrapers.length} scrapers (concurrency ${concurrency}, ` +
         `deadline ${deadlineMs > 0 ? `${deadlineMs}ms` : 'none'}` +
         (multi ? `, ${searchLocations.length} locations each, ${intervalMs}ms apart` : '') +
-        `): ${selectedScrapers.map((s) => s.site).join(', ')}`,
+        `, term=${describeTerm(input)}${listMode ? ' [list mode]' : ''}): ` +
+        `${selectedScrapers.map((s) => s.site).join(', ')}`,
     );
 
     // Spec 1690 §4.1 — the caller's crawl policy (the `crawl` object plus the
@@ -539,8 +692,76 @@ export class JobsService implements OnModuleInit {
       ? new Array(selectedScrapers.length)
       : [];
     let cursor = 0;
+    // Calls not started because of the deadline — per source, or per
+    // (source, location) call in multi-location mode.
     let skipped = 0;
+    // In-flight calls whose outstanding requests the deadline aborted (Spec 1690).
     let aborted = 0;
+    // Spec 1721 / FR-14 — sources not started because the caller went away.
+    let cancelledSkipped = 0;
+    // Spec 1720 / FR-12 — raw jobs collected so far, and sources not started
+    // because that reached EVER_JOBS_MAX_JOBS_PER_SEARCH.
+    let collected = 0;
+    let capSkipped = 0;
+    // Spec 1721 / FR-15 — the first bound that stopped the fan-out, the
+    // sources a bound skipped or cut short (the completeness record's
+    // `sourcesSkipped`), and every source that did not run to the end on its
+    // own, cancelled ones included (their rows are not failures).
+    let firstStop: SearchStopReason | null = null;
+    const boundStopped = new Set<number>();
+    const stopped = new Set<number>();
+    // Set when the deadline race abandons a call. Node schedules that timer
+    // against libuv's cached loop time, so it can fire a few ms before
+    // `Date.now()` reaches `deadlineAt` — and the worker would then START
+    // the next source after the deadline had already cut one short.
+    let deadlinePassed = false;
+    const isCancelled = (): boolean => {
+      if (!options.isCancelled) return false;
+      try {
+        return options.isCancelled() === true;
+      } catch {
+        return false;
+      }
+    };
+
+    // Spec 1721 — progress for the NDJSON heartbeat. A throwing listener must
+    // never break the fan-out it is observing.
+    let sourcesDone = 0;
+    let jobsSoFar = 0;
+    const reportProgress = (settledJobs?: number): void => {
+      if (!options.onProgress) return;
+      if (settledJobs !== undefined) {
+        sourcesDone++;
+        jobsSoFar += settledJobs;
+      }
+      try {
+        options.onProgress({
+          sourcesDone,
+          sourcesTotal: selectedScrapers.length,
+          jobs: jobsSoFar,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `progress listener threw (ignored): ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    };
+    reportProgress();
+
+    // A source not started: the same rejection for its row, or for every one
+    // of its (source, location) rows in multi-location mode.
+    const notStarted = (index: number, reason: Error, deadline = false): void => {
+      const settled: PromiseSettledResult<JobResponseDto> = { status: 'rejected', reason };
+      results[index] = settled;
+      if (multi) {
+        locationOutcomes[index] = searchLocations.map((location) => ({
+          location,
+          settled,
+          ...(deadline ? { deadlineSkipped: true } : {}),
+        }));
+      }
+      reportProgress(0);
+    };
 
     // Shared-cursor worker pool — same shape as
     // `LivenessHttpService.checkBatch` (Spec 721), which is the established
@@ -551,6 +772,44 @@ export class JobsService implements OnModuleInit {
         if (index >= selectedScrapers.length) return;
 
         const { site, scraper } = selectedScrapers[index];
+
+        // Past the deadline we stop STARTING work and drain the remaining
+        // queue as skipped. Already-running scrapers are raced against the
+        // deadline and, since Spec 1690, aborted when it passes.
+        if (deadlinePassed || Date.now() >= deadlineAt) {
+          skipped += multi ? searchLocations.length : 1;
+          firstStop ??= 'deadline';
+          boundStopped.add(index);
+          stopped.add(index);
+          this.metrics.scraperRequestsTotal.inc({ site, status: 'deadline_skipped' });
+          notStarted(index, new Error(`${site}: skipped (search deadline exceeded)`), true);
+          continue;
+        }
+        // Spec 1721 / FR-14 — same shape as the deadline: nobody is waiting
+        // for this answer any more, so stop scraping third-party sites for it.
+        if (isCancelled()) {
+          cancelledSkipped++;
+          // Not a failure either. No stop reason: a cancelled result is
+          // discarded by the caller (FR-14) and its record never reaches one.
+          stopped.add(index);
+          this.metrics.scraperRequestsTotal.inc({ site, status: 'cancelled_skipped' });
+          notStarted(index, new Error(`${site}: skipped (caller disconnected)`));
+          continue;
+        }
+        // Spec 1720 / FR-12 — a memory bound, handled like the deadline: stop
+        // STARTING sources; in-flight ones finish, so the peak is at most the
+        // ceiling plus `concurrency × resultsWanted` (× locations). The detail
+        // deliberately carries no number or site name, so the error classifier
+        // cannot read it as an HTTP status.
+        if (maxJobsPerSearch > 0 && collected >= maxJobsPerSearch) {
+          capSkipped++;
+          firstStop ??= 'job_ceiling';
+          boundStopped.add(index);
+          stopped.add(index);
+          this.metrics.scraperRequestsTotal.inc({ site, status: 'job_cap_skipped' });
+          notStarted(index, new Error(JOB_CAP_SKIPPED_DETAIL));
+          continue;
+        }
 
         // Spec 1700 — the unit of work is still one site; its locations run
         // sequentially inside it, so one search never opens concurrent
@@ -566,24 +825,30 @@ export class JobsService implements OnModuleInit {
             intervalMs,
             callerCrawl,
           );
-          skipped += outcomes.filter((o) => o.deadlineSkipped).length;
-          aborted += outcomes.filter((o) => o.deadlineAborted).length;
           locationOutcomes[index] = outcomes;
-          continue;
-        }
-
-        // Past the deadline we stop STARTING work and drain the remaining
-        // queue as skipped. Already-running scrapers are left to finish (they
-        // carry their own per-source timeouts and retry budgets); the point is
-        // to bound how long the handler can live, not to abandon in-flight
-        // sockets mid-read.
-        if (Date.now() >= deadlineAt) {
-          skipped++;
-          this.metrics.scraperRequestsTotal.inc({ site, status: 'deadline_skipped' });
-          results[index] = {
-            status: 'rejected',
-            reason: new Error(`${site}: skipped (search deadline exceeded)`),
-          };
+          let found = 0;
+          let cut = false;
+          for (const outcome of outcomes) {
+            if (outcome.deadlineSkipped) {
+              skipped++;
+              cut = true;
+            }
+            if (outcome.deadlineAborted) aborted++;
+            const settled = outcome.settled;
+            if (settled?.status === 'fulfilled') {
+              found += settled.value?.jobs?.length ?? 0;
+            } else if (settled?.reason instanceof FanoutDeadlineError) {
+              cut = true;
+            }
+          }
+          collected += found;
+          if (cut) {
+            deadlinePassed = true;
+            firstStop ??= 'deadline';
+            boundStopped.add(index);
+            stopped.add(index);
+          }
+          reportProgress(found);
           continue;
         }
 
@@ -595,19 +860,26 @@ export class JobsService implements OnModuleInit {
           // Race against the deadline as well as checking it before starting:
           // a source that never settles would otherwise keep this worker (and
           // therefore the whole handler) pending indefinitely.
-          results[index] = {
-            status: 'fulfilled',
-            value: await withDeadline(
-              this.scrapeOne(site, scraper, input, { callerCrawl, signal: controller.signal }),
-              deadlineAt,
-              site,
-              () => {
-                if (this.abortAtDeadline(site, controller)) aborted++;
-              },
-            ),
-          };
+          const value = await withDeadline(
+            this.scrapeOne(site, scraper, input, { callerCrawl, signal: controller.signal }),
+            deadlineAt,
+            site,
+            () => {
+              if (this.abortAtDeadline(site, controller)) aborted++;
+            },
+          );
+          results[index] = { status: 'fulfilled', value };
+          collected += value?.jobs?.length ?? 0;
+          reportProgress(value?.jobs?.length ?? 0);
         } catch (err) {
           results[index] = { status: 'rejected', reason: err };
+          if (err instanceof FanoutDeadlineError) {
+            deadlinePassed = true;
+            firstStop ??= 'deadline';
+            boundStopped.add(index);
+            stopped.add(index);
+          }
+          reportProgress(0);
         }
       }
     };
@@ -623,9 +895,9 @@ export class JobsService implements OnModuleInit {
         multi
           ? `Search deadline (${deadlineMs}ms) exceeded — skipped ${skipped} of ` +
               `${selectedScrapers.length * searchLocations.length} (source, location) calls. ` +
-              `Raise EVER_JOBS_SEARCH_DEADLINE_MS, or narrow siteType or locations.`
+              `Raise EVER_JOBS_FANOUT_DEADLINE_MS, or narrow siteType or locations.`
           : `Search deadline (${deadlineMs}ms) exceeded — skipped ${skipped} of ` +
-              `${selectedScrapers.length} sources. Raise EVER_JOBS_SEARCH_DEADLINE_MS ` +
+              `${selectedScrapers.length} sources. Raise EVER_JOBS_FANOUT_DEADLINE_MS ` +
               `or narrow siteType to cover more of the catalogue.`,
       );
     }
@@ -636,21 +908,75 @@ export class JobsService implements OnModuleInit {
           `lets them run on detached).`,
       );
     }
+    if (cancelledSkipped > 0) {
+      this.logger.warn(
+        `Caller disconnected — did not start ${cancelledSkipped} of ${selectedScrapers.length} sources ` +
+          `(in-flight sources were allowed to finish).`,
+      );
+    }
+    if (capSkipped > 0) {
+      this.logger.warn(
+        `Job ceiling reached (${collected} raw jobs >= EVER_JOBS_MAX_JOBS_PER_SEARCH=${maxJobsPerSearch}) — ` +
+          `did not start ${capSkipped} of ${selectedScrapers.length} sources. Raise the ceiling, lower ` +
+          `resultsWanted, or narrow siteType/siteCategories.`,
+      );
+    }
     // Aggregate results from fulfilled searches + derive a per-source outcome
     // (Spec 5082) — see `settledDiagnostic` for how the reason is chosen.
     const allJobs: JobPostDto[] = [];
     const perSource: SourceDiagnosticDto[] = [];
+    // Rows of the calls that RAN — the failure count excludes sources a bound
+    // skipped or abandoned (counted as skipped instead) and sources a
+    // disconnect left unstarted.
+    const ranRows: SourceDiagnosticDto[] = [];
+    // Spec 1721 / FR-20 — every selected source whose result must not be used
+    // to expire its postings, once per source, in fan-out order.
+    const problems: ProblemSource[] = [];
+    const noteSource = (index: number, rows: ReadonlyArray<SourceDiagnosticDto>): void => {
+      const site = selectedScrapers[index]?.site ?? 'unknown';
+      if (stopped.has(index)) {
+        problems.push({ site, reason: 'skipped' });
+        return;
+      }
+      ranRows.push(...rows);
+      for (const row of rows) {
+        const problem = problemOfRanSource(row, input.resultsWanted);
+        if (problem) {
+          problems.push(problem);
+          return;
+        }
+      }
+    };
     if (multi) {
-      this.mergeLocationOutcomes(selectedScrapers, locationOutcomes, searchLocations.length, allJobs, perSource);
+      const rowsBySource = this.mergeLocationOutcomes(
+        selectedScrapers,
+        locationOutcomes,
+        searchLocations.length,
+        allJobs,
+        perSource,
+      );
+      rowsBySource.forEach((rows, index) => noteSource(index, rows));
     } else {
       results.forEach((result, index) => {
         const site = selectedScrapers[index]?.site ?? 'unknown';
         if (result?.status === 'fulfilled') {
           allJobs.push(...result.value.jobs);
         }
-        const row = settledDiagnostic(site, result);
-        perSource.push(new SourceDiagnosticDto(site, row.count, row.reason, row.detail));
+        const diag = settledDiagnostic(site, result);
+        const row = new SourceDiagnosticDto(site, diag.count, diag.reason, diag.detail);
+        perSource.push(row);
+        noteSource(index, [row]);
       });
+    }
+    const completeness = buildSearchCompleteness(firstStop, boundStopped.size, ranRows, [
+      ...problems,
+      ...keywordProblems,
+    ]);
+    if (!completeness.complete) {
+      this.logger.warn(
+        `Incomplete crawl (${completeness.stopReason}): ${completeness.sourcesSkipped} of ` +
+          `${selectedScrapers.length} sources skipped or abandoned, ${completeness.sourcesFailed} failed`,
+      );
     }
 
     // Post-processing: salary enrichment (mirrors Python __init__.py logic)
@@ -694,9 +1020,15 @@ export class JobsService implements OnModuleInit {
         ),
       );
     }
+    // Spec 1720 — keyword-only sources that list mode did not dispatch.
+    perSource.push(...keywordSkippedRows);
 
     this.logger.log(`Total aggregated jobs: ${allJobs.length}`);
-    return { jobs: allJobs, perSource };
+    // `cancelled` marks a PARTIAL result (sources were not started): callers
+    // must not cache or persist it as if it were the answer to the request.
+    return cancelledSkipped > 0
+      ? { jobs: allJobs, perSource, completeness, cancelled: true }
+      : { jobs: allJobs, perSource, completeness };
   }
 
   /**
@@ -807,16 +1139,20 @@ export class JobsService implements OnModuleInit {
     const out: LocationOutcome[] = [];
     let refusal: LocationRefusal | undefined;
     let attempted = false;
+    // Set when the deadline race abandons a call. The timer can fire a few ms
+    // before `Date.now()` reaches `deadlineAt` (libuv's cached loop time), so
+    // without it the next location could still start after the cut.
+    let deadlineHit = false;
     for (const location of locations) {
       if (refusal) {
         this.metrics.scraperRequestsTotal.inc({ site, status: 'location_skipped' });
         out.push({ location, notAttempted: refusal });
         continue;
       }
-      if (attempted && intervalMs > 0 && Date.now() < deadlineAt) {
+      if (attempted && intervalMs > 0 && !deadlineHit && Date.now() < deadlineAt) {
         await this.pause(Math.min(intervalMs, deadlineAt - Date.now()));
       }
-      if (Date.now() >= deadlineAt) {
+      if (deadlineHit || Date.now() >= deadlineAt) {
         this.metrics.scraperRequestsTotal.inc({ site, status: 'deadline_skipped' });
         out.push({
           location,
@@ -846,6 +1182,7 @@ export class JobsService implements OnModuleInit {
         if (reason) refusal = { reason, trigger: location };
       } catch (err) {
         out.push({ location, settled: { status: 'rejected', reason: err }, deadlineAborted });
+        if (err instanceof FanoutDeadlineError) deadlineHit = true;
         const reason = refusalFromError(err);
         if (reason) refusal = { reason, trigger: location };
       }
@@ -865,7 +1202,8 @@ export class JobsService implements OnModuleInit {
    * created removed — the same posting from the same source under two
    * locations. The first occurrence wins, in caller location order. This runs
    * before, and independently of, the cross-source dedup engine, so it also
-   * applies to `?dedup=false` callers.
+   * applies to `?dedup=false` callers. Returns the rows of each source, by
+   * fan-out index, for the crawl-completeness record (Spec 1721).
    */
   private mergeLocationOutcomes(
     selected: ReadonlyArray<{ site: Site }>,
@@ -873,14 +1211,17 @@ export class JobsService implements OnModuleInit {
     locationCount: number,
     allJobs: JobPostDto[],
     perSource: SourceDiagnosticDto[],
-  ): void {
+  ): SourceDiagnosticDto[][] {
     const seen = new Set<string>();
+    const rowsBySource: SourceDiagnosticDto[][] = [];
     let raw = 0;
     let duplicates = 0;
     selected.forEach(({ site }, index) => {
+      const rows: SourceDiagnosticDto[] = [];
+      rowsBySource[index] = rows;
       for (const outcome of outcomes[index] ?? []) {
         if (outcome.notAttempted) {
-          perSource.push(
+          rows.push(
             new LocatedSourceDiagnosticDto(
               site,
               0,
@@ -907,15 +1248,17 @@ export class JobsService implements OnModuleInit {
           }
         }
         const row = settledDiagnostic(site, settled);
-        perSource.push(
+        rows.push(
           new LocatedSourceDiagnosticDto(site, row.count, row.reason, row.detail, outcome.location),
         );
       }
+      perSource.push(...rows);
     });
     this.logger.log(
       `multi-location: ${selected.length} sites × ${locationCount} locations → ` +
         `${raw} raw, ${duplicates} same-source duplicates removed`,
     );
+    return rowsBySource;
   }
 
   /** Politeness pause between one source's location calls. */

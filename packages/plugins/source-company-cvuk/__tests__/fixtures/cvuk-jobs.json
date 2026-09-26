@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CVUK/743999704401317",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CVUK/postings/743999704401317",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CVUK/743999704150420",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CVUK/postings/743999704150420",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CVUK/743999703872726",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CVUK/postings/743999703872726",
       "jobAd": {
         "sections": {
           "jobDescription": {

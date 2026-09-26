@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "mastercard:1:CorporateCareers"
+      },
+      "atsIdPrefix": "wd-mastercard-"
+    }
+  ],
+  "responses": {
+    "https://mastercard.wd1.myworkdayjobs.com/wday/cxs/mastercard/CorporateCareers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Senior Software Engineer",
+          "externalPath": "/job/OFallon-Missouri/Senior-Software-Engineer_R-287829",
+          "locationsText": "O'Fallon, Missouri",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-287829"
+          ]
+        },
+        {
+          "title": "Senior Software Engineer",
+          "externalPath": "/job/Arlington-Virginia/Senior-Software-Engineer_R-291094-1",
+          "locationsText": "Arlington, Virginia",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-291094"
+          ]
+        },
+        {
+          "title": "Manager, Product Management (Agentic Commerce + Commercialization)",
+          "externalPath": "/job/Toronto-Canada-Ethoca/Manager--Product-Management--Agentic-Commerce---Commercialization-_R-291355",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-291355"
+          ]
+        }
+      ]
+    },
+    "https://mastercard.wd1.myworkdayjobs.com/wday/cxs/mastercard/CorporateCareers/job/OFallon-Missouri/Senior-Software-Engineer_R-287829": {
+      "jobPostingInfo": {
+        "title": "Senior Software Engineer",
+        "jobDescription": "<p>Senior Software Engineer at Mastercard.</p>",
+        "location": "O'Fallon, Missouri",
+        "jobReqId": "R-287829",
+        "externalUrl": "https://mastercard.wd1.myworkdayjobs.com/CorporateCareers/job/OFallon-Missouri/Senior-Software-Engineer_R-287829",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "mastercard"
+      }
+    },
+    "https://mastercard.wd1.myworkdayjobs.com/wday/cxs/mastercard/CorporateCareers/job/Arlington-Virginia/Senior-Software-Engineer_R-291094-1": {
+      "jobPostingInfo": {
+        "title": "Senior Software Engineer",
+        "jobDescription": "<p>Senior Software Engineer at Mastercard.</p>",
+        "location": "Arlington, Virginia",
+        "jobReqId": "R-291094",
+        "externalUrl": "https://mastercard.wd1.myworkdayjobs.com/CorporateCareers/job/Arlington-Virginia/Senior-Software-Engineer_R-291094-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "mastercard"
+      }
+    },
+    "https://mastercard.wd1.myworkdayjobs.com/wday/cxs/mastercard/CorporateCareers/job/Toronto-Canada-Ethoca/Manager--Product-Management--Agentic-Commerce---Commercialization-_R-291355": {
+      "jobPostingInfo": {
+        "title": "Manager, Product Management (Agentic Commerce + Commercialization)",
+        "jobDescription": "<p>Manager, Product Management (Agentic Commerce + Commercialization) at Mastercard.</p>",
+        "location": "2 Locations",
+        "jobReqId": "R-291355",
+        "externalUrl": "https://mastercard.wd1.myworkdayjobs.com/CorporateCareers/job/Toronto-Canada-Ethoca/Manager--Product-Management--Agentic-Commerce---Commercialization-_R-291355",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "mastercard"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "mastercard-R-287829",
+      "title": "Senior Software Engineer"
+    },
+    {
+      "id": "mastercard-R-291094",
+      "title": "Senior Software Engineer"
+    },
+    {
+      "id": "mastercard-R-291355",
+      "title": "Manager, Product Management (Agentic Commerce + Commercialization)"
+    }
+  ]
+}

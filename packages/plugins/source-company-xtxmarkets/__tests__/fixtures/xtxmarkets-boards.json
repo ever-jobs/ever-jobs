@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "xtxmarketstechnologies"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/xtxmarketstechnologies/jobs": {
+      "jobs": [
+        {
+          "id": 6274458003,
+          "title": "AI Research Internship - XTY Labs",
+          "updated_at": "2026-06-30T14:56:10.000Z",
+          "location": {
+            "name": "New York"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/xtxmarketstechnologies/jobs/6274458003",
+          "content": "&lt;p&gt;AI Research Internship - XTY Labs at XTX Markets.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "xtxmarketstechnologies"
+        },
+        {
+          "id": 7831489003,
+          "title": "C++ Software Engineer",
+          "updated_at": "2026-08-21T17:00:23.000Z",
+          "location": {
+            "name": "Singapore, Central, Singapore"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/xtxmarketstechnologies/jobs/7831489003",
+          "content": "&lt;p&gt;C++ Software Engineer at XTX Markets.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "xtxmarketstechnologies"
+        },
+        {
+          "id": 7645996003,
+          "title": "Datacentre Operations Engineer",
+          "updated_at": "2026-06-23T13:35:44.000Z",
+          "location": {
+            "name": "Singapore, Central, Singapore"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/xtxmarketstechnologies/jobs/7645996003",
+          "content": "&lt;p&gt;Datacentre Operations Engineer at XTX Markets.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "xtxmarketstechnologies"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "xtxmarkets-6274458003",
+      "title": "AI Research Internship - XTY Labs"
+    },
+    {
+      "id": "xtxmarkets-7831489003",
+      "title": "C++ Software Engineer"
+    },
+    {
+      "id": "xtxmarkets-7645996003",
+      "title": "Datacentre Operations Engineer"
+    }
+  ]
+}

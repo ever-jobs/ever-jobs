@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LiveNationEntertainment/743999674838033",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LiveNationEntertainment/postings/743999674838033",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LiveNationEntertainment/743999663962919",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LiveNationEntertainment/postings/743999663962919",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LiveNationEntertainment/743999660368229",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LiveNationEntertainment/postings/743999660368229",
       "jobAd": {
         "sections": {
           "jobDescription": {

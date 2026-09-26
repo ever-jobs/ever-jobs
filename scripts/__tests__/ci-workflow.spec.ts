@@ -187,3 +187,41 @@ describe('test:core coverage (Spec 1689)', () => {
     expect(specs.filter((s) => !include.test(s))).toEqual([]);
   });
 });
+
+describe('ci.yml Test (Feature Plugins) coverage (Spec 1722)', () => {
+  const block = jobs.get('test-feature-plugins') ?? '';
+  const pattern =
+    /run: npx jest --testPathPatterns '([^']+)'/.exec(
+      block
+        .split('\n')
+        .filter((l) => !/^\s*#/.test(l))
+        .join('\n'),
+    )?.[1] ?? '';
+  const include = new RegExp(pattern);
+
+  it('runs the store plugins that back EVER_JOBS_STORE=sqlite|postgres', () => {
+    expect(include.test('packages/plugins/store-sqlite-drizzle/__tests__/store-sqlite-drizzle.spec.ts')).toBe(true);
+    expect(include.test('packages/plugins/store-postgres-prisma/__tests__/store-postgres-prisma.spec.ts')).toBe(true);
+  });
+
+  it('covers every feature (non-source) plugin that has unit specs', () => {
+    // Derived from the filesystem: a new feature plugin with tests must be
+    // added to the job, or this fails — the store plugins ran in no job
+    // until Spec 1722's review, and legitimacy-detector until Spec 1689.
+    const pluginsDir = path.join(REPO_ROOT, 'packages', 'plugins');
+    const specs: string[] = [];
+    for (const dir of fs.readdirSync(pluginsDir, { withFileTypes: true })) {
+      if (!dir.isDirectory() || dir.name.startsWith('source-')) continue;
+      const testsDir = path.join(pluginsDir, dir.name, '__tests__');
+      if (!fs.existsSync(testsDir)) continue;
+      for (const file of fs.readdirSync(testsDir)) {
+        if (file.endsWith('.spec.ts') && !file.includes('e2e-spec')) {
+          specs.push(`packages/plugins/${dir.name}/__tests__/${file}`);
+        }
+      }
+    }
+    // Control: the walk finds the suites the job is known to run.
+    expect(specs).toContain('packages/plugins/dedup-hybrid/__tests__/dedup-perf.spec.ts');
+    expect(specs.filter((s) => !include.test(s))).toEqual([]);
+  });
+});

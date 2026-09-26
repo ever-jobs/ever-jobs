@@ -257,3 +257,93 @@ export function canonicalJobId(
     .update(canonicalKey(input, options), 'utf8')
     .digest('hex');
 }
+
+/**
+ * Structural location shape accepted by {@link formatJobLocation}: a
+ * `LocationDto` instance *or* the plain object it becomes after a JSON / Redis
+ * cache round-trip (which drops the `displayLocation()` method).
+ */
+export interface JobLocationLike {
+  readonly city?: string | null;
+  readonly state?: string | null;
+  readonly country?: unknown;
+  readonly displayLocation?: () => string;
+}
+
+/**
+ * Render a job location into the flat `"city, state, country"` string the
+ * canonicaliser expects (Spec 003; shared since Spec 1721 so the dedup engine
+ * and the API's `dedupKey` can never disagree).
+ *
+ * Prefers `displayLocation()` when present (the user-visible rendering);
+ * otherwise joins the parts in the same order. `Country` is a string enum, so
+ * both branches produce identical output for the same data — which is what
+ * makes a key computed from a cached plain object equal the one computed from
+ * the live DTO.
+ */
+export function formatJobLocation(loc: JobLocationLike | null | undefined): string {
+  if (!loc) return '';
+  if (typeof loc.displayLocation === 'function') {
+    return loc.displayLocation();
+  }
+  const parts: string[] = [];
+  if (loc.city) parts.push(loc.city);
+  if (loc.state) parts.push(loc.state);
+  if (loc.country) parts.push(typeof loc.country === 'string' ? loc.country : String(loc.country));
+  return parts.join(', ');
+}
+
+/**
+ * The job fields the canonical key reads — `JobPostDto` is assignable, and so
+ * is the plain object a JSON / Redis cache round-trip turns it into.
+ */
+export interface CanonicalKeyJob {
+  readonly title?: string | null;
+  readonly companyName?: string | null;
+  readonly location?: JobLocationLike | null;
+  /** Per-site locations (Spec 5123) — the key's location component when present. */
+  readonly locations?: ReadonlyArray<CanonicalKeySite> | null;
+  /** Feeds the key's remote bucket (Spec 1689). */
+  readonly isRemote?: boolean | null;
+}
+
+/**
+ * The ONE place a job becomes a {@link CanonicalKeyInput} (Spec 1721 / FR-10).
+ *
+ * The dedup engine builds `canonicalJobId` from it and {@link dedupKeyForJob}
+ * builds the API's `dedupKey` from it, so the two can never read different
+ * fields again. (Until this helper, `dedupKeyForJob` passed only
+ * title/company/location while the engine also passed `locations` and
+ * `isRemote`, so a remote country-only or a multi-location posting got a
+ * `dedupKey` that differed from its cluster id.)
+ */
+export function canonicalKeyInputForJob(job: CanonicalKeyJob): CanonicalKeyInput {
+  return {
+    title: job.title ?? '',
+    company: job.companyName ?? '',
+    location: formatJobLocation(job.location),
+    locations: job.locations,
+    isRemote: job.isRemote,
+  };
+}
+
+/** The job fields {@link dedupKeyForJob} reads. */
+export type DedupKeyJobInput = CanonicalKeyJob;
+
+/**
+ * Stable cross-source key for one job posting (Spec 1721 / contract C9):
+ * `canonicalJobId(canonicalKeyInputForJob(job))` — the exact key the dedup
+ * engine buckets on (company, title, flat location, per-site `locations[]` and
+ * the remote flag). Independent of `site`, source id, URL, letter case,
+ * punctuation and legal-suffix noise, so the same posting seen on a job board
+ * and on the company's ATS, today and tomorrow, gets the same key.
+ *
+ * Returns `undefined` when the job has neither a title nor a company — such a
+ * key would collide across unrelated postings.
+ */
+export function dedupKeyForJob(job: DedupKeyJobInput): string | undefined {
+  const title = job.title ?? '';
+  const company = job.companyName ?? '';
+  if (title.trim() === '' && company.trim() === '') return undefined;
+  return canonicalJobId(canonicalKeyInputForJob(job));
+}

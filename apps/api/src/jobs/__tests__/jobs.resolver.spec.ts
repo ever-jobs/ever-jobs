@@ -9,7 +9,7 @@ import { SearchJobsInput, resolveSearchCountry } from '../gql-types';
 // ---------------------------------------------------------------------------
 
 function makeJobsService(jobs: JobPostDto[] = []) {
-  return { searchJobs: jest.fn().mockResolvedValue(jobs) };
+  return { searchJobsWithDiagnostics: jest.fn().mockResolvedValue({ jobs, perSource: [] }) };
 }
 
 function makeCacheService(cachedValue: any = null) {
@@ -113,7 +113,7 @@ describe('JobsResolver', () => {
         cached: true,
         rawCount: 1,
       });
-      expect(jobsService.searchJobs).not.toHaveBeenCalled();
+      expect(jobsService.searchJobsWithDiagnostics).not.toHaveBeenCalled();
     });
 
     it('caches raw jobs on miss', async () => {
@@ -174,7 +174,7 @@ describe('JobsResolver', () => {
 
       await resolver.searchJobs(makeInput());
 
-      expect(jobsService.searchJobs).not.toHaveBeenCalled();
+      expect(jobsService.searchJobsWithDiagnostics).not.toHaveBeenCalled();
       expect(aggregator.aggregateRaw).toHaveBeenCalledWith(cachedJobs, { dedup: true, persist: true });
     });
 
@@ -260,7 +260,7 @@ describe('JobsResolver', () => {
         }),
       );
 
-      expect(jobsService.searchJobs).toHaveBeenCalledWith(
+      expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledWith(
         expect.objectContaining({
           searchTerm: 'engineer',
           location: 'NYC',
@@ -287,7 +287,7 @@ describe('JobsResolver', () => {
 
       await resolver.searchJobs(makeInput({ country: raw }));
 
-      expect(jobsService.searchJobs).toHaveBeenCalledWith(
+      expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledWith(
         expect.objectContaining({ country: expected }),
       );
     });
@@ -300,7 +300,7 @@ describe('JobsResolver', () => {
 
       await resolver.searchJobs(makeInput({ country: 'Atlantis' }));
 
-      expect(jobsService.searchJobs.mock.calls[0][0].country).toBeUndefined();
+      expect(jobsService.searchJobsWithDiagnostics.mock.calls[0][0].country).toBeUndefined();
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('"Atlantis"'));
     });
 
@@ -310,7 +310,7 @@ describe('JobsResolver', () => {
 
       await resolver.searchJobs(makeInput());
 
-      expect(jobsService.searchJobs).toHaveBeenCalledWith(
+      expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledWith(
         expect.objectContaining({
           resultsWanted: 20,
           descriptionFormat: 'markdown',

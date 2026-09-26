@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ZenithTalentCorporation/87085404",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ZenithTalentCorporation/postings/87085404",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ZenithTalentCorporation/87085244",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ZenithTalentCorporation/postings/87085244",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ZenithTalentCorporation/87085132",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ZenithTalentCorporation/postings/87085132",
       "jobAd": {
         "sections": {
           "jobDescription": {

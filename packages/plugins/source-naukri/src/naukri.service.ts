@@ -48,6 +48,9 @@ import { NaukriJobDetail, NaukriSearchResponse } from './naukri.types';
   site: Site.NAUKRI,
   name: 'Naukri',
   category: 'regional',
+  // Spec 1720 — `urlType: search_by_keyword` + a `<term>-jobs` SEO key: an
+  // empty term is a malformed search, not a listing.
+  requiresSearchTerm: true,
   // Spec 1700 — the plugin keeps 3-7 s between pages; hold location calls to the same floor.
   minRequestIntervalMs: NAUKRI_PAGE_DELAY_S * 1000,
 })

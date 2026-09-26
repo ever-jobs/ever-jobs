@@ -13,7 +13,7 @@ import {
   Site,
   DescriptionFormat,
 } from '@ever-jobs/models';
-import { createHttpClient, extractEmails, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
+import { createHttpClient, extractEmails, firstPublicUrl, htmlToPlainText, markdownConverter, parseLocationList, toDateOnly } from '@ever-jobs/common';
 import { HIRINGTHING_API_URL, HIRINGTHING_HEADERS } from './hiringthing.constants';
 import { HiringThingResponse, HiringThingJob } from './hiringthing.types';
 
@@ -74,7 +74,7 @@ export class HiringThingService implements IScraper {
         if (jobPosts.length >= resultsWanted) break;
 
         try {
-          const post = this.mapJob(job, input.descriptionFormat);
+          const post = this.mapJob(job, input.descriptionFormat, input.companyUrl);
           if (post) {
             jobPosts.push(post);
           }
@@ -98,6 +98,7 @@ export class HiringThingService implements IScraper {
   private mapJob(
     job: HiringThingJob,
     format?: DescriptionFormat,
+    companyUrl?: string,
   ): JobPostDto | null {
     const title = job.title;
     if (!title) return null;
@@ -128,8 +129,13 @@ export class HiringThingService implements IScraper {
       });
     }
 
-    // Job URL — required field; fall back to a constructed URL if missing
-    const jobUrl = job.url ?? `https://api.hiringthing.com/jobs/${job.id}`;
+    // Job URL (Spec 1751): the posting's own public `url`, else the caller's
+    // careers page. The API host fallback below is a last resort kept only
+    // because no public posting pattern is known for an account (Q-110); it is
+    // a documented exception in scripts/__tests__/plugin-job-url-hosts.spec.ts.
+    const jobUrl =
+      firstPublicUrl(job.url, companyUrl) ??
+      `https://api.hiringthing.com/jobs/${job.id}`;
 
     // Date posted
     const datePosted = job.created_at

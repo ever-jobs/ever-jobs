@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "fiveringsllc"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/fiveringsllc/jobs": {
+      "jobs": [
+        {
+          "id": 5255334008,
+          "title": "Campus Full Time 2027 - Quantitative Trader",
+          "updated_at": "2026-09-01T21:18:37.000Z",
+          "location": {
+            "name": "New York"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/fiveringsllc/jobs/5255334008",
+          "content": "&lt;p&gt;Campus Full Time 2027 - Quantitative Trader at Five Rings.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "fiveringsllc"
+        },
+        {
+          "id": 5344213008,
+          "title": "Campus Full Time 2027 - Quantitative Trader - Amsterdam",
+          "updated_at": "2026-09-01T21:18:37.000Z",
+          "location": {
+            "name": "Amsterdam"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/fiveringsllc/jobs/5344213008",
+          "content": "&lt;p&gt;Campus Full Time 2027 - Quantitative Trader - Amsterdam at Five Rings.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "fiveringsllc"
+        },
+        {
+          "id": 5255367008,
+          "title": "Campus Full Time 2027 - Quantitative Trader - London",
+          "updated_at": "2026-09-01T21:18:37.000Z",
+          "location": {
+            "name": "London"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/fiveringsllc/jobs/5255367008",
+          "content": "&lt;p&gt;Campus Full Time 2027 - Quantitative Trader - London at Five Rings.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "fiveringsllc"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "fiverings-5255334008",
+      "title": "Campus Full Time 2027 - Quantitative Trader"
+    },
+    {
+      "id": "fiverings-5344213008",
+      "title": "Campus Full Time 2027 - Quantitative Trader - Amsterdam"
+    },
+    {
+      "id": "fiverings-5255367008",
+      "title": "Campus Full Time 2027 - Quantitative Trader - London"
+    }
+  ]
+}

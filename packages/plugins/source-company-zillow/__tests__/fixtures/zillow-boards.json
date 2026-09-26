@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "zillow:5:Zillow_Group_External"
+      },
+      "atsIdPrefix": "wd-zillow-"
+    }
+  ],
+  "responses": {
+    "https://zillow.wd5.myworkdayjobs.com/wday/cxs/zillow/Zillow_Group_External/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Lifecycle Marketing Operations Specialist, Audience",
+          "externalPath": "/job/Bengaluru/Lifecycle-Marketing-Operations-Specialist--Audience_P750923-1",
+          "locationsText": "Bengaluru",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "P750923"
+          ]
+        },
+        {
+          "title": "Lifecycle Marketing Operations Specialist, Templates",
+          "externalPath": "/job/Bengaluru/Lifecycle-Marketing-Operations-Specialist--Templates_P750921-1",
+          "locationsText": "Bengaluru",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "P750921"
+          ]
+        },
+        {
+          "title": "Recruiter",
+          "externalPath": "/job/Bengaluru/Recruiter_P751421-1",
+          "locationsText": "Bengaluru",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "P751421"
+          ]
+        }
+      ]
+    },
+    "https://zillow.wd5.myworkdayjobs.com/wday/cxs/zillow/Zillow_Group_External/job/Bengaluru/Lifecycle-Marketing-Operations-Specialist--Audience_P750923-1": {
+      "jobPostingInfo": {
+        "title": "Lifecycle Marketing Operations Specialist, Audience",
+        "jobDescription": "<p>Lifecycle Marketing Operations Specialist, Audience at Zillow.</p>",
+        "location": "Bengaluru",
+        "jobReqId": "P750923",
+        "externalUrl": "https://zillow.wd5.myworkdayjobs.com/Zillow_Group_External/job/Bengaluru/Lifecycle-Marketing-Operations-Specialist--Audience_P750923-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "zillow"
+      }
+    },
+    "https://zillow.wd5.myworkdayjobs.com/wday/cxs/zillow/Zillow_Group_External/job/Bengaluru/Lifecycle-Marketing-Operations-Specialist--Templates_P750921-1": {
+      "jobPostingInfo": {
+        "title": "Lifecycle Marketing Operations Specialist, Templates",
+        "jobDescription": "<p>Lifecycle Marketing Operations Specialist, Templates at Zillow.</p>",
+        "location": "Bengaluru",
+        "jobReqId": "P750921",
+        "externalUrl": "https://zillow.wd5.myworkdayjobs.com/Zillow_Group_External/job/Bengaluru/Lifecycle-Marketing-Operations-Specialist--Templates_P750921-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "zillow"
+      }
+    },
+    "https://zillow.wd5.myworkdayjobs.com/wday/cxs/zillow/Zillow_Group_External/job/Bengaluru/Recruiter_P751421-1": {
+      "jobPostingInfo": {
+        "title": "Recruiter",
+        "jobDescription": "<p>Recruiter at Zillow.</p>",
+        "location": "Bengaluru",
+        "jobReqId": "P751421",
+        "externalUrl": "https://zillow.wd5.myworkdayjobs.com/Zillow_Group_External/job/Bengaluru/Recruiter_P751421-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "zillow"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "zillow-P750923",
+      "title": "Lifecycle Marketing Operations Specialist, Audience"
+    },
+    {
+      "id": "zillow-P750921",
+      "title": "Lifecycle Marketing Operations Specialist, Templates"
+    },
+    {
+      "id": "zillow-P751421",
+      "title": "Recruiter"
+    }
+  ]
+}

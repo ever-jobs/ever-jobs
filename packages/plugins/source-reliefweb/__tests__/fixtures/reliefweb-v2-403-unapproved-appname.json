@@ -1,0 +1,1 @@
+{"status":403,"time":25,"error":{"type":"AccessDeniedHttpException","message":"You are not using an approved appname. Kindly request an appname from ReliefWeb here: https:\/\/apidoc.reliefweb.int\/parameters#appname"}}

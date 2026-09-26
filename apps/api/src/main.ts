@@ -1,10 +1,11 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { requestContextMiddleware } from './middleware/request-context.middleware';
+import { createGlobalValidationPipe } from './pipes/global-validation.pipe';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -15,13 +16,7 @@ async function bootstrap() {
   app.use(requestContextMiddleware);
 
   // ── Global validation pipe ─────────────
-  app.useGlobalPipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: false,
-    }),
-  );
+  app.useGlobalPipes(createGlobalValidationPipe());
 
   // ── CORS ───────────────────────────────
   const corsOrigins = config.get<string[]>('cors.origins', ['*']);

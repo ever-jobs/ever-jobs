@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Ashby listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "ashby",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "voleon"
+      },
+      "atsIdPrefix": "ashby-"
+    }
+  ],
+  "responses": {
+    "https://api.ashbyhq.com/posting-api/job-board/voleon": {
+      "jobs": [
+        {
+          "id": "306bf4dd-b3a8-4e9d-95eb-17afbf33467c",
+          "title": "Senior Software Engineer, Developer Experience",
+          "location": "Berkeley, CA",
+          "department": "Software",
+          "team": "Software",
+          "employmentType": "FullTime",
+          "isListed": true,
+          "isRemote": false,
+          "publishedAt": "2026-08-11T23:02:28.230Z",
+          "jobUrl": "https://jobs.ashbyhq.com/voleon/306bf4dd-b3a8-4e9d-95eb-17afbf33467c",
+          "applyUrl": "https://jobs.ashbyhq.com/voleon/306bf4dd-b3a8-4e9d-95eb-17afbf33467c/application",
+          "descriptionPlain": "Senior Software Engineer, Developer Experience at The Voleon Group."
+        },
+        {
+          "id": "36c3634b-ffc5-44b7-970b-9c17943d6628",
+          "title": "Senior/Staff Software Engineer, Data Engineering",
+          "location": "Remote, United States",
+          "department": "Software",
+          "team": "Software",
+          "employmentType": "FullTime",
+          "isListed": true,
+          "isRemote": false,
+          "publishedAt": "2026-04-17T01:11:23.427Z",
+          "jobUrl": "https://jobs.ashbyhq.com/voleon/36c3634b-ffc5-44b7-970b-9c17943d6628",
+          "applyUrl": "https://jobs.ashbyhq.com/voleon/36c3634b-ffc5-44b7-970b-9c17943d6628/application",
+          "descriptionPlain": "Senior/Staff Software Engineer, Data Engineering at The Voleon Group."
+        },
+        {
+          "id": "ea4af8e0-d7d9-44db-9f57-9f26e783fd11",
+          "title": "Senior Software Engineer, Strategy Research Analytics",
+          "location": "Remote, United States",
+          "department": "Software",
+          "team": "Software",
+          "employmentType": "FullTime",
+          "isListed": true,
+          "isRemote": false,
+          "publishedAt": "2026-09-04T13:06:23.729Z",
+          "jobUrl": "https://jobs.ashbyhq.com/voleon/ea4af8e0-d7d9-44db-9f57-9f26e783fd11",
+          "applyUrl": "https://jobs.ashbyhq.com/voleon/ea4af8e0-d7d9-44db-9f57-9f26e783fd11/application",
+          "descriptionPlain": "Senior Software Engineer, Strategy Research Analytics at The Voleon Group."
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "voleon-306bf4dd-b3a8-4e9d-95eb-17afbf33467c",
+      "title": "Senior Software Engineer, Developer Experience"
+    },
+    {
+      "id": "voleon-36c3634b-ffc5-44b7-970b-9c17943d6628",
+      "title": "Senior/Staff Software Engineer, Data Engineering"
+    },
+    {
+      "id": "voleon-ea4af8e0-d7d9-44db-9f57-9f26e783fd11",
+      "title": "Senior Software Engineer, Strategy Research Analytics"
+    }
+  ]
+}

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Lakeshore/744000135116129",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Lakeshore/postings/744000135116129",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Lakeshore/744000135072325",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Lakeshore/postings/744000135072325",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Lakeshore/744000135071359",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Lakeshore/postings/744000135071359",
       "jobAd": {
         "sections": {
           "jobDescription": {

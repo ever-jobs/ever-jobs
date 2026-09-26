@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "salesforce:12:External_Career_Site"
+      },
+      "atsIdPrefix": "wd-salesforce-"
+    }
+  ],
+  "responses": {
+    "https://salesforce.wd12.myworkdayjobs.com/wday/cxs/salesforce/External_Career_Site/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Value Acceleration Engineer MTS",
+          "externalPath": "/job/California---San-Francisco/Value-Acceleration-Engineer-MTS_JR360493-1",
+          "locationsText": "3 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR360493"
+          ]
+        },
+        {
+          "title": "Value Acceleration Engineer SMTS",
+          "externalPath": "/job/California---San-Francisco/Value-Acceleration-Engineer-SMTS_JR360492",
+          "locationsText": "3 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR360492"
+          ]
+        },
+        {
+          "title": "ETL Informatica/IICS Engineer | Data",
+          "externalPath": "/job/Mexico---Mexico-City/ETL-Software-Engineer---Data_JR357458",
+          "locationsText": "Mexico - Mexico City",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR357458"
+          ]
+        }
+      ]
+    },
+    "https://salesforce.wd12.myworkdayjobs.com/wday/cxs/salesforce/External_Career_Site/job/California---San-Francisco/Value-Acceleration-Engineer-MTS_JR360493-1": {
+      "jobPostingInfo": {
+        "title": "Value Acceleration Engineer MTS",
+        "jobDescription": "<p>Value Acceleration Engineer MTS at Salesforce.</p>",
+        "location": "3 Locations",
+        "jobReqId": "JR360493",
+        "externalUrl": "https://salesforce.wd12.myworkdayjobs.com/External_Career_Site/job/California---San-Francisco/Value-Acceleration-Engineer-MTS_JR360493-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "salesforce"
+      }
+    },
+    "https://salesforce.wd12.myworkdayjobs.com/wday/cxs/salesforce/External_Career_Site/job/California---San-Francisco/Value-Acceleration-Engineer-SMTS_JR360492": {
+      "jobPostingInfo": {
+        "title": "Value Acceleration Engineer SMTS",
+        "jobDescription": "<p>Value Acceleration Engineer SMTS at Salesforce.</p>",
+        "location": "3 Locations",
+        "jobReqId": "JR360492",
+        "externalUrl": "https://salesforce.wd12.myworkdayjobs.com/External_Career_Site/job/California---San-Francisco/Value-Acceleration-Engineer-SMTS_JR360492",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "salesforce"
+      }
+    },
+    "https://salesforce.wd12.myworkdayjobs.com/wday/cxs/salesforce/External_Career_Site/job/Mexico---Mexico-City/ETL-Software-Engineer---Data_JR357458": {
+      "jobPostingInfo": {
+        "title": "ETL Informatica/IICS Engineer | Data",
+        "jobDescription": "<p>ETL Informatica/IICS Engineer | Data at Salesforce.</p>",
+        "location": "Mexico - Mexico City",
+        "jobReqId": "JR357458",
+        "externalUrl": "https://salesforce.wd12.myworkdayjobs.com/External_Career_Site/job/Mexico---Mexico-City/ETL-Software-Engineer---Data_JR357458",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "salesforce"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "salesforce-JR360493",
+      "title": "Value Acceleration Engineer MTS"
+    },
+    {
+      "id": "salesforce-JR360492",
+      "title": "Value Acceleration Engineer SMTS"
+    },
+    {
+      "id": "salesforce-JR357458",
+      "title": "ETL Informatica/IICS Engineer | Data"
+    }
+  ]
+}

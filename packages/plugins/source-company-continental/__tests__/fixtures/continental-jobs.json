@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Continental/744000135786979",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Continental/postings/744000135786979",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Continental/744000135773349",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Continental/postings/744000135773349",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Continental/744000135716352",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Continental/postings/744000135716352",
       "jobAd": {
         "sections": {
           "jobDescription": {

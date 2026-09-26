@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TexasHealthResources/743999925011435",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TexasHealthResources/postings/743999925011435",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TexasHealthResources/743999844029126",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TexasHealthResources/postings/743999844029126",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TexasHealthResources/743999843881801",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TexasHealthResources/postings/743999843881801",
       "jobAd": {
         "sections": {
           "jobDescription": {

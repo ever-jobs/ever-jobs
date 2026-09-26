@@ -1,0 +1,102 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "wf:1:WellsFargoJobs"
+      },
+      "atsIdPrefix": "wd-wf-"
+    }
+  ],
+  "responses": {
+    "https://wf.wd1.myworkdayjobs.com/wday/cxs/wf/WellsFargoJobs/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Personal Banker Brainerd MN",
+          "externalPath": "/job/BRAINERD-MN/Personal-Banker-Brainerd-MN_R-577758",
+          "locationsText": "BRAINERD, MN",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-577758",
+            "Posting End Date: 09/30/2026"
+          ]
+        },
+        {
+          "title": "Principal Technology Mid-Corporate Relationship Manager",
+          "externalPath": "/job/AUSTIN-TX/Principal-Technology-Mid-Corporate-Relationship-Manager_R-518255",
+          "locationsText": "AUSTIN, TX",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-518255",
+            "Posting End Date: 10/15/2026"
+          ]
+        },
+        {
+          "title": "Personal Banker Thorncreek",
+          "externalPath": "/job/THORNTON-CO/Personal-Banker-Thorncreek_R-576467-1",
+          "locationsText": "THORNTON, CO",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-576467",
+            "Posting End Date: 09/30/2026"
+          ]
+        }
+      ]
+    },
+    "https://wf.wd1.myworkdayjobs.com/wday/cxs/wf/WellsFargoJobs/job/BRAINERD-MN/Personal-Banker-Brainerd-MN_R-577758": {
+      "jobPostingInfo": {
+        "title": "Personal Banker Brainerd MN",
+        "jobDescription": "<p>Personal Banker Brainerd MN at Wells Fargo.</p>",
+        "location": "BRAINERD, MN",
+        "jobReqId": "R-577758",
+        "externalUrl": "https://wf.wd1.myworkdayjobs.com/WellsFargoJobs/job/BRAINERD-MN/Personal-Banker-Brainerd-MN_R-577758",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "wf"
+      }
+    },
+    "https://wf.wd1.myworkdayjobs.com/wday/cxs/wf/WellsFargoJobs/job/AUSTIN-TX/Principal-Technology-Mid-Corporate-Relationship-Manager_R-518255": {
+      "jobPostingInfo": {
+        "title": "Principal Technology Mid-Corporate Relationship Manager",
+        "jobDescription": "<p>Principal Technology Mid-Corporate Relationship Manager at Wells Fargo.</p>",
+        "location": "AUSTIN, TX",
+        "jobReqId": "R-518255",
+        "externalUrl": "https://wf.wd1.myworkdayjobs.com/WellsFargoJobs/job/AUSTIN-TX/Principal-Technology-Mid-Corporate-Relationship-Manager_R-518255",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "wf"
+      }
+    },
+    "https://wf.wd1.myworkdayjobs.com/wday/cxs/wf/WellsFargoJobs/job/THORNTON-CO/Personal-Banker-Thorncreek_R-576467-1": {
+      "jobPostingInfo": {
+        "title": "Personal Banker Thorncreek",
+        "jobDescription": "<p>Personal Banker Thorncreek at Wells Fargo.</p>",
+        "location": "THORNTON, CO",
+        "jobReqId": "R-576467",
+        "externalUrl": "https://wf.wd1.myworkdayjobs.com/WellsFargoJobs/job/THORNTON-CO/Personal-Banker-Thorncreek_R-576467-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "wf"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "wellsfargo-R-577758",
+      "title": "Personal Banker Brainerd MN"
+    },
+    {
+      "id": "wellsfargo-R-518255",
+      "title": "Principal Technology Mid-Corporate Relationship Manager"
+    },
+    {
+      "id": "wellsfargo-R-576467",
+      "title": "Personal Banker Thorncreek"
+    }
+  ]
+}

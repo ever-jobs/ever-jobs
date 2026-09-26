@@ -6,6 +6,7 @@ import { DedupHybridModule } from '@ever-jobs/dedup-hybrid';
 import { MergeDefaultModule } from '@ever-jobs/merge-default';
 import { LivenessHttpModule } from '@ever-jobs/liveness-http';
 import { LegitimacyDetectorModule } from '@ever-jobs/legitimacy-detector';
+import { CareerLevelClassifierModule } from '@ever-jobs/career-level-classifier';
 import { JobsService } from './jobs.service';
 import { JobsAggregator } from './jobs.aggregator';
 import { JobsController } from './jobs.controller';
@@ -31,6 +32,9 @@ import { HealthSnapshotCron } from './health-snapshot.cron';
     // them @Optional() and only enriches when ?liveness=true / ?legitimacy=true.
     LivenessHttpModule,
     LegitimacyDetectorModule,
+    // Spec 1730 — career-level classifier under CAREER_LEVEL_CLASSIFIER_TOKEN; the aggregator
+    // injects it @Optional() and classifies every returned job after dedup.
+    CareerLevelClassifierModule,
     // Spec 005 / T04 — bind the circuit-breaker service + interceptor so
     // `JobsService` can wrap each per-source `scrape()` call. The
     // underlying engine is swappable by replacing this module (the

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EtihadAirways5/744000135701874",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EtihadAirways5/postings/744000135701874",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EtihadAirways5/744000135638559",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EtihadAirways5/postings/744000135638559",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EtihadAirways5/744000135492674",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EtihadAirways5/postings/744000135492674",
       "jobAd": {
         "sections": {
           "jobDescription": {

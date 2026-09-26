@@ -8,12 +8,13 @@ import {
   JOB_STORE_QUERY_MAX_LIMIT,
   JobStorePage,
   JobStoreQuery,
+  ObservationBatchEntry,
   Site,
   SourceObservation,
 } from '@ever-jobs/models';
 import { StorePlugin } from '@ever-jobs/plugin';
 import Database from 'better-sqlite3';
-import { and, asc, desc, eq, gte, inArray, like, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, like, lt, or, sql } from 'drizzle-orm';
 import {
   BetterSQLite3Database,
   drizzle,
@@ -145,7 +146,22 @@ export interface StoreSqliteDrizzleConfig {
    * persistent storage.
    */
   readonly databaseUrl?: string;
+
+  /**
+   * Rows per transaction for `upsertMany` / `putAllMany` (Spec 1722 /
+   * FR-15). The event loop gets a turn between chunks. Defaults to
+   * {@link DEFAULT_SQLITE_BATCH_SIZE}; the API binds it from
+   * `EVER_JOBS_STORE_BATCH_SIZE`.
+   */
+  readonly batchSize?: number;
 }
+
+/**
+ * Default rows per transaction. With prepared statements a row costs a few
+ * microseconds, so a 500-row chunk blocks the event loop for single-digit
+ * milliseconds — short enough for NDJSON heartbeats and concurrent requests.
+ */
+export const DEFAULT_SQLITE_BATCH_SIZE = 500;
 
 /**
  * NestJS DI token for {@link StoreSqliteDrizzleConfig}. Bind it via a
@@ -220,6 +236,9 @@ export class SqliteDrizzleJobStore implements IJobStore, IJobObservationStore {
     sourceObservation: typeof sourceObservation;
   }>;
   private readonly client: Database.Database;
+  private readonly batchSize: number;
+  /** Prepared statements for the batch paths, compiled on first use. */
+  private batchStatements?: SqliteBatchStatements;
 
   constructor(
     @Optional()
@@ -227,6 +246,7 @@ export class SqliteDrizzleJobStore implements IJobStore, IJobObservationStore {
     config?: StoreSqliteDrizzleConfig,
   ) {
     const databaseUrl = config?.databaseUrl ?? ':memory:';
+    this.batchSize = resolveBatchSize(config?.batchSize);
     this.client = new Database(databaseUrl);
     // FK cascade enforcement is OFF by default in SQLite — set it
     // here so DELETE on canonical_job propagates to source_observation.
@@ -283,53 +303,35 @@ export class SqliteDrizzleJobStore implements IJobStore, IJobObservationStore {
     if (jobs.length === 0) {
       return { inserted: 0, updated: 0 };
     }
-    // Pre-check existence in a single round-trip so we can split
-    // inserted-vs-updated counts without a second query per row.
-    const ids = jobs.map((j) => j.canonicalJobId);
-    const existing = this.db
-      .select({ id: canonicalJob.canonicalJobId })
-      .from(canonicalJob)
-      .where(inArray(canonicalJob.canonicalJobId, ids))
-      .all();
-    const existingSet = new Set(existing.map((e) => e.id));
+    // Spec 1722 / FR-15. The previous shape bound EVERY id in one
+    // `IN (…)` pre-check (fails past SQLite's 32 766-variable limit) and
+    // wrote the whole batch in one synchronous transaction (a 10 000-row
+    // persist blocked the event loop for ~4 s: no other request, no NDJSON
+    // heartbeat). Now: prepared statements (one row's values per statement),
+    // one transaction per chunk, and a `setImmediate` turn between chunks.
+    //
+    // The existence probe runs inside the chunk's transaction just before
+    // each write, so a repeated id counts as an update of the row its first
+    // occurrence inserted — exactly what sequential upserts report.
+    // Atomic per chunk, not per call: a failure part-way leaves earlier
+    // chunks written, which is safe for idempotent upserts.
+    const statements = this.getBatchStatements();
+    const writeChunk = this.client.transaction((chunk: ReadonlyArray<CanonicalJob>) => {
+      let inserted = 0;
+      for (const job of chunk) {
+        const exists = statements.canonicalExists.get(job.canonicalJobId) !== undefined;
+        statements.upsertCanonical.run(toCanonicalJobRow(job));
+        if (!exists) inserted++;
+      }
+      return inserted;
+    });
 
     let inserted = 0;
-    let updated = 0;
-    // Single transaction so the batch is atomic — partial failure leaves
-    // no half-written cohort. better-sqlite3 transactions are synchronous
-    // (a deliberate design choice — see https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md#transactionfunction---function).
-    const tx = this.client.transaction((rows: ReadonlyArray<CanonicalJob>) => {
-      for (const job of rows) {
-        const row = toCanonicalJobRow(job);
-        this.db
-          .insert(canonicalJob)
-          .values(row)
-          .onConflictDoUpdate({
-            target: canonicalJob.canonicalJobId,
-            set: {
-              title: row.title,
-              company: row.company,
-              location: row.location,
-              description: row.description,
-              url: row.url,
-              mergedAt: row.mergedAt,
-              fieldsJson: row.fieldsJson,
-              sourcesJson: row.sourcesJson,
-              companyLc: row.companyLc,
-              titleLc: row.titleLc,
-              locationLc: row.locationLc,
-            },
-          })
-          .run();
-        if (existingSet.has(job.canonicalJobId)) {
-          updated++;
-        } else {
-          inserted++;
-        }
-      }
-    });
-    tx(jobs);
-    return { inserted, updated };
+    for (let start = 0; start < jobs.length; start += this.batchSize) {
+      if (start > 0) await yieldToEventLoop();
+      inserted += writeChunk(jobs.slice(start, start + this.batchSize));
+    }
+    return { inserted, updated: jobs.length - inserted };
   }
 
   async getById(id: string): Promise<CanonicalJob | null> {
@@ -466,6 +468,96 @@ export class SqliteDrizzleJobStore implements IJobStore, IJobObservationStore {
     tx(canonicalJobId, observations);
   }
 
+  /**
+   * Batch `putAll` (Spec 1722 / FR-13, FR-15): one transaction per chunk of
+   * `batchSize` entries, prepared statements, an event-loop turn between
+   * chunks. Same replace-not-merge result as one `putAll` per entry; a
+   * repeated canonical id means the last entry wins. Entries whose canonical
+   * row does not exist are skipped (their rows would violate the FK and roll
+   * back the chunk), and a repeated `(site, sourceJobId)` within one entry
+   * keeps the last observation instead of failing on the primary key.
+   */
+  async putAllMany(entries: ReadonlyArray<ObservationBatchEntry>): Promise<void> {
+    if (entries.length === 0) return;
+    const byId = new Map<string, ReadonlyArray<SourceObservation>>();
+    for (const entry of entries) byId.set(entry.canonicalJobId, entry.observations);
+    const ids = [...byId.keys()];
+
+    const statements = this.getBatchStatements();
+    const writeChunk = this.client.transaction((chunkIds: ReadonlyArray<string>) => {
+      for (const id of chunkIds) {
+        if (statements.canonicalExists.get(id) === undefined) continue;
+        statements.deleteObservations.run(id);
+        for (const o of byId.get(id) ?? []) {
+          statements.upsertObservation.run({
+            canonicalJobId: id,
+            site: String(o.site),
+            sourceJobId: o.sourceJobId,
+            url: o.url,
+            observedAt: o.observedAt,
+            rawTitle: o.rawTitle ?? null,
+          });
+        }
+      }
+    });
+
+    for (let start = 0; start < ids.length; start += this.batchSize) {
+      if (start > 0) await yieldToEventLoop();
+      writeChunk(ids.slice(start, start + this.batchSize));
+    }
+  }
+
+  /**
+   * Compile the batch statements once per connection. Column names mirror
+   * `../drizzle/schema.ts`; the named parameters are the keys of
+   * {@link toCanonicalJobRow}'s result.
+   */
+  private getBatchStatements(): SqliteBatchStatements {
+    if (!this.batchStatements) {
+      this.batchStatements = {
+        canonicalExists: this.client.prepare(
+          'SELECT 1 FROM canonical_job WHERE canonical_job_id = ?',
+        ),
+        upsertCanonical: this.client.prepare(
+          `INSERT INTO canonical_job (
+             canonical_job_id, title, company, location, description, url, merged_at,
+             fields_json, sources_json, company_lc, title_lc, location_lc
+           ) VALUES (
+             @canonicalJobId, @title, @company, @location, @description, @url, @mergedAt,
+             @fieldsJson, @sourcesJson, @companyLc, @titleLc, @locationLc
+           )
+           ON CONFLICT (canonical_job_id) DO UPDATE SET
+             title = excluded.title,
+             company = excluded.company,
+             location = excluded.location,
+             description = excluded.description,
+             url = excluded.url,
+             merged_at = excluded.merged_at,
+             fields_json = excluded.fields_json,
+             sources_json = excluded.sources_json,
+             company_lc = excluded.company_lc,
+             title_lc = excluded.title_lc,
+             location_lc = excluded.location_lc`,
+        ),
+        deleteObservations: this.client.prepare(
+          'DELETE FROM source_observation WHERE canonical_job_id = ?',
+        ),
+        upsertObservation: this.client.prepare(
+          `INSERT INTO source_observation (
+             canonical_job_id, site, source_job_id, url, observed_at, raw_title
+           ) VALUES (
+             @canonicalJobId, @site, @sourceJobId, @url, @observedAt, @rawTitle
+           )
+           ON CONFLICT (canonical_job_id, site, source_job_id) DO UPDATE SET
+             url = excluded.url,
+             observed_at = excluded.observed_at,
+             raw_title = excluded.raw_title`,
+        ),
+      };
+    }
+    return this.batchStatements;
+  }
+
   async listByCanonicalId(
     canonicalJobId: string,
   ): Promise<ReadonlyArray<SourceObservation>> {
@@ -529,6 +621,34 @@ export class SqliteDrizzleJobStore implements IJobStore, IJobObservationStore {
 // =====================================================================
 // Helpers
 // =====================================================================
+
+/** Prepared statements behind `upsertMany` / `putAllMany` (Spec 1722 / FR-15). */
+interface SqliteBatchStatements {
+  readonly canonicalExists: Database.Statement;
+  readonly upsertCanonical: Database.Statement;
+  readonly deleteObservations: Database.Statement;
+  readonly upsertObservation: Database.Statement;
+}
+
+/**
+ * Clamp a configured batch size into `[1, 5000]`; anything non-finite or
+ * non-positive means {@link DEFAULT_SQLITE_BATCH_SIZE}.
+ */
+function resolveBatchSize(raw: number | undefined): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 1) {
+    return DEFAULT_SQLITE_BATCH_SIZE;
+  }
+  return Math.min(Math.floor(raw), 5_000);
+}
+
+/**
+ * Give the event loop one turn. better-sqlite3 is synchronous by design, so
+ * this is the only way a long batch lets timers (NDJSON heartbeats) and
+ * other requests run.
+ */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise<void>((resolve) => setImmediate(resolve));
+}
 
 /**
  * Internal row shape persisted to the `canonical_job` table. We store

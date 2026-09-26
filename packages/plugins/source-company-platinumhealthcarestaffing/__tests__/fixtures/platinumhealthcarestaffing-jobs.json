@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PlatinumHealthcareStaffingInc/743999653382091",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PlatinumHealthcareStaffingInc/postings/743999653382091",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PlatinumHealthcareStaffingInc/86813459",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PlatinumHealthcareStaffingInc/postings/86813459",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PlatinumHealthcareStaffingInc/85966900",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PlatinumHealthcareStaffingInc/postings/85966900",
       "jobAd": {
         "sections": {
           "jobDescription": {

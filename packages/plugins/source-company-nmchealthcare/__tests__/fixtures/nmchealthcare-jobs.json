@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NMCHealthcare/744000134182164",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NMCHealthcare/postings/744000134182164",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NMCHealthcare/744000131432259",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NMCHealthcare/postings/744000131432259",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NMCHealthcare/744000124567809",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NMCHealthcare/postings/744000124567809",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -44,6 +44,33 @@ export function stripHtmlTags(html: string): string {
 }
 
 /**
+ * Convert Markdown to plain text: headings, emphasis, inline code, block
+ * quotes and horizontal rules lose their markers, links and images keep their
+ * text, list items keep a "- " bullet. HTML embedded in the Markdown is
+ * converted with {@link htmlToPlainText}. Never throws.
+ */
+export function markdownToPlainText(markdown: string): string {
+  let text = markdown.replace(/\r\n?/g, '\n');
+  text = text.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1'); // images -> alt text
+  text = text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1'); // links -> link text
+  text = text.replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, ''); // ATX headings
+  text = text.replace(/^[ \t]{0,3}(?:[-*_][ \t]*){3,}$/gm, ''); // horizontal rules
+  text = text.replace(/^[ \t]{0,3}>[ \t]?/gm, ''); // block quotes
+  text = text.replace(/^([ \t]*)[*+-][ \t]+/gm, '$1- '); // list bullets
+  text = text.replace(/(\*\*|__)(?=\S)([\s\S]*?\S)\1/g, '$2'); // strong
+  text = text.replace(/(^|[^\w*])\*(?=\S)([^*\n]*?\S)\*(?!\w)/g, '$1$2'); // *em*
+  text = text.replace(/(^|[^\w_])_(?=\S)([^_\n]*?\S)_(?!\w)/g, '$1$2'); // _em_
+  text = text.replace(/`([^`\n]+)`/g, '$1'); // inline code
+  if (/<[a-z/!][^>]*>/i.test(text)) text = htmlToPlainText(text);
+  return text
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
  * Convert HTML to clean plain text.
  * Handles block elements (p, div, br, li, h1-h6) with line breaks,
  * strips remaining tags, decodes entities, and normalizes whitespace.

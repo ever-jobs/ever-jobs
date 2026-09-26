@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CityOfSanAntonio/744000134826829",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CityOfSanAntonio/postings/744000134826829",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CityOfSanAntonio/744000134817690",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CityOfSanAntonio/postings/744000134817690",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CityOfSanAntonio/744000134500504",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CityOfSanAntonio/postings/744000134500504",
       "jobAd": {
         "sections": {
           "jobDescription": {

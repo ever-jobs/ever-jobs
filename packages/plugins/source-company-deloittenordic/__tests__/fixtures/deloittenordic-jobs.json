@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeloitteNordic/744000135660091",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeloitteNordic/postings/744000135660091",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeloitteNordic/744000135459089",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeloitteNordic/postings/744000135459089",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeloitteNordic/744000135429749",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeloitteNordic/postings/744000135429749",
       "jobAd": {
         "sections": {
           "jobDescription": {

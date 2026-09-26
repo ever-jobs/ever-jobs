@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EVERSANA1/744000135783459",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EVERSANA1/postings/744000135783459",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EVERSANA1/744000135783065",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EVERSANA1/postings/744000135783065",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EVERSANA1/744000135765059",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EVERSANA1/postings/744000135765059",
       "jobAd": {
         "sections": {
           "jobDescription": {

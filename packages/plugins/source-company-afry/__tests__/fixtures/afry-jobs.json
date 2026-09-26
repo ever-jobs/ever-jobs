@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AFRY/744000135775369",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AFRY/postings/744000135775369",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AFRY/744000135747979",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AFRY/postings/744000135747979",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AFRY/744000135747829",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AFRY/postings/744000135747829",
       "jobAd": {
         "sections": {
           "jobDescription": {

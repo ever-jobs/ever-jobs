@@ -1,0 +1,102 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "intel:1:External"
+      },
+      "atsIdPrefix": "wd-intel-"
+    }
+  ],
+  "responses": {
+    "https://intel.wd1.myworkdayjobs.com/wday/cxs/intel/External/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Senior DFT Logic Design Engineer",
+          "externalPath": "/job/US-Arizona-Phoenix/Senior-DFT-Logic-Design-Engineer_JR0287131",
+          "locationsText": "3 Locations",
+          "postedOn": "Posted 10 Days Ago",
+          "bulletFields": [
+            "Spotlight Job",
+            "JR0287131"
+          ]
+        },
+        {
+          "title": "SoC Compute/Memory Subsystem Architect",
+          "externalPath": "/job/Ireland-Leixlip/SoC-Compute-Memory-Subsystem-Architect_JR0284570",
+          "locationsText": "Ireland, Leixlip",
+          "postedOn": "Posted 10 Days Ago",
+          "bulletFields": [
+            "Spotlight Job",
+            "JR0284570"
+          ]
+        },
+        {
+          "title": "Pre-Silicon verification engineer",
+          "externalPath": "/job/Ireland-Leixlip/Pre-Silicon-verification-engineer_JR0286861",
+          "locationsText": "Ireland, Leixlip",
+          "postedOn": "Posted 16 Days Ago",
+          "bulletFields": [
+            "Spotlight Job",
+            "JR0286861"
+          ]
+        }
+      ]
+    },
+    "https://intel.wd1.myworkdayjobs.com/wday/cxs/intel/External/job/US-Arizona-Phoenix/Senior-DFT-Logic-Design-Engineer_JR0287131": {
+      "jobPostingInfo": {
+        "title": "Senior DFT Logic Design Engineer",
+        "jobDescription": "<p>Senior DFT Logic Design Engineer at Intel.</p>",
+        "location": "3 Locations",
+        "jobReqId": "JR0287131",
+        "externalUrl": "https://intel.wd1.myworkdayjobs.com/External/job/US-Arizona-Phoenix/Senior-DFT-Logic-Design-Engineer_JR0287131",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "intel"
+      }
+    },
+    "https://intel.wd1.myworkdayjobs.com/wday/cxs/intel/External/job/Ireland-Leixlip/SoC-Compute-Memory-Subsystem-Architect_JR0284570": {
+      "jobPostingInfo": {
+        "title": "SoC Compute/Memory Subsystem Architect",
+        "jobDescription": "<p>SoC Compute/Memory Subsystem Architect at Intel.</p>",
+        "location": "Ireland, Leixlip",
+        "jobReqId": "JR0284570",
+        "externalUrl": "https://intel.wd1.myworkdayjobs.com/External/job/Ireland-Leixlip/SoC-Compute-Memory-Subsystem-Architect_JR0284570",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "intel"
+      }
+    },
+    "https://intel.wd1.myworkdayjobs.com/wday/cxs/intel/External/job/Ireland-Leixlip/Pre-Silicon-verification-engineer_JR0286861": {
+      "jobPostingInfo": {
+        "title": "Pre-Silicon verification engineer",
+        "jobDescription": "<p>Pre-Silicon verification engineer at Intel.</p>",
+        "location": "Ireland, Leixlip",
+        "jobReqId": "JR0286861",
+        "externalUrl": "https://intel.wd1.myworkdayjobs.com/External/job/Ireland-Leixlip/Pre-Silicon-verification-engineer_JR0286861",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "intel"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "intel-JR0287131",
+      "title": "Senior DFT Logic Design Engineer"
+    },
+    {
+      "id": "intel-JR0284570",
+      "title": "SoC Compute/Memory Subsystem Architect"
+    },
+    {
+      "id": "intel-JR0286861",
+      "title": "Pre-Silicon verification engineer"
+    }
+  ]
+}

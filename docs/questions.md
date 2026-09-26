@@ -10,6 +10,426 @@
 
 ---
 
+## Q-111 — SmartRecruiters: the list endpoint has no description or apply link — fetch each posting's detail? (Spec 1750)
+
+**Context:** `source-ats-smartrecruiters` reads only
+`GET /v1/companies/<Co>/postings`. Captured live on 2026-09-25 (AbbVie), a list posting has
+`ref`, `company`, `location`, `department`, … but **no `jobAd`, `postingUrl` or `applyUrl`**;
+those come only from `GET /v1/companies/<Co>/postings/<id>`. So every SmartRecruiters posting
+(and every one of the 217 delegating company plugins) ships `description: null` and
+`applyUrl: null`, although `processJob` has always parsed `jobAd.sections`. The delegating
+plugins' fixtures hide this: the scaffold fabricates a `jobAd` on list postings. Spec 1750
+fixed the link (`jobUrl` is now the public page) without adding requests.
+
+**Options:**
+
+- **A. Fetch the detail for every posting** (bounded `Promise.allSettled`, e.g. 5 at a time,
+  polite delay): full description, `postingUrl`, `applyUrl`, compensation. Cost: one extra
+  request per posting — AbbVie alone lists hundreds.
+- **B. Opt-in detail fetch** (`SMARTRECRUITERS_FETCH_DETAIL=true` or a per-request flag),
+  list-only by default.
+- **C. Keep list-only** and document that SmartRecruiters postings carry no description.
+
+**Default:** **C (default — proceeding)** — no change in request volume in this branch; B is the
+likely end state, and the scaffold should stop fabricating a list `jobAd` when it lands.
+
+---
+
+## Q-110 — A posting with no known public page: keep the API link, drop the posting, or link the board? (Spec 1751)
+
+**Context:** The Spec 1751 audit of every `jobUrl` / `jobUrlDirect` / `applyUrl` assignment
+found four ATS plugins that fall back to an API URL when no public posting page is known:
+`source-ats-bullhorn` (always — Bullhorn exposes no public posting page for a corp token),
+`source-ats-ceipal` (a bare portal key names no page), `source-ats-hiringthing` and
+`source-ats-loxo` (only when the API omits the posting's own URL). Each now prefers every
+public candidate and the caller's `companyUrl` (`firstPublicUrl`), but with neither the old
+API link remains, so a downstream Apply button can still open JSON for these. Separately,
+`source-ats-zwayam` links `https://api.zwayam.com/job_preview/…`, which the plugin documents
+as the platform's public share page; nobody has re-checked that it serves HTML. Since Spec 1751
+T11 the guard follows links built into intermediate records, so it now sees Zwayam's link too:
+Zwayam is the fifth named exception ("by design, unverified"), expiring like the others.
+
+**Options:**
+
+- **A. Keep the API link as the last resort** (no data loss; the four — plus Zwayam — are named
+  exceptions in `scripts/__tests__/plugin-job-url-hosts.spec.ts`, which fails if one stops
+  needing it).
+- **B. Drop postings with no public link** (a link that opens JSON is worse than no posting)
+  — Bullhorn would return nothing unless the caller passes `companyUrl`.
+- **C. Emit them with a board-level page only** — requires a per-tenant careers URL (e.g. a
+  required `companyUrl` for Bullhorn/Ceipal), otherwise same as B.
+- **D. Add a `linkIsPublic: false` (or similar) flag on `JobPostDto`** so consumers can hide
+  the button while keeping the posting.
+
+**Default:** **A (default — proceeding)** — behaviour for tenants without a public page is
+unchanged from before Spec 1751; the guard keeps the list from growing. Zwayam: verify its
+preview URL live before deciding whether it joins the list.
+## Q-109 — Company sources the lane could not cover through a supported public board (Specs 1736, 1737)
+
+**Context:** Specs 1736/1737 only generate plugins for boards verified live on
+an ATS Ever Jobs already supports. Of the owner's lists, these were not
+coverable that way on 2026-09-24: **Workday list** — Dell (its Workday site
+`dell:1:External` answers HTTP 422; careers appear to have moved to Oracle HCM
+at `enterpriseplatform.dell.com`), Qualcomm (its Workday site answers
+0 postings; careers moved to `careers.qualcomm.com`), NetApp (site name not
+found, HTTP 422), Lockheed Martin, L3Harris, UnitedHealth Group, Citi, AMD,
+Texas Instruments, Honeywell, ExxonMobil (no public Workday site found), and
+Adobe's university site (HTTP 403 to anonymous requests). **Quant list** —
+Citadel, Citadel Securities, D. E. Shaw (own careers sites), Two Sigma (Avature
+portal at `/careers/OpenRoles`; the Avature adapter's fixed
+`/careers/SearchJobs/` path answers 404 there), Millennium (Workday site
+empty; moved to `career.mlp.com`), AQR (Workday answers 401), Balyasny
+(Salesforce Experience Cloud site), PEAK6, Wolverine, Man Group (no public
+board found). Boeing and NVIDIA already have company plugins.
+
+**Options:**
+
+- **A. Record the gaps, cover nothing else in this lane (default — proceeding).**
+  Every generated plugin rests on a live verification record; nothing is
+  guessed.
+- **B. Bespoke scrapers** for the own-site firms (Citadel, Citadel Securities,
+  D. E. Shaw), only if each exposes a simple public JSON/HTML listing with no
+  login, captcha or bot wall. Needs one spec per firm and a fresh politeness
+  review.
+- **C. Adapter work**: a configurable listing path in `source-ats-avature`
+  (Two Sigma), and company plugins on `source-ats-oracle` for Dell and other
+  Oracle-HCM employers.
+
+**Default:** A. B and C are listed as follow-up tasks in Specs 1736 T7 and
+1737 T5.
+
+**Addendum (2026-09-25) — a covered board whose host disallows crawling.**
+The robots.txt review (Spec 1735 §3.1) found `careers-sig.icims.com` serving
+`User-agent: *` / `Disallow: /`; SIG is the only plugin on that host. The
+other host families allow the endpoints the adapters call.
+
+- **A. Keep SIG in the default fan-out** and leave robots handling to the
+  crawl-policy lane (Spec 1690 `robotsTxt: 'respect'`, off by default).
+- **B. Explicit-only SIG (default — proceeding).** The generated plugin runs
+  only when a caller selects it (`siteType` contains `sig`, or `companyDomain`
+  contains `sig.com`); in the default fan-out it makes no request and returns
+  an `empty` diagnostic naming the reason (Spec 1735 §4.7). Reversible by
+  dropping `explicitOnly` from the seed and re-scaffolding.
+- **C. Drop SIG** (not taken — no-removal rule; the owner asked for the firm).
+
+**Default:** B: the default fan-out never contacts a host that disallows all
+crawlers, while an explicit request still works. Revisit when Spec 1690's
+robots mode lands or if SIG publishes a crawlable board.
+
+---
+
+## Q-108 — Where do company-tier / industry tags live? (Specs 1735–1737)
+
+**Context:** The owner wants the Workday employers and the quant firms tagged
+so a later company-tier feature can select them. `IPluginMetadata` has no tag
+or tier field. The crawl-policy lane (Spec 1690) is editing the same interface
+in parallel, so adding a field here would collide.
+
+**Options:**
+
+- **A. New optional `tags?: string[]` on `IPluginMetadata`**, surfaced by
+  `/api/sources`. Cleanest, but a concurrent edit of a core interface.
+- **B. Machine-greppable suffix in `description`** —
+  `Tags: segment=<segment>; industry=<industry-slug>.` — plus the committed
+  seed `scripts/seeds/ats-delegate-companies.json` as the machine-readable
+  source of the same tags, HQ and domains (default — proceeding).
+- **C. A separate tier registry** in `@ever-jobs/models` keyed by `Site`.
+
+**Default:** B now (segments `workday-enterprise`, `quant-trading`); migrate to
+A once Spec 1690 has landed — every tagged plugin is generated, so the move is
+a re-scaffold (Spec 1735 T8).
+
+---
+
+## Q-107 — Should delegating company plugins filter by keyword, given the Workday adapter ignores `searchTerm`? (Specs 1735, 1736)
+
+**Context:** The new plugins pass every caller input to the ATS adapter
+untouched. `source-ats-workday` sends `searchText: ''` whatever the
+`searchTerm`, pages 20 postings at a time with a 1–2 s sleep, and fetches one
+detail per posting (5 in flight) up to `resultsWanted`. So each of the 56
+Workday boards added here returns its newest postings regardless of the
+keyword and costs about `resultsWanted / 20 + resultsWanted` requests per
+search that includes it (e.g. ~105 for `resultsWanted = 100`). Greenhouse,
+Lever and Ashby boards are one request each; iCIMS pages at 20.
+
+**Options:**
+
+- **A. Pure delegation (default — proceeding).** Same behaviour as the ~700
+  existing delegating plugins; list mode (no keyword) returns the board, which
+  is what the consumer's full sync wants; per-host pacing is the crawl-policy
+  lane's job (Spec 1690).
+- **B. Post-filter in each plugin** by title/department. Correct results for
+  keyword searches but no saving: the adapter has already fetched and enriched
+  every posting.
+- **C. Pass `searchTerm` to Workday's `searchText` in the adapter**, so a
+  keyword search is filtered server-side and only matching postings are
+  enriched. Fixes relevance and cost for every Workday tenant at once; an
+  adapter change, outside this lane.
+
+**Default:** A, with C recommended as the follow-up (Spec 1736 T6). Operators
+can drop the batch from the default fan-out with `EVER_JOBS_DISABLED_SOURCES`.
+
+**Review outcome (2026-09-25) — C adopted, plus sequential details.** Review
+found that 55 plugins (56 boards) now bring Workday into every default search
+and, with detail enrichment 5 in flight per board, one search could open ~280
+concurrent requests to `*.myworkdayjobs.com` (tenants share the `wd1`/`wd5`/
+`wd12` clusters) from one egress IP. Done in this lane (Spec 1735 §4.6, Spec
+1736 T6/T8): the adapter sends the trimmed `searchTerm` as `searchText` (`''`
+in list mode), so a keyword search is filtered by Workday and only matches are
+enriched; detail enrichment is 1 request in flight with a 250–500 ms pause
+(worst case ~56 concurrent Workday requests per search, one per board).
+
+Follow-ups and constraints recorded here:
+
+1. **Merge/deploy gate (Spec 1736 §7, T10) — withdrawn.** **Decision (owner,
+   2026-09-26; Spec 1736 T16): the new Workday and quant plugins ship enabled
+   by default**; the per-board detail cap and time budget (follow-up 5, Spec
+   1736 §8/§8.2) bound their cost, and `EVER_JOBS_DISABLED_SOURCES` with the
+   55 tokens is an optional emergency switch, not a deploy prerequisite
+   (`docs/DEPLOYMENT.md`). The original gate, for the record: `JobsService` sorts results by
+   site name and `3m` now sorts first (~700 postings). The ever-hust consumer
+   still keeps only page 1 (80) of a site-sorted response, so this batch must
+   not reach the deployment before the consumer's full-result ingestion
+   (NDJSON or all pages) is live — or it ships with the 55 Workday-backed site
+   tokens in `EVER_JOBS_DISABLED_SOURCES` (the exact list is in Spec 1736 §7)
+   until then.
+2. **Fan-out deadline order — live today.** The plugins are registered at the
+   tail of `Site` / `ALL_SOURCE_MODULES`, and the fan-out deadline already
+   applies: `search.deadlineMs` is 120 000 ms by default
+   (`EVER_JOBS_FANOUT_DEADLINE_MS`, preferred since Spec 1721, with
+   `EVER_JOBS_SEARCH_DEADLINE_MS` as the fallback name; `0` disables) and `search.concurrency` is
+   64 (`EVER_JOBS_SEARCH_CONCURRENCY`). So in a default fan-out that overruns
+   120 s these are the first sources `JobsService` skips (`deadline_skipped`)
+   or abandons mid-flight. Sequential Workday enrichment (above) makes each
+   Workday board slower: up to `resultsWanted` detail requests, each after a
+   250–500 ms pause, plus 1–2 s between listing pages (for `resultsWanted = 80`,
+   at least ~20–40 s of pauses alone). Callers that need these boards in a
+   full sync should select them (`siteType`, or `siteCategories` once contract
+   C2 lands) or raise the deadline (contract C4). Correction (2026-09-25): an
+   earlier version of this item, following the review, said the deadline never
+   applies because `parseInt(env, 120_000)` / `parseInt(env, 64)` pass a radix.
+   That is wrong: `configuration.ts` shadows `parseInt` with a local
+   `(value, fallback)` helper, so both variables (and `CACHE_EXPIRY` /
+   `CACHE_MAX_ITEMS`) take effect. Pinned by
+   `apps/api/__tests__/jobs/fanout-config.spec.ts`; nothing to hand to the
+   C4 lane.
+3. **Per-host limits** for the shared Workday clusters and Lever's
+   `Crawl-delay: 1`, and whether the adapters keep a desktop-Chrome
+   User-Agent, are open items for the crawl-policy lane (Spec 1690; Spec 1735
+   §3.1, T12).
+4. **Credential isolation (Spec 1735 §4.5).** Generated plugins now delegate
+   with `auth: undefined`, and `source-ats-greenhouse` uses the env Harvest key
+   only when `GREENHOUSE_HARVEST_BOARD` names the requested board — before,
+   `GREENHOUSE_API_KEY` made every Greenhouse-delegating plugin return the
+   operator's own (incl. confidential) Harvest jobs under the firm's name.
+   Behaviour change for forks that set `GREENHOUSE_API_KEY`: set
+   `GREENHOUSE_HARVEST_BOARD` to your own board token to keep using Harvest
+   for it (a per-request `auth.greenhouse.apiKey` is still honoured).
+5. **Per-scrape bound (integration review F8, Spec 1736 §8 / T11).** Sequential
+   enrichment made one board at `resultsWanted = 1000` cost ~10 minutes, and
+   the scrape ran on, detached, after the fan-out deadline abandoned it (the
+   plugin contract has no deadline or `AbortSignal`). The adapter now makes at
+   most `WORKDAY_MAX_DETAIL_FETCHES` (default 50) detail requests per scrape
+   and stops starting work once `WORKDAY_SCRAPE_TIME_BUDGET_MS` (default
+   90 000; `0` = off) is spent, over listing and enrichment; the rest is
+   returned at list level (no description), and a listing cut short is a
+   `partial` diagnostic. Defaults chosen here (no owner decision needed): 50
+   detail requests cost ~13–25 s of pauses plus request time and cover a
+   board's newest postings (the Tesla plugin's `detail-25` budget is the
+   precedent); 90 s stays under the 120 s fan-out deadline. A full sync that wants every
+   description raises both limits together with the fan-out deadline and
+   selects the boards explicitly. A list-level posting keeps the id an
+   enriched one gets (the list row's requisition id).
+## Q-106 — `careerLevels` filter semantics when classification is switched off; is `unknown` filterable? (Spec 1730)
+
+**Context:** `EVER_JOBS_CLASSIFY_CAREER_LEVEL=false` is the operator kill-switch that removes
+`careerLevel` from every job. A caller may still send `careerLevels: ["internship"]`. Separately,
+`unknown` is a level in the contract, so it could be asked for too.
+
+**Options:**
+
+- **A. Honour the filter anyway.** Classify transiently, filter, and attach nothing. The caller gets
+  what they asked for, but cannot see why a job survived.
+- **B. Ignore the filter** when the switch is off. This is silent: the caller believes the list is
+  filtered and it is not.
+- **C. Reject with 400** when the switch is off. Loud and honest, but it turns an operator
+  decision into a client-visible error.
+- For `unknown`: **filterable** (useful to audit what the rules miss) vs **not accepted**.
+
+**Default (proceeding):** **A**, and `unknown` is filterable. The switch exists to strip the
+field and its cost from the default path. An explicit filter is a deliberate request, and B would
+fail silently. The filter never mutates the cached raw fan-out, and `careerLevelFilteredOut`
+reports how many jobs it removed.
+
+**Follow-up (2026-09-25, code review): what if the filter cannot be applied at all?** The first
+cut failed open. When no classifier was bound, or classification threw, the request returned 200
+with every job and only a server-side warning. A caller that asked for `["internship"]` silently got
+senior roles too.
+
+- **A. Report it in the response** (`career_level_filter: { applied: false }`). The caller has to
+  check a flag on every response, and the GraphQL `jobs` list and the NDJSON stream would each need
+  their own way to carry it.
+- **B. Fail closed with 503** `ServiceUnavailableException` ("careerLevels filter could not be
+  applied …"). Loud, identical in REST, GraphQL and NDJSON (an `error` line), and a 200 then always
+  means the filter ran.
+- **C. Keep failing open.**
+
+**Default (proceeding): B.** With no classifier bound the aggregator throws before dedup and
+persistence run; if classification throws, or returns the wrong number of verdicts, it throws
+afterwards. Without a filter nothing changes: a classifier failure only leaves `careerLevel` off
+the jobs, because the field is additive. The shipped classifier is total (it catches internally), so
+in practice this fires only when a fork drops or replaces the plugin.
+
+**Second review (2026-09-25): the GraphQL path still failed open.** The global `ValidationPipe`
+(`whitelist: true`) also runs on GraphQL `@Args`, and `SearchJobsInput` had no class-validator
+decorators, so the pipe stripped `careerLevels` (and every other field) before the resolver saw
+it: a filtered GraphQL search returned the unfiltered set with 200, and an unknown level was not
+rejected. Every `SearchJobsInput` field is now decorated, the unknown-level check comes from the
+pipe (`BAD_REQUEST`) with the resolver's own check as a second line, and an integration suite
+sends real requests through the production pipe on GraphQL and REST. `aggregateRaw` also makes
+`careerLevels` a required key of its options, so a call site that drops the filter no longer
+compiles (Spec 1730 §7.3). "Identical in REST, GraphQL and NDJSON" now holds for all three: at
+integration (Spec 1730 §12.7) JSON and NDJSON share one `runSearch()` that passes the filter, and
+NDJSON tests show the same filtered set and, with no classifier, an `error` line instead of a stream. **Default (proceeding)** for the fields that now
+reach `JobsService`: GraphQL `country` and `descriptionFormat` keep the lenient rules Spec 1689
+put on `develop`. `country` accepts a `Country` value, a name or alias, or an ISO alpha-2 code and
+is resolved to a `Country` before any plugin sees it (an unrecognised value is dropped with a
+warning, so Indeed / Glassdoor domain lookup never gets one); `descriptionFormat` accepts any
+string, and an unknown one leaves descriptions unconverted. *Alternative (dropped at
+integration):* validate both against the REST enums and answer `BAD_REQUEST`; stricter, but it
+breaks the `DE`-style codes GraphQL has always documented.
+
+---
+
+## Q-105 — Career-level taxonomy boundaries (Spec 1730)
+
+**Context:** The C7 contract names the eleven levels but leaves several boundaries to the
+implementation. Each choice below changes which jobs an "internship" or "new grad" filter returns.
+
+**Decisions (default — proceeding), with the alternative for each:**
+
+1. **Apprenticeship → `entry`**, not `internship`. An apprenticeship is a paid, employed training
+   contract, often multi-year (electrician, software apprenticeships, UK degree apprenticeships),
+   not a temporary student placement. *Alternative:* `internship`, if the owner wants early-career
+   filters to include them.
+2. **Graduate research/teaching assistant, graduate assistant → `internship`**, never
+   `new_grad`. These are appointments held while enrolled. *Alternative:* `unknown`.
+3. **Bank corporate titles:** `VP` / `AVP` alongside an IC role noun (`Vice President, Software
+   Engineer`, `Data Analyst - AVP`) → `senior` (medium). Otherwise `VP`, `SVP` and `EVP` →
+   `executive`. *Alternative:* always `executive`, which mislabels most quant/bank engineering
+   postings.
+4. **Distinguished engineer / technical fellow → `principal`** (the top IC rung); `executive`
+   stays for management. Postdoc → `entry`. School principal / assistant principal → `director`.
+   Chief of staff → `director`.
+5. **Level numerals:** `I`/`1` → entry, `II`/`2` → mid, `III`/`3` → senior (low confidence,
+   because companies disagree), `IV`/`V` → senior (medium). A range (`I/II`) takes the lower bound at
+   low confidence. `Tier N` and `Level N support` are support tiers, not seniority.
+   *Live sample (2026-09-26):* a numeral counts only after a job noun on an allow-list. A live
+   list-mode crawl found IC ladders missing from it, so *Account Executive I/II* and *Coordinator/
+   Publisher I* were `unknown`. **Default (proceeding):** add the observed nouns (`executive`,
+   `publisher`) and common ATS ladder nouns (`handler`, `assembler`, `processor`, `custodian`,
+   `cook`, `biostatistician`, `epidemiologist`). `executive` counts for numerals only: it never
+   makes a title `executive`, so *Account Executive I* is `entry`. *Alternative:* any agentive
+   noun (*-er*, *-or*, *-ist*) before a trailing numeral. Rejected: *Floor 1*, *Plant 1*, *Tier 1*,
+   *Sector 1* would read as levels, and the `careerLevels` filter ignores confidence.
+6. **Product / program / project / account / case / customer-success "manager" titles are IC
+   roles.** Without another modifier they are `unknown`; `Senior Product Manager` is senior and
+   `Group Product Manager` is manager. *Alternative:* `mid` at low confidence.
+7. **`Lead` → `senior`** (medium). `Team/shift/crew lead`, `supervisor` and `foreman` → `manager`.
+   `Head of` → `director`. `Head/executive chef` → `manager`.
+8. **Partner:** bare `Partner` and `managing/general/founding/senior/equity partner` →
+   `executive`. `Business/HR/talent/finance partner` and `Partner Engineer` are not levels.
+   *Second review (2026-09-25):* the ranked forms count only when *partner* is the head noun (end
+   of the segment, or followed by `at` / `of` / `in` / `and` / `or` / `&`). Before a role noun it is
+   the partner / channel function of an IC: *Senior Partner Manager*, *Senior Partner Solutions
+   Architect*, *Senior Partner Marketing Manager* → `senior`. *Alternative:* keep `executive`, which
+   put common senior IC titles into executive filters at high confidence.
+9. **Labelling policy for the fixture:** a label is what the posting explicitly states.
+   Seniority implied only by the occupation (Barista, Warehouse Associate, Registered Nurse) is
+   `unknown`.
+10. **Season + year without an intern / student word** (added 2026-09-25 after review). It is the
+    weakest cue: `internship` (medium) only when it is the title's only evidence. Any explicit
+    level word outranks it (*Senior Software Engineer (Fall 2026)* → `senior`). It is ignored for
+    academic / seasonal / coaching work (*Adjunct Faculty - Spring 2026*, *Ski Instructor*), for
+    titles with an admin or leadership noun, and for `associate` / `staff` / `assistant` /
+    `analyst` hires, where it is usually a full-time start date (Big Four *Audit Associate - Fall
+    2026*, *Assurance Staff*; law-firm first-year associates) → `unknown`. *Alternative:* keep
+    those as `internship` at low confidence. Rejected because the `careerLevels` filter ignores
+    confidence, so they would still reach an "internships" list. *Cost:* a bank posting written as
+    *Investment Banking Analyst - Summer 2026* (a summer internship) is now `unknown` unless it
+    also says *intern* or *summer analyst*.
+
+    *Second review (2026-09-25):* what survives those guards is still ambiguous. *Software
+    Engineer, Fall 2026*, *Quantitative Trader - Fall 2026* and *Fall 2026 Software Engineer* are
+    as often full-time new-grad or quant start dates as work terms. **Default (proceeding):** keep
+    the level `internship` but always at **`low`** confidence, with the reason
+    `"fall 2026" (season + year only)`; independent evidence (an internship description, `jobType`
+    internship) lifts it to `medium`. A consumer that stores every job (Hust) can threshold it out.
+    *Alternatives:* (a) `unknown`, which loses real internships titled only by term (common on ATS
+    boards); (b) role-noun start-date handling for `trader` / `engineer` / `researcher`, which
+    would also drop genuine *Software Engineer - Summer 2026* internships. *Open point:* the
+    server-side `careerLevels` filter ignores confidence, so a low-confidence verdict still passes
+    `["internship"]`. A caller that needs high precision filters on `confidence` itself; a request
+    field such as `careerLevelMinConfidence` is left for the owner to decide.
+
+---
+
+## Q-104 — Should the JSON result order stop being "by site name"? (Specs 1720, 1721)
+
+**Context:** `JobsService` sorts the fan-out by `site` name, then `datePosted` desc, before any
+pagination. A consumer that stores only page 1 therefore only ever sees sources whose name
+starts with "a" — the main consumer's 6 587 production rows were 100 % `a*` sources (66 % AbbVie).
+Spec 1721's NDJSON stream removes the need to paginate at all, and the contract requires NDJSON
+to keep the JSON order.
+
+**Options:**
+
+- **A. Keep the order.** Deterministic, cache-friendly, and page N+1 of a paginated request stays
+  consistent with page N. Consumers that want everything use `?format=ndjson`.
+- **B. Sort by `datePosted` desc across all sources.** Page 1 becomes "newest anywhere", but
+  undated postings (many company boards) sink to the end, and the NDJSON contract's "same order
+  as JSON" would move with it.
+- **C. Interleave sources (round-robin).** Fairest page 1, but order then depends on how many
+  sources answered — two identical requests can page differently.
+
+**Default (proceeding):** **A** — the defect was the consumer stopping at page 1, which list mode
++ NDJSON fix without changing what any existing paginated client sees.
+
+**Resolution:** _pending review._
+
+---
+
+## Q-103 — `dedupKey`: the job's own key or the dedup cluster's id? (Spec 1721)
+
+**Context:** Contract C9 asks for a stable cross-source key on every job. The dedup engine buckets
+on `canonicalJobId = sha256(normalizeCompany|normalizeTitle|normalizeLocation)` and, after its
+MinHash stage, names each cluster after its *head* (first member in input order).
+
+**Options:**
+
+- **A. Per-job key** — `dedupKeyForJob(job)`, the same function applied to the job itself.
+  Identical to the cluster id for every representative the aggregator returns (the
+  representative *is* the head), identical with `dedup=false`, with a swapped engine, from cache
+  or fresh, across runs.
+- **B. Cluster id from `assignments[i]`.** Exactly "what the engine used", but for fuzzy (MinHash)
+  merges it depends on which member happened to come first, so the same posting can change key
+  between runs; and it does not exist when `dedup=false`.
+
+**Default (proceeding):** **A.** Near-duplicates that only MinHash merges (e.g. a title with an
+extra word) keep *different* keys under A; a consumer that wants them merged must dedup fuzzily
+itself. Exact-after-normalisation duplicates — the common cross-source case — always share a key.
+
+**Addendum (second review, 2026-09-25):** A still holds, with two corrections. (1) The per-job key
+now reads exactly the fields the engine reads — `canonicalKeyInputForJob` passes `locations[]`
+and `isRemote` as well (Spec 1721 FR-10); before, multi-location and remote country-only postings
+got a key that differed from their cluster id. (2) Spec 1724's merge gate can keep two postings
+apart whose company, title and location coincide (an internship and a new-grad posting of the
+same title in one city). On the default `dedup=true` path those representatives carry their
+(distinct, discriminated) cluster ids instead of the shared per-job key, so distinct postings
+never share a `dedupKey`; with `dedup=false` they still share one (Spec 1724 D-05).
+Since the 2026-09-26 PR review that `dedup=true` key is `clusterKeyForJob`: class-scoped for any
+engagement other than full-time/unknown in EVERY batch, not only in a batch that holds the
+conflicting twin, so it no longer changes from run to run (Spec 1724 FR-5).
 ## Q-099 — Boards whose robots.txt disallows generic crawlers (Specs 1692-1713)
 
 **Context:** The board fixes in Specs 1701-1713 made each plugin honest about what it fetches:
@@ -145,6 +565,122 @@ replica count. `strict` keeps the builtin limits for now (documented in `docs/CR
 
 ---
 
+## Q-102 — Postgres store: fail fast when unreachable? Migrate at boot? (Spec 1722)
+
+**Context:** Spec 1722 makes `EVER_JOBS_STORE=postgres` work from env alone. Two behaviours had
+to be chosen.
+
+**Options (unreachable database at boot):**
+
+- **A. Fail fast** (`ERR_STORE_BACKEND_DOWN`, redacted URL). A wrong host/port/password becomes a
+  failed deploy instead of a silently empty corpus. Matches Spec 004 §7.3.
+- **B. Boot anyway and degrade** to `persistError` on every search. Search stays up during a DB
+  outage, but misconfiguration is invisible unless someone reads the logs.
+
+**Options (schema):**
+
+- **C. Scripted** — `npm run store:postgres:migrate` (`prisma migrate deploy`), run once by the
+  operator. Needs the Prisma CLI (devDependency) and the right to `CREATE EXTENSION pg_trgm`.
+- **D. At boot** — the API applies migrations itself. Convenient, but the API role then needs DDL
+  rights and several replicas race on first start.
+
+**Default (proceeding):** **A + C.** A fork that wants search to survive a store outage can set
+`EVER_JOBS_PERSIST_SEARCH=false` temporarily; persistence failures *after* boot are already
+best-effort (Spec 004 / T11).
+
+**Addendum (review fix, 2026-09-25) — should persistence leave the response's critical path?**
+After the write path became set-based (Spec 1722 FR-12/FR-13; 10 000 rows in ~0.7 s on
+loopback), the remaining question was whether the search should return before the store write.
+
+- **E. Keep it awaited.** A slow store slows the requester (natural back-pressure); the NDJSON
+  heartbeat keeps the connection alive meanwhile; `persisted` / `persistError` stay accurate.
+- **F. Fire and forget.** Faster responses, but a slow or down store lets pending 25 k-job corpora
+  pile up in the heap across requests, and failures surface only in logs.
+
+**Default (proceeding): E** (Spec 1722 D-07).
+
+**Resolution:** _pending review._
+
+---
+
+## Q-101 — Liveness cap: default value, and what an unprobed job carries (Spec 1723)
+
+**Context:** `?liveness=true` issues one GET per returned job. Spec 5025 bounded paginated
+requests (`page_size ≤ 100`) but an unpaginated JSON or NDJSON response is the whole corpus
+(20–30 k jobs). The owner wants liveness possible per request but off unless asked.
+
+**Options:**
+
+- **A. `EVER_JOBS_LIVENESS_MAX_URLS=100`, unprobed jobs carry no `liveness`.** 100 is the existing
+  `page_size` ceiling, so paginated behaviour is unchanged; ~20–40 s at the plugin's concurrency
+  of 5.
+- **B. A larger cap (500–1 000).** More coverage, minutes per request, outside the consumer's
+  120 s JSON timeout.
+- **C. Mark unprobed jobs `uncertain`.** Conflates "we did not look" with "we looked and could not
+  tell".
+
+**Default (proceeding):** **A.** `EVER_JOBS_LIVENESS_ENABLED=false` additionally lets an operator
+refuse probing outright.
+
+**Resolution:** _pending review._
+
+---
+
+## Q-100 — List mode: which plugins "require a keyword", and how is that reported? (Spec 1720)
+
+**Context:** In list mode (no `searchTerm`) most plugins already list their board (847 guard with
+`if (input.searchTerm)`, others use `?? ''`). A few put the term in the URL path and send a
+malformed request without one: Bayt builds `/jobs/-jobs/`, Naukri a `-jobs` SEO key under
+`urlType: search_by_keyword`. Auditing all ~1 860 plugins live was out of scope.
+
+**Options:**
+
+- **A. Metadata flag `requiresSearchTerm`, set only where the code proves a keyword is needed**
+  (`bayt`, `naukri`); flagged plugins are not dispatched in list mode and report `empty` with an
+  explanatory detail. Other plugins that misbehave are isolated by the fan-out and can be flagged
+  as they are found. A static test forbids bare `${input.searchTerm}` interpolation.
+- **B. Report flagged plugins as `bad_input`.** Accurate for the source, but `bad_input` is an
+  "actionable" diagnostic — every list-mode request would surface the same non-actionable rows.
+- **C. Probe every plugin live without a keyword** and flag from the results — thorough, but
+  thousands of requests and flaky upstreams.
+
+**Default (proceeding):** **A.**
+
+**Addendum 1 (review fix, 2026-09-25) — two more keyword-only plugins, and a wider guard.** The
+static guard only caught bare `${input.searchTerm}` interpolation. Two other shapes break list
+mode without ever printing "undefined":
+
+- `source-stepstone` builds `/jobs/<term>` and falls back to searching **"developer"** when no
+  term is given (`input.searchTerm ?? 'developer'`), so list mode silently became a keyword
+  search on this source;
+- `source-careeronestop` puts the keyword in a path segment of its v2 API
+  (`/{userId}/{keyword}/{location}/…`), so an absent term sends `//` — malformed, not a listing.
+
+Options: **A.** flag both `requiresSearchTerm` (not dispatched in list mode, `empty` row);
+**B.** make StepStone list without a keyword (e.g. `/jobs` with no segment). **Default
+(proceeding): A** — StepStone is a WIP Playwright scraper behind anti-bot protection, and no
+keyword-less listing URL can be verified from this lane without live traffic; un-flag it once one
+is verified live. CareerOneStop's API requires the keyword. The guard now also fails on a
+non-empty default keyword (`?? 'x'` / `|| "x"`, outside a log call) and on a term-derived value
+used as a whole path segment (`/${keyword}/`, `/${term}-jobs`) in any plugin **not** flagged
+`requiresSearchTerm`; the flagged plugins (`bayt`, `careeronestop`, `stepstone`) trip it and are
+excused only by the flag.
+
+**Addendum 2 (review fix, 2026-09-25) — result-size bounds (Spec 1720 FR-12).** A list-mode
+request holds the whole raw fan-out in memory before the first NDJSON job line, and
+`resultsWanted` had no upper bound. Options for the defaults:
+
+- **A. `EVER_JOBS_MAX_RESULTS_WANTED=1000`, `EVER_JOBS_MAX_JOBS_PER_SEARCH=100000`.** 1 000 is
+  where the big boards stop paginating anyway and caps in-flight memory at
+  `concurrency × 1 000`; 100 000 is ~4× today's 20–30 k catalogue-wide corpus.
+- **B. Both off by default (0).** Nothing changes for any caller, but one request can still
+  exhaust a 2.5 GB heap.
+- **C. Tighter (e.g. 500 / 50 000).** Safer for memory, but the job ceiling stops *starting*
+  sources in fan-out order, so hitting it routinely would again bias results toward sources that
+  sort first — the very defect list mode exists to fix.
+
+**Default (proceeding): A.** Clamping (with a warning) rather than a 400 keeps every existing
+request valid. `0` disables either bound.
 ## Q-097 — Default User-Agent mode (`identify` vs `strict`) and which plugins opt into `plugin` mode (Spec 1690)
 
 **Context:** Spec 1690 sends an honest UA naming the project by default. Three modes decide

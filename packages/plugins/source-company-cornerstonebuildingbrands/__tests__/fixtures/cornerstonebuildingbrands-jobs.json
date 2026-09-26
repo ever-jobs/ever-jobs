@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/cornerstonebuildingbrandscareers/3743990013928986",
+      "ref": "https://api.smartrecruiters.com/v1/companies/cornerstonebuildingbrandscareers/postings/3743990013928986",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/cornerstonebuildingbrandscareers/3743990013928885",
+      "ref": "https://api.smartrecruiters.com/v1/companies/cornerstonebuildingbrandscareers/postings/3743990013928885",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/cornerstonebuildingbrandscareers/3743990013928845",
+      "ref": "https://api.smartrecruiters.com/v1/companies/cornerstonebuildingbrandscareers/postings/3743990013928845",
       "jobAd": {
         "sections": {
           "jobDescription": {

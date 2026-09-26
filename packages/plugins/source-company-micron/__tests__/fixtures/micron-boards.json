@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "micron:1:External"
+      },
+      "atsIdPrefix": "wd-micron-"
+    }
+  ],
+  "responses": {
+    "https://micron.wd1.myworkdayjobs.com/wday/cxs/micron/External/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "PDE NPI PWF Process Engineer",
+          "externalPath": "/job/Taichung---Fab-16-Taiwan/PDE-NPI-PWF-Process-Engineer_JR105575-1",
+          "locationsText": "Taichung - Fab 16, Taiwan",
+          "postedOn": "Posted 14 Days Ago",
+          "bulletFields": [
+            "JR105575"
+          ]
+        },
+        {
+          "title": "ASIC Gen-AI Data Scientist",
+          "externalPath": "/job/San-Jose-CA/ASIC-Gen-AI-Data-Scientist_JR110473-1",
+          "locationsText": "3 Locations",
+          "postedOn": "Posted 22 Days Ago",
+          "bulletFields": [
+            "JR110473"
+          ]
+        },
+        {
+          "title": "半導体製造 EUVフォトマスク検査・管理スタッフ（技術職）",
+          "externalPath": "/job/Hiroshima---Fab-15-Japan/-EUV---_JR101216",
+          "locationsText": "Hiroshima - Fab 15, Japan",
+          "postedOn": "Posted 30+ Days Ago",
+          "bulletFields": [
+            "JR101216"
+          ]
+        }
+      ]
+    },
+    "https://micron.wd1.myworkdayjobs.com/wday/cxs/micron/External/job/Taichung---Fab-16-Taiwan/PDE-NPI-PWF-Process-Engineer_JR105575-1": {
+      "jobPostingInfo": {
+        "title": "PDE NPI PWF Process Engineer",
+        "jobDescription": "<p>PDE NPI PWF Process Engineer at Micron Technology.</p>",
+        "location": "Taichung - Fab 16, Taiwan",
+        "jobReqId": "JR105575",
+        "externalUrl": "https://micron.wd1.myworkdayjobs.com/External/job/Taichung---Fab-16-Taiwan/PDE-NPI-PWF-Process-Engineer_JR105575-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "micron"
+      }
+    },
+    "https://micron.wd1.myworkdayjobs.com/wday/cxs/micron/External/job/San-Jose-CA/ASIC-Gen-AI-Data-Scientist_JR110473-1": {
+      "jobPostingInfo": {
+        "title": "ASIC Gen-AI Data Scientist",
+        "jobDescription": "<p>ASIC Gen-AI Data Scientist at Micron Technology.</p>",
+        "location": "3 Locations",
+        "jobReqId": "JR110473",
+        "externalUrl": "https://micron.wd1.myworkdayjobs.com/External/job/San-Jose-CA/ASIC-Gen-AI-Data-Scientist_JR110473-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "micron"
+      }
+    },
+    "https://micron.wd1.myworkdayjobs.com/wday/cxs/micron/External/job/Hiroshima---Fab-15-Japan/-EUV---_JR101216": {
+      "jobPostingInfo": {
+        "title": "半導体製造 EUVフォトマスク検査・管理スタッフ（技術職）",
+        "jobDescription": "<p>半導体製造 EUVフォトマスク検査・管理スタッフ（技術職） at Micron Technology.</p>",
+        "location": "Hiroshima - Fab 15, Japan",
+        "jobReqId": "JR101216",
+        "externalUrl": "https://micron.wd1.myworkdayjobs.com/External/job/Hiroshima---Fab-15-Japan/-EUV---_JR101216",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "micron"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "micron-JR105575",
+      "title": "PDE NPI PWF Process Engineer"
+    },
+    {
+      "id": "micron-JR110473",
+      "title": "ASIC Gen-AI Data Scientist"
+    },
+    {
+      "id": "micron-JR101216",
+      "title": "半導体製造 EUVフォトマスク検査・管理スタッフ（技術職）"
+    }
+  ]
+}

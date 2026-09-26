@@ -1,0 +1,138 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "chicagotradingcampus"
+      },
+      "atsIdPrefix": "gh-"
+    },
+    {
+      "input": {
+        "companySlug": "chicagotrading"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/chicagotradingcampus/jobs": {
+      "jobs": [
+        {
+          "id": 4716937005,
+          "title": "Associate Engineer - 2027 Start",
+          "updated_at": "2026-09-11T15:33:23.000Z",
+          "location": {
+            "name": "Chicago, IL; New York, NY"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/chicagotradingcampus/jobs/4716937005",
+          "content": "&lt;p&gt;Associate Engineer - 2027 Start at Chicago Trading Company.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "chicagotradingcampus"
+        },
+        {
+          "id": 4716509005,
+          "title": "Quant Trading Associate - 2027 Start",
+          "updated_at": "2026-09-11T15:33:23.000Z",
+          "location": {
+            "name": "London, England, United Kingdom"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/chicagotradingcampus/jobs/4716509005",
+          "content": "&lt;p&gt;Quant Trading Associate - 2027 Start at Chicago Trading Company.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "chicagotradingcampus"
+        },
+        {
+          "id": 4716507005,
+          "title": "Quant Trading Associate - 2027 Start",
+          "updated_at": "2026-09-11T15:33:23.000Z",
+          "location": {
+            "name": "Chicago, IL"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/chicagotradingcampus/jobs/4716507005",
+          "content": "&lt;p&gt;Quant Trading Associate - 2027 Start at Chicago Trading Company.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "chicagotradingcampus"
+        }
+      ]
+    },
+    "https://api.greenhouse.io/v1/boards/chicagotrading/jobs": {
+      "jobs": [
+        {
+          "id": 4730408005,
+          "title": "AI Engineer",
+          "updated_at": "2026-09-21T19:35:31.000Z",
+          "location": {
+            "name": "Chicago, Illinois, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/chicagotrading/jobs/4730408005",
+          "content": "&lt;p&gt;AI Engineer at Chicago Trading Company.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "chicagotrading"
+        },
+        {
+          "id": 4668637005,
+          "title": "Business Manager - Systematic",
+          "updated_at": "2026-09-11T15:33:24.000Z",
+          "location": {
+            "name": "Chicago, Illinois, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/chicagotrading/jobs/4668637005",
+          "content": "&lt;p&gt;Business Manager - Systematic at Chicago Trading Company.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "chicagotrading"
+        },
+        {
+          "id": 4725292005,
+          "title": "Campus Relations & Events Associate",
+          "updated_at": "2026-09-11T15:33:24.000Z",
+          "location": {
+            "name": "Chicago, Illinois, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/chicagotrading/jobs/4725292005",
+          "content": "&lt;p&gt;Campus Relations &amp;amp; Events Associate at Chicago Trading Company.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "chicagotrading"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "chicagotrading-4716937005",
+      "title": "Associate Engineer - 2027 Start"
+    },
+    {
+      "id": "chicagotrading-4716509005",
+      "title": "Quant Trading Associate - 2027 Start"
+    },
+    {
+      "id": "chicagotrading-4716507005",
+      "title": "Quant Trading Associate - 2027 Start"
+    },
+    {
+      "id": "chicagotrading-4730408005",
+      "title": "AI Engineer"
+    },
+    {
+      "id": "chicagotrading-4668637005",
+      "title": "Business Manager - Systematic"
+    },
+    {
+      "id": "chicagotrading-4725292005",
+      "title": "Campus Relations & Events Associate"
+    }
+  ]
+}

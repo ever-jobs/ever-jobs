@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Deloitte6/744000135756759",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Deloitte6/postings/744000135756759",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Deloitte6/744000135702839",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Deloitte6/postings/744000135702839",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Deloitte6/744000135702529",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Deloitte6/postings/744000135702529",
       "jobAd": {
         "sections": {
           "jobDescription": {
