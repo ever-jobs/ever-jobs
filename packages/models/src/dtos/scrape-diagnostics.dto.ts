@@ -281,3 +281,43 @@ export function looksLikeChallenge(html: string): boolean {
     s,
   );
 }
+
+/** A rate-limit refusal in an error message or a diagnostic detail. */
+const RATE_LIMIT_TEXT = /\b429\b|too many requests|rate[ -]?limit/i;
+
+/**
+ * Did this error show the host refusing us: an HTTP 429, 401, 403 or 407, a
+ * rate-limit message, anything {@link classifyScrapeError} calls `blocked`
+ * (captcha, challenge, access denied, a robots.txt refusal under the crawl
+ * policy), or a crawl-policy `rate_limited` (Spec 1690: the host asked us to
+ * back off longer than we wait, or its rate-limit bucket gave no slot in
+ * time)? Returns the diagnostic to report — `rate_limited` for the crawl
+ * policy's own hold-back, `fetch_error` for a rate limit, `blocked`
+ * otherwise — or `null` when the error is not a refusal (timeouts, 404s and
+ * 5xx are not: the next request may well succeed). A plugin walking detail
+ * pages stops at the first refusal instead of spending the rest of its budget
+ * on a host that said stop.
+ */
+export function refusalFromScrapeError(err: unknown): ScrapeDiagnostics | null {
+  const status = (err as { response?: { status?: unknown } } | null | undefined)?.response?.status;
+  const diag = classifyScrapeError(err);
+  if (diag.reason === 'rate_limited') return diag;
+  if (status === 429 || (diag.reason !== 'blocked' && RATE_LIMIT_TEXT.test(diag.detail ?? ''))) {
+    return new ScrapeDiagnostics('fetch_error', diag.detail ?? 'HTTP 429 Too Many Requests');
+  }
+  if (status === 401 || status === 403 || status === 407) {
+    return diag.reason === 'blocked' ? diag : new ScrapeDiagnostics('blocked', diag.detail ?? `HTTP ${status}`);
+  }
+  return diag.reason === 'blocked' ? diag : null;
+}
+
+/**
+ * The same test for a diagnostic a plugin already built: `blocked`, an open
+ * circuit breaker, a crawl-policy `rate_limited`, or a `fetch_error` whose
+ * detail names a rate limit.
+ */
+export function isRefusalDiagnostics(diag: ScrapeDiagnostics | null | undefined): boolean {
+  if (!diag) return false;
+  if (diag.reason === 'blocked' || diag.reason === 'circuit_open' || diag.reason === 'rate_limited') return true;
+  return diag.reason === 'fetch_error' && RATE_LIMIT_TEXT.test(diag.detail ?? '');
+}

@@ -468,6 +468,9 @@ Invalid flag values are printed as warnings and skipped.
 
 - `none` — the caller's `crawl` and legacy fields are ignored.
 
+Under every mode, a client's `minIntervalFloorMs` (§9, §19) is a spacing no caller
+value shortens: a plugin that must keep a site's `Crawl-delay` or a designed pace sets it.
+
 Refused fields are reported by the policy endpoint's `crawl=` preview (§17).
 `EVER_JOBS_CRAWL_CALLER_PROXIES` separately decides whether the request's `proxies`
 are used.
@@ -576,6 +579,10 @@ first-in first-out. **Every attempt, retries included, holds a slot.**
   requests in flight. Size per-host limits for the replica count you run.
 - The limiter spaces *grants*: under a burst, the first gap between wire starts can be
   a few ms shorter than `minIntervalMs` (measured 86–90 ms for 100 ms).
+- **A client floor** (`createHttpClient({ minIntervalFloorMs })`, milliseconds): the
+  limiter spaces that client's requests by max(`minIntervalMs`, robots.txt `Crawl-delay`,
+  floor), whatever any layer resolved — like a `Crawl-delay`, and unlike `rateDelayMin`,
+  which is only the plugin layer. Jitter still follows the policy.
 
 ---
 
@@ -899,6 +906,16 @@ Common symptoms:
   `plugin`. If an API genuinely requires a specific UA, declare it with `setHeaders`
   and opt in: `crawl: { userAgentMode: 'plugin', userAgentReason: '<why>' }` (the reason
   is shown by the policy endpoint; an opt-in without one is flagged in its `warnings`).
+  An operator switch that brings back an older UA (`WTTJ_USER_AGENT_MODE=browser`,
+  `EVER_JOBS_REMOTEOK_LEGACY=ua`) must add that opt-in on the clients it affects, or it
+  does nothing under `identify`; `strict` still overrides it.
+- **A pace a caller may only lengthen:** `rateDelayMin`/`rateDelayMax` on
+  `createHttpClient` and a manifest `minIntervalMs` are the plugin layer, which operator
+  and caller layers replace (a search's `rateDelayMin` under the default
+  `EVER_JOBS_CRAWL_CALLER_OVERRIDES=any`). When a site asks for a minimum spacing (a
+  robots.txt `Crawl-delay`, a documented rate) or your spec promises one, also pass
+  `minIntervalFloorMs`: no layer shortens it. RemoteOK (1 s, its `Crawl-delay`), Welcome
+  to the Jungle (0.5 s board pacing; 2 s between credential pages) and Simplify (2 s) do.
 - **Do not hand-roll politeness.** No `sleep` between requests for pacing, no custom
   retry loops on 429 — `HttpClient` does both per the policy. Keep existing plugin
   constants as upper bounds.

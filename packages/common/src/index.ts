@@ -6,3 +6,5 @@ export * from './exceptions';
 export * from './browser';
 export * from './normalize';
 export * from './canonical-key';
+export * from './utils/search-locations';
+export * from './utils/job-exclusion';

@@ -92,6 +92,44 @@ describe('WelcomeToTheJungleService (E2E)', () => {
     expect(response.jobs.length).toBe(0);
   }, 30000);
 
+  // Spec 1705: with no company but a search criterion, the same registration searches the
+  // whole board. Tolerant like the cases above: zero results are accepted.
+  it('should search the whole board when a search term is given without a company', async () => {
+    const input = new ScraperInputDto({
+      siteType: [Site.WTTJ],
+      searchTerm: 'data',
+      resultsWanted: 3,
+    });
+
+    const response = await service.scrape(input);
+
+    expect(response).toBeDefined();
+    expect(response.jobs.length).toBeLessThanOrEqual(3);
+    for (const job of response.jobs) {
+      expect(job.site).toBe(Site.WTTJ);
+      expect(job.jobUrl).toMatch(/welcometothejungle\.com\/(en|fr|es|cs|sk)\/companies\/[^/]+\/jobs\//);
+      expect(typeof job.isRemote).toBe('boolean');
+    }
+  }, 30000);
+
+  it('should return only fully remote roles for a remote board search', async () => {
+    const input = new ScraperInputDto({
+      siteType: [Site.WTTJ],
+      searchTerm: 'engineer',
+      isRemote: true,
+      hoursOld: 168,
+      resultsWanted: 3,
+    });
+
+    const response = await service.scrapeBoard(input);
+
+    expect(response).toBeDefined();
+    expect(response.jobs.length).toBeLessThanOrEqual(3);
+    for (const job of response.jobs) {
+      expect(job.isRemote).toBe(true);
+    }
+  }, 30000);
+
   it('should respect the resultsWanted limit', async () => {
     const input = new ScraperInputDto({
       siteType: [Site.WTTJ],

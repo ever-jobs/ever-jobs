@@ -628,6 +628,57 @@ describe('pacing through the host limiter (Spec 1690 §4.3)', () => {
     expect(Math.max(...g)).toBeLessThanOrEqual(3000);
   });
 
+  describe('minIntervalFloorMs — a spacing floor no policy layer shortens', () => {
+    const caller = { minIntervalMs: 50, jitterMs: 0 };
+
+    it('a caller rateDelayMin replaces the plugin-layer rateDelayMin, but not the floor', async () => {
+      const paced = new HttpClient({ rateDelayMin: 1, rateDelayMax: 1 });
+      const floored = new HttpClient({ rateDelayMin: 1, rateDelayMax: 1, minIntervalFloorMs: 1000 });
+      const hp = attach(paced);
+      const hf = attach(floored);
+
+      await inScrape({ site: 'remoteok', caller }, () =>
+        settle(
+          Promise.all([
+            paced.get(URL_A),
+            paced.get(URL_A),
+            floored.get('https://floored.example.org/api'),
+            floored.get('https://floored.example.org/api'),
+          ]),
+          10_000,
+        ),
+      );
+
+      // Control: the caller layer wins over the client's rateDelayMin (Spec 1690 §4.1)…
+      expect(gaps(hp.sent)[0]).toBeLessThan(1000);
+      // …while the floor holds.
+      expect(gaps(hf.sent)[0]).toBeGreaterThanOrEqual(1000);
+    });
+
+    it('bounds an operator policy and the legacy preset too, and is copied from an input-shaped object', async () => {
+      setEnv({
+        [CRAWL_ENV.PRESET]: 'legacy',
+        [CRAWL_ENV.POLICIES]: JSON.stringify({ sites: { remoteok: { minIntervalMs: 10 } } }),
+      });
+      const client = createHttpClient({ requestTimeout: 10, proxies: [], minIntervalFloorMs: 1500 });
+      const h = attach(client);
+
+      await inScrape({ site: 'remoteok', caller }, () => settle(Promise.all([client.get(URL_A), client.get(URL_A)]), 10_000));
+
+      expect(gaps(h.sent)[0]).toBeGreaterThanOrEqual(1500);
+    });
+
+    it('ignores a non-positive or non-finite floor', async () => {
+      const client = new HttpClient({ minIntervalFloorMs: Number.NaN });
+      const acquire = jest.spyOn(getHostLimiter(), 'acquire');
+      attach(client);
+
+      await inScrape({ site: 'remoteok', caller }, () => settle(client.get(URL_A)));
+
+      expect(acquire).toHaveBeenCalledWith('host:acme.example.com', expect.objectContaining({ minIntervalMs: 50 }));
+    });
+  });
+
   it('different hosts do not wait for each other; clients share one host budget', async () => {
     setEnv({ [CRAWL_ENV.MIN_INTERVAL_MS]: '5000' });
     const one = new HttpClient();

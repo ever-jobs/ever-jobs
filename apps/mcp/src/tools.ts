@@ -77,10 +77,18 @@ function getClient(): AxiosInstance {
 export interface JobSearchParams {
   query: string;
   location?: string;
+  /** Spec 1700 — several locations; each source is searched once per location. */
+  locations?: string[];
   source?: string;
   company?: string;
   limit?: number;
   remoteOnly?: boolean;
+  /** Spec 1700 — drop jobs whose title contains any of these words/phrases. */
+  excludeTitleTerms?: string[];
+  /** Spec 1700 — drop jobs whose title or description contains any of these. */
+  excludeKeywords?: string[];
+  /** Spec 1700 — curated exclusion lists (e.g. `security_clearance`). */
+  excludePresets?: string[];
   /**
    * Per-request crawl policy (Spec 1690), forwarded to the API unchanged as the
    * camelCase `crawl` object (e.g. `{ maxConcurrentPerHost: 1, minIntervalMs: 1000 }`).
@@ -183,7 +191,30 @@ export function normalizeMcpCrawl(raw: unknown): McpCrawlPolicy | undefined {
   return Object.keys(value as object).length > 0 ? { ...(value as McpCrawlPolicy) } : undefined;
 }
 
-export interface JobResult {
+/** Largest `locations` list the API accepts (Spec 1700); longer lists are cut here instead of 400ing. */
+export const MCP_MAX_LOCATIONS = 25;
+/** Longest accepted `locations` entry (Spec 1700). */
+export const MCP_MAX_LOCATION_LENGTH = 200;
+/** Most terms per exclusion list the API accepts (Spec 1700). */
+export const MCP_MAX_EXCLUSION_TERMS = 50;
+/** Longest accepted exclusion term (Spec 1700). */
+export const MCP_MAX_EXCLUSION_TERM_LENGTH = 100;
+
+/**
+ * Posting-time detail (Spec 1696). Each key is present only when the API sent
+ * it (the source gave finer-than-day information), so a job without it keeps
+ * its previous shape.
+ */
+export interface PostedTimeDetail {
+  /** Posting instant, ISO-8601 UTC; only for precision exact, minute or hour. `date_posted` stays the date. */
+  date_posted_at?: string;
+  /** exact | minute | hour | day | week | month | year. */
+  date_posted_precision?: string;
+  /** timestamp | date | relative (estimated from an age label at fetch time). */
+  date_posted_basis?: string;
+}
+
+export interface JobResult extends PostedTimeDetail {
   id: string;
   title: string;
   company: string;
@@ -202,9 +233,15 @@ export interface SearchResponse {
   jobs: JobResult[];
   sources_searched: string[];
   query: string;
+  /**
+   * Jobs the API removed with the exclusion filters (Spec 1700). Present only
+   * when the search carried an exclusion list, so an unfiltered response keeps
+   * its previous shape.
+   */
+  excluded?: number;
 }
 
-export interface JobDetailsResponse {
+export interface JobDetailsResponse extends PostedTimeDetail {
   id: string;
   title: string;
   company: string;
@@ -447,6 +484,7 @@ export async function searchJobs(params: JobSearchParams): Promise<SearchRespons
       url: job.jobUrl ?? job.job_url ?? '',
       description: truncateDescription(job.description),
       date_posted: job.datePosted ?? job.date_posted ?? null,
+      ...postedTimeDetail(job),
       is_remote: job.isRemote ?? job.is_remote ?? false,
       source: job.site ?? '',
       salary: formatSalary(job.compensation),
@@ -463,6 +501,9 @@ export async function searchJobs(params: JobSearchParams): Promise<SearchRespons
       jobs: filteredJobs,
       sources_searched: params.source ? [params.source] : ['all'],
       query: params.query,
+      ...(hasExclusions(params)
+        ? { excluded: Number(data.exclusion_metrics?.excluded_count ?? 0) || 0 }
+        : {}),
     };
   } catch (err: any) {
     // If the API is unavailable, return a helpful error
@@ -509,6 +550,7 @@ export async function getJobDetails(params: {
       description: truncateDescription(job.description),
       full_description: job.description ?? null,
       date_posted: job.datePosted ?? job.date_posted ?? null,
+      ...postedTimeDetail(job),
       is_remote: job.isRemote ?? job.is_remote ?? false,
       source: job.site ?? '',
       salary: formatSalary(job.compensation),
@@ -689,7 +731,8 @@ export function compareSources(): {
  * unfiltered search stays exactly `{ searchTerm, location, resultsWanted }`. The
  * per-request `crawl` object (Spec 1690) is added unchanged when given — its key
  * is spelled the same in every style, and its own keys are the camelCase ones
- * the API's `CrawlPolicyDto` declares.
+ * the API's `CrawlPolicyDto` declares. `locations` and the exclusion lists
+ * (Spec 1700) are added, cleaned, only when non-empty, in the chosen style.
  */
 export function buildSearchRequestBody(
   params: JobSearchParams,
@@ -699,14 +742,14 @@ export function buildSearchRequestBody(
   const resultsWanted = Math.min(params.limit ?? 20, 100);
   const location = params.location ?? '';
 
-  const camel = {
+  const camel: Record<string, unknown> = {
     searchTerm: params.query,
     location,
     ...(siteType ? { siteType } : {}),
     ...(params.company ? { companySlug: params.company } : {}),
     resultsWanted,
   };
-  const snake = {
+  const snake: Record<string, unknown> = {
     search_term: params.query,
     location,
     ...(siteType ? { site_type: siteType } : {}),
@@ -715,9 +758,67 @@ export function buildSearchRequestBody(
   };
   const crawl = params.crawl ? { crawl: params.crawl } : {};
 
+  // Spec 1700 — added only when non-empty, so a plain search body stays
+  // byte-identical. `locations` is one word, so both spellings agree.
+  const locations = cleanList(params.locations, MCP_MAX_LOCATIONS, MCP_MAX_LOCATION_LENGTH);
+  if (locations) {
+    camel.locations = locations;
+    snake.locations = locations;
+  }
+  const exclusions: [string, string, string[] | undefined][] = [
+    ['excludeTitleTerms', 'exclude_title_terms', cleanList(params.excludeTitleTerms, MCP_MAX_EXCLUSION_TERMS, MCP_MAX_EXCLUSION_TERM_LENGTH)],
+    ['excludeKeywords', 'exclude_keywords', cleanList(params.excludeKeywords, MCP_MAX_EXCLUSION_TERMS, MCP_MAX_EXCLUSION_TERM_LENGTH)],
+    ['excludePresets', 'exclude_presets', knownPresets(params.excludePresets)],
+  ];
+  for (const [camelKey, snakeKey, list] of exclusions) {
+    if (!list) continue;
+    camel[camelKey] = list;
+    snake[snakeKey] = list;
+  }
+
   if (style === 'snake') return { ...snake, ...crawl };
   if (style === 'both') return { ...snake, ...camel, ...crawl };
   return { ...camel, ...crawl };
+}
+
+/**
+ * Normalise a list argument from a tool call (Spec 1700): a bare string
+ * becomes a one-item list, non-strings and blanks are dropped, entries over
+ * `maxLength` are dropped (truncating would change their meaning), and the
+ * list is cut to `maxItems` so the API's validator never 400s the search.
+ * Returns `undefined` for an empty result.
+ */
+export function cleanList(value: unknown, maxItems: number, maxLength: number): string[] | undefined {
+  const raw = typeof value === 'string' ? [value] : Array.isArray(value) ? value : [];
+  const out = raw
+    .filter((v): v is string => typeof v === 'string')
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0 && v.length <= maxLength)
+    .slice(0, maxItems);
+  return out.length > 0 ? out : undefined;
+}
+
+/**
+ * The presets the API knows (`ExclusionPreset` in `@ever-jobs/models`; the MCP
+ * server does not import the monorepo packages). An unknown preset would 400
+ * the whole search, so it is dropped here instead.
+ */
+export const MCP_EXCLUSION_PRESETS: readonly string[] = ['security_clearance'];
+
+function knownPresets(value: unknown): string[] | undefined {
+  const list = cleanList(value, MCP_MAX_EXCLUSION_TERMS, MCP_MAX_EXCLUSION_TERM_LENGTH)
+    ?.map((p) => p.toLowerCase())
+    .filter((p) => MCP_EXCLUSION_PRESETS.includes(p));
+  return list && list.length > 0 ? [...new Set(list)] : undefined;
+}
+
+/** Did the search send any exclusion filter? */
+function hasExclusions(params: JobSearchParams): boolean {
+  return (
+    cleanList(params.excludeTitleTerms, MCP_MAX_EXCLUSION_TERMS, MCP_MAX_EXCLUSION_TERM_LENGTH) !== undefined ||
+    cleanList(params.excludeKeywords, MCP_MAX_EXCLUSION_TERMS, MCP_MAX_EXCLUSION_TERM_LENGTH) !== undefined ||
+    knownPresets(params.excludePresets) !== undefined
+  );
 }
 
 /**
@@ -747,6 +848,24 @@ export function formatJobLocation(
   if (geo.length > 0) return geo.join(', ');
 
   return nonEmpty(loc.name) ?? nonEmpty(loc.text);
+}
+
+/**
+ * The Spec 1696 posting-time detail of an API job, in the tools' snake_case:
+ * only the keys the API sent as a non-blank string, so a job without the
+ * detail maps exactly as before. Reads the camelCase (current API) and the
+ * snake_case spelling, like the other job fields.
+ */
+export function postedTimeDetail(job: unknown): PostedTimeDetail {
+  const j = (job && typeof job === 'object' ? job : {}) as Record<string, unknown>;
+  const at = nonEmpty(j.datePostedAt ?? j.date_posted_at);
+  const precision = nonEmpty(j.datePostedPrecision ?? j.date_posted_precision);
+  const basis = nonEmpty(j.datePostedBasis ?? j.date_posted_basis);
+  return {
+    ...(at ? { date_posted_at: at } : {}),
+    ...(precision ? { date_posted_precision: precision } : {}),
+    ...(basis ? { date_posted_basis: basis } : {}),
+  };
 }
 
 function nonEmpty(value: unknown): string | null {

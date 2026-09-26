@@ -564,6 +564,13 @@ differently, and why. Where the design was silent the most flexible option was t
 - A compile-time check (`apps/api/src/jobs/crawl-policy.mapping.ts`) fails the build
   if `CrawlPolicyDto` and `CrawlPolicy` drift apart in either direction; the MCP
   schema is kept in step by a test.
+- Merge with Specs 1692-1713 (2026-09-26): `HttpClientOptions.minIntervalFloorMs`
+  (milliseconds) — a spacing floor per client that no layer shortens, applied like a
+  robots.txt `Crawl-delay` (limiter `minIntervalMs` = max(policy, Crawl-delay, floor)).
+  `rateDelayMin` stays the plugin layer; the floor is for plugins whose spec promises a
+  pace a caller may only lengthen (RemoteOK, Welcome to the Jungle, Simplify). A request
+  parked on an identical in-flight one in a Spec 1700 memo scope now honours its own
+  abort signal (§4.6) instead of waiting for the first request.
 
 ### 9.3 Plugin UA opt-ins (`userAgentMode: 'plugin'`)
 
@@ -575,6 +582,12 @@ differently, and why. Where the design was silent the most flexible option was t
 
 No site was opted in on A/B evidence alone yet; the live A/B (30 plugins, 166
 requests) and the candidates it found are recorded in Q-097.
+
+Conditional opt-ins (merge with Specs 1705/1707, 2026-09-26): `source-ats-wttj` and
+`source-remoteok` opt their clients in only while the operator's own switch asks for
+the old browser UA (`WTTJ_USER_AGENT_MODE=browser`, `EVER_JOBS_REMOTEOK_LEGACY=ua`), with
+that switch as the `userAgentReason`; by default both send the configured UA, and
+`strict` overrides the switch.
 
 ### 9.4 Verification (2026-09-25)
 

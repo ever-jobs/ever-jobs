@@ -31,12 +31,18 @@ import {
   type LegitimacyInput,
 } from '@ever-jobs/models';
 import { ConfigService } from '@nestjs/config';
-import { runWithScrapeContext } from '@ever-jobs/common';
+import {
+  applyJobExclusions,
+  exclusionSpecFromInput,
+  hasExclusionInput,
+  runWithScrapeContext,
+} from '@ever-jobs/common';
 import { LIVENESS_CRAWL_SITE, livenessDeadlineMs } from './crawl-policy.mapping';
-import { JobsService } from './jobs.service';
-import { JobsAggregator } from './jobs.aggregator';
+import { JobsService, readMaxSearchLocations } from './jobs.service';
+import { AggregateResult, JobsAggregator } from './jobs.aggregator';
 import { AnalyticsService } from '@ever-jobs/analytics';
 import { CacheService } from '../cache/cache.service';
+import { searchCacheParams } from './search-cache-params';
 
 /**
  * Crawl-policy site key for liveness enrichment (Spec 1690) — defined in
@@ -90,7 +96,11 @@ export class JobsController {
     description:
       'Searches selected job boards concurrently and returns a merged, sorted list of job postings. ' +
       'Supports caching, CSV export (via ?format=csv), pagination (via ?paginate=true), and ' +
-      'cross-source deduplication (default ?dedup=true; pass ?dedup=false to opt out).',
+      'cross-source deduplication (default ?dedup=true; pass ?dedup=false to opt out). ' +
+      'Spec 1700: `locations` searches several places in one request (per_source then has one row per ' +
+      '(source, location)); `excludeTitleTerms` / `excludeKeywords` / `excludePresets` drop matching jobs after ' +
+      'dedup — `count` and pagination are post-exclusion, and the response carries `exclusion_metrics` ' +
+      '(with `samples` when ?diagnostics is set) whenever an exclusion field was supplied.',
   })
   @ApiQuery({ name: 'format', required: false, description: 'Output format: json (default) or csv', example: 'json' })
   @ApiQuery({ name: 'paginate', required: false, type: Boolean, description: 'Enable pagination' })
@@ -136,7 +146,8 @@ export class JobsController {
     @Query('diagnostics_limit') diagnosticsLimitRaw?: string,
   ) {
     this.logger.log(
-      `Search request: sites=${input.siteType?.join(',') ?? 'all'}, term="${input.searchTerm}", location="${input.location}"`,
+      `Search request: sites=${input.siteType?.join(',') ?? 'all'}, term="${input.searchTerm}", location="${input.location}"` +
+        (input.locations ? `, locations=${JSON.stringify(input.locations)}` : ''),
     );
 
     // ── Helper parsers ────────────────────
@@ -180,7 +191,15 @@ export class JobsController {
     };
 
     // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
-    const cacheParams = { ...input, endpoint: 'search' };
+    // Spec 1700: exclusion fields never reach the key (they filter after the
+    // cache) and `locations` keys case-insensitively in the caller's order
+    // (the fan-out merges in that order). A request without either keys
+    // exactly as before.
+    const cacheParams = searchCacheParams(
+      input,
+      { endpoint: 'search' },
+      readMaxSearchLocations(this.configService),
+    );
     const cached = await this.cacheService.get<JobPostDto[]>(cacheParams);
     let rawJobs: JobPostDto[];
     let fromCache = false;
@@ -206,7 +225,16 @@ export class JobsController {
     // behaviour); deployments on the in-process `memory` backend should
     // disable it, since nothing in `apps/api` reads the corpus back.
     const persist = this.configService.get<boolean>('store.persistSearch', true);
-    const aggregated = await this.aggregator.aggregateRaw(rawJobs, { dedup, persist });
+    // Spec 1700 — exclusions run in the aggregator, after dedup and before
+    // the pagination window, so `count` / `total_pages` are post-exclusion
+    // and excluded jobs are never liveness-probed. Passed only when supplied,
+    // so an unfiltered request takes exactly the pre-Spec-1700 path.
+    const aggregated = await this.aggregator.aggregateRaw(
+      rawJobs,
+      hasExclusionInput(input)
+        ? { dedup, persist, exclusions: exclusionSpecFromInput(input) }
+        : { dedup, persist },
+    );
     const jobs = aggregated.jobs;
 
     this.logger.log(
@@ -257,11 +285,14 @@ export class JobsController {
     }
 
     // ── Per-source diagnostics (opt-in, filtered, capped) ──
+    const diagnosticsMode = parseDiagnosticsMode(diagnosticsRaw);
     const diagnostics = summarizeSourceDiagnostics(
       perSource,
-      parseDiagnosticsMode(diagnosticsRaw),
+      diagnosticsMode,
       parseLimit(diagnosticsLimitRaw) ?? DEFAULT_DIAGNOSTICS_LIMIT,
     );
+    // Spec 1700 — present only when an exclusion field was supplied.
+    const exclusionKeys = this.exclusionResponseKeys(aggregated, diagnosticsMode !== 'off');
 
     // ── Pagination ────────────────────────
     if (paginate) {
@@ -279,6 +310,7 @@ export class JobsController {
         per_source_summary: diagnostics.summary,
         next_page: page < totalPages ? page + 1 : null,
         previous_page: page > 1 ? page - 1 : null,
+        ...exclusionKeys,
       };
     }
 
@@ -295,7 +327,45 @@ export class JobsController {
       dedup_metrics: aggregated.dedupMetrics,
       per_source: diagnostics.rows,
       per_source_summary: diagnostics.summary,
+      ...exclusionKeys,
     };
+  }
+
+  /**
+   * Snake-cased exclusion keys for the JSON response (Spec 1700). Empty when
+   * no exclusion field was supplied, so an unfiltered response is unchanged.
+   * `samples` (at most 20) only with `?diagnostics=true|all`.
+   */
+  private exclusionResponseKeys(
+    aggregated: AggregateResult,
+    includeSamples: boolean,
+  ): Record<string, unknown> {
+    const keys: Record<string, unknown> = {};
+    const metrics = aggregated.exclusionMetrics;
+    if (metrics) {
+      keys.exclusion_metrics = {
+        excluded_count: metrics.excludedCount,
+        excluded_raw_count: metrics.excludedRawCount,
+        by_term: metrics.byTerm.map((t) => ({ term: t.term, source: t.source, count: t.count })),
+        ignored_terms: metrics.ignoredTerms.map((t) => ({ term: t.term, reason: t.reason })),
+        ...(includeSamples
+          ? {
+              samples: (aggregated.excludedSamples ?? []).map(({ job, match }) => ({
+                id: job.id ?? null,
+                site: job.site ?? null,
+                title: job.title ?? null,
+                term: match.term,
+                source: match.source,
+                field: match.field,
+              })),
+            }
+          : {}),
+      };
+    }
+    if (aggregated.exclusionError) {
+      keys.exclusion_error = aggregated.exclusionError;
+    }
+    return keys;
   }
 
   /**
@@ -318,7 +388,11 @@ export class JobsController {
     this.logger.log(
       `Analyze request: sites=${input.siteType?.join(',') ?? 'all'}, term="${input.searchTerm}", location="${input.location}"`,
     );
-    const jobs = await this.jobsService.searchJobs(input);
+    const found = await this.jobsService.searchJobs(input);
+    // Spec 1700 — analyse the same set a search with these exclusions returns.
+    const jobs = hasExclusionInput(input)
+      ? applyJobExclusions(found, exclusionSpecFromInput(input)).kept
+      : found;
     const analysis = this.analyticsService.analyze(jobs);
     this.logger.log(`Analysis complete: ${analysis.summary.totalJobs} jobs, ${analysis.companies.length} companies`);
     return analysis;

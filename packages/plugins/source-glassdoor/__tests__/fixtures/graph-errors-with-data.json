@@ -1,0 +1,28 @@
+[
+  {
+    "errors": [{ "message": "Service unavailable: seo metadata", "path": ["jobListings", "searchResultsMetadata"] }],
+    "data": {
+      "jobListings": {
+        "paginationCursors": [{ "cursor": "cursor-page-1", "pageNumber": 1 }],
+        "jobListings": [
+          {
+            "jobview": {
+              "header": {
+                "adOrderId": 901,
+                "ageInDays": 2,
+                "employerNameFromSearch": "Initech",
+                "jobLink": "/partner/jobListing.htm?pos=101&ao=901&jl=2001",
+                "jobTitleText": "Data Engineer",
+                "locId": 1147401,
+                "locationName": "Seattle, WA",
+                "locationType": "C"
+              },
+              "job": { "descriptionFragments": ["<p>Pipelines.</p>"], "listingId": 2001 },
+              "overview": { "shortName": "Initech" }
+            }
+          }
+        ]
+      }
+    }
+  }
+]

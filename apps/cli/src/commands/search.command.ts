@@ -3,8 +3,11 @@ import * as fs from 'fs';
 import { JobsService } from '../../../api/src/jobs/jobs.service';
 import {
   ScraperInputDto, JobPostDto, Site, Country,
-  DescriptionFormat, JobType,
+  DescriptionFormat, JobType, ExclusionPreset, DatePostedBasis,
 } from '@ever-jobs/models';
+import {
+  applyJobExclusions, exclusionSpecFromInput, hasExclusionInput,
+} from '@ever-jobs/common';
 import { AnalyticsService } from '@ever-jobs/analytics';
 import {
   CALLER_OVERRIDES_FLAG_DESCRIPTION,
@@ -20,6 +23,8 @@ interface SearchOptions extends CrawlCliOptions {
   searchTerm?: string;
   googleSearchTerm?: string;
   location?: string;
+  /** Spec 1700 — several locations, each searched per source. */
+  locations?: string[];
   distance?: number;
   remote?: boolean;
   jobType?: string;
@@ -30,6 +35,7 @@ interface SearchOptions extends CrawlCliOptions {
   country?: string;
   descriptionFormat?: string;
   linkedinFetchDescription?: boolean;
+  linkedinFetchCompanyDetails?: boolean;
   linkedinCompanyIds?: number[];
   enforceAnnualSalary?: boolean;
   timeout?: number;
@@ -46,6 +52,41 @@ interface SearchOptions extends CrawlCliOptions {
   bd?: boolean;
   companySlug?: string;
   upworkAuthJson?: string;
+  /** Spec 1700 — exclusion filters, applied after the search. */
+  excludeTitle?: string[];
+  excludeKeyword?: string[];
+  excludePreset?: string[];
+}
+
+/**
+ * Apply the input's exclusion fields to `jobs` (Spec 1700). The CLI calls
+ * `JobsService` directly (no aggregator), so it filters here. The summary goes
+ * to stderr so stdout stays clean JSON/CSV. Returns `jobs` untouched when no
+ * exclusion field was supplied.
+ */
+export function applyCliExclusions(input: ScraperInputDto, jobs: JobPostDto[]): JobPostDto[] {
+  if (!hasExclusionInput(input)) return jobs;
+  const { kept, metrics } = applyJobExclusions(jobs, exclusionSpecFromInput(input));
+  const byTerm = metrics.byTerm.map((t) => `${t.term}=${t.count}`).join(', ');
+  console.error(`Excluded ${metrics.excludedCount} jobs${byTerm ? ` (by term: ${byTerm})` : ''}`);
+  for (const ignored of metrics.ignoredTerms) {
+    console.error(`Ignored exclusion term "${ignored.term}" (${ignored.reason})`);
+  }
+  return kept;
+}
+
+/**
+ * The table's "Posted at (UTC)" cell (Spec 1696): `datePostedAt` as
+ * `YYYY-MM-DD HH:MM`, prefixed `~` when it was estimated from an age label
+ * (`datePostedBasis: relative`). Empty when the source gave no instant.
+ */
+export function postedAtLabel(job: Pick<JobPostDto, 'datePostedAt' | 'datePostedBasis'>): string {
+  const at = job.datePostedAt;
+  if (typeof at !== 'string') return '';
+  const ms = Date.parse(at);
+  if (!Number.isFinite(ms)) return '';
+  const text = new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
+  return job.datePostedBasis === DatePostedBasis.RELATIVE ? `~${text}` : text;
 }
 
 @Command({
@@ -149,6 +190,8 @@ export class SearchCommand extends CommandRunner {
       country: options.country as Country | undefined,
       descriptionFormat: (options.descriptionFormat as DescriptionFormat) ?? DescriptionFormat.MARKDOWN,
       linkedinFetchDescription: options.linkedinFetchDescription ?? false,
+      // Spec 1701: left unset without the flag so EVER_JOBS_LINKEDIN_FETCH_COMPANY_DETAILS still applies.
+      ...(options.linkedinFetchCompanyDetails ? { linkedinFetchCompanyDetails: true } : {}),
       linkedinCompanyIds: options.linkedinCompanyIds,
       enforceAnnualSalary: options.enforceAnnualSalary ?? false,
       requestTimeout: options.timeout ?? 60,
@@ -159,19 +202,26 @@ export class SearchCommand extends CommandRunner {
       rateDelayMax: options.rateDelayMax,
       companySlug: options.companySlug,
       auth,
+      // Spec 1700 — set only when given, so a plain search builds the same input as before.
+      ...(options.locations ? { locations: options.locations } : {}),
+      ...(options.excludeTitle ? { excludeTitleTerms: options.excludeTitle } : {}),
+      ...(options.excludeKeyword ? { excludeKeywords: options.excludeKeyword } : {}),
+      ...(options.excludePreset ? { excludePresets: options.excludePreset as ExclusionPreset[] } : {}),
     });
     return applyCrawlCliOptions(input, options);
   }
 
   private async executeAndOutput(input: ScraperInputDto, options: SearchOptions): Promise<void> {
     const sitesLabel = input.siteType?.join(', ') ?? 'all';
-    console.error(`Searching ${sitesLabel} for "${input.searchTerm ?? ''}"...`);
+    const locationsLabel = input.locations?.length ? ` in ${input.locations.length} locations` : '';
+    console.error(`Searching ${sitesLabel} for "${input.searchTerm ?? ''}"${locationsLabel}...`);
 
     const startTime = Date.now();
-    const jobs = await this.jobsService.searchJobs(input);
+    const found = await this.jobsService.searchJobs(input);
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
-    console.error(`Found ${jobs.length} jobs in ${elapsed}s`);
+    console.error(`Found ${found.length} jobs in ${elapsed}s`);
+    const jobs = applyCliExclusions(input, found);
 
     // BD intelligence mode — output company analysis instead of raw jobs
     if (options.bd) {
@@ -249,6 +299,8 @@ export class SearchCommand extends CommandRunner {
       'id', 'site', 'title', 'companyName', 'location', 'jobUrl',
       'datePosted', 'jobType', 'isRemote', 'minAmount', 'maxAmount',
       'currency', 'interval', 'description',
+      // Spec 1696 — appended, so every column above keeps its position.
+      'datePostedAt', 'datePostedPrecision', 'datePostedBasis',
     ];
 
     const escape = (val: any): string => {
@@ -279,8 +331,9 @@ export class SearchCommand extends CommandRunner {
   private toTable(jobs: JobPostDto[]): string {
     if (jobs.length === 0) return 'No jobs found.';
 
-    const cols = ['Site', 'Title', 'Company', 'Location', 'Posted', 'Remote'];
-    const widths = [12, 40, 25, 25, 12, 7];
+    // Spec 1696 — "Posted at (UTC)" appended after the original columns.
+    const cols = ['Site', 'Title', 'Company', 'Location', 'Posted', 'Remote', 'Posted at (UTC)'];
+    const widths = [12, 40, 25, 25, 12, 7, 17];
 
     const pad = (str: string, width: number): string =>
       str.length > width ? str.slice(0, width - 1) + '…' : str.padEnd(width);
@@ -301,6 +354,7 @@ export class SearchCommand extends CommandRunner {
         pad(locStr, widths[3]),
         pad(dateStr, widths[4]),
         pad(remoteStr, widths[5]),
+        pad(postedAtLabel(job), widths[6]),
       ].join(' │ ');
     });
 
@@ -369,13 +423,49 @@ export class SearchCommand extends CommandRunner {
   @Option({ flags: '-l, --location <location>', description: 'Location to search near' })
   parseLocation(val: string): string { return val; }
 
+  @Option({
+    flags: '--locations <locations...>',
+    description:
+      'Several locations in one search; each source is searched once per location, one after another, and ' +
+      'same-source duplicates are removed (e.g. --locations "New York, NY" "Chicago, IL"). The server caps the ' +
+      'list at EVER_JOBS_SEARCH_MAX_LOCATIONS (default 10).',
+  })
+  parseLocations(val: string, acc?: string[]): string[] {
+    return (acc ?? []).concat(val);
+  }
+
+  @Option({
+    flags: '--exclude-title <terms...>',
+    description:
+      'Drop jobs whose TITLE contains any of these words/phrases (whole-word, case/accent-insensitive, trailing * = prefix, never a regex)',
+  })
+  parseExcludeTitle(val: string, acc?: string[]): string[] {
+    return (acc ?? []).concat(val);
+  }
+
+  @Option({
+    flags: '--exclude-keyword <terms...>',
+    description: 'Drop jobs whose TITLE or DESCRIPTION contains any of these words/phrases (same matching rules)',
+  })
+  parseExcludeKeyword(val: string, acc?: string[]): string[] {
+    return (acc ?? []).concat(val);
+  }
+
+  @Option({
+    flags: '--exclude-preset <presets...>',
+    description: `Curated exclusion lists matched against title + description: ${Object.values(ExclusionPreset).join(', ')}`,
+  })
+  parseExcludePreset(val: string, acc?: string[]): string[] {
+    return (acc ?? []).concat(val);
+  }
+
   @Option({ flags: '-d, --distance <miles>', description: 'Search radius in miles (default: 50)' })
   parseDistance(val: string): number { return parseInt(val, 10); }
 
   @Option({ flags: '-r, --remote', description: 'Filter for remote jobs only' })
   parseRemote(): boolean { return true; }
 
-  @Option({ flags: '--job-type <type>', description: 'Filter by job type: fulltime, parttime, internship, contract' })
+  @Option({ flags: '--job-type <type>', description: `Filter by job type: ${Object.values(JobType).join(', ')}` })
   parseJobType(val: string): string { return val; }
 
   @Option({ flags: '--easy-apply', description: 'Filter for easy-apply / hosted jobs' })
@@ -398,6 +488,9 @@ export class SearchCommand extends CommandRunner {
 
   @Option({ flags: '--linkedin-fetch-description', description: 'Fetch full LinkedIn descriptions (slower)' })
   parseLinkedinFetchDescription(): boolean { return true; }
+
+  @Option({ flags: '--linkedin-fetch-company-details', description: 'Fetch each LinkedIn company page once to fill website, size, HQ and industry (slower; one request per company, capped at 25)' })
+  parseLinkedinFetchCompanyDetails(): boolean { return true; }
 
   @Option({ flags: '--linkedin-company-ids [ids...]', description: 'Filter LinkedIn by company IDs' })
   parseLinkedinCompanyIds(val: string, acc?: number[]): number[] {

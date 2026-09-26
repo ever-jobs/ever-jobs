@@ -1,5 +1,6 @@
 import {
   DEFAULT_MAX_LOCATION_LABEL_LENGTH,
+  ISO_ALPHA2_TO_ALPHA3,
   LOCATION_PARSER_ENV,
   canonicalCountryName,
   findUsAddressSnippet,
@@ -7,8 +8,10 @@ import {
   normalizeCountryOnly,
   parseLocationList,
   parseLocationText,
+  regionNameFromCode,
   resetLocationParserEnvCache,
 } from '../src';
+import type { ParseLocationOptions } from '../src';
 
 describe('parseLocationText', () => {
   it('splits a plain US city and state label', () => {
@@ -1156,5 +1159,443 @@ describe('golden values (Spec 1689)', () => {
       city: 'Denver, CO; San Francisco, CA',
     });
     expect(parsed.location?.country).toBeUndefined();
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────── *
+ *  Country coverage: Slovenia's code, Sri Lanka, ISO 3166 (Spec 1699)
+ * ────────────────────────────────────────────────────────────────────── */
+
+type GeoFields = Record<'city' | 'state' | 'country' | 'name', string | undefined>;
+
+/** Exact geography of one parsed label: no field beyond the expected ones. */
+function exactGeo(label: string, options?: ParseLocationOptions): GeoFields {
+  const loc = parseLocationText(label, options).location;
+  return {
+    city: loc?.city ?? undefined,
+    state: loc?.state ?? undefined,
+    country: loc?.country ?? undefined,
+    name: loc?.name ?? undefined,
+  };
+}
+
+function expectGeo(
+  label: string,
+  expected: Partial<GeoFields>,
+  options?: ParseLocationOptions,
+): void {
+  expect([label, exactGeo(label, options)]).toEqual([
+    label,
+    {
+      city: undefined,
+      state: undefined,
+      country: undefined,
+      name: undefined,
+      ...expected,
+    },
+  ]);
+}
+
+/** Codes whose NAME the parser never reads as a country (US territories, Georgia). */
+const ISO_NAME_NOT_A_COUNTRY = new Set(['AS', 'GE', 'GU', 'MP', 'PR', 'UM', 'VI']);
+
+/**
+ * Upper-case alpha-3 codes left unresolved on purpose: everyday words,
+ * abbreviations and airport codes first, plus the US territories.
+ */
+const AMBIGUOUS_ALPHA3 = [
+  'ALA', 'AND', 'ARM', 'ASM', 'ATF', 'BEN', 'BLM', 'BTN', 'CAF', 'CIV', 'COD',
+  'COM', 'DJI', 'DMA', 'DOM', 'ETH', 'GEO', 'GIN', 'GTM', 'GUM', 'GUY', 'IOT',
+  'JAM', 'KEN', 'LCA', 'MAC', 'MCO', 'MNP', 'NAM', 'PNG', 'PRI', 'SDN', 'SEN',
+  'SSD', 'SUR', 'TLS', 'TON', 'TUV', 'UGA', 'UMI', 'VAT', 'VIR',
+];
+
+/**
+ * Distinct labels trimmed from one public company board's official job API
+ * (probed 2026-09-24): the shapes and countries the configured-only lookup
+ * got wrong, plus configured-country controls.
+ */
+const LIVE_BOARD_LABELS = [
+  'Almaty, Kazakhstan', 'Shymkent, Kazakhstan', 'Astana, Kazakhstan',
+  'Almaty, Kazakhstan; Astana, Kazakhstan', 'Tirana, Albania',
+  'Pristina, Kosovo; Tirana, Albania', 'Belgrade, Serbia', 'Novi Sad, Serbia',
+  'Kragujevac, Serbia', 'Belgrade - Savski Venac, Serbia', 'Remote; Serbia',
+  'Baku, Azerbaijan', 'Skopje, North Macedonia', 'Reykjavik, Iceland',
+  'Ljubljana, Slovenia', 'Tbilisi, Georgia', 'Batumi, Georgia',
+  'Frankfurt am Main, Germany',
+  'Bielefeld, Germany; Cologne, Germany; Dortmund, Germany; Düsseldorf, Germany; Essen, Germany; Münster, Germany',
+  'Krakow, Poland; Remote', 'Poland', 'Poland; Remote', 'Zagreb, Croatia',
+  'Ramat Gan, Israel', 'Tel Aviv-Yafo, Israel',
+  'Bratislava, Slovakia; Warsaw, Poland; Wien, Austria; Zagreb, Croatia',
+  'OSLO, Norway',
+  'BERGEN, Norway; OSLO, Norway; Stavanger, Norway; Trondheim, Norway',
+  'Birkirkara, Malta; Limassol, Cyprus; Nicosia, Cyprus', 'Malta',
+  'San Ġwann, Malta', 'Brno, Czechia', 'Košice, Slovakia; Slovakia',
+  'Ružinov, Slovakia', 'Søborg, Denmark', 'Örebro, Sweden',
+  'Athens, Greece; Cyprus; Frankfurt am Main, Germany; Munich, Germany',
+  'Berlin, Germany; Helsinki, Finland; London, United Kingdom',
+  'Luxembourg, Luxembourg', 'Sofia, Bulgaria', 'Bucharest, Romania',
+  'Riga, Latvia', 'Vilnius, Lithuania', 'Tallinn, Estonia', 'Budapest, Hungary',
+  'Finland', 'Sweden',
+];
+
+describe('every ISO 3166-1 country (Spec 1699)', () => {
+  withParserEnv();
+
+  it.each([
+    [
+      'Colombo, Western Province, Sri Lanka',
+      { city: 'Colombo', state: 'Western Province', country: 'Sri Lanka' },
+    ],
+    ['Colombo, Sri Lanka', { city: 'Colombo', country: 'Sri Lanka' }],
+    ['Sri Lanka', { country: 'Sri Lanka' }],
+    ['Remote - Sri Lanka', { country: 'Sri Lanka' }],
+    ['Remote in Sri Lanka', { country: 'Sri Lanka' }],
+    ['Colombo, LKA', { city: 'Colombo', country: 'Sri Lanka' }],
+    ['Colombo, LK', { city: 'Colombo', country: 'Sri Lanka' }],
+    ['Almaty, Kazakhstan', { city: 'Almaty', country: 'Kazakhstan' }],
+    ['Belgrade, Serbia', { city: 'Belgrade', country: 'Serbia' }],
+    ['Skopje, North Macedonia', { city: 'Skopje', country: 'North Macedonia' }],
+    ['Skopje, Macedonia', { city: 'Skopje', country: 'North Macedonia' }],
+    ['Pristina, Kosovo', { city: 'Pristina', country: 'Kosovo' }],
+    ['Kathmandu, Nepal', { city: 'Kathmandu', country: 'Nepal' }],
+    ['Reykjavik, Iceland', { city: 'Reykjavik', country: 'Iceland' }],
+    ['Baku, Azerbaijan', { city: 'Baku', country: 'Azerbaijan' }],
+    ['Nairobi, Kenya', { city: 'Nairobi', country: 'Kenya' }],
+    ['Abidjan, Ivory Coast', { city: 'Abidjan', country: 'Côte d’Ivoire' }],
+    ["Abidjan, Cote d'Ivoire", { city: 'Abidjan', country: 'Côte d’Ivoire' }],
+    ['Abidjan, Côte d’Ivoire', { city: 'Abidjan', country: 'Côte d’Ivoire' }],
+    ['Yangon, Myanmar', { city: 'Yangon', country: 'Myanmar' }],
+    ['Yangon, Burma', { city: 'Yangon', country: 'Myanmar' }],
+    ['Yangon, Myanmar (Burma)', { city: 'Yangon', country: 'Myanmar' }],
+    ['Kinshasa, DR Congo', { city: 'Kinshasa', country: 'DR Congo' }],
+    [
+      'Kinshasa, Democratic Republic of the Congo',
+      { city: 'Kinshasa', country: 'DR Congo' },
+    ],
+    ['Kinshasa, Congo - Kinshasa', { city: 'Kinshasa', country: 'DR Congo' }],
+    ['Kinshasa, CD', { city: 'Kinshasa', country: 'DR Congo' }],
+    [
+      'Brazzaville, Republic of the Congo',
+      { city: 'Brazzaville', country: 'Republic of the Congo' },
+    ],
+    [
+      'Sarajevo, Bosnia and Herzegovina',
+      { city: 'Sarajevo', country: 'Bosnia & Herzegovina' },
+    ],
+    [
+      'Sarajevo, Bosnia & Herzegovina',
+      { city: 'Sarajevo', country: 'Bosnia & Herzegovina' },
+    ],
+    [
+      'Port of Spain, Trinidad & Tobago',
+      { city: 'Port of Spain', country: 'Trinidad & Tobago' },
+    ],
+    ['Willemstad, Curacao', { city: 'Willemstad', country: 'Curaçao' }],
+    ['Castries, Saint Lucia', { city: 'Castries', country: 'St. Lucia' }],
+    ['Hanoi, Viet Nam', { city: 'Hanoi', country: 'Vietnam' }],
+    ['Amsterdam, The Netherlands', { city: 'Amsterdam', country: 'Netherlands' }],
+    [
+      'Serbia - Belgrade, Savski Venac',
+      { city: 'Belgrade', state: 'Savski Venac', country: 'Serbia' },
+    ],
+  ])('%s', (label, expected) => {
+    expectGeo(label, expected);
+  });
+
+  const codes = Object.keys(ISO_ALPHA2_TO_ALPHA3).filter(
+    (code) => !ISO_NAME_NOT_A_COUNTRY.has(code),
+  );
+
+  it.each(codes)(
+    '%s: its CLDR name, alpha-2 and alpha-3 agree, and the label re-parses to itself',
+    (alpha2) => {
+      const cldr = regionNameFromCode(alpha2) as string;
+      const display = normalizeCountryOnly(alpha2) as string;
+      expect(display).not.toBeNull();
+      expect([cldr, normalizeCountryOnly(cldr)]).toEqual([cldr, display]);
+      const alpha3 = ISO_ALPHA2_TO_ALPHA3[alpha2];
+      if (!AMBIGUOUS_ALPHA3.includes(alpha3)) {
+        expect([alpha3, normalizeCountryOnly(alpha3)]).toEqual([alpha3, display]);
+      }
+      // the CLDR name in a label's country slot
+      expectGeo(`Someplace, ${cldr}`, { city: 'Someplace', country: display });
+      // the emitted label reads back as the same entry
+      const once = parseLocationList([`Someplace, ${cldr}`]).labels;
+      expect(once).toEqual([`Someplace, ${display}`]);
+      expect(parseLocationList(once).labels).toEqual(once);
+    },
+  );
+
+  it('leaves exactly the ambiguous upper-case alpha-3 codes unresolved', () => {
+    const unresolved = Object.values(ISO_ALPHA2_TO_ALPHA3).filter(
+      (alpha3) => normalizeCountryOnly(alpha3) === null,
+    );
+    expect(unresolved.sort()).toEqual([...AMBIGUOUS_ALPHA3].sort());
+  });
+
+  it('reads a non-configured alpha-3 only as an upper-case token', () => {
+    expect(normalizeCountryOnly('LKA')).toBe('Sri Lanka');
+    expect(normalizeCountryOnly('lka')).toBeNull();
+    expect(normalizeCountryOnly('Lka')).toBeNull();
+    for (const word of ['AND', 'MAC', 'VAT', 'IOT', 'GEO', 'ETH', 'NAM', 'MCO']) {
+      expect([word, normalizeCountryOnly(word)]).toEqual([word, null]);
+    }
+    // the configured (legacy) alpha-3 codes stay case-insensitive
+    expect(normalizeCountryOnly('gbr')).toBe('United Kingdom');
+    expect(normalizeCountryOnly('Deu')).toBe('Germany');
+  });
+
+  it('never reads a pseudo, reserved or retired region NAME as a country', () => {
+    for (const name of [
+      'European Union', 'Eurozone', 'United Nations', 'Pseudo-Accents',
+      'Pseudo-Bidi', 'Outlying Oceania', 'Unknown Region', 'Ascension Island',
+      'Canary Islands', 'Tristan da Cunha', 'Diego Garcia', 'Ceuta & Melilla',
+      'Clipperton Island',
+    ]) {
+      expect([name, normalizeCountryOnly(name)]).toEqual([name, null]);
+    }
+  });
+
+  it('keeps a comma part that is a country name with "&" as one site', () => {
+    expect(parseLocationList(['Sarajevo, Bosnia & Herzegovina']).labels).toEqual([
+      'Sarajevo, Bosnia & Herzegovina',
+    ]);
+    expect(
+      parseLocationList(['Port of Spain, Trinidad & Tobago; Kingston, Jamaica'])
+        .labels,
+    ).toEqual(['Port of Spain, Trinidad & Tobago', 'Kingston, Jamaica']);
+    // real '&' site lists still split
+    expect(parseLocationList(['Denver, CO & San Francisco, CA']).labels).toEqual([
+      'Denver, CO',
+      'San Francisco, CA',
+    ]);
+  });
+
+  it('keeps the connector check linear on a long uncapped label', () => {
+    const opts = { maxLabelLength: 0 };
+    parseLocationList(['Sarajevo, Bosnia & Herzegovina'], opts); // warm up
+    const manyNames = `Sarajevo, ${'Bosnia & Herzegovina, '.repeat(2_000)}Bosnia`;
+    const oneLongPart = `Sarajevo, ${'Bosnia & '.repeat(4_000)}Herzegovina`;
+    expect(bestOf3Ms(() => parseLocationList([manyNames], opts))).toBeLessThan(500);
+    expect(bestOf3Ms(() => parseLocationList([oneLongPart], opts))).toBeLessThan(500);
+  });
+});
+
+describe('canonical country names agree across forms (Spec 1699)', () => {
+  withParserEnv();
+
+  it.each([
+    ['Slovenia', ['Slovenia', 'slovenia', 'SI', 'si', 'SVN', 'svn', 'SLOVENIA']],
+    ['Sri Lanka', ['Sri Lanka', 'srilanka', 'LK', 'LKA', 'SRILANKA']],
+    ['Czechia', ['Czechia', 'czech republic', 'CZ', 'CZE', 'cze', 'CZECHREPUBLIC']],
+    ['Türkiye', ['Türkiye', 'Turkey', 'TR', 'TUR', 'TURKEY']],
+    ['Hong Kong SAR China', ['Hong Kong', 'Hong Kong SAR', 'HK', 'HKG', 'HONGKONG']],
+    ['United Arab Emirates', ['United Arab Emirates', 'UAE', 'U.A.E.', 'AE', 'ARE']],
+    ['United States', ['United States', 'USA', 'U.S.', 'US', 'United States of America']],
+    ['DR Congo', ['DR Congo', 'Democratic Republic of the Congo', 'Congo - Kinshasa', 'CD']],
+    ['Myanmar', ['Myanmar', 'Burma', 'Myanmar (Burma)', 'MM', 'MMR']],
+    ['Côte d’Ivoire', ['Côte d’Ivoire', "Cote d'Ivoire", 'Ivory Coast', 'CI']],
+    ['Kosovo', ['Kosovo', 'XK', 'XKX']],
+  ])('%s', (display, forms) => {
+    for (const form of forms) {
+      expect([form, canonicalCountryName(form)]).toEqual([form, display]);
+    }
+  });
+});
+
+describe('Slovenia is not Sierra Leone (Spec 1699)', () => {
+  withParserEnv();
+
+  it.each([
+    'Ljubljana, Slovenia',
+    'Slovenia',
+    'Remote - Slovenia',
+    'Remote in Slovenia',
+    'SI',
+    'SVN',
+    'Ljubljana, SI',
+  ])('%s', (label) => {
+    expect(parseLocationText(label).location?.country).toBe('Slovenia');
+  });
+
+  it('is a data fix: the legacy lookup reads Slovenia too', () => {
+    const legacy = { isoCountryNames: false };
+    expect(parseLocationText('Ljubljana, Slovenia', legacy).location?.country).toBe(
+      'Slovenia',
+    );
+    expect(normalizeCountryOnly('slovenia', legacy)).toBe('Slovenia');
+    expect(canonicalCountryName('SLOVENIA', legacy)).toBe('Slovenia');
+  });
+
+  it('still resolves Sierra Leone by its own name and code', () => {
+    expect(normalizeCountryOnly('Sierra Leone')).toBe('Sierra Leone');
+    expect(normalizeCountryOnly('SL')).toBe('Sierra Leone');
+    expect(normalizeCountryOnly('SLE')).toBe('Sierra Leone');
+    expectGeo('Freetown, Sierra Leone', {
+      city: 'Freetown',
+      country: 'Sierra Leone',
+    });
+  });
+});
+
+describe('US readings survive the ISO country names (Spec 1699)', () => {
+  withParserEnv();
+
+  it.each([
+    ['Jamaica, NY', { city: 'Jamaica', state: 'NY' }],
+    ['Lebanon, PA', { city: 'Lebanon', state: 'PA' }],
+    ['Lebanon, Pennsylvania', { city: 'Lebanon', state: 'PA' }],
+    ['Peru, IN', { city: 'Peru', state: 'IN' }],
+    ['Mexico, MO', { city: 'Mexico', state: 'MO' }],
+    ['Poland, OH', { city: 'Poland', state: 'OH' }],
+    ['Norway, ME', { city: 'Norway', state: 'ME' }],
+    ['Denmark, SC', { city: 'Denmark', state: 'SC' }],
+    ['Jordan, MN', { city: 'Jordan', state: 'MN' }],
+    ['Cuba, NY', { city: 'Cuba', state: 'NY' }],
+    ['Atlanta, Georgia', { city: 'Atlanta', state: 'GA' }],
+    ['San Juan, Puerto Rico', { city: 'San Juan', state: 'Puerto Rico' }],
+    ['Hagatna, Guam', { city: 'Hagatna', state: 'Guam' }],
+    [
+      'Charlotte Amalie, U.S. Virgin Islands',
+      { city: 'Charlotte Amalie', state: 'U.S. Virgin Islands' },
+    ],
+  ])('%s is a US town, not the country', (label, expected) => {
+    expectGeo(label, expected);
+  });
+
+  it.each([
+    ['Lebanon, Boone County, IN', 'IN'],
+    ['Jordan, Scott County, MN', 'MN'],
+    ['Cuba, Crawford County, MO', 'MO'],
+    ['Peru, Miami County, IN', 'IN'],
+    ['Mexico, Audrain County, MO', 'MO'],
+    ['Brazil, Clay County, IN', 'IN'],
+    ['Norway, Oxford County, ME', 'ME'],
+    ['Denmark, Bamberg County, SC', 'SC'],
+    ['Lebanon, St. Clair County, IL', 'IL'],
+  ])('%s keeps the US state tail', (label, state) => {
+    expectGeo(label, { city: label.slice(0, label.lastIndexOf(',')), state });
+  });
+
+  it('keeps "Country, its own code" and "United States, ST" readings', () => {
+    expectGeo('India, IN', { state: 'IN', country: 'India' });
+    expectGeo('Germany, DE', { state: 'DE', country: 'Germany' });
+    expectGeo('United States, CA', { state: 'CA', country: 'United States' });
+  });
+
+  it('reads "Georgia" as the country only next to a Georgian place', () => {
+    expectGeo('Georgia', { city: 'Georgia' });
+    expectGeo('Tbilisi, Georgia', { city: 'Tbilisi', country: 'Georgia' });
+    expectGeo('Batumi, Adjara, Georgia', {
+      city: 'Batumi',
+      state: 'Adjara',
+      country: 'Georgia',
+    });
+    expectGeo('Tbilisi, GE', { city: 'Tbilisi', country: 'Georgia' });
+    expectGeo('Atlanta, Georgia', { city: 'Atlanta', state: 'GA' });
+    expectGeo('Savannah, Chatham County, Georgia', {
+      city: 'Savannah, Chatham County',
+      state: 'GA',
+    });
+    expect(normalizeCountryOnly('Georgia')).toBeNull();
+    // qualifier and dash readings are unchanged
+    for (const label of ['Remote - Georgia', 'Georgia - Atlanta, Midtown', 'GA - Remote']) {
+      expect([label, exactGeo(label)]).toEqual([
+        label,
+        exactGeo(label, { isoCountryNames: false }),
+      ]);
+    }
+  });
+
+  it('reads a country NAME as a dash prefix, never a code', () => {
+    expectGeo('Germany - Berlin, Mitte', {
+      city: 'Berlin',
+      state: 'Mitte',
+      country: 'Germany',
+    });
+    expect(parseLocationText('US - GA - Remote, Atlanta').location).toMatchObject({
+      country: 'United States',
+    });
+    expect(parseLocationText('GA - Remote').location).toMatchObject({ state: 'GA' });
+  });
+});
+
+describe('isoCountryNames: false restores the configured-only lookup (Spec 1699)', () => {
+  const env = withParserEnv();
+  const legacy = { isoCountryNames: false };
+
+  it('keeps an unconfigured country name as the subdivision', () => {
+    expectGeo('Almaty, Kazakhstan', { city: 'Almaty', state: 'Kazakhstan' }, legacy);
+    expectGeo(
+      'Colombo, Western Province, Sri Lanka',
+      // Sri Lanka is now a configured input country, so its name resolves
+      { city: 'Colombo', state: 'Western Province', country: 'Sri Lanka' },
+      legacy,
+    );
+    expect(normalizeCountryOnly('Kazakhstan', legacy)).toBeNull();
+    expect(normalizeCountryOnly('LKA', legacy)).toBeNull();
+  });
+
+  it('keeps the legacy alpha-3 spellings', () => {
+    expect(normalizeCountryOnly('CZE', legacy)).toBe('Czech Republic');
+    expect(normalizeCountryOnly('TUR', legacy)).toBe('Turkey');
+    expect(canonicalCountryName('HKG', legacy)).toBe('Hong Kong');
+    expect(normalizeCountryOnly('CD', legacy)).toBe('Congo - Kinshasa');
+  });
+
+  it('keeps the legacy US-town and Georgia readings', () => {
+    expectGeo('Peru, IN', { state: 'IN', country: 'Peru' }, legacy);
+    expectGeo('Tbilisi, Georgia', { city: 'Tbilisi', state: 'GA' }, legacy);
+    expect(
+      parseLocationList(['Sarajevo, Bosnia & Herzegovina'], legacy).locations,
+    ).toHaveLength(2);
+  });
+
+  it('EVER_JOBS_LOCATION_ISO_COUNTRY_NAMES=false sets it as the default', () => {
+    env.set(LOCATION_PARSER_ENV.isoCountryNames, 'false');
+    expectGeo('Almaty, Kazakhstan', { city: 'Almaty', state: 'Kazakhstan' });
+    expect(normalizeCountryOnly('CZE')).toBe('Czech Republic');
+    expect(canonicalCountryName('Kazakhstan')).toBeNull();
+    // a per-call option still wins over the env
+    expectGeo(
+      'Almaty, Kazakhstan',
+      { city: 'Almaty', country: 'Kazakhstan' },
+      { isoCountryNames: true },
+    );
+    expect(normalizeCountryOnly('CZE', { isoCountryNames: true })).toBe('Czechia');
+  });
+});
+
+describe('live board labels (Spec 1699)', () => {
+  withParserEnv();
+
+  it.each(LIVE_BOARD_LABELS)('%s: every site has a country, none in state', (label) => {
+    const { locations } = parseLocationList([label]);
+    expect(locations.length).toBeGreaterThan(0);
+    for (const loc of locations) {
+      expect([label, Boolean(loc.country)]).toEqual([label, true]);
+      expect([label, loc.state ?? null]).toEqual([label, null]);
+      expect(loc.country).not.toBe('Sierra Leone');
+    }
+  });
+
+  it('pins the countries the configured-only lookup got wrong', () => {
+    const countriesOf = (label: string) =>
+      parseLocationList([label]).locations.map((l) => l.country);
+    expect(countriesOf('Ljubljana, Slovenia')).toEqual(['Slovenia']);
+    expect(countriesOf('Tbilisi, Georgia')).toEqual(['Georgia']);
+    expect(countriesOf('Almaty, Kazakhstan; Astana, Kazakhstan')).toEqual([
+      'Kazakhstan',
+      'Kazakhstan',
+    ]);
+    expect(countriesOf('Pristina, Kosovo; Tirana, Albania')).toEqual([
+      'Kosovo',
+      'Albania',
+    ]);
+    expect(countriesOf('Remote; Serbia')).toEqual(['Serbia']);
+    expect(
+      parseLocationList(['Almaty, Kazakhstan; Astana, Kazakhstan']).location,
+    ).toMatchObject({ country: 'Kazakhstan' });
   });
 });

@@ -3,7 +3,14 @@ import { Test } from '@nestjs/testing';
 import { ValidationPipe } from '@nestjs/common';
 import { GraphQLSchemaBuilderModule, GraphQLSchemaFactory } from '@nestjs/graphql';
 import { GraphQLObjectType, GraphQLSchema, graphql, printType } from 'graphql';
-import { JobPostDto, LocationDto, OfficeDto, Site } from '@ever-jobs/models';
+import {
+  DatePostedBasis,
+  DatePostedPrecision,
+  JobPostDto,
+  LocationDto,
+  OfficeDto,
+  Site,
+} from '@ever-jobs/models';
 import { JobsResolver } from '../jobs.resolver';
 import { SearchJobsInput } from '../gql-types';
 
@@ -156,6 +163,87 @@ describe('GraphQL schema — additive location fields (Spec 1689)', () => {
       offices: null,
       location: { city: 'Berlin', name: null, text: null },
     });
+  });
+});
+
+/**
+ * Spec 1696 — the posting-time detail (`datePostedAt`, `datePostedPrecision`,
+ * `datePostedBasis`) reaches GraphQL, not only REST. Same real schema as above.
+ */
+describe('GraphQL schema — posted-time fields (Spec 1696)', () => {
+  let schema: GraphQLSchema;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [GraphQLSchemaBuilderModule],
+    }).compile();
+    await moduleRef.init();
+    schema = await moduleRef.get(GraphQLSchemaFactory).create([JobsResolver]);
+  });
+
+  it('exposes the three fields on JobPostGql as nullable Strings, documenting every wire value', () => {
+    const fields = (schema.getType('JobPostGql') as GraphQLObjectType).getFields();
+    expect(String(fields.datePostedAt.type)).toBe('String');
+    expect(String(fields.datePostedPrecision.type)).toBe('String');
+    expect(String(fields.datePostedBasis.type)).toBe('String');
+    for (const value of Object.values(DatePostedPrecision)) {
+      expect(fields.datePostedPrecision.description).toContain(value);
+    }
+    for (const value of Object.values(DatePostedBasis)) {
+      expect(fields.datePostedBasis.description).toContain(value);
+    }
+  });
+
+  it('resolves them straight off a JobPostDto, with the REST wire values, and null when absent', async () => {
+    const detailed = new JobPostDto({
+      id: 'li-1',
+      site: Site.LINKEDIN,
+      title: 'Engineer',
+      jobUrl: 'https://example.com/li-1',
+      datePosted: '2026-09-24',
+      datePostedAt: '2026-09-24T19:34:00.000Z',
+      datePostedPrecision: DatePostedPrecision.MINUTE,
+      datePostedBasis: DatePostedBasis.RELATIVE,
+    });
+    const dateOnly = new JobPostDto({
+      id: 'lever-1',
+      site: Site.LEVER,
+      title: 'Operator',
+      jobUrl: 'https://example.com/lever-1',
+      datePosted: '2026-09-20',
+    });
+
+    const queryType = schema.getQueryType()!;
+    queryType.getFields().searchJobs.resolve = () => ({
+      count: 2,
+      jobs: [detailed, dateOnly],
+      cached: false,
+      deduped: false,
+      rawCount: 2,
+    });
+
+    const result = await graphql({
+      schema,
+      source: `{ searchJobs(input: { searchTerm: "x" }) { jobs { id datePosted datePostedAt datePostedPrecision datePostedBasis } } }`,
+    });
+
+    expect(result.errors).toBeUndefined();
+    expect((result.data as any).searchJobs.jobs).toEqual([
+      {
+        id: 'li-1',
+        datePosted: '2026-09-24',
+        datePostedAt: '2026-09-24T19:34:00.000Z',
+        datePostedPrecision: 'minute',
+        datePostedBasis: 'relative',
+      },
+      {
+        id: 'lever-1',
+        datePosted: '2026-09-20',
+        datePostedAt: null,
+        datePostedPrecision: null,
+        datePostedBasis: null,
+      },
+    ]);
   });
 });
 

@@ -130,6 +130,7 @@ describe('test:core coverage (Spec 1689)', () => {
     'apps/api/__tests__/jobs/corpus-signals.spec.ts',
     'apps/api/__tests__/integration/source-ats-batch-1.integration.spec.ts',
     'apps/mcp/__tests__/tools.spec.ts',
+    'apps/cli/__tests__/search-filters.command.spec.ts',
     'apps/cli/__tests__/crawl-options.spec.ts',
   ])('includes %s', (file) => {
     expect(include.test(file)).toBe(true);

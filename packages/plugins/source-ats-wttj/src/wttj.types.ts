@@ -11,6 +11,14 @@
  * breaks the parser.
  */
 
+import {
+  CompensationDto,
+  DatePostedBasis,
+  DatePostedPrecision,
+  JobType,
+  LocationDto,
+} from '@ever-jobs/models';
+
 /**
  * A single structured office (workplace) attached to a job hit. WTTJ splits a role's
  * location into one or more offices, each carrying city / state / country parts.
@@ -52,6 +60,20 @@ export interface WttjOrganization {
   name?: string | null;
   /** Internal company reference id. */
   reference?: string | null;
+  /** Company logo (Spec 1705 B5: `companyLogo`). */
+  logo?: { url?: string | null } | null;
+  /** Headcount (Spec 1705 B5: `companyNumEmployees`). */
+  nb_employees?: number | null;
+  /** One-line company pitch (Spec 1705 B5: `companyDescription`). */
+  summary?: string | null;
+}
+
+/** A sector tag attached to a job hit (Spec 1705 B5: `companyIndustry`). */
+export interface WttjSector {
+  /** Sector label (e.g. `SaaS / Cloud Services`). */
+  name?: string | null;
+  /** Parent sector label (e.g. `Tech`). */
+  parent_name?: string | null;
 }
 
 /**
@@ -79,8 +101,11 @@ export interface WttjJobHit {
   summary?: string | null;
   /** Candidate-profile section of the ad body (HTML-ish), when present. */
   profile?: string | null;
-  /** Key-missions section of the ad body (HTML-ish), when present. */
-  key_missions?: string | null;
+  /**
+   * Key missions of the role. The live index sends a list of plain-text sentences; a
+   * single string is still accepted (Spec 1705 B2).
+   */
+  key_missions?: string[] | string | null;
   /** ISO publish timestamp (e.g. `2026-06-03T19:01:03Z`). */
   published_at?: string | null;
   /** Alternate publish date string, when present. */
@@ -89,6 +114,42 @@ export interface WttjJobHit {
   language?: string | null;
   /** Embedded company ("organization") object. */
   organization?: WttjOrganization | null;
+
+  // Spec 1705 B7: structured fields the index carries on every hit.
+
+  /** Lower salary bound, in `salary_period` units. */
+  salary_minimum?: number | null;
+  /** Upper salary bound, in `salary_period` units. */
+  salary_maximum?: number | null;
+  /** Yearly-equivalent lower bound. */
+  salary_yearly_minimum?: number | null;
+  /** ISO 4217 currency of the salary fields (e.g. `EUR`). */
+  salary_currency?: string | null;
+  /** Pay period of `salary_minimum` / `salary_maximum` (e.g. `yearly`, `monthly`). */
+  salary_period?: string | null;
+  /** True when `salary_yearly_minimum` is set. */
+  has_salary_yearly_minimum?: boolean | null;
+  /** Publish time as epoch seconds. */
+  published_at_timestamp?: number | null;
+  /** Minimum experience, in years. */
+  experience_level_minimum?: number | null;
+  /** True when `experience_level_minimum` is meaningful. */
+  has_experience_level_minimum?: boolean | null;
+  /** Education token (e.g. `bac_5`, `no_diploma`). */
+  education_level?: string | null;
+  /** Sector tags. */
+  sectors?: WttjSector[] | null;
+  /** Benefit labels. */
+  benefits?: string[] | null;
+  /** Office coordinates. */
+  _geoloc?: { lat: number; lng: number }[] | null;
+  /** Contract duration bounds, in months. */
+  contract_duration_minimum?: number | null;
+  contract_duration_maximum?: number | null;
+  /** True when the posting states a remote policy. */
+  has_remote?: boolean | null;
+  /** The site's own short posting reference (e.g. `ACME_Ab12Cd3`). */
+  wk_reference?: string | null;
 }
 
 /**
@@ -106,6 +167,8 @@ export interface WttjAlgoliaResponse {
   page?: number | null;
   /** Page size used. */
   hitsPerPage?: number | null;
+  /** Informational or error message (e.g. the 1,000-hit window notice, a refused key). */
+  message?: string | null;
 }
 
 /**
@@ -146,4 +209,33 @@ export interface WttjJob {
 
   /** True when the role advertises remote / home-working. */
   isRemote?: boolean | null;
+
+  // Spec 1705 B: fields mapped from the structured hit.
+
+  /** Canonical job types derived from `contract_type`. */
+  jobType?: JobType[] | null;
+  /** Structured salary, else the salary parsed from the description. */
+  compensation?: CompensationDto | null;
+  /** `Remote` or `Hybrid` when the remote policy says so. */
+  workFromHomeType?: string | null;
+  /** ISO 3166-1 alpha-2 code of the primary office. */
+  countryCode?: string | null;
+  /** One location per office. */
+  locations?: LocationDto[] | null;
+  /** Company logo URL. */
+  companyLogo?: string | null;
+  /** Sector labels, comma-joined. */
+  companyIndustry?: string | null;
+  /** Headcount, as a string. */
+  companyNumEmployees?: string | null;
+  /** Company pitch. */
+  companyDescription?: string | null;
+  /** Profession category. */
+  jobFunction?: string | null;
+  /** Minimum experience label (e.g. `5+ years`). */
+  experienceRange?: string | null;
+  /** Posting instant and its precision (Spec 1696), when consistent with `datePosted`. */
+  datePostedAt?: string | null;
+  datePostedPrecision?: DatePostedPrecision | null;
+  datePostedBasis?: DatePostedBasis | null;
 }

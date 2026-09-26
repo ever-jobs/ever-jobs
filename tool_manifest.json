@@ -12,9 +12,9 @@
     "job_search": {
       "description": "Search for jobs across multiple job boards simultaneously",
       "supported_sites": {
-        "job_boards": ["linkedin", "indeed", "glassdoor", "zip_recruiter", "google", "bayt", "naukri", "bdjobs", "internshala", "exa", "upwork", "dice", "simplyhired", "wellfound", "stepstone", "monster", "careerbuilder", "builtin", "snagajob", "dribbble", "solidjobs"],
+        "job_boards": ["linkedin", "indeed", "glassdoor", "zip_recruiter", "google", "bayt", "naukri", "bdjobs", "internshala", "exa", "upwork", "dice", "simplyhired", "wellfound", "stepstone", "monster", "careerbuilder", "builtin", "snagajob", "dribbble", "solidjobs", "jobsbylevel", "simplifyjobs"],
         "remote_boards": ["remoteok", "remotive", "weworkremotely", "jobicy", "himalayas", "arbeitnow"],
-        "ats_platforms": ["greenhouse", "lever", "ashby", "workable", "smartrecruiters", "jobvite", "workday", "successfactors", "taleo", "icims", "adp", "ukg", "rippling", "recruitee", "teamtailor", "bamboohr", "personio", "jazzhr"],
+        "ats_platforms": ["greenhouse", "lever", "ashby", "workable", "smartrecruiters", "jobvite", "workday", "successfactors", "taleo", "icims", "adp", "ukg", "rippling", "recruitee", "teamtailor", "bamboohr", "personio", "jazzhr", "inhire"],
         "company_pages": ["amazon", "apple", "microsoft", "nvidia", "tiktok", "uber", "cursor", "google_careers", "meta", "netflix", "stripe", "openai"],
         "aggregators": ["usajobs", "adzuna", "reed", "jooble", "careerjet"]
       },
@@ -32,6 +32,8 @@
         "Softy sitemap discovery with sequential detail fetches",
         "Remote job filtering",
         "Job type filtering",
+        "Multi-location search in one request (sequential per source, same-source duplicates removed)",
+        "Title / keyword / preset exclusion filters (whole-word, negation-aware, never regex)",
         "HTTP job-posting liveness verification (active/expired/uncertain verdicts)",
         "Description format selection (markdown, html, plain)",
         "Analytics (summary stats, company intelligence, site comparison)",
@@ -77,10 +79,33 @@
         "type": "string",
         "description": "Location to search near (e.g., 'San Francisco, CA')"
       },
+      "locations": {
+        "type": "array",
+        "items": { "type": "string", "maxLength": 200 },
+        "maxItems": 25,
+        "description": "Several locations searched in one request (e.g., ['New York, NY', 'Chicago, IL']). Each source runs once per location, one after another, with its own resultsWanted; same-source duplicates are removed. 'location', when also set, is searched first. The server searches the first EVER_JOBS_SEARCH_MAX_LOCATIONS (default 10) and reports the rest as bad_input diagnostics."
+      },
       "resultsWanted": {
         "type": "integer",
         "default": 15,
-        "description": "Number of results per site"
+        "description": "Number of results per site (per site and location when 'locations' is set)"
+      },
+      "excludeTitleTerms": {
+        "type": "array",
+        "items": { "type": "string", "maxLength": 100 },
+        "maxItems": 50,
+        "description": "Drop jobs whose title contains any of these words or phrases (e.g., ['senior', 'lead*']). Whole-word, case- and accent-insensitive, trailing * = prefix, literal text (never a regex); negated mentions are ignored. Applied after dedup; the cache and stored corpus are unaffected."
+      },
+      "excludeKeywords": {
+        "type": "array",
+        "items": { "type": "string", "maxLength": 100 },
+        "maxItems": 50,
+        "description": "Drop jobs whose title or description contains any of these words or phrases (e.g., ['security clearance', 'ts/sci']). Same matching rules as excludeTitleTerms."
+      },
+      "excludePresets": {
+        "type": "array",
+        "items": { "type": "string", "enum": ["security_clearance"] },
+        "description": "Curated exclusion lists matched against title + description. security_clearance drops roles that require (or ask the candidate to obtain) a security clearance or vetting."
       },
       "country": {
         "type": "string",
@@ -98,7 +123,7 @@
       },
       "jobType": {
         "type": "string",
-        "enum": ["fulltime", "parttime", "internship", "contract"],
+        "enum": ["fulltime", "parttime", "contract", "temporary", "internship", "perdiem", "nights", "other", "summer", "volunteer", "permanent", "apprenticeship"],
         "description": "Filter by job type"
       },
       "descriptionFormat": {
@@ -348,6 +373,21 @@
             },
             "description": { "type": "string" },
             "datePosted": { "type": "string", "format": "date" },
+            "datePostedAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Posting instant, ISO-8601 UTC. Present only when the source gives finer-than-day time (precision exact, minute or hour); datePosted stays the date."
+            },
+            "datePostedPrecision": {
+              "type": "string",
+              "enum": ["exact", "minute", "hour", "day", "week", "month", "year"],
+              "description": "Granularity of the posting time. Present only when the source supports it."
+            },
+            "datePostedBasis": {
+              "type": "string",
+              "enum": ["timestamp", "date", "relative"],
+              "description": "Where the posting time came from; relative = estimated from an age label at fetch time."
+            },
             "isRemote": { "type": "boolean" },
             "jobType": { "type": "array", "items": { "type": "string" } },
             "compensation": {
@@ -383,6 +423,25 @@
         "siteType": ["linkedin", "indeed"],
         "isRemote": true,
         "resultsWanted": 20
+      }
+    },
+    {
+      "name": "One query in several cities",
+      "input": {
+        "searchTerm": "backend engineer",
+        "siteType": ["themuse", "dice"],
+        "locations": ["New York, NY", "Chicago, IL"],
+        "resultsWanted": 10
+      }
+    },
+    {
+      "name": "Exclude senior roles and roles that need a clearance",
+      "input": {
+        "searchTerm": "software engineer",
+        "siteType": ["greenhouse"],
+        "companySlug": "acme",
+        "excludeTitleTerms": ["senior", "lead*", "principal"],
+        "excludePresets": ["security_clearance"]
       }
     },
     {

@@ -3,8 +3,11 @@ import * as fs from 'fs';
 import { JobsService } from '../../../api/src/jobs/jobs.service';
 import {
   ScraperInputDto, Site, Country,
-  DescriptionFormat, JobType, SiteComparisonDto,
+  DescriptionFormat, JobType, SiteComparisonDto, ExclusionPreset,
 } from '@ever-jobs/models';
+import {
+  applyJobExclusions, compileJobExclusions, exclusionSpecFromInput, hasExclusionInput,
+} from '@ever-jobs/common';
 import { AnalyticsService } from '@ever-jobs/analytics';
 import {
   CALLER_OVERRIDES_FLAG_DESCRIPTION,
@@ -18,6 +21,11 @@ import {
 interface CompareOptions extends CrawlCliOptions {
   searchTerm?: string;
   location?: string;
+  /** Spec 1700 — several locations, each searched per site. */
+  locations?: string[];
+  excludeTitle?: string[];
+  excludeKeyword?: string[];
+  excludePreset?: string[];
   results?: number;
   country?: string;
   descriptionFormat?: string;
@@ -61,7 +69,17 @@ export class CompareCommand extends CommandRunner {
       jobType: options.jobType as JobType | undefined,
       rateDelayMin: options.rateDelayMin,
       rateDelayMax: options.rateDelayMax,
+      // Spec 1700 — set only when given, so a plain compare builds the same input as before.
+      ...(options.locations ? { locations: options.locations } : {}),
+      ...(options.excludeTitle ? { excludeTitleTerms: options.excludeTitle } : {}),
+      ...(options.excludeKeyword ? { excludeKeywords: options.excludeKeyword } : {}),
+      ...(options.excludePreset ? { excludePresets: options.excludePreset as ExclusionPreset[] } : {}),
     }), options);
+    // Compiled once, applied per site so the printed counts match the comparison.
+    const exclusions = hasExclusionInput(baseInput)
+      ? compileJobExclusions(exclusionSpecFromInput(baseInput))
+      : undefined;
+    let excludedTotal = 0;
 
     // Scrape each site individually (sequentially to avoid rate-limiting)
     const allJobs = [];
@@ -73,11 +91,23 @@ export class CompareCommand extends CommandRunner {
           ...baseInput,
           siteType: [site],
         });
-        const jobs = await this.jobsService.searchJobs(input);
-        console.error(`${jobs.length} jobs`);
+        let jobs = await this.jobsService.searchJobs(input);
+        if (exclusions) {
+          const filtered = applyJobExclusions(jobs, exclusions);
+          excludedTotal += filtered.excluded.length;
+          jobs = filtered.kept;
+          console.error(`${jobs.length} jobs (${filtered.excluded.length} excluded)`);
+        } else {
+          console.error(`${jobs.length} jobs`);
+        }
         allJobs.push(...jobs);
       } catch (err: any) {
         console.error(`failed (${err.message})`);
+      }
+    }
+    if (exclusions) {
+      for (const ignored of exclusions.ignored) {
+        console.error(`Ignored exclusion term "${ignored.term}" (${ignored.reason})`);
       }
     }
 
@@ -114,6 +144,8 @@ export class CompareCommand extends CommandRunner {
       totalJobs: allJobs.length,
       siteComparison: comparison,
       summary: this.analyticsService.summarize(allJobs),
+      // Spec 1700 — present only when exclusions were requested.
+      ...(exclusions ? { excludedJobs: excludedTotal } : {}),
     };
 
     const content = JSON.stringify(output, null, 2);
@@ -133,6 +165,35 @@ export class CompareCommand extends CommandRunner {
   @Option({ flags: '-l, --location <location>', description: 'Location to search near' })
   parseLocation(val: string): string { return val; }
 
+  @Option({
+    flags: '--locations <locations...>',
+    description: 'Several locations; each site is searched once per location, one after another',
+  })
+  parseLocations(val: string, acc?: string[]): string[] {
+    return (acc ?? []).concat(val);
+  }
+
+  @Option({ flags: '--exclude-title <terms...>', description: 'Drop jobs whose TITLE contains any of these words/phrases' })
+  parseExcludeTitle(val: string, acc?: string[]): string[] {
+    return (acc ?? []).concat(val);
+  }
+
+  @Option({
+    flags: '--exclude-keyword <terms...>',
+    description: 'Drop jobs whose TITLE or DESCRIPTION contains any of these words/phrases',
+  })
+  parseExcludeKeyword(val: string, acc?: string[]): string[] {
+    return (acc ?? []).concat(val);
+  }
+
+  @Option({
+    flags: '--exclude-preset <presets...>',
+    description: `Curated exclusion lists: ${Object.values(ExclusionPreset).join(', ')}`,
+  })
+  parseExcludePreset(val: string, acc?: string[]): string[] {
+    return (acc ?? []).concat(val);
+  }
+
   @Option({ flags: '-n, --results <count>', description: 'Results per site (default: 15)' })
   parseResults(val: string): number { return parseInt(val, 10); }
 
@@ -145,7 +206,7 @@ export class CompareCommand extends CommandRunner {
   @Option({ flags: '-r, --remote', description: 'Remote jobs only' })
   parseRemote(): boolean { return true; }
 
-  @Option({ flags: '--job-type <type>', description: 'Filter by job type' })
+  @Option({ flags: '--job-type <type>', description: `Filter by job type: ${Object.values(JobType).join(', ')}` })
   parseJobType(val: string): string { return val; }
 
   @Option({ flags: '--rate-delay-min <seconds>', description: 'Min request delay (seconds)' })

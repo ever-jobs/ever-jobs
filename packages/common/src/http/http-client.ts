@@ -7,6 +7,7 @@ import { ScraperInputDto } from '@ever-jobs/models';
 
 import { getRequestId } from '../context';
 import { describeUrlForLog, pinUrlToHosts } from '../utils/url-guard';
+import { memoisedRequest } from './http-memo';
 import {
   EgressGuardOptions,
   assertPublicHostname,
@@ -194,6 +195,19 @@ export interface HttpClientOptions {
   /** Maximum delay between requests in seconds (rate limiting): `jitterMs` = (max − min) × 1000. */
   rateDelayMax?: number;
   /**
+   * A minimum gap between request starts in this client's rate-limit bucket, in
+   * MILLISECONDS, that no crawl-policy layer shortens — neither a search caller's
+   * `rateDelayMin` (the caller layer, accepted under the default
+   * `EVER_JOBS_CRAWL_CALLER_OVERRIDES=any`) nor an operator policy. Applied like a
+   * robots.txt `Crawl-delay`: the limiter spaces starts by
+   * max(policy `minIntervalMs`, Crawl-delay, this floor); jitter still follows the
+   * policy. `rateDelayMin` alone is only the plugin layer, which a caller override
+   * replaces inside a scrape context, so a plugin whose spec promises a pace a
+   * caller "may only lengthen" (a site's `Crawl-delay`, a designed feed spacing)
+   * sets this as well. 0 / unset = no floor.
+   */
+  minIntervalFloorMs?: number;
+  /**
    * Enable cookie handling. When `true`, an isolated `CookieJar` is created for
    * this client. Pass a `CookieJar` instance to share state across requests.
    */
@@ -247,6 +261,20 @@ interface WireIdentity {
   /** Drop `sec-ch-ua*` headers (the configured UA is sent and `stripClientHints` is on). */
   stripClientHints: boolean;
   from?: string;
+}
+
+/**
+ * What `HttpClient.request` resolved for one request before the memo (Spec 1700
+ * T13) decides whether it goes to the network at all.
+ */
+interface RequestPlan {
+  target: URL | null;
+  policy: ResolvedCrawlPolicy;
+  site: string | undefined;
+  bucket: string | undefined;
+  signal: AbortSignal | undefined;
+  axiosSignal: AxiosRequestConfig['signal'];
+  identity: WireIdentity;
 }
 
 /** Input to `selectWireUserAgent`. */
@@ -367,6 +395,7 @@ const CLIENT_OPTION_KEYS: readonly (keyof HttpClientOptions)[] = [
   'timeout',
   'rateDelayMin',
   'rateDelayMax',
+  'minIntervalFloorMs',
   'cookies',
   'crawl',
   'site',
@@ -771,6 +800,8 @@ export class HttpClient {
   private readonly retryMaxDelay: number;
   private readonly rateDelayMin: number;
   private readonly rateDelayMax: number;
+  /** `minIntervalFloorMs`: a spacing floor no policy layer shortens (0 = none). */
+  private readonly minIntervalFloorMs: number;
   private readonly cookieJar?: CookieJar;
   private readonly caCert?: string;
   private readonly site?: string;
@@ -792,6 +823,8 @@ export class HttpClient {
    * (read once, when the client is built).
    */
   private readonly redirectPin?: (redirectOptions: Record<string, unknown>) => void;
+  /** The hosts behind `redirectPin` — part of the memo key (Spec 1700). */
+  private readonly allowedRedirectHosts?: readonly string[];
 
   constructor(options: HttpClientOptions = {}) {
     const opts: HttpClientOptions = isScraperInputDto(options)
@@ -805,6 +838,10 @@ export class HttpClient {
     this.retryMaxDelay = opts.retryMaxDelay ?? 30000;
     this.rateDelayMin = (opts.rateDelayMin ?? 0) * 1000; // convert to ms
     this.rateDelayMax = (opts.rateDelayMax ?? 0) * 1000;
+    this.minIntervalFloorMs =
+      typeof opts.minIntervalFloorMs === 'number' && Number.isFinite(opts.minIntervalFloorMs) && opts.minIntervalFloorMs > 0
+        ? opts.minIntervalFloorMs
+        : 0;
     this.caCert = opts.caCert;
     this.site = typeof opts.site === 'string' && opts.site.trim() ? opts.site.trim() : undefined;
     this.explicit = crawlOverrideFromClientOptions(opts);
@@ -827,6 +864,7 @@ export class HttpClient {
       opts.allowedRedirectHosts?.length && redirectPinningEnabled()
         ? redirectPinGuard(opts.allowedRedirectHosts)
         : undefined;
+    this.allowedRedirectHosts = this.redirectPin ? [...(opts.allowedRedirectHosts ?? [])] : undefined;
     this.client = axios.create({
       timeout: (opts.timeout ?? 60) * 1000,
       ...(this.defaultHttpsAgent ? { httpsAgent: this.defaultHttpsAgent } : {}),
@@ -942,6 +980,20 @@ export class HttpClient {
    * host limiter → retries with back-off / `Retry-After` → whole-bucket back-off
    * on 429/503. A `crawl` key on the config (`CrawlRequestConfig`) overrides the
    * policy for this one request.
+   *
+   * Spec 1700 (T13) — inside a multi-location memo scope (`runWithHttpMemo`), a
+   * request identical to one already answered successfully in that scope is
+   * served from the scope's memo (see http-memo.ts). The memo sits after the
+   * policy is resolved and the literal egress check, and BEFORE robots.txt, the
+   * host limiter and the network: a memo hit sends nothing and takes no slot,
+   * while every miss goes through the whole crawl pipeline above. Its key covers
+   * the request (method, URL, query, body, headers) plus everything that decides
+   * whether that request may be sent and what comes back (`memoKeyExtra`: the
+   * wire identity, the per-request `crawl`, the robots and egress regime, the
+   * redirect pin, insecure TLS, `maxRedirects`), so a hit can never hand a
+   * response to a request that the guards would have refused. A memo hit skips
+   * the response interceptors, so its Set-Cookie headers are replayed into this
+   * client's jar here (a no-op without a jar).
    */
   async request<T = any>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     const { crawl: requestCrawl, ...axiosConfig } = config as CrawlRequestConfig;
@@ -961,10 +1013,69 @@ export class HttpClient {
 
     if (target && policy.blockPrivateNetworks) assertPublicHostname(target.hostname, this.egressOptions);
 
+    const plan: RequestPlan = { target, policy, site, bucket, signal, axiosSignal, identity };
+    if (!this.memoable(axiosConfig)) return this.sendUnderPolicy<T>(axiosConfig, plan);
+    // An aborted scrape gets no answer, not even from the memo — the same error
+    // the limiter would have rejected a real request with.
+    if (signal?.aborted) throw abortReasonOf(signal);
+    return memoisedRequest<T>(
+      axiosConfig,
+      this.client.defaults.headers,
+      () => this.sendUnderPolicy<T>(axiosConfig, plan),
+      (response) => this.storeResponseCookies(response),
+      this.memoKeyExtra(axiosConfig, plan, requestCrawl),
+      signal,
+    );
+  }
+
+  /**
+   * Whether a request may be answered from a memo scope (Spec 1700): not when it
+   * brings its own transport (agents, an axios `proxy`, a `beforeRedirect` hook,
+   * an adapter) — those decide what reaches the network and cannot be keyed.
+   */
+  private memoable(config: AxiosRequestConfig): boolean {
+    const ownHttpsAgent = config.httpsAgent !== undefined && config.httpsAgent !== this.defaultHttpsAgent;
+    return (
+      config.httpAgent === undefined &&
+      !ownHttpsAgent &&
+      config.proxy === undefined &&
+      config.beforeRedirect === undefined &&
+      config.adapter === undefined
+    );
+  }
+
+  /**
+   * Memo key material beyond the request itself (Spec 1700 × Spec 1690): two
+   * requests share a memo entry only when they would go out with the same
+   * identity and under the same refusal regime (robots.txt mode, egress guard
+   * and its allow-list, redirect pin, insecure TLS, redirect limit, per-request
+   * `crawl` override).
+   */
+  private memoKeyExtra(config: AxiosRequestConfig, plan: RequestPlan, requestCrawl: CrawlPolicyOverride | undefined): unknown {
+    return {
+      userAgent: plan.identity.userAgent,
+      from: plan.identity.from ?? null,
+      stripClientHints: plan.identity.stripClientHints,
+      robotsTxt: plan.policy.robotsTxt,
+      blockPrivateNetworks: plan.policy.blockPrivateNetworks,
+      egressAllowHosts: this.egressOptions.allowHosts ?? [],
+      redirectPin: this.redirectPin ? [...(this.allowedRedirectHosts ?? [])] : null,
+      insecureTls: Boolean(this.caCert),
+      maxRedirects: config.maxRedirects ?? null,
+      crawl: requestCrawl && typeof requestCrawl === 'object' ? requestCrawl : null,
+    };
+  }
+
+  /** Everything after the memo (Spec 1690): proxy, robots.txt, limiter, retries. */
+  private async sendUnderPolicy<T = any>(axiosConfig: AxiosRequestConfig, plan: RequestPlan): Promise<AxiosResponse<T>> {
+    const { target, policy, site, bucket, signal, axiosSignal, identity } = plan;
+
     // Chosen once per request, so retries reuse it (as before Spec 1690). Under
     // `per-scrape` the pin lives in the scrape context, so every client of one
     // scrape (a token client and a data client…) keeps the same origin; outside
-    // any scrape context it is per client, as before.
+    // any scrape context it is per client, as before. (A memo hit never gets
+    // here, so it consumes no pick.)
+    const ctx = getScrapeContext();
     const proxies = getEffectiveProxies(this.proxies);
     const rotation =
       policy.proxyRotation === 'per-scrape' && ctx?.proxyPin ? scrapeProxyRotationState(ctx.proxyPin, proxies) : this.rotation;
@@ -1097,7 +1208,9 @@ export class HttpClient {
     signal: AbortSignal | undefined,
     crawlDelayMs = 0,
   ): HostLimiterAcquireOptions & HostLimiterAcquireExtraOptions {
-    return crawlAcquireOptions(policy, signal, crawlDelayMs);
+    const options = crawlAcquireOptions(policy, signal, crawlDelayMs);
+    // The client's floor (`minIntervalFloorMs`) bounds every layer, a caller's included.
+    return { ...options, minIntervalMs: Math.max(options.minIntervalMs, this.minIntervalFloorMs) };
   }
 
   /**

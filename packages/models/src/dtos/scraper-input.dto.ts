@@ -1,12 +1,35 @@
-import { IsOptional, IsString, IsBoolean, IsNumber, IsArray, IsEnum, ValidateNested } from 'class-validator';
+import {
+  IsOptional, IsString, IsBoolean, IsNumber, IsArray, IsEnum, ValidateNested, ArrayMaxSize, MaxLength,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Site } from '../enums/site.enum';
 import { JobType } from '../enums/job-type.enum';
 import { DescriptionFormat } from '../enums/description-format.enum';
 import { Country } from '../enums/country.enum';
+import { ExclusionPreset } from '../enums/exclusion-preset.enum';
 import { ScraperAuthDto } from './auth/scraper-auth.dto';
 import { CrawlPolicyDto } from './crawl-policy.dto';
+
+/**
+ * Hard ceiling on `locations` entries a request may carry (Spec 1700). The
+ * server searches at most the operator cap (`EVER_JOBS_SEARCH_MAX_LOCATIONS`,
+ * default {@link DEFAULT_MAX_SEARCH_LOCATIONS}) and reports the rest as
+ * `bad_input` diagnostics; anything above this ceiling is a 400.
+ */
+export const HARD_MAX_SEARCH_LOCATIONS = 25;
+
+/** Default number of `locations` entries actually searched (Spec 1700). */
+export const DEFAULT_MAX_SEARCH_LOCATIONS = 10;
+
+/** Longest accepted single `locations` entry, in characters (Spec 1700). */
+export const MAX_SEARCH_LOCATION_LENGTH = 200;
+
+/** Most terms accepted per exclusion list (Spec 1700). */
+export const MAX_EXCLUSION_TERMS = 50;
+
+/** Longest accepted exclusion term, in characters (Spec 1700). */
+export const MAX_EXCLUSION_TERM_LENGTH = 100;
 
 export class ScraperInputDto {
   @ApiPropertyOptional({ enum: Site, isArray: true, description: 'Sites to scrape (default: search + company scrapers; omit or pass explicit values to override)' })
@@ -40,6 +63,27 @@ export class ScraperInputDto {
   @IsString()
   location?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Several locations to search in one request (Spec 1700). The query runs once per location for every selected ' +
+      'source, one location after another per source (each call has its own offset and resultsWanted); results are ' +
+      'merged and exact same-source duplicates removed. `location`, when also set, is searched first. Entries are ' +
+      'trimmed, blanks dropped and case-insensitive duplicates collapsed. At most ' +
+      `${HARD_MAX_SEARCH_LOCATIONS} entries are accepted; the server searches the first ` +
+      `\`EVER_JOBS_SEARCH_MAX_LOCATIONS\` (default ${DEFAULT_MAX_SEARCH_LOCATIONS}) and reports the rest as ` +
+      '`bad_input` diagnostics. Per-source diagnostics then carry one row per (source, location) with a `location` field.',
+    type: String,
+    isArray: true,
+    maxItems: HARD_MAX_SEARCH_LOCATIONS,
+    example: ['New York, NY', 'Chicago, IL'],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(HARD_MAX_SEARCH_LOCATIONS)
+  @IsString({ each: true })
+  @MaxLength(MAX_SEARCH_LOCATION_LENGTH, { each: true })
+  locations?: string[];
+
   @ApiPropertyOptional({ description: 'Distance in miles from location', default: 50 })
   @IsOptional()
   @IsNumber()
@@ -60,12 +104,18 @@ export class ScraperInputDto {
   @IsBoolean()
   easyApply?: boolean;
 
-  @ApiPropertyOptional({ description: 'Number of results wanted', default: 15 })
+  @ApiPropertyOptional({
+    description: 'Number of results wanted, per source (and per location when `locations` is set)',
+    default: 15,
+  })
   @IsOptional()
   @IsNumber()
   resultsWanted?: number;
 
-  @ApiPropertyOptional({ description: 'Offset for pagination', default: 0 })
+  @ApiPropertyOptional({
+    description: 'Offset for pagination, per source (and per location when `locations` is set)',
+    default: 0,
+  })
   @IsOptional()
   @IsNumber()
   offset?: number;
@@ -89,6 +139,16 @@ export class ScraperInputDto {
   @IsOptional()
   @IsBoolean()
   linkedinFetchDescription?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Fetch each LinkedIn company page once (sequential, cached, capped at 25) to fill website, size, HQ, industry, description and logo. ' +
+      'Unset = EVER_JOBS_LINKEDIN_FETCH_COMPANY_DETAILS (off by default) (Spec 1701)',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  linkedinFetchCompanyDetails?: boolean;
 
   @ApiPropertyOptional({ description: 'LinkedIn company IDs to filter by', isArray: true })
   @IsOptional()
@@ -197,6 +257,53 @@ export class ScraperInputDto {
   @IsOptional()
   @IsNumber()
   retryMaxDelay?: number;
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: MAX_EXCLUSION_TERMS,
+    example: ['senior', 'lead*', 'principal'],
+    description:
+      'Drop jobs whose TITLE contains any of these words or phrases (Spec 1700). Case- and accent-insensitive, ' +
+      'whole-word; multi-word terms match as a phrase; a trailing * is a prefix wildcard (at least 3 characters). ' +
+      'Literal text, never a regex. Negated mentions ("no clearance required") are ignored. Applied after the ' +
+      'fan-out and dedup: the cache and the persisted corpus are unaffected, and a source can return fewer than ' +
+      'resultsWanted.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_EXCLUSION_TERMS)
+  @IsString({ each: true })
+  @MaxLength(MAX_EXCLUSION_TERM_LENGTH, { each: true })
+  excludeTitleTerms?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: MAX_EXCLUSION_TERMS,
+    example: ['security clearance', 'ts/sci', 'polygraph'],
+    description:
+      'Drop jobs whose TITLE or DESCRIPTION contains any of these words or phrases (Spec 1700). Same matching ' +
+      'rules as excludeTitleTerms: case- and accent-insensitive, whole-word, phrases, trailing * prefix, literal ' +
+      'text (never a regex), negated mentions ignored, HTML tags and entities in descriptions are not matched.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_EXCLUSION_TERMS)
+  @IsString({ each: true })
+  @MaxLength(MAX_EXCLUSION_TERM_LENGTH, { each: true })
+  excludeKeywords?: string[];
+
+  @ApiPropertyOptional({
+    enum: ExclusionPreset,
+    isArray: true,
+    description:
+      'Curated exclusion lists matched against title + description (Spec 1700). `security_clearance` drops roles ' +
+      'that require a security clearance or vetting, including "clearance eligible" / "able to obtain a clearance" ' +
+      'roles (US, UK, Canadian and Australian vocabulary). Negated mentions ("no clearance required") are kept.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(ExclusionPreset, { each: true })
+  excludePresets?: ExclusionPreset[];
 
   @ApiPropertyOptional({
     type: () => ScraperAuthDto,
