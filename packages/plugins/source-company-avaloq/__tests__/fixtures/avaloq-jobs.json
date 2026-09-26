@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Avaloq1/744000135760909",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Avaloq1/postings/744000135760909",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Avaloq1/744000135759335",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Avaloq1/postings/744000135759335",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Avaloq1/744000135638349",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Avaloq1/postings/744000135638349",
       "jobAd": {
         "sections": {
           "jobDescription": {

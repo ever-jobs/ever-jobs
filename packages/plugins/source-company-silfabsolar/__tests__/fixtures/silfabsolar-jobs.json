@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SilfabSolar/744000135338349",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SilfabSolar/postings/744000135338349",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SilfabSolar/744000135321249",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SilfabSolar/postings/744000135321249",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SilfabSolar/744000135081560",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SilfabSolar/postings/744000135081560",
       "jobAd": {
         "sections": {
           "jobDescription": {

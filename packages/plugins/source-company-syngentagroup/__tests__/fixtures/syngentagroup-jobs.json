@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SyngentaGroup/744000135775119",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SyngentaGroup/postings/744000135775119",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SyngentaGroup/744000135769839",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SyngentaGroup/postings/744000135769839",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SyngentaGroup/744000135746390",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SyngentaGroup/postings/744000135746390",
       "jobAd": {
         "sections": {
           "jobDescription": {

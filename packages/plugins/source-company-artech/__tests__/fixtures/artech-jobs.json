@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ArtechInformationSystemLLC/743999659867496",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ArtechInformationSystemLLC/postings/743999659867496",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ArtechInformationSystemLLC/743999659867219",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ArtechInformationSystemLLC/postings/743999659867219",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ArtechInformationSystemLLC/743999659867053",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ArtechInformationSystemLLC/postings/743999659867053",
       "jobAd": {
         "sections": {
           "jobDescription": {

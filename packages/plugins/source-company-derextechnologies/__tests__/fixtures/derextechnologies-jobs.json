@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DerexTechnologiesInc/744000135343349",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DerexTechnologiesInc/postings/744000135343349",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DerexTechnologiesInc/744000135328334",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DerexTechnologiesInc/postings/744000135328334",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DerexTechnologiesInc/744000135312679",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DerexTechnologiesInc/postings/744000135312679",
       "jobAd": {
         "sections": {
           "jobDescription": {

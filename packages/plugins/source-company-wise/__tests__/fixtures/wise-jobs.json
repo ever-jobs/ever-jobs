@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Wise/744000135786239",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Wise/postings/744000135786239",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Wise/744000135786119",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Wise/postings/744000135786119",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Wise/744000135785909",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Wise/postings/744000135785909",
       "jobAd": {
         "sections": {
           "jobDescription": {

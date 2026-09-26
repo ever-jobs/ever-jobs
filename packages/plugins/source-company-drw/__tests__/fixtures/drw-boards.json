@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "drweng"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/drweng/jobs": {
+      "jobs": [
+        {
+          "id": 8201188,
+          "title": "Administrative Assistant - FICCO Trading Group",
+          "updated_at": "2026-09-15T14:25:48.000Z",
+          "location": {
+            "name": "Chicago"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/drweng/jobs/8201188",
+          "content": "&lt;p&gt;Administrative Assistant - FICCO Trading Group at DRW.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "drweng"
+        },
+        {
+          "id": 7759802,
+          "title": "AI Full Stack Software Developer",
+          "updated_at": "2026-08-19T21:04:51.000Z",
+          "location": {
+            "name": "Montreal"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/drweng/jobs/7759802",
+          "content": "&lt;p&gt;AI Full Stack Software Developer at DRW.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "drweng"
+        },
+        {
+          "id": 7991171,
+          "title": "AI/ML Research Intern",
+          "updated_at": "2026-08-19T21:04:51.000Z",
+          "location": {
+            "name": "Montreal"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/drweng/jobs/7991171",
+          "content": "&lt;p&gt;AI/ML Research Intern at DRW.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "drweng"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "drw-8201188",
+      "title": "Administrative Assistant - FICCO Trading Group"
+    },
+    {
+      "id": "drw-7759802",
+      "title": "AI Full Stack Software Developer"
+    },
+    {
+      "id": "drw-7991171",
+      "title": "AI/ML Research Intern"
+    }
+  ]
+}

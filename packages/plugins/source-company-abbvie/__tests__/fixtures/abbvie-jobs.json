@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AbbVie/3743990013928346",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AbbVie/postings/3743990013928346",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AbbVie/3743990013928286",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AbbVie/postings/3743990013928286",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AbbVie/3743990013925646",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AbbVie/postings/3743990013925646",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -1,0 +1,75 @@
+{
+  "id": "3743990015679966",
+  "name": "Head of AI Transformation & Analytics, Medical Affairs + Health Impact",
+  "uuid": "b2b3ea82-bb03-402c-8ec2-2ea22b2e024a",
+  "jobId": "4a77de2f-2303-4de6-a6f7-c644bec27048",
+  "jobAdId": "159bb3eb-3a46-4e0b-b283-777b6058675c",
+  "defaultJobAd": true,
+  "refNumber": "R00151365",
+  "company": {
+    "name": "AbbVie",
+    "identifier": "AbbVie"
+  },
+  "location": {
+    "city": "Mettawa",
+    "region": "IL",
+    "country": "us",
+    "remote": false,
+    "hybrid": false,
+    "latitude": "42.2333571",
+    "longitude": "-87.9259058",
+    "fullLocation": "Mettawa, IL, United States"
+  },
+  "releasedDate": "2026-09-25T15:53:31.720Z",
+  "postingUrl": "https://jobs.smartrecruiters.com/AbbVie/3743990015679966-head-of-ai-transformation-analytics-medical-affairs-health-impact",
+  "applyUrl": "https://jobs.smartrecruiters.com/AbbVie/3743990015679966-head-of-ai-transformation-analytics-medical-affairs-health-impact?oga=true",
+  "jobAd": {
+    "sections": {
+      "companyDescription": {
+        "title": "Company Description",
+        "text": "<p>Company Description text.</p>"
+      },
+      "jobDescription": {
+        "title": "Job Description",
+        "text": "<p>Job Description text.</p>"
+      },
+      "qualifications": {
+        "title": "Qualifications",
+        "text": "<p>Qualifications text.</p>"
+      },
+      "additionalInformation": {
+        "title": "Additional Information",
+        "text": "<p>Additional Information text.</p>"
+      }
+    }
+  },
+  "compensation": {
+    "min": 182000,
+    "max": 346000,
+    "currency": "USD",
+    "period": "YEARLY"
+  },
+  "active": true,
+  "visibility": "PUBLIC",
+  "industry": {
+    "id": "pharmaceuticals",
+    "label": "Pharmaceuticals"
+  },
+  "function": {
+    "id": "research",
+    "label": "Research"
+  },
+  "experienceLevel": {
+    "id": "director",
+    "label": "Director"
+  },
+  "typeOfEmployment": {
+    "id": "permanent",
+    "label": "Full-time"
+  },
+  "language": {
+    "code": "en",
+    "label": "English",
+    "labelNative": "English (US)"
+  }
+}

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Artelia/744000135762399",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Artelia/postings/744000135762399",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Artelia/744000135756290",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Artelia/postings/744000135756290",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Artelia/744000135752838",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Artelia/postings/744000135752838",
       "jobAd": {
         "sections": {
           "jobDescription": {

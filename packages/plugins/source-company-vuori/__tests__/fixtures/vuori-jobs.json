@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/VuoriInc/744000135767519",
+      "ref": "https://api.smartrecruiters.com/v1/companies/VuoriInc/postings/744000135767519",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/VuoriInc/744000135596189",
+      "ref": "https://api.smartrecruiters.com/v1/companies/VuoriInc/postings/744000135596189",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/VuoriInc/744000135528996",
+      "ref": "https://api.smartrecruiters.com/v1/companies/VuoriInc/postings/744000135528996",
       "jobAd": {
         "sections": {
           "jobDescription": {

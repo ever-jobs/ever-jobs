@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Structube1/744000135772549",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Structube1/postings/744000135772549",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Structube1/744000135772409",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Structube1/postings/744000135772409",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Structube1/744000135772249",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Structube1/postings/744000135772249",
       "jobAd": {
         "sections": {
           "jobDescription": {

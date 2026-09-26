@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Dexterra/744000135774965",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Dexterra/postings/744000135774965",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Dexterra/744000135761920",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Dexterra/postings/744000135761920",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Dexterra/744000135749257",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Dexterra/postings/744000135749257",
       "jobAd": {
         "sections": {
           "jobDescription": {

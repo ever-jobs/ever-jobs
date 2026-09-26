@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/GEHealthcare2/83441060",
+      "ref": "https://api.smartrecruiters.com/v1/companies/GEHealthcare2/postings/83441060",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/GEHealthcare2/83440720",
+      "ref": "https://api.smartrecruiters.com/v1/companies/GEHealthcare2/postings/83440720",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/GEHealthcare2/82988288",
+      "ref": "https://api.smartrecruiters.com/v1/companies/GEHealthcare2/postings/82988288",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -1,0 +1,29 @@
+{
+  "note": "Recorded iCIMS listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "icims",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "careers-sig"
+      },
+      "atsIdPrefix": "icims-careers-sig-"
+    }
+  ],
+  "responses": {
+    "https://careers-sig.icims.com/jobs/search": "<html><head><title>Job Listings at careers-sig</title></head><body><div class=\"iCIMS_JobsTable\"><div class=\"row iCIMS_JobCardItem\"><div class=\"col-xs-12 title\"><a class=\"iCIMS_Anchor\" href=\"https://careers-sig.icims.com/jobs/10966/job\" title=\"10966 - Accounting Internship: Summer 2027\"><h3>Accounting Internship: Summer 2027</h3></a></div><div class=\"col-xs-12 description\">Accounting Internship: Summer 2027 at Susquehanna International Group (SIG).</div></div><div class=\"row iCIMS_JobCardItem\"><div class=\"col-xs-12 title\"><a class=\"iCIMS_Anchor\" href=\"https://careers-sig.icims.com/jobs/11485/job\" title=\"11485 - Accounts Payable Associate | Fixed Term Contract\"><h3>Accounts Payable Associate | Fixed Term Contract</h3></a></div><div class=\"col-xs-12 description\">Accounts Payable Associate | Fixed Term Contract at Susquehanna International Group (SIG).</div></div><div class=\"row iCIMS_JobCardItem\"><div class=\"col-xs-12 title\"><a class=\"iCIMS_Anchor\" href=\"https://careers-sig.icims.com/jobs/11368/job\" title=\"11368 - AI Co-op with Drexel University\"><h3>AI Co-op with Drexel University</h3></a></div><div class=\"col-xs-12 description\">AI Co-op with Drexel University at Susquehanna International Group (SIG).</div></div></div><div class=\"iCIMS_Paging\">Page 1 of 1</div></body></html>"
+  },
+  "expected": [
+    {
+      "id": "sig-10966",
+      "title": "Accounting Internship: Summer 2027"
+    },
+    {
+      "id": "sig-11485",
+      "title": "Accounts Payable Associate | Fixed Term Contract"
+    },
+    {
+      "id": "sig-11368",
+      "title": "AI Co-op with Drexel University"
+    }
+  ]
+}

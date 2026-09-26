@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "blueorigin:5:BlueOrigin"
+      },
+      "atsIdPrefix": "wd-blueorigin-"
+    }
+  ],
+  "responses": {
+    "https://blueorigin.wd5.myworkdayjobs.com/wday/cxs/blueorigin/BlueOrigin/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Specialist - Quality III",
+          "externalPath": "/job/Space-Coast-FL/Specialist---Quality-III_R72273",
+          "locationsText": "Space Coast, FL",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R72273"
+          ]
+        },
+        {
+          "title": "Specialist - Quality II",
+          "externalPath": "/job/Space-Coast-FL/Specialist---Quality-II_R72275",
+          "locationsText": "Space Coast, FL",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R72275"
+          ]
+        },
+        {
+          "title": "Senior System Validation and Test Automation Engineer - TeraWave RF and Optical Systems",
+          "externalPath": "/job/Greater-Seattle-Area/Senior-System-Validation-and-Test-Automation-Engineer---TeraWave-RF-and-Optical-Systems_R72455",
+          "locationsText": "Greater Seattle Area",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R72455"
+          ]
+        }
+      ]
+    },
+    "https://blueorigin.wd5.myworkdayjobs.com/wday/cxs/blueorigin/BlueOrigin/job/Space-Coast-FL/Specialist---Quality-III_R72273": {
+      "jobPostingInfo": {
+        "title": "Specialist - Quality III",
+        "jobDescription": "<p>Specialist - Quality III at Blue Origin.</p>",
+        "location": "Space Coast, FL",
+        "jobReqId": "R72273",
+        "externalUrl": "https://blueorigin.wd5.myworkdayjobs.com/BlueOrigin/job/Space-Coast-FL/Specialist---Quality-III_R72273",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "blueorigin"
+      }
+    },
+    "https://blueorigin.wd5.myworkdayjobs.com/wday/cxs/blueorigin/BlueOrigin/job/Space-Coast-FL/Specialist---Quality-II_R72275": {
+      "jobPostingInfo": {
+        "title": "Specialist - Quality II",
+        "jobDescription": "<p>Specialist - Quality II at Blue Origin.</p>",
+        "location": "Space Coast, FL",
+        "jobReqId": "R72275",
+        "externalUrl": "https://blueorigin.wd5.myworkdayjobs.com/BlueOrigin/job/Space-Coast-FL/Specialist---Quality-II_R72275",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "blueorigin"
+      }
+    },
+    "https://blueorigin.wd5.myworkdayjobs.com/wday/cxs/blueorigin/BlueOrigin/job/Greater-Seattle-Area/Senior-System-Validation-and-Test-Automation-Engineer---TeraWave-RF-and-Optical-Systems_R72455": {
+      "jobPostingInfo": {
+        "title": "Senior System Validation and Test Automation Engineer - TeraWave RF and Optical Systems",
+        "jobDescription": "<p>Senior System Validation and Test Automation Engineer - TeraWave RF and Optical Systems at Blue Origin.</p>",
+        "location": "Greater Seattle Area",
+        "jobReqId": "R72455",
+        "externalUrl": "https://blueorigin.wd5.myworkdayjobs.com/BlueOrigin/job/Greater-Seattle-Area/Senior-System-Validation-and-Test-Automation-Engineer---TeraWave-RF-and-Optical-Systems_R72455",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "blueorigin"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "blueorigin-R72273",
+      "title": "Specialist - Quality III"
+    },
+    {
+      "id": "blueorigin-R72275",
+      "title": "Specialist - Quality II"
+    },
+    {
+      "id": "blueorigin-R72455",
+      "title": "Senior System Validation and Test Automation Engineer - TeraWave RF and Optical Systems"
+    }
+  ]
+}

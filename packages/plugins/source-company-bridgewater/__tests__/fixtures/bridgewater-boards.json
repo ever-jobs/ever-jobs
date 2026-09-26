@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "bridgewater89"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/bridgewater89/jobs": {
+      "jobs": [
+        {
+          "id": 8395041002,
+          "title": "2027 Investment Associate Intern",
+          "updated_at": "2026-09-23T05:01:55.000Z",
+          "location": {
+            "name": "New York City"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/bridgewater89/jobs/8395041002",
+          "content": "&lt;p&gt;2027 Investment Associate Intern at Bridgewater Associates.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "bridgewater89"
+        },
+        {
+          "id": 8334259002,
+          "title": "Campus Talent Associate",
+          "updated_at": "2026-09-23T05:01:54.000Z",
+          "location": {
+            "name": "Westport, CT & New York City"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/bridgewater89/jobs/8334259002",
+          "content": "&lt;p&gt;Campus Talent Associate at Bridgewater Associates.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "bridgewater89"
+        },
+        {
+          "id": 8294673002,
+          "title": "Client Investment Research Associate",
+          "updated_at": "2026-09-23T05:01:54.000Z",
+          "location": {
+            "name": "New York City"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/bridgewater89/jobs/8294673002",
+          "content": "&lt;p&gt;Client Investment Research Associate at Bridgewater Associates.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "bridgewater89"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "bridgewater-8395041002",
+      "title": "2027 Investment Associate Intern"
+    },
+    {
+      "id": "bridgewater-8334259002",
+      "title": "Campus Talent Associate"
+    },
+    {
+      "id": "bridgewater-8294673002",
+      "title": "Client Investment Research Associate"
+    }
+  ]
+}

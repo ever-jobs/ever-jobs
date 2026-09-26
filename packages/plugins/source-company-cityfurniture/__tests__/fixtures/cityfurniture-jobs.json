@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CityFurniture1/105577164",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CityFurniture1/postings/105577164",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CityFurniture1/105573448",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CityFurniture1/postings/105573448",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CityFurniture1/85330668",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CityFurniture1/postings/85330668",
       "jobAd": {
         "sections": {
           "jobDescription": {

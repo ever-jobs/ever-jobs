@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/OntarioTransitGroup/744000135567759",
+      "ref": "https://api.smartrecruiters.com/v1/companies/OntarioTransitGroup/postings/744000135567759",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/OntarioTransitGroup/744000135566489",
+      "ref": "https://api.smartrecruiters.com/v1/companies/OntarioTransitGroup/postings/744000135566489",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/OntarioTransitGroup/744000134876129",
+      "ref": "https://api.smartrecruiters.com/v1/companies/OntarioTransitGroup/postings/744000134876129",
       "jobAd": {
         "sections": {
           "jobDescription": {

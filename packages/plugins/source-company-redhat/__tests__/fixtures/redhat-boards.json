@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "redhat:5:jobs"
+      },
+      "atsIdPrefix": "wd-redhat-"
+    }
+  ],
+  "responses": {
+    "https://redhat.wd5.myworkdayjobs.com/wday/cxs/redhat/jobs/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Openshift Consultant - Bilingual - French-English // Consultant OpenShift – Bilingue français-anglais",
+          "externalPath": "/job/Remote-CA-QC/Openshift-Consultant---Billingual---French-English_R-059036-1",
+          "locationsText": "Remote CA QC",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-059036"
+          ]
+        },
+        {
+          "title": "Strategic Accounts Manager",
+          "externalPath": "/job/Lima---MSO/Strategic-Accounts-Manager_R-059723-1",
+          "locationsText": "Lima - MSO",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-059723"
+          ]
+        },
+        {
+          "title": "RHEL Sales Specialist",
+          "externalPath": "/job/Buenos-Aires/RHEL-Sales-Specialist_R-059737-1",
+          "locationsText": "Buenos Aires",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-059737"
+          ]
+        }
+      ]
+    },
+    "https://redhat.wd5.myworkdayjobs.com/wday/cxs/redhat/jobs/job/Remote-CA-QC/Openshift-Consultant---Billingual---French-English_R-059036-1": {
+      "jobPostingInfo": {
+        "title": "Openshift Consultant - Bilingual - French-English // Consultant OpenShift – Bilingue français-anglais",
+        "jobDescription": "<p>Openshift Consultant - Bilingual - French-English // Consultant OpenShift – Bilingue français-anglais at Red Hat.</p>",
+        "location": "Remote CA QC",
+        "jobReqId": "R-059036",
+        "externalUrl": "https://redhat.wd5.myworkdayjobs.com/jobs/job/Remote-CA-QC/Openshift-Consultant---Billingual---French-English_R-059036-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "redhat"
+      }
+    },
+    "https://redhat.wd5.myworkdayjobs.com/wday/cxs/redhat/jobs/job/Lima---MSO/Strategic-Accounts-Manager_R-059723-1": {
+      "jobPostingInfo": {
+        "title": "Strategic Accounts Manager",
+        "jobDescription": "<p>Strategic Accounts Manager at Red Hat.</p>",
+        "location": "Lima - MSO",
+        "jobReqId": "R-059723",
+        "externalUrl": "https://redhat.wd5.myworkdayjobs.com/jobs/job/Lima---MSO/Strategic-Accounts-Manager_R-059723-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "redhat"
+      }
+    },
+    "https://redhat.wd5.myworkdayjobs.com/wday/cxs/redhat/jobs/job/Buenos-Aires/RHEL-Sales-Specialist_R-059737-1": {
+      "jobPostingInfo": {
+        "title": "RHEL Sales Specialist",
+        "jobDescription": "<p>RHEL Sales Specialist at Red Hat.</p>",
+        "location": "Buenos Aires",
+        "jobReqId": "R-059737",
+        "externalUrl": "https://redhat.wd5.myworkdayjobs.com/jobs/job/Buenos-Aires/RHEL-Sales-Specialist_R-059737-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "redhat"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "redhat-R-059036",
+      "title": "Openshift Consultant - Bilingual - French-English // Consultant OpenShift – Bilingue français-anglais"
+    },
+    {
+      "id": "redhat-R-059723",
+      "title": "Strategic Accounts Manager"
+    },
+    {
+      "id": "redhat-R-059737",
+      "title": "RHEL Sales Specialist"
+    }
+  ]
+}

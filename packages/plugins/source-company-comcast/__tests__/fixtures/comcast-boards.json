@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "comcast:115:Comcast_Careers"
+      },
+      "atsIdPrefix": "wd-comcast-"
+    }
+  ],
+  "responses": {
+    "https://comcast.wd115.myworkdayjobs.com/wday/cxs/comcast/Comcast_Careers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Sr. Analyst, FP&A",
+          "externalPath": "/job/PA---Philadelphia-1800-Arch-St/Sr-Analyst--FP-A_R444631",
+          "locationsText": "4 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R444631"
+          ]
+        },
+        {
+          "title": "Xfinity Assistant Retail Store Manager",
+          "externalPath": "/job/IL---Champaign-2000-N-Neil-St---Retail-XFR1324/Xfinity-Assistant-Retail-Store-Manager_R443140",
+          "locationsText": "IL - Champaign, 2000 N Neil St - Retail XFR1324",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R443140"
+          ]
+        },
+        {
+          "title": "Senior Auditor, Financial Operations (Corporate/Spectacor)",
+          "externalPath": "/job/PA---Philadelphia-1701-John-F-Kennedy-Blvd/Senior-Auditor--Financial-Operations--Corporate-Spectacor-_R445143",
+          "locationsText": "PA - Philadelphia, 1701 John F Kennedy Blvd",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R445143"
+          ]
+        }
+      ]
+    },
+    "https://comcast.wd115.myworkdayjobs.com/wday/cxs/comcast/Comcast_Careers/job/PA---Philadelphia-1800-Arch-St/Sr-Analyst--FP-A_R444631": {
+      "jobPostingInfo": {
+        "title": "Sr. Analyst, FP&A",
+        "jobDescription": "<p>Sr. Analyst, FP&amp;A at Comcast.</p>",
+        "location": "4 Locations",
+        "jobReqId": "R444631",
+        "externalUrl": "https://comcast.wd115.myworkdayjobs.com/Comcast_Careers/job/PA---Philadelphia-1800-Arch-St/Sr-Analyst--FP-A_R444631",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "comcast"
+      }
+    },
+    "https://comcast.wd115.myworkdayjobs.com/wday/cxs/comcast/Comcast_Careers/job/IL---Champaign-2000-N-Neil-St---Retail-XFR1324/Xfinity-Assistant-Retail-Store-Manager_R443140": {
+      "jobPostingInfo": {
+        "title": "Xfinity Assistant Retail Store Manager",
+        "jobDescription": "<p>Xfinity Assistant Retail Store Manager at Comcast.</p>",
+        "location": "IL - Champaign, 2000 N Neil St - Retail XFR1324",
+        "jobReqId": "R443140",
+        "externalUrl": "https://comcast.wd115.myworkdayjobs.com/Comcast_Careers/job/IL---Champaign-2000-N-Neil-St---Retail-XFR1324/Xfinity-Assistant-Retail-Store-Manager_R443140",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "comcast"
+      }
+    },
+    "https://comcast.wd115.myworkdayjobs.com/wday/cxs/comcast/Comcast_Careers/job/PA---Philadelphia-1701-John-F-Kennedy-Blvd/Senior-Auditor--Financial-Operations--Corporate-Spectacor-_R445143": {
+      "jobPostingInfo": {
+        "title": "Senior Auditor, Financial Operations (Corporate/Spectacor)",
+        "jobDescription": "<p>Senior Auditor, Financial Operations (Corporate/Spectacor) at Comcast.</p>",
+        "location": "PA - Philadelphia, 1701 John F Kennedy Blvd",
+        "jobReqId": "R445143",
+        "externalUrl": "https://comcast.wd115.myworkdayjobs.com/Comcast_Careers/job/PA---Philadelphia-1701-John-F-Kennedy-Blvd/Senior-Auditor--Financial-Operations--Corporate-Spectacor-_R445143",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "comcast"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "comcast-R444631",
+      "title": "Sr. Analyst, FP&A"
+    },
+    {
+      "id": "comcast-R443140",
+      "title": "Xfinity Assistant Retail Store Manager"
+    },
+    {
+      "id": "comcast-R445143",
+      "title": "Senior Auditor, Financial Operations (Corporate/Spectacor)"
+    }
+  ]
+}

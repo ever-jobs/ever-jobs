@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TheNielsenCompany/3743990013923567",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TheNielsenCompany/postings/3743990013923567",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TheNielsenCompany/3743990013922046",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TheNielsenCompany/postings/3743990013922046",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TheNielsenCompany/3743990013921986",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TheNielsenCompany/postings/3743990013921986",
       "jobAd": {
         "sections": {
           "jobDescription": {

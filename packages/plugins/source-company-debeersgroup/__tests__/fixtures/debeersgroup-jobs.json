@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AngloAmericanDeBeersGroup/744000135770789",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AngloAmericanDeBeersGroup/postings/744000135770789",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AngloAmericanDeBeersGroup/744000135768589",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AngloAmericanDeBeersGroup/postings/744000135768589",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AngloAmericanDeBeersGroup/744000135759274",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AngloAmericanDeBeersGroup/postings/744000135759274",
       "jobAd": {
         "sections": {
           "jobDescription": {

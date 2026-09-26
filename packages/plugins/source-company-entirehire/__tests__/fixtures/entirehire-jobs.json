@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/entirehire/96497137",
+      "ref": "https://api.smartrecruiters.com/v1/companies/entirehire/postings/96497137",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/entirehire/81235578",
+      "ref": "https://api.smartrecruiters.com/v1/companies/entirehire/postings/81235578",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/entirehire/79921169",
+      "ref": "https://api.smartrecruiters.com/v1/companies/entirehire/postings/79921169",
       "jobAd": {
         "sections": {
           "jobDescription": {

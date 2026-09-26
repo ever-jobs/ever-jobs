@@ -1123,6 +1123,10 @@ Job aggregator covering 70+ countries. Requires `JOOBLE_API_KEY` environment var
 
 Job aggregator covering 80+ countries with locale-based searches. Requires `CAREERJET_AFFID` environment variable. Register at [careerjet.com/partners](https://www.careerjet.com/partners/). Requires `clientIp` parameter for proper operation (falls back to `127.0.0.1`). Supports the `proxies` parameter for residential IP rotation. Credentials can also be passed per-request via the `auth.careerjet` field in the request body.
 
+### ReliefWeb
+
+Humanitarian and development jobs from the ReliefWeb API v2 (`https://api.reliefweb.int/v2/jobs`; v1 is decommissioned and answers HTTP 410). Since 1 November 2025 ReliefWeb only serves **pre-approved appnames**: request one at [apidoc.reliefweb.int/parameters#appname](https://apidoc.reliefweb.int/parameters#appname) and set `RELIEFWEB_APPNAME`. Without it the plugin sends the neutral `ever-jobs`, which ReliefWeb currently answers with HTTP 403; the source then returns no jobs with a `bad_input` diagnostic that names the variable. Job links are the public `reliefweb.int/job/<id>/<slug>` pages (Spec 1752).
+
 ---
 
 ## Using Individual Packages

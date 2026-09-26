@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "humana:5:Humana_External_Career_Site"
+      },
+      "atsIdPrefix": "wd-humana-"
+    }
+  ],
+  "responses": {
+    "https://humana.wd5.myworkdayjobs.com/wday/cxs/humana/Humana_External_Career_Site/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Medical Director - OneHome",
+          "externalPath": "/job/Remote-Nationwide/Medical-Director---OneHome_R-422163",
+          "locationsText": "Remote Nationwide",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-422163"
+          ]
+        },
+        {
+          "title": "Senior Product Manager",
+          "externalPath": "/job/Louisville-KY/Senior-Product-Manager_R-421978",
+          "locationsText": "3 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-421978"
+          ]
+        },
+        {
+          "title": "Lead Technology Leadership",
+          "externalPath": "/job/Louisville-KY/Lead-Technology-Leadership_R-428162",
+          "locationsText": "3 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-428162"
+          ]
+        }
+      ]
+    },
+    "https://humana.wd5.myworkdayjobs.com/wday/cxs/humana/Humana_External_Career_Site/job/Remote-Nationwide/Medical-Director---OneHome_R-422163": {
+      "jobPostingInfo": {
+        "title": "Medical Director - OneHome",
+        "jobDescription": "<p>Medical Director - OneHome at Humana.</p>",
+        "location": "Remote Nationwide",
+        "jobReqId": "R-422163",
+        "externalUrl": "https://humana.wd5.myworkdayjobs.com/Humana_External_Career_Site/job/Remote-Nationwide/Medical-Director---OneHome_R-422163",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "humana"
+      }
+    },
+    "https://humana.wd5.myworkdayjobs.com/wday/cxs/humana/Humana_External_Career_Site/job/Louisville-KY/Senior-Product-Manager_R-421978": {
+      "jobPostingInfo": {
+        "title": "Senior Product Manager",
+        "jobDescription": "<p>Senior Product Manager at Humana.</p>",
+        "location": "3 Locations",
+        "jobReqId": "R-421978",
+        "externalUrl": "https://humana.wd5.myworkdayjobs.com/Humana_External_Career_Site/job/Louisville-KY/Senior-Product-Manager_R-421978",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "humana"
+      }
+    },
+    "https://humana.wd5.myworkdayjobs.com/wday/cxs/humana/Humana_External_Career_Site/job/Louisville-KY/Lead-Technology-Leadership_R-428162": {
+      "jobPostingInfo": {
+        "title": "Lead Technology Leadership",
+        "jobDescription": "<p>Lead Technology Leadership at Humana.</p>",
+        "location": "3 Locations",
+        "jobReqId": "R-428162",
+        "externalUrl": "https://humana.wd5.myworkdayjobs.com/Humana_External_Career_Site/job/Louisville-KY/Lead-Technology-Leadership_R-428162",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "humana"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "humana-R-422163",
+      "title": "Medical Director - OneHome"
+    },
+    {
+      "id": "humana-R-421978",
+      "title": "Senior Product Manager"
+    },
+    {
+      "id": "humana-R-428162",
+      "title": "Lead Technology Leadership"
+    }
+  ]
+}

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/statkraft1/744000135767999",
+      "ref": "https://api.smartrecruiters.com/v1/companies/statkraft1/postings/744000135767999",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/statkraft1/744000135756269",
+      "ref": "https://api.smartrecruiters.com/v1/companies/statkraft1/postings/744000135756269",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/statkraft1/744000135721662",
+      "ref": "https://api.smartrecruiters.com/v1/companies/statkraft1/postings/744000135721662",
       "jobAd": {
         "sections": {
           "jobDescription": {
