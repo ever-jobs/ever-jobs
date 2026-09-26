@@ -9,7 +9,7 @@ import { JobsResolver } from '../jobs.resolver';
 
 /** Spec 1730 — GraphQL: `careerLevel` on output, `careerLevels` filter on input. */
 function setup(jobs: JobPostDto[]) {
-  const jobsService = { searchJobs: jest.fn().mockResolvedValue(jobs) };
+  const jobsService = { searchJobsWithDiagnostics: jest.fn().mockResolvedValue({ jobs, perSource: [] }) };
   const cacheService = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) };
   const config = { get: (_k: string, def?: unknown) => def };
   const aggregator = new JobsAggregator(

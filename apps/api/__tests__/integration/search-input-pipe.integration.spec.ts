@@ -132,7 +132,7 @@ describe('GraphQL searchJobs input through the production ValidationPipe (Spec 1
     const [error] = res.body.errors;
     expect(error.extensions.code).toBe('BAD_REQUEST');
     expect(JSON.stringify(error)).toMatch(/careerLevels/);
-    expect(jobsService.searchJobs).not.toHaveBeenCalled();
+    expect(jobsService.searchJobsWithDiagnostics).not.toHaveBeenCalled();
   });
 
   it('delivers every search field to JobsService (none stripped by the whitelist)', async () => {
@@ -153,8 +153,8 @@ describe('GraphQL searchJobs input through the production ValidationPipe (Spec 1
 
     expect(res.body.errors).toBeUndefined();
     expect(res.body.data.searchJobs).toEqual({ count: 2, deduped: false });
-    expect(jobsService.searchJobs).toHaveBeenCalledTimes(1);
-    expect(jobsService.searchJobs.mock.calls[0]![0]).toEqual({
+    expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledTimes(1);
+    expect(jobsService.searchJobsWithDiagnostics.mock.calls[0]![0]).toEqual({
       searchTerm: 'engineer',
       location: 'New York',
       resultsWanted: 7,
@@ -179,20 +179,20 @@ describe('GraphQL searchJobs input through the production ValidationPipe (Spec 1
     );
     expect(code.body.errors).toBeUndefined();
     expect(code.body.data.searchJobs.count).toBe(2);
-    expect(jobsService.searchJobs.mock.calls[0]![0]).toEqual(
+    expect(jobsService.searchJobsWithDiagnostics.mock.calls[0]![0]).toEqual(
       expect.objectContaining({ country: 'GERMANY', descriptionFormat: 'text' }),
     );
 
     const unknown = await gql(`{ searchJobs(input: { searchTerm: "engineer", country: "Atlantis" }) { count } }`);
     expect(unknown.body.errors).toBeUndefined();
     expect(unknown.body.data.searchJobs.count).toBe(2);
-    expect(jobsService.searchJobs.mock.calls[1]![0].country).toBeUndefined();
+    expect(jobsService.searchJobsWithDiagnostics.mock.calls[1]![0].country).toBeUndefined();
 
     const exact = await gql(
       `{ searchJobs(input: { searchTerm: "engineer", country: "GERMANY", descriptionFormat: "plain" }) { count } }`,
     );
     expect(exact.body.errors).toBeUndefined();
-    expect(jobsService.searchJobs.mock.calls[2]![0]).toEqual(
+    expect(jobsService.searchJobsWithDiagnostics.mock.calls[2]![0]).toEqual(
       expect.objectContaining({ country: 'GERMANY', descriptionFormat: 'plain' }),
     );
   });
