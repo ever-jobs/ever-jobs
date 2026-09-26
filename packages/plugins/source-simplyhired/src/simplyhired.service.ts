@@ -30,12 +30,15 @@ import {
   SIMPLYHIRED_HEADERS,
   SIMPLYHIRED_DELAY_MIN,
   SIMPLYHIRED_DELAY_MAX,
+  SIMPLYHIRED_CRAWL_POLICY,
 } from './simplyhired.constants';
 
 @SourcePlugin({
   site: Site.SIMPLYHIRED,
   name: 'SimplyHired',
   category: 'job-board',
+  // Keeps its declared browser UA under the default identify mode - see SIMPLYHIRED_CRAWL_POLICY.
+  crawl: SIMPLYHIRED_CRAWL_POLICY,
 })
 @Injectable()
 export class SimplyHiredService implements IScraper, OnModuleDestroy {
@@ -116,7 +119,7 @@ export class SimplyHiredService implements IScraper, OnModuleDestroy {
       if (input.location) url.searchParams.set('l', input.location);
 
       this.logger.log(`SimplyHired Playwright: navigating to ${url.toString()}`);
-      await page.goto(url.toString(), {
+      await BrowserPool.navigate(page, url.toString(), {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });

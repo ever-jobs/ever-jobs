@@ -85,7 +85,13 @@ Then add a spec under `.specify/specs/<NNN>-source-<plugin-id>/` (spec.md, plan.
 - Imports: external → `@ever-jobs/*` → relative.
 - Prefer `async/await` over raw `.then`.
 - Always `Promise.allSettled` for fan-out; never `.all` (a single failure must not nuke the batch).
+  *Since Spec 1690:* `allSettled` isolates failures but does not limit load on a host — the
+  crawl-policy per-host limiter in `HttpClient` does. Do not add sleeps or retry loops for
+  politeness; declare site needs in `@SourcePlugin({ crawl })`, fetch detail pages of
+  fragile sites sequentially (`for … await`), and never set a browser User-Agent (by
+  default a declared UA is only sent with a `userAgentMode: 'plugin'` opt-in and a
+  `userAgentReason`). See `docs/CRAWL_POLICY.md` §19.
 
 ---
 
-_Last revised: 2026-05-03 (scheduled run #299)_
+_Last revised: 2026-09-25 (Spec 1690: crawl-policy note in §6 House Style)_

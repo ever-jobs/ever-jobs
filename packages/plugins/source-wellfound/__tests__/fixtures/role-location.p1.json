@@ -1,0 +1,236 @@
+{
+  "page": "/seoLanding/roleLocationSearch",
+  "query": { "role": "software-engineer", "location": "san-francisco" },
+  "buildId": "synthetic-build",
+  "props": {
+    "pageProps": {
+      "role": "software-engineer",
+      "location": "san-francisco",
+      "apolloState": {
+        "data": {
+          "ROOT_QUERY": {
+            "__typename": "Query",
+            "talent": {
+              "__typename": "Talent",
+              "seoLandingPageJobSearchResults({\"location\":\"san-francisco\",\"page\":1,\"role\":\"software-engineer\"})": {
+                "__typename": "Results",
+                "totalStartupCount": 58,
+                "totalJobCount": 131,
+                "perPage": 20,
+                "pageCount": 3,
+                "startups": [
+                  { "__ref": "StartupResult:900001" },
+                  { "__ref": "StartupResult:900002" },
+                  { "__ref": "StartupResult:900003" }
+                ]
+              }
+            }
+          },
+          "JobListingSearchResult:800031": {
+            "__typename": "JobListingSearchResult",
+            "id": "800031",
+            "title": "Staff Platform Engineer",
+            "slug": "staff-platform-engineer",
+            "description": "## What you will do\n\nOwn the deploy pipeline.",
+            "jobType": "full-time",
+            "liveStartAt": 1789000000,
+            "locationNames": ["Oakland"],
+            "acceptedRemoteLocationNames": [],
+            "remote": false,
+            "remoteConfig": { "__typename": "JobListingRemoteConfig", "kind": "ONSITE", "wfhFlexible": true },
+            "primaryRoleTitle": "DevOps",
+            "compensation": "$190k – $240k",
+            "yearsExperienceMin": 8,
+            "yearsExperienceMax": null,
+            "atsSource": null,
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "StartupResult:900001": {
+            "__typename": "StartupResult",
+            "id": "900001",
+            "name": "Harborlight Analytics",
+            "slug": "harborlight-analytics",
+            "logoUrl": "https://example.invalid/logos/harborlight.png",
+            "highConcept": "Tide tables for your data warehouse",
+            "companySize": "SIZE_51_200",
+            "badges": [{ "__ref": "Badge:ACTIVELY_HIRING" }],
+            "highlightedJobListings": [{ "__ref": "JobListingSearchResult:800011" }]
+          },
+          "JobListingSearchResult:800011": {
+            "__typename": "JobListingSearchResult",
+            "id": "800011",
+            "title": "Associate Software Engineer",
+            "slug": "associate-software-engineer",
+            "description": "**Location**\n\nHybrid in San Francisco, one day a week in the office.\n\n**About the role**\n\nYou will build *reliable* ingestion jobs. Questions: jobs@harborlight.example",
+            "jobType": "full-time",
+            "liveStartAt": 1790107906,
+            "locationNames": ["San Francisco"],
+            "acceptedRemoteLocationNames": [],
+            "remote": false,
+            "remoteConfig": null,
+            "primaryRoleTitle": "Software Engineer",
+            "compensation": "$139k – $153k",
+            "yearsExperienceMin": null,
+            "yearsExperienceMax": null,
+            "atsSource": "AtsIntegration::Greenhouse::Listing",
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "StartupResult:900002": {
+            "__typename": "StartupResult",
+            "id": "900002",
+            "name": "Quillstone Robotics",
+            "slug": "quillstone-robotics",
+            "logoUrl": "https://example.invalid/logos/quillstone.png",
+            "highConcept": "Warehouse arms that learn on the job",
+            "companySize": "SIZE_11_50",
+            "badges": [],
+            "highlightedJobListings": [
+              { "__ref": "JobListingSearchResult:800021" },
+              { "__ref": "JobListingSearchResult:800022" },
+              { "__ref": "JobListingSearchResult:800023" }
+            ]
+          },
+          "JobListingSearchResult:800021": {
+            "__typename": "JobListingSearchResult",
+            "id": "800021",
+            "title": "Backend Engineer",
+            "slug": "backend-engineer",
+            "description": "Build the fleet control plane in Go.",
+            "jobType": "full-time",
+            "liveStartAt": 1789500000,
+            "locationNames": ["San Francisco", "New York City"],
+            "acceptedRemoteLocationNames": ["United States"],
+            "remote": true,
+            "remoteConfig": { "__typename": "JobListingRemoteConfig", "kind": "ONSITE_OR_REMOTE", "wfhFlexible": false },
+            "primaryRoleTitle": "Backend Engineer",
+            "compensation": "$130k – $210k • 0.05% – 0.2%",
+            "yearsExperienceMin": 3,
+            "yearsExperienceMax": 5,
+            "atsSource": null,
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "JobListingSearchResult:800022": {
+            "__typename": "JobListingSearchResult",
+            "id": "800022",
+            "title": "Senior Rust Engineer",
+            "slug": "senior-rust-engineer",
+            "description": "Motion planning in Rust.",
+            "jobType": "full-time",
+            "liveStartAt": 1788000000,
+            "locationNames": ["San Francisco"],
+            "acceptedRemoteLocationNames": [],
+            "remote": false,
+            "remoteConfig": null,
+            "primaryRoleTitle": "Software Engineer",
+            "compensation": "$175k – $225k • No equity",
+            "yearsExperienceMin": null,
+            "yearsExperienceMax": null,
+            "atsSource": null,
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "JobListingSearchResult:800023": {
+            "__typename": "JobListingSearchResult",
+            "id": "800023",
+            "title": "Firmware Intern",
+            "slug": "firmware-intern",
+            "description": "Summer internship.",
+            "jobType": "internship",
+            "liveStartAt": 1640107882,
+            "locationNames": ["San Francisco"],
+            "acceptedRemoteLocationNames": [],
+            "remote": false,
+            "remoteConfig": null,
+            "primaryRoleTitle": "Embedded Engineer",
+            "compensation": "",
+            "yearsExperienceMin": null,
+            "yearsExperienceMax": null,
+            "atsSource": null,
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "StartupResult:900003": {
+            "__typename": "StartupResult",
+            "id": "900003",
+            "name": "Brightfern Health",
+            "slug": "brightfern-health",
+            "logoUrl": "https://example.invalid/logos/brightfern.png",
+            "highConcept": "Clinic scheduling without the phone tag",
+            "companySize": "SIZE_201_500",
+            "badges": [],
+            "highlightedJobListings": [
+              { "__ref": "JobListingSearchResult:800031" },
+              { "__ref": "JobListingSearchResult:800032" },
+              { "__ref": "JobListingSearchResult:800033" }
+            ]
+          },
+          "JobListingSearchResult:800032": {
+            "__typename": "JobListingSearchResult",
+            "id": "800032",
+            "title": "Senior Software Engineer, Scheduling",
+            "slug": "senior-software-engineer-scheduling",
+            "description": "Own the booking engine.",
+            "jobType": "full-time",
+            "liveStartAt": 1789601426,
+            "locationNames": ["Toronto"],
+            "acceptedRemoteLocationNames": ["Canada"],
+            "remote": true,
+            "remoteConfig": { "__typename": "JobListingRemoteConfig", "kind": "REMOTE", "wfhFlexible": false },
+            "primaryRoleTitle": "Software Engineer",
+            "compensation": "$126k – $187k CAD",
+            "yearsExperienceMin": null,
+            "yearsExperienceMax": null,
+            "atsSource": "AtsIntegration::Ashby::Listing",
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "JobListingSearchResult:800033": {
+            "__typename": "JobListingSearchResult",
+            "id": "800033",
+            "title": "Software Engineer, Integrations",
+            "slug": "software-engineer-integrations",
+            "description": "Connect clinics to insurers.",
+            "jobType": "full-time",
+            "liveStartAt": 1790022134,
+            "locationNames": [],
+            "acceptedRemoteLocationNames": ["United States"],
+            "remote": true,
+            "remoteConfig": null,
+            "primaryRoleTitle": "Software Engineer",
+            "compensation": "$140k – $155k",
+            "yearsExperienceMin": null,
+            "yearsExperienceMax": null,
+            "atsSource": "AtsIntegration::Greenhouse::Listing",
+            "autoPosted": false,
+            "isBookmarked": false
+          },
+          "Badge:ACTIVELY_HIRING": {
+            "__typename": "Badge",
+            "id": "ACTIVELY_HIRING",
+            "name": "ACTIVELY_HIRING_BADGE",
+            "label": "Actively Hiring",
+            "tooltip": "Actively processing applications",
+            "avatarUrl": null,
+            "rating": null,
+            "data": null
+          },
+          "SeoRoleKeyword:710": {
+            "__typename": "SeoRoleKeyword",
+            "id": "710",
+            "slug": "software-engineer",
+            "displayName": "Software Engineer"
+          },
+          "NewTag:1692": {
+            "__typename": "NewTag",
+            "id": "1692",
+            "slug": "san-francisco",
+            "displayName": "San Francisco"
+          }
+        }
+      }
+    }
+  }
+}

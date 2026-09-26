@@ -3,8 +3,10 @@ import {
   CompensationInterval,
   Country,
   JobType,
+  SalarySource,
   getCompensationInterval,
   getJobTypeFromString,
+  JobTypeLookupOptions,
 } from '@ever-jobs/models';
 
 /**
@@ -489,6 +491,58 @@ export interface ExtractSalaryOptions {
    * Spec 012 / FR-7.
    */
   defaultCurrency?: string;
+  /**
+   * Spec 1695 — range / single-bound grammar for this call. Unset takes the
+   * process-wide default from `EVER_JOBS_SALARY_GRAMMAR` (`extended` unless
+   * that variable is `legacy`). See {@link SalaryGrammar}.
+   */
+  grammar?: SalaryGrammar;
+  /**
+   * Spec 1695 — accept an upper-only figure (`"up to $90,000"`) only when a
+   * salary word (`salary`, `pay`, `compensation`, `wage`, `rate`, `base`, …)
+   * sits in the same clause before it and no benefit word (`bonus`,
+   * `stipend`, `relocation`, `401(k)`, `tuition`, …) does. Default `false`.
+   * {@link postProcessCompensation} sets it for its whole-description
+   * fallback, where "up to $10,000 relocation assistance" is far more common
+   * than an upper-only salary.
+   */
+  upperBoundNeedsSalaryCue?: boolean;
+}
+
+/**
+ * Spec 1695 — which salary grammar {@link extractSalary} applies.
+ *
+ * - `'extended'` (default) — reads a pay-period token written next to either
+ *   amount (`"$20/hr - $25/hr"`, `"$28,000 - $32,000/yr"`,
+ *   `"up to $4,000/mo"`, `"45.000 €/Jahr"`) and takes the interval from it
+ *   instead of the magnitude heuristic; accepts the word `to` between two
+ *   currency-marked amounts (`"$100,000 to $150,000"`); and never reads an
+ *   amount followed by a scale word (`"$5 - $10 million"`) as a range.
+ *   A `to` range or a single bound whose nearest preceding keyword in its
+ *   clause is a benefit word (`"Sign-on bonus of $2,000 to $5,000"`,
+ *   `"relocation up to $10,000"`) is never read as the salary, and a `to`
+ *   range with neither a pay-period token nor a salary word before it is
+ *   used only when no dash range or qualified `to` range exists in the text.
+ * - `'legacy'` — the grammar before Spec 1695: dash separators only, no
+ *   pay-period tokens (a token after the first amount breaks the match, one
+ *   after the second is ignored), interval from magnitude unless
+ *   {@link ExtractSalaryOptions.interval} is set.
+ */
+export type SalaryGrammar = 'extended' | 'legacy';
+
+/** Environment variable holding the process-wide default {@link SalaryGrammar}. */
+const SALARY_GRAMMAR_ENV = 'EVER_JOBS_SALARY_GRAMMAR';
+
+/**
+ * Resolve the grammar for one call: an explicit option wins; otherwise
+ * `EVER_JOBS_SALARY_GRAMMAR=legacy` selects the legacy grammar and anything
+ * else (unset, empty, unknown) the extended one. Read per call, so the switch
+ * needs no restart-time cache.
+ */
+function resolveSalaryGrammar(option: SalaryGrammar | undefined): SalaryGrammar {
+  if (option === 'extended' || option === 'legacy') return option;
+  const raw = process.env[SALARY_GRAMMAR_ENV]?.trim().toLowerCase();
+  return raw === 'legacy' ? 'legacy' : 'extended';
 }
 
 /**
@@ -618,21 +672,273 @@ function resolveSalaryLocale(
 }
 
 /**
- * Build the prefix-anchored salary regex: the FIRST number must be
- * preceded by a currency symbol or ISO code. Captures four groups —
- * `[1] = min number raw`, `[2] = min K suffix`, `[3] = max number
- * raw`, `[4] = max K suffix`. Form:
+ * Spec 1695 — make a regex source case-insensitive without the `i` flag.
+ * The range matchers must stay case-sensitive (ISO codes, `kr`, `Fr.`), so
+ * each letter is rewritten as a two-case class (`hr` → `[hH][rR]`). Escape
+ * sequences (`\s`, `\.`, `\b`) are copied unchanged, and so is any letter
+ * without a single-character counterpart in the other case.
+ */
+function caseInsensitiveSrc(src: string): string {
+  return src.replace(/\\.|[A-Za-z\u00C0-\u024F]/g, (ch) => {
+    if (ch.length === 2) return ch;
+    const lower = ch.toLowerCase();
+    const upper = ch.toUpperCase();
+    if (lower === upper || lower.length !== 1 || upper.length !== 1) return ch;
+    return `[${lower}${upper}]`;
+  });
+}
+
+/**
+ * Spec 1695 — pay-period words that may follow a salary amount after a
+ * connector (`/`, `per`, `a`, `an`, `pro`, `par`, `por`): `"$20/hr"`,
+ * `"$53,000/yr"`, `"£30,000 per annum"`, `"$25 an hour"`, `"45.000 €/Jahr"`,
+ * `"3.000 € par mois"`. One row per interval, so a language is a one-line
+ * addition. Single letters other than `h` are left out on purpose (`/m`
+ * could be minute or month; `/d` and `/a` are ambiguous), and so is `mon`,
+ * which reads a weekday (`"a Mon-Fri shift"`) as a month.
+ */
+const SALARY_PERIOD_UNITS: ReadonlyArray<readonly [CompensationInterval, string]> = [
+  [CompensationInterval.HOURLY, 'hours|hour|hrs|hr|h|stunde|std|heure|hora|uur'],
+  [CompensationInterval.DAILY, 'days|day|tag|jour|día|dia|dag'],
+  [CompensationInterval.WEEKLY, 'weeks|week|wks|wk|woche|semaine|semana'],
+  [CompensationInterval.MONTHLY, 'months|month|mths|mth|mos|mo|monat|mois|mes|maand'],
+  [CompensationInterval.YEARLY, 'years|year|yrs|yr|annum|anno|jahr|année|an|año|ano|jaar'],
+];
+
+/** Spec 1695 — stand-alone period words that need no connector (`"$20 - $25 hourly"`). */
+const SALARY_PERIOD_ADVERBS: ReadonlyArray<readonly [CompensationInterval, string]> = [
+  [CompensationInterval.HOURLY, 'hourly|p\\.?h\\.?'],
+  [CompensationInterval.DAILY, 'daily'],
+  [CompensationInterval.WEEKLY, 'weekly'],
+  [CompensationInterval.MONTHLY, 'monthly|monatlich|mensuel'],
+  [CompensationInterval.YEARLY, 'yearly|annually|annual|jährlich|annuel|p\\.?a\\.?'],
+];
+
+/** Connectors between an amount and a period word (the `/` form is separate). */
+const SALARY_PERIOD_CONNECTORS = 'per|an|a|pro|par|por';
+
+/**
+ * A period word must end the token: the next character may not be a letter.
+ * ASCII `\b` is not enough — it treats `é` / `ñ` as a word boundary.
+ */
+const SALARY_PERIOD_END = '(?![A-Za-z\\u00C0-\\u024F])';
+
+/**
+ * Spec 1695 — regex source of the optional pay-period token that may follow
+ * ONE salary amount (or its trailing currency symbol). Alternations of
+ * literals only (no nested quantifiers), with a top-level `|`, so a builder
+ * always wraps it in a group.
  *
- *   <sym>\s*<num>K?\s*[<sym>?]\s*<dash>\s*[<sym>?]<num>K?[\s<sym>?]
+ * It carries no leading whitespace on purpose: each builder puts exactly one
+ * `\s*` in front of it and one after it, so a run of spaces is always owned
+ * by a single quantifier. Two `\s*` competing for the same run make a
+ * failing match quadratic in the run's length.
+ */
+const SALARY_PERIOD_TOKEN_SRC =
+  `(?:\\/\\s*|\\b${caseInsensitiveSrc(`(?:${SALARY_PERIOD_CONNECTORS})`)}\\s+)` +
+  `${caseInsensitiveSrc(`(?:${SALARY_PERIOD_UNITS.map(([, alt]) => alt).join('|')})`)}` +
+  `${SALARY_PERIOD_END}` +
+  `|\\b${caseInsensitiveSrc(`(?:${SALARY_PERIOD_ADVERBS.map(([, alt]) => alt).join('|')})`)}` +
+  `${SALARY_PERIOD_END}`;
+
+/** Spec 1695 — the word range separator (`"$100,000 to $150,000"`). */
+const SALARY_WORD_SEPARATOR_SRC = `\\b${caseInsensitiveSrc('to')}\\b`;
+
+/**
+ * Spec 1695 — words that mark a nearby amount as something other than the
+ * job's pay: a bonus, stipend, relocation or tuition budget, a commission, a
+ * referral reward, a retirement match, money a company raised.
+ */
+const SALARY_BENEFIT_WORDS_SRC =
+  'bonus(?:es)?|stipends?|relocation|reimburse\\w*|commissions?|referrals?|budgets?|' +
+  'raised|allowances?|tuition|401\\s*\\(?k\\)?|match(?:ing)?|equity';
+
+/** Spec 1695 — words that mark a nearby amount as the job's pay. */
+const SALARY_CUE_WORDS_SRC =
+  'salary|salaries|pay|paid|paying|compensation|comp|wages?|rates?|base|' +
+  'earn(?:s|ings?)?|income|ote|remuneration|gehalt|salaire|salario|sueldo';
+
+/** Keyword scanner; `matchAll` clones it, so the shared instance keeps no state. */
+const SALARY_CONTEXT_WORDS = new RegExp(
+  `(?<![A-Za-z0-9])(?:(?<benefit>${SALARY_BENEFIT_WORDS_SRC})|(?<cue>${SALARY_CUE_WORDS_SRC}))(?![A-Za-z])`,
+  'gi',
+);
+
+/**
+ * A clause ends at `;` `!` `?` `|` `•`, a line break, or a period followed by
+ * whitespace (so the `.` inside `"$1,000.50"` or `"45.000 €"` does not count).
+ * A colon does not end one: `"Salary: $95,000"` keeps its cue.
+ */
+const SALARY_CLAUSE_BREAK = /[;!?|•\n\r]|\.(?=\s)/g;
+
+/** How far back from an amount {@link salaryContextBefore} looks for a keyword. */
+const SALARY_CONTEXT_WINDOW = 80;
+
+/**
+ * Spec 1695 — what the words before an amount say about it, within its clause
+ * and at most {@link SALARY_CONTEXT_WINDOW} characters back: the class of the
+ * NEAREST keyword (`"bonus, and the salary is $X"` → `salary`), plus whether
+ * any cue / benefit word appears at all.
+ */
+interface SalaryContext {
+  nearest: 'benefit' | 'salary' | 'none';
+  hasCue: boolean;
+  hasBenefit: boolean;
+}
+
+function salaryContextBefore(text: string, index: number): SalaryContext {
+  let start = Math.max(0, index - SALARY_CONTEXT_WINDOW);
+  // Never start inside a word: a cut "database" must not read as "base".
+  while (start > 0 && start < index && /[A-Za-z0-9]/.test(text[start - 1])) start++;
+  let clause = text.slice(start, index);
+  let clauseStart = 0;
+  for (const found of clause.matchAll(SALARY_CLAUSE_BREAK)) {
+    clauseStart = (found.index ?? 0) + found[0].length;
+  }
+  clause = clause.slice(clauseStart);
+
+  const context: SalaryContext = { nearest: 'none', hasCue: false, hasBenefit: false };
+  for (const found of clause.matchAll(SALARY_CONTEXT_WORDS)) {
+    if (found.groups?.benefit) {
+      context.nearest = 'benefit';
+      context.hasBenefit = true;
+    } else {
+      context.nearest = 'salary';
+      context.hasCue = true;
+    }
+  }
+  return context;
+}
+
+/** One range match the extended grammar may use, and how strongly it reads as pay. */
+interface RangeCandidate {
+  match: RegExpExecArray;
+  /** `true` for a dash range, or a `to` range with a period token or a salary word. */
+  strong: boolean;
+}
+
+/**
+ * Spec 1695 — pick the range to read from a text in the extended grammar.
+ * Scans every match of `pattern` (a global copy of a range regex) left to
+ * right:
+ *
+ * - a dash range is used as soon as it is found, as in the legacy grammar;
+ * - a `to` range whose nearest preceding keyword is a benefit word
+ *   (`"Sign-on bonus of $2,000 to $5,000"`) is skipped;
+ * - a `to` range with a pay-period token or a salary word before it is used
+ *   like a dash range;
+ * - any other `to` range (`"$100,000 to $150,000"` with nothing around it)
+ *   is kept as a weak fallback, returned only when nothing stronger follows.
+ *
+ * After a skipped match the scan resumes one character later, so a range
+ * overlapping the skipped one is still found.
+ */
+function selectRangeMatch(text: string, pattern: RegExp): RangeCandidate | null {
+  let weak: RegExpExecArray | null = null;
+  pattern.lastIndex = 0;
+  for (let found = pattern.exec(text); found !== null; found = pattern.exec(text)) {
+    if (found.groups?.to === undefined) return { match: found, strong: true };
+    const context = salaryContextBefore(text, found.index);
+    if (context.nearest !== 'benefit') {
+      if (context.nearest === 'salary' || found.groups.minPer || found.groups.maxPer) {
+        return { match: found, strong: true };
+      }
+      weak ??= found;
+    }
+    pattern.lastIndex = found.index + 1;
+  }
+  return weak ? { match: weak, strong: false } : null;
+}
+
+/** Per-interval classifiers for a captured token, in {@link SALARY_PERIOD_UNITS} order. */
+const SALARY_PERIOD_CLASSIFIERS: ReadonlyArray<readonly [CompensationInterval, RegExp]> =
+  SALARY_PERIOD_UNITS.map(([interval, units]) => {
+    const adverbs = SALARY_PERIOD_ADVERBS.find(([candidate]) => candidate === interval)?.[1];
+    return [
+      interval,
+      new RegExp(
+        `^(?:(?:\\/|${SALARY_PERIOD_CONNECTORS})\\s*)?(?:${units})$` +
+          (adverbs ? `|^(?:${adverbs})$` : ''),
+        'i',
+      ),
+    ] as const;
+  });
+
+/**
+ * Spec 1695 — map a pay-period token (`"/hr"`, `" per annum"`, `"hourly"`,
+ * `"p.a."`, `"/Jahr"`) to its {@link CompensationInterval}. Also accepts a
+ * bare unit (`"hr"`, `"year"`) and anything {@link getCompensationInterval}
+ * understands, so a plugin reading a separate "pay period" field can reuse
+ * it. Returns `null` for an absent or unknown token (`" per shift"`, `"/m"`).
+ */
+export function intervalFromPeriodToken(
+  token: string | null | undefined,
+): CompensationInterval | null {
+  if (!token) return null;
+  const text = token.trim().replace(/\s+/g, ' ').replace(/^\/\s*/, '/');
+  if (!text) return null;
+  for (const [interval, classifier] of SALARY_PERIOD_CLASSIFIERS) {
+    if (classifier.test(text)) return interval;
+  }
+  return getCompensationInterval(text);
+}
+
+/**
+ * Spec 1695 — the interval stated by the per-bound tokens of one range
+ * match. Either bound's token applies to the whole range; two DIFFERENT
+ * periods (`"$20/hr - $40,000/yr"`) make the match unusable (`'conflict'`)
+ * rather than a guess.
+ */
+function periodFromTokens(
+  minToken: string | undefined,
+  maxToken: string | undefined,
+): CompensationInterval | null | 'conflict' {
+  const fromMin = intervalFromPeriodToken(minToken);
+  const fromMax = intervalFromPeriodToken(maxToken);
+  if (fromMin && fromMax && fromMin !== fromMax) return 'conflict';
+  return fromMax ?? fromMin;
+}
+
+/**
+ * Spec 1695 — the three range regexes are built from a handful of inputs
+ * (currency alternation × locale number shape × grammar), so each distinct
+ * one is compiled once and reused. The plain ones carry no `g` / `y` flag, so
+ * a shared instance holds no `lastIndex` state between calls; the global
+ * copies the extended grammar scans with are reset by {@link selectRangeMatch}
+ * before every use (the scan is synchronous, so no two calls interleave).
+ */
+const SALARY_REGEX_CACHE = new Map<string, RegExp>();
+
+function cachedSalaryRegex(key: string, build: () => RegExp): RegExp {
+  let regex = SALARY_REGEX_CACHE.get(key);
+  if (!regex) {
+    regex = build();
+    SALARY_REGEX_CACHE.set(key, regex);
+  }
+  return regex;
+}
+
+/**
+ * Build the prefix-anchored salary regex: the FIRST number must be
+ * preceded by a currency symbol or ISO code. Named groups — `min` /
+ * `max` (raw numbers), `minK` / `maxK` (K suffix) and, in the extended
+ * grammar, `minPer` / `maxPer` (pay-period tokens) and `to` (set when the word
+ * separator was used; read by {@link selectRangeMatch}), Spec 1695. Form:
+ *
+ *   legacy:   <sym>\s*<num>K?\s*[<sym>?]\s*<dash>\s*[<sym>?]<num>K?[\s<sym>?]
+ *   extended: <sym>\s*<num>K?\s*[<sym>\s*][<per>\s*]<dash|to>\s*[<sym>\s*]<num>K?\s*[<sym>\s*][+\s*][<per>]
  *
  * Matches USD `$100,000 - $150,000`, GBP `£45,000 - £60,000`, CHF
- * `CHF 90,000 - 120,000`, etc. Permissive on the second number: the
- * symbol on the left of the second number is optional (covers
- * `$100 - 150`-style shorthand).
+ * `CHF 90,000 - 120,000`, `$20/hr - $25/hr`, etc. Permissive on the
+ * second number after a dash: its left-hand symbol is optional (covers
+ * `$100 - 150`-style shorthand). The extended grammar's word separator
+ * `to` requires that symbol, so plain prose (`"$5 to 10 people"`) is not
+ * read as a range, and neither amount may be followed by a scale word.
  */
 function buildSalaryRegexPrefix(
   symbolAlt: string,
   numSrc: string,
+  grammar: SalaryGrammar = 'extended',
 ): RegExp {
   // The `[kK]?\b` shape pins the K-suffix to a word boundary so
   // `100K -` parses cleanly while `100 kr` doesn't lose the leading
@@ -640,48 +946,80 @@ function buildSalaryRegexPrefix(
   // `k` of `kr` would be greedily consumed by `([kK]?)` and the
   // currency symbol matcher would then see only `r` (Spec 012 / T03
   // — debugged in run #40 against `'500.000 kr - 700.000 kr'`).
+  if (grammar === 'legacy') {
+    return new RegExp(
+      `(?:${symbolAlt})\\s*(?<min>${numSrc})\\s*(?<minK>[kK]?\\b)\\s*(?:${symbolAlt})?` +
+        `\\s*[-–—]\\s*` +
+        `(?:${symbolAlt})?\\s*(?<max>${numSrc})\\s*(?<maxK>[kK]?\\b)\\s*(?:${symbolAlt})?`,
+    );
+  }
+  // Spec 1695 — every whitespace run has exactly one owner (see
+  // SALARY_PERIOD_TOKEN_SRC), so a near-miss on a long run stays linear.
+  const scale = SALARY_RANGE_SCALE_LOOKAHEAD;
   return new RegExp(
-    `(?:${symbolAlt})\\s*(${numSrc})\\s*([kK]?\\b)\\s*(?:${symbolAlt})?` +
-      `\\s*[-–—]\\s*` +
-      `(?:${symbolAlt})?\\s*(${numSrc})\\s*([kK]?\\b)\\s*(?:${symbolAlt})?`,
+    `(?:${symbolAlt})\\s*(?<min>${numSrc})\\s*(?<minK>[kK]?\\b)${scale}` +
+      `\\s*(?:(?:${symbolAlt})\\s*)?` +
+      `(?:(?<minPer>${SALARY_PERIOD_TOKEN_SRC})\\s*)?` +
+      `(?:[-–—]\\s*(?:(?:${symbolAlt})\\s*)?|(?<to>${SALARY_WORD_SEPARATOR_SRC})\\s*(?:${symbolAlt})\\s*)` +
+      `(?<max>${numSrc})\\s*(?<maxK>[kK]?\\b)${scale}` +
+      `\\s*(?:(?:${symbolAlt})\\s*)?(?:\\+\\s*)?` +
+      `(?<maxPer>${SALARY_PERIOD_TOKEN_SRC})?`,
   );
 }
 
 /**
  * Build the suffix-anchored salary regex: the FIRST number must be
- * FOLLOWED by a currency symbol or ISO code. Captures the same four
- * groups as the prefix variant. Form:
+ * FOLLOWED by a currency symbol or ISO code. Same named groups as the
+ * prefix variant. Form:
  *
- *   <num>K?\s*<sym>\s*<dash>\s*<num>K?[\s<sym>?]
+ *   legacy:   <num>K?\s*<sym>\s*<dash>\s*<num>K?[\s<sym>?]
+ *   extended: <num>K?\s*<sym>\s*[<per>\s*]<dash|to>\s*<num>K?\s*[<sym>\s*][+\s*][<per>]
  *
  * Matches Continental EUR `45.000 € – 60.000 €`, Nordic kr
- * `500.000 kr - 700.000 kr`, Polish PLN `50 000 zł – 80 000 zł`.
- * The trailing symbol on the second number is optional so terse
- * postings like `'45.000 € – 60.000'` still parse.
+ * `500.000 kr - 700.000 kr`, Polish PLN `50 000 zł – 80 000 zł`,
+ * `45.000 €/Jahr - 60.000 €/Jahr`. The trailing symbol on the second
+ * number is optional after a dash so terse postings like
+ * `'45.000 € – 60.000'` still parse; the word separator `to` requires it.
  */
 function buildSalaryRegexSuffix(
   symbolAlt: string,
   numSrc: string,
+  grammar: SalaryGrammar = 'extended',
 ): RegExp {
   // Same `[kK]?\b` discipline as the prefix variant — see the
   // commentary on {@link buildSalaryRegexPrefix} for the
   // `kr`-disambiguation rationale.
+  if (grammar === 'legacy') {
+    return new RegExp(
+      `(?<min>${numSrc})\\s*(?<minK>[kK]?\\b)\\s*(?:${symbolAlt})` +
+        `\\s*[-–—]\\s*` +
+        `(?<max>${numSrc})\\s*(?<maxK>[kK]?\\b)\\s*(?:${symbolAlt})?`,
+    );
+  }
+  const scale = SALARY_RANGE_SCALE_LOOKAHEAD;
   return new RegExp(
-    `(${numSrc})\\s*([kK]?\\b)\\s*(?:${symbolAlt})` +
-      `\\s*[-–—]\\s*` +
-      `(${numSrc})\\s*([kK]?\\b)\\s*(?:${symbolAlt})?`,
+    `(?<min>${numSrc})\\s*(?<minK>[kK]?\\b)${scale}\\s*(?:${symbolAlt})\\s*` +
+      `(?:(?<minPer>${SALARY_PERIOD_TOKEN_SRC})\\s*)?` +
+      `(?:[-–—]|(?<to>${SALARY_WORD_SEPARATOR_SRC})(?=\\s*${numSrc}\\s*[kK]?\\b\\s*(?:${symbolAlt})))\\s*` +
+      `(?<max>${numSrc})\\s*(?<maxK>[kK]?\\b)${scale}` +
+      `\\s*(?:(?:${symbolAlt})\\s*)?(?:\\+\\s*)?` +
+      `(?<maxPer>${SALARY_PERIOD_TOKEN_SRC})?`,
   );
 }
 
 /**
  * Build the bare-numeric-range salary regex: NEITHER number requires
- * a currency symbol or ISO code. Captures the same four groups as
- * the prefix / suffix variants (`[1] = min`, `[2] = min K-suffix`,
- * `[3] = max`, `[4] = max K-suffix`) so the existing K-suffix
+ * a currency symbol or ISO code. Captures the same named groups as
+ * the prefix / suffix variants (`min`, `minK`, `max`, `maxK`, and in
+ * the extended grammar `minPer` / `maxPer`) so the existing K-suffix
  * arithmetic at {@link extractSalary} doesn't need a branch to
  * handle the bare match. Form:
  *
- *   <num>K?\s*<dash>\s*<num>K?
+ *   legacy:   <num>K?\s*<dash>\s*<num>K?
+ *   extended: <num>K?\s*[<per>\s*]<dash>\s*<num>K?[\s*<per>]
+ *
+ * Deliberately dash-only in both grammars: with no currency anchor, a
+ * word separator would turn prose (`"5 to 7 years"`) into candidates.
  *
  * Spec 014 / T03 (Q-026) — this third variant lands ONLY when
  * `parseSalaryCurrency()` resolved the currency via the country
@@ -701,18 +1039,32 @@ function buildSalaryRegexSuffix(
  * country (`country=UK` → GBP; `country=AUSTRALIA` would too if
  * `Country.AUSTRALIA` ever lands in `SALARY_COUNTRY_TO_CURRENCY`).
  */
-function buildSalaryRegexBare(numSrc: string): RegExp {
+function buildSalaryRegexBare(
+  numSrc: string,
+  grammar: SalaryGrammar = 'extended',
+): RegExp {
   // Same `[kK]?\b` discipline as the other two variants — pins the
   // K-suffix to a word boundary so `100K -` parses cleanly.
+  if (grammar === 'legacy') {
+    return new RegExp(
+      `(?<min>${numSrc})\\s*(?<minK>[kK]?\\b)\\s*[-–—]\\s*(?<max>${numSrc})\\s*(?<maxK>[kK]?\\b)`,
+    );
+  }
   return new RegExp(
-    `(${numSrc})\\s*([kK]?\\b)\\s*[-–—]\\s*(${numSrc})\\s*([kK]?\\b)`,
+    `(?<min>${numSrc})\\s*(?<minK>[kK]?\\b)\\s*` +
+      `(?:(?<minPer>${SALARY_PERIOD_TOKEN_SRC})\\s*)?` +
+      `[-–—]\\s*` +
+      `(?<max>${numSrc})\\s*(?<maxK>[kK]?\\b)` +
+      `(?:\\s*(?<maxPer>${SALARY_PERIOD_TOKEN_SRC}))?`,
   );
 }
 
 /**
- * Spec 5045 — annualization factor per pay period, used only for the
- * bounds check when an explicit {@link ExtractSalaryOptions.interval} hint is
- * supplied (hourly = 40h × 52w; daily = 5d × 52w; weekly = 52w; monthly = 12m).
+ * Spec 5045 — annualization factor per pay period (hourly = 40h × 52w;
+ * daily = 5d × 52w; weekly = 52w; monthly = 12m). Used for the bounds check
+ * when the period is stated — by the {@link ExtractSalaryOptions.interval}
+ * hint or, Spec 1695, by a pay-period token in the text — and by
+ * {@link convertToAnnual}.
  */
 const ANNUALIZATION_FACTORS: Record<CompensationInterval, number> = {
   [CompensationInterval.HOURLY]: 2080,
@@ -752,10 +1104,19 @@ const SALARY_UPPER_TRAILERS =
  */
 const SALARY_SCALE_LOOKAHEAD = '(?!\\s*(?:million|billion|mln|bln|trillion))';
 
+/**
+ * Spec 1695 — the same scale guard for the (case-sensitive) range regexes
+ * of the extended grammar, so `"$5 - $10 million"` / `"$5 to $10 Million"`
+ * are not read as an hourly 5-10 range.
+ */
+const SALARY_RANGE_SCALE_LOOKAHEAD = caseInsensitiveSrc(SALARY_SCALE_LOOKAHEAD);
+
 interface SingleBoundSalaryMatch {
   bound: 'min' | 'max';
   raw: string;
   kSuffix: string;
+  /** Spec 1695 — raw pay-period token right after the amount (`"/hr"`, `" per year"`). */
+  period: string | undefined;
 }
 
 /**
@@ -766,48 +1127,101 @@ interface SingleBoundSalaryMatch {
  *
  * Ordered so keyword-led shapes ("from $X" / "up to $Y") win over the terser
  * trailer shapes ("$X+" / "$Y or less"). Returns `null` when no single-bound
- * shape is present.
+ * shape is present. Spec 1695 — in the extended grammar the amount may carry
+ * a pay-period token (`"$25/hr+"`, `"up to $4,000/mo"`), returned as `period`.
  */
 function matchSingleBoundSalary(
   salaryStr: string,
   symbolAlt: string,
   numSrc: string,
+  grammar: SalaryGrammar = 'extended',
+  upperBoundNeedsSalaryCue = false,
 ): SingleBoundSalaryMatch | null {
+  const candidates = cachedSingleBoundCandidates(symbolAlt, numSrc, grammar);
+  const extended = grammar === 'extended';
+  for (const { re, bound } of candidates) {
+    // Global regexes: reset before each scan (synchronous, so never shared mid-scan).
+    re.lastIndex = 0;
+    for (let m = re.exec(salaryStr); m !== null; m = re.exec(salaryStr)) {
+      if (extended || upperBoundNeedsSalaryCue) {
+        // Spec 1695 — "relocation up to $10,000" / "bonus from $2,000" state a
+        // benefit, not the pay; an upper-only figure may also need a salary word.
+        const context = salaryContextBefore(salaryStr, m.index);
+        const benefit = extended && context.nearest === 'benefit';
+        const uncued =
+          upperBoundNeedsSalaryCue && bound === 'max' && (!context.hasCue || context.hasBenefit);
+        if (benefit || uncued) {
+          re.lastIndex = m.index + 1;
+          continue;
+        }
+      }
+      re.lastIndex = 0;
+      return { bound, raw: m[1], kSuffix: m[2], period: m.groups?.per };
+    }
+  }
+  return null;
+}
+
+/** One single-bound shape: its regex and the bound it states. */
+type SingleBoundCandidate = { readonly re: RegExp; readonly bound: 'min' | 'max' };
+
+/** Spec 1695 — compiled once per currency / locale / grammar, like the range regexes. */
+const SINGLE_BOUND_CANDIDATE_CACHE = new Map<string, ReadonlyArray<SingleBoundCandidate>>();
+
+function cachedSingleBoundCandidates(
+  symbolAlt: string,
+  numSrc: string,
+  grammar: SalaryGrammar,
+): ReadonlyArray<SingleBoundCandidate> {
+  const key = `${grammar}|${symbolAlt}|${numSrc}`;
+  let candidates = SINGLE_BOUND_CANDIDATE_CACHE.get(key);
+  if (!candidates) {
+    candidates = buildSingleBoundCandidates(symbolAlt, numSrc, grammar);
+    SINGLE_BOUND_CANDIDATE_CACHE.set(key, candidates);
+  }
+  return candidates;
+}
+
+function buildSingleBoundCandidates(
+  symbolAlt: string,
+  numSrc: string,
+  grammar: SalaryGrammar,
+): ReadonlyArray<SingleBoundCandidate> {
   // Force the number to match maximally: without this, JS backtracking would
   // let `numSrc` stop mid-thousands (e.g. capture `100` out of `100,000`) so
   // the range-tail guard below could be sidestepped. The class holds only the
   // intra-number separators (comma / period / apostrophe / U+00A0), never a
   // regular space, so a legitimate `"$48,000 per year"` still ends cleanly.
   const numBoundary = "(?![\\d,.'\\u00A0])";
+  const extended = grammar === 'extended';
+  const period = extended ? `(?:\\s*(?<per>${SALARY_PERIOD_TOKEN_SRC}))?` : '';
   const amtPrefix =
-    `(?:${symbolAlt})\\s*(${numSrc})${numBoundary}\\s*([kK]?\\b)${SALARY_SCALE_LOOKAHEAD}`;
+    `(?:${symbolAlt})\\s*(${numSrc})${numBoundary}\\s*([kK]?\\b)${SALARY_SCALE_LOOKAHEAD}${period}`;
   const amtSuffix =
-    `(${numSrc})${numBoundary}\\s*([kK]?\\b)${SALARY_SCALE_LOOKAHEAD}\\s*(?:${symbolAlt})`;
+    `(${numSrc})${numBoundary}\\s*([kK]?\\b)${SALARY_SCALE_LOOKAHEAD}\\s*(?:${symbolAlt})${period}`;
 
   // Negative lookahead rejecting a two-ended range dressed in a lower-leadin —
-  // e.g. "from $100,000 to $150,000" is a range, not a floor, so we must NOT
-  // truncate it to a min-only. The range cascade upstream only recognises
-  // dash separators, so this guard leaves such "to"-ranges as no-match (their
-  // prior behaviour) rather than silently dropping the ceiling.
-  const rangeTail =
-    `(?!\\s*(?:to|through|[-–—])\\s*(?:${symbolAlt})?\\s*${numSrc})`;
+  // e.g. "from $100,000 to 150,000" is a range, not a floor, so we must NOT
+  // truncate it to a min-only. The extended grammar's range cascade reads a
+  // "to"-range only when both amounts carry a currency, so this guard leaves
+  // the rest as no-match (their prior behaviour) rather than silently dropping
+  // the ceiling. In the extended grammar the guard also looks past an optional
+  // pay-period token, so `"from $40/hr to 60"` cannot backtrack out of the
+  // token and slip through as a `$40` floor.
+  const rangeTail = extended
+    ? `(?!(?:\\s*(?:${SALARY_PERIOD_TOKEN_SRC}))?\\s*(?:to|through|[-–—])\\s*(?:${symbolAlt})?\\s*${numSrc})`
+    : `(?!\\s*(?:to|through|[-–—])\\s*(?:${symbolAlt})?\\s*${numSrc})`;
 
-  const candidates: ReadonlyArray<{ re: RegExp; bound: 'min' | 'max' }> = [
-    { re: new RegExp(`\\b(?:${SALARY_LOWER_LEADINS})\\b[\\s:]*${amtPrefix}${rangeTail}`, 'i'), bound: 'min' },
-    { re: new RegExp(`\\b(?:${SALARY_LOWER_LEADINS})\\b[\\s:]*${amtSuffix}${rangeTail}`, 'i'), bound: 'min' },
-    { re: new RegExp(`\\b(?:${SALARY_UPPER_LEADINS})\\b[\\s:]*${amtPrefix}`, 'i'), bound: 'max' },
-    { re: new RegExp(`\\b(?:${SALARY_UPPER_LEADINS})\\b[\\s:]*${amtSuffix}`, 'i'), bound: 'max' },
-    { re: new RegExp(`${amtPrefix}${rangeTail}\\s*(?:${SALARY_LOWER_TRAILERS})`, 'i'), bound: 'min' },
-    { re: new RegExp(`${amtSuffix}${rangeTail}\\s*(?:${SALARY_LOWER_TRAILERS})`, 'i'), bound: 'min' },
-    { re: new RegExp(`${amtPrefix}${rangeTail}\\s*(?:${SALARY_UPPER_TRAILERS})`, 'i'), bound: 'max' },
-    { re: new RegExp(`${amtSuffix}${rangeTail}\\s*(?:${SALARY_UPPER_TRAILERS})`, 'i'), bound: 'max' },
+  return [
+    { re: new RegExp(`\\b(?:${SALARY_LOWER_LEADINS})\\b[\\s:]*${amtPrefix}${rangeTail}`, 'gi'), bound: 'min' },
+    { re: new RegExp(`\\b(?:${SALARY_LOWER_LEADINS})\\b[\\s:]*${amtSuffix}${rangeTail}`, 'gi'), bound: 'min' },
+    { re: new RegExp(`\\b(?:${SALARY_UPPER_LEADINS})\\b[\\s:]*${amtPrefix}`, 'gi'), bound: 'max' },
+    { re: new RegExp(`\\b(?:${SALARY_UPPER_LEADINS})\\b[\\s:]*${amtSuffix}`, 'gi'), bound: 'max' },
+    { re: new RegExp(`${amtPrefix}${rangeTail}\\s*(?:${SALARY_LOWER_TRAILERS})`, 'gi'), bound: 'min' },
+    { re: new RegExp(`${amtSuffix}${rangeTail}\\s*(?:${SALARY_LOWER_TRAILERS})`, 'gi'), bound: 'min' },
+    { re: new RegExp(`${amtPrefix}${rangeTail}\\s*(?:${SALARY_UPPER_TRAILERS})`, 'gi'), bound: 'max' },
+    { re: new RegExp(`${amtSuffix}${rangeTail}\\s*(?:${SALARY_UPPER_TRAILERS})`, 'gi'), bound: 'max' },
   ];
-
-  for (const { re, bound } of candidates) {
-    const m = salaryStr.match(re);
-    if (m) return { bound, raw: m[1], kSuffix: m[2] };
-  }
-  return null;
 }
 
 /**
@@ -829,6 +1243,13 @@ function matchSingleBoundSalary(
  * failure (no throws — preserves prior contract). Spec 5045 — when
  * {@link ExtractSalaryOptions.interval} is set, the interval is taken from
  * that hint rather than inferred from the amount's magnitude.
+ *
+ * Spec 1695 — interval precedence, for ranges and single bounds alike:
+ * the caller's `interval` hint, then a pay-period token in the text
+ * (extended grammar, see {@link SalaryGrammar}), then magnitude. Two
+ * different tokens on one range (`"$20/hr - $40,000/yr"`) return the
+ * all-`null` envelope. `enforceAnnualSalary` still annualises the amounts
+ * and keeps the stated interval.
  */
 export function extractSalary(
   salaryStr: string | null,
@@ -848,6 +1269,7 @@ export function extractSalary(
   const hourlyThreshold = options?.hourlyThreshold ?? 350;
   const monthlyThreshold = options?.monthlyThreshold ?? 30000;
   const enforceAnnualSalary = options?.enforceAnnualSalary ?? false;
+  const grammar = resolveSalaryGrammar(options?.grammar);
 
   const detected = parseSalaryCurrency(salaryStr, {
     country: options?.country,
@@ -865,8 +1287,13 @@ export function extractSalary(
   // require either (a) overly permissive optional anchors that match
   // bare number ranges, or (b) a complex alternation that doubles
   // the regex compile cost on the hot path.
-  const prefixPattern = buildSalaryRegexPrefix(symbolAlt, numSrc);
-  const suffixPattern = buildSalaryRegexSuffix(symbolAlt, numSrc);
+  const cacheKey = `${grammar}|${symbolAlt}|${numSrc}`;
+  const prefixPattern = cachedSalaryRegex(`prefix|${cacheKey}`, () =>
+    buildSalaryRegexPrefix(symbolAlt, numSrc, grammar),
+  );
+  const suffixPattern = cachedSalaryRegex(`suffix|${cacheKey}`, () =>
+    buildSalaryRegexSuffix(symbolAlt, numSrc, grammar),
+  );
   // Spec 014 / T03 (Q-026) — when both anchored variants miss AND
   // the currency was resolved via the country tier (no symbol / ISO
   // in the input but a `country` hint was supplied), try the bare
@@ -880,14 +1307,35 @@ export function extractSalary(
   // positive immunity).
   const barePattern =
     detected.confidence === 'country'
-      ? buildSalaryRegexBare(numSrc)
+      ? cachedSalaryRegex(`bare|${grammar}|${numSrc}`, () =>
+          buildSalaryRegexBare(numSrc, grammar),
+        )
       : null;
   // Spec 015 / Q-036 / FR-2 — track the matched path so the bare-
   // path raw-value pre-check below can fire only when the bare
   // regex won. Prefix/suffix paths stay byte-identical (FR-6).
   let matchedFromBare = false;
-  let match = salaryStr.match(prefixPattern);
-  if (!match) match = salaryStr.match(suffixPattern);
+  let match: RegExpMatchArray | null;
+  if (grammar === 'legacy') {
+    match = salaryStr.match(prefixPattern);
+    if (!match) match = salaryStr.match(suffixPattern);
+  } else {
+    // Spec 1695 — scan every candidate instead of taking the leftmost, so a
+    // benefit range written with "to" cannot shadow the salary after it.
+    const fromPrefix = selectRangeMatch(
+      salaryStr,
+      cachedSalaryRegex(`prefix-g|${cacheKey}`, () => new RegExp(prefixPattern.source, 'g')),
+    );
+    let picked = fromPrefix?.strong ? fromPrefix : null;
+    if (!picked) {
+      const fromSuffix = selectRangeMatch(
+        salaryStr,
+        cachedSalaryRegex(`suffix-g|${cacheKey}`, () => new RegExp(suffixPattern.source, 'g')),
+      );
+      picked = fromSuffix?.strong ? fromSuffix : (fromPrefix ?? fromSuffix);
+    }
+    match = picked?.match ?? null;
+  }
   if (!match && barePattern) {
     match = salaryStr.match(barePattern);
     if (match) matchedFromBare = true;
@@ -898,18 +1346,26 @@ export function extractSalary(
   // never alters range behaviour; it only rescues a genuinely one-sided figure
   // the employer published (which would otherwise be dropped).
   if (!match) {
-    const single = matchSingleBoundSalary(salaryStr, symbolAlt, numSrc);
+    const single = matchSingleBoundSalary(
+      salaryStr,
+      symbolAlt,
+      numSrc,
+      grammar,
+      options?.upperBoundNeedsSalaryCue ?? false,
+    );
     if (!single) return result;
 
     let value = parseSalaryNumber(single.raw, locale);
     if (value === null) return result;
     if (single.kSuffix.toLowerCase() === 'k') value *= 1000;
 
+    // Spec 1695 — caller hint, then the amount's own period token.
+    const statedPeriod = options?.interval ?? intervalFromPeriodToken(single.period);
     let interval: string;
     let annual: number;
-    if (options?.interval) {
-      interval = options.interval;
-      annual = value * ANNUALIZATION_FACTORS[options.interval];
+    if (statedPeriod) {
+      interval = statedPeriod;
+      annual = value * ANNUALIZATION_FACTORS[statedPeriod];
     } else if (value < hourlyThreshold) {
       interval = CompensationInterval.HOURLY;
       annual = value * 2080;
@@ -931,8 +1387,13 @@ export function extractSalary(
     return result;
   }
 
-  let minSalary = parseSalaryNumber(match[1], locale);
-  let maxSalary = parseSalaryNumber(match[3], locale);
+  // Named groups (Spec 1695): the optional period-token groups sit between
+  // the two amounts, so positional indices would shift with the grammar.
+  const groups = match.groups ?? {};
+  const minK = groups.minK ?? '';
+  const maxK = groups.maxK ?? '';
+  let minSalary = parseSalaryNumber(groups.min ?? '', locale);
+  let maxSalary = parseSalaryNumber(groups.max ?? '', locale);
   if (minSalary === null || maxSalary === null) return result;
 
   // Spec 015 / Q-036 / FR-2 + Spec 019 / Q-041 / FR-1 —
@@ -957,29 +1418,36 @@ export function extractSalary(
   // `100000 ≥ 1000`). See `docs/PERFORMANCE_TUNING.md`.
   if (
     matchedFromBare &&
-    match[2].toLowerCase() !== 'k' &&
-    match[4].toLowerCase() !== 'k' &&
+    minK.toLowerCase() !== 'k' &&
+    maxK.toLowerCase() !== 'k' &&
     minSalary < lowerLimit
   ) {
     return result;
   }
 
-  if (match[2].toLowerCase() === 'k' || match[4].toLowerCase() === 'k') {
+  if (minK.toLowerCase() === 'k' || maxK.toLowerCase() === 'k') {
     minSalary *= 1000;
     maxSalary *= 1000;
   }
+
+  // Spec 1695 — a period token on either amount states the interval; two
+  // different ones make the text self-contradictory, so nothing is emitted.
+  const tokenPeriod = periodFromTokens(groups.minPer, groups.maxPer);
+  if (tokenPeriod === 'conflict') return result;
+  const statedPeriod = options?.interval ?? tokenPeriod;
 
   let interval: string;
   let annualMinSalary: number;
   let annualMaxSalary: number | null = null;
 
-  if (options?.interval) {
-    // Spec 5045 — trust the caller's explicit pay period over the magnitude
-    // heuristic; annualize both ends with the period's factor for the bounds
-    // check (never `null`, so a genuine range is not dropped by the crossing
-    // guard the magnitude branches use).
-    interval = options.interval;
-    const factor = ANNUALIZATION_FACTORS[options.interval];
+  if (statedPeriod) {
+    // Spec 5045 — trust the caller's explicit pay period (or, Spec 1695, the
+    // one written in the text) over the magnitude heuristic; annualize both
+    // ends with the period's factor for the bounds check (never `null`, so a
+    // genuine range is not dropped by the crossing guard the magnitude
+    // branches use).
+    interval = statedPeriod;
+    const factor = ANNUALIZATION_FACTORS[statedPeriod];
     annualMinSalary = minSalary * factor;
     annualMaxSalary = maxSalary * factor;
   } else if (minSalary < hourlyThreshold) {
@@ -1168,51 +1636,253 @@ export function extractJobType(description: string | null): JobType[] | null {
 /**
  * Resolve a raw job type string to a JobType enum value.
  * Replaces Python's get_enum_from_job_type().
+ *
+ * Spec 1697: `options` passes through to `getJobTypeFromString` (a `locale`
+ * enables locale-scoped aliases such as French `stage`; `mode: 'token'`
+ * ignores the prose-ambiguous aliases). Omitted, the lookup is unchanged.
  */
-export function getEnumFromJobType(jobTypeStr: string): JobType | null {
-  return getJobTypeFromString(jobTypeStr);
+export function getEnumFromJobType(
+  jobTypeStr: string,
+  options?: JobTypeLookupOptions,
+): JobType | null {
+  return getJobTypeFromString(jobTypeStr, options);
+}
+
+/** Spec 1695 — options for {@link parseCurrency}. */
+export interface ParseCurrencyOptions {
+  /**
+   * Multiply by 1000 when a `k` / `K` follows the digits (`"$100K"` →
+   * 100000, `"1.5k"` → 1500). Default `true`; `false` keeps the earlier
+   * reading, which drops the suffix (`"$100K"` → 100).
+   */
+  thousandsSuffix?: boolean;
 }
 
 /**
- * Parse a currency string removing non-numeric characters.
- * Replaces Python's currency_parser().
+ * Parse a single money amount out of a display string (`"$1,234.56"`,
+ * `"1.234,56"`, `"€45.000"`, `"$100K"`). Every character other than digits,
+ * `-`, `.` and `,` is dropped; the last three remaining characters decide
+ * the decimal separator (a `,` there without a `.` is a decimal comma) and
+ * any separator before them is a thousands separator. The result is rounded
+ * to cents.
+ *
+ * Spec 1695 — returns `null`, never `NaN`, when the text has no digit
+ * (`"Negotiable"`, `""`, `"-"`) or does not parse to a finite number, and
+ * honours a trailing K (see {@link ParseCurrencyOptions.thousandsSuffix}).
  */
-export function parseCurrency(curStr: string): number {
-  let cleaned = curStr.replace(/[^-0-9.,]/g, '');
+export function parseCurrency(
+  curStr: string | null | undefined,
+  options?: ParseCurrencyOptions,
+): number | null {
+  if (curStr == null) return null;
+  const text = String(curStr);
+  if (!/\d/.test(text)) return null;
+  const multiplier =
+    (options?.thousandsSuffix ?? true) && /\d\s*[kK](?![A-Za-z])/.test(text) ? 1000 : 1;
+
+  let cleaned = text.replace(/[^-0-9.,]/g, '');
   // Remove thousands separators
   const last3 = cleaned.slice(-3);
   const before = cleaned.slice(0, -3);
   cleaned = before.replace(/[.,]/g, '') + last3;
 
-  if (last3.includes('.')) {
-    return Math.round(parseFloat(cleaned) * 100) / 100;
-  } else if (last3.includes(',')) {
-    return Math.round(parseFloat(cleaned.replace(',', '.')) * 100) / 100;
-  }
-  return Math.round(parseFloat(cleaned) * 100) / 100;
+  const value =
+    last3.includes(',') && !last3.includes('.')
+      ? parseFloat(cleaned.replace(',', '.'))
+      : parseFloat(cleaned);
+  if (!Number.isFinite(value)) return null;
+  return Math.round(value * multiplier * 100) / 100;
+}
+
+/** A bound counts as present only when it is a finite number. */
+function isFiniteAmount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 /**
- * Convert a job's salary to annual equivalent.
- * Mutates the input object. Replaces Python's convert_to_annual().
+ * Annualise a compensation-like object in place (a {@link CompensationDto}
+ * or any `{ interval, minAmount, maxAmount }` shape). The interval is
+ * normalised through {@link getCompensationInterval} (`hourly`, `HOURLY`,
+ * `hour` …), each bound that is a finite number is multiplied by the
+ * period's factor (hourly 2080, daily 260, weekly 52, monthly 12) and
+ * rounded to cents, and the interval becomes `yearly`.
+ *
+ * Spec 1695 — a missing bound stays missing (it used to become `0`), and
+ * nothing changes when the interval is missing, unknown (`biweekly`) or
+ * already yearly, or when no bound is present. Returns whether the object
+ * was changed.
  */
 export function convertToAnnual(jobData: {
-  interval: string;
-  minAmount: number;
-  maxAmount: number;
-}): void {
-  const multipliers: Record<string, number> = {
-    hourly: 2080,
-    monthly: 12,
-    weekly: 52,
-    daily: 260,
-  };
-  const multiplier = multipliers[jobData.interval];
-  if (multiplier) {
-    jobData.minAmount *= multiplier;
-    jobData.maxAmount *= multiplier;
-    jobData.interval = 'yearly';
+  interval?: string | null;
+  minAmount?: number | null;
+  maxAmount?: number | null;
+}): boolean {
+  const interval = jobData.interval ? getCompensationInterval(jobData.interval) : null;
+  if (!interval || interval === CompensationInterval.YEARLY) return false;
+  const hasMin = isFiniteAmount(jobData.minAmount);
+  const hasMax = isFiniteAmount(jobData.maxAmount);
+  if (!hasMin && !hasMax) return false;
+
+  const factor = ANNUALIZATION_FACTORS[interval];
+  if (hasMin) jobData.minAmount = Math.round((jobData.minAmount as number) * factor * 100) / 100;
+  if (hasMax) jobData.maxAmount = Math.round((jobData.maxAmount as number) * factor * 100) / 100;
+  jobData.interval = CompensationInterval.YEARLY;
+  return true;
+}
+
+/**
+ * Spec 1695 — whether a compensation carries a usable amount: at least one
+ * bound that is a finite number above zero. A `0` / `0` pair is a common
+ * "not disclosed" placeholder, so it does not count.
+ */
+export function hasSalaryAmount(
+  compensation:
+    | { minAmount?: number | null; maxAmount?: number | null }
+    | null
+    | undefined,
+): boolean {
+  if (!compensation) return false;
+  const usable = (value: unknown): boolean => isFiniteAmount(value) && value > 0;
+  return usable(compensation.minAmount) || usable(compensation.maxAmount);
+}
+
+/** Spec 1695 — input of {@link postProcessCompensation}. */
+export interface PostProcessCompensationInput {
+  /** Compensation the source returned, if any. */
+  compensation?: CompensationDto | null;
+  /** Job description, read only when no direct amount exists. */
+  description?: string | null;
+  /** Search country; the description fallback runs for the USA only. Default USA. */
+  country?: Country;
+  /** Annualise the final compensation (`ScraperInputDto.enforceAnnualSalary`). */
+  enforceAnnualSalary?: boolean;
+  /** Grammar for the description parse; `legacy` also restores the legacy rules. */
+  grammar?: SalaryGrammar;
+}
+
+/** Spec 1695 — result of {@link postProcessCompensation}. */
+export interface PostProcessCompensationResult {
+  compensation: CompensationDto | null | undefined;
+  salarySource: SalarySource | undefined;
+}
+
+/**
+ * Spec 1695 — the post-scrape salary rule for one job, as a pure function
+ * (the input compensation is never mutated; an annualised one is a copy).
+ *
+ * Extended rules (default):
+ * 1. A compensation with a usable amount ({@link hasSalaryAmount}) is kept
+ *    and marked `direct_data` — a single bound counts.
+ * 2. Otherwise, for the USA, the description is parsed with
+ *    {@link salaryToCompensation} in its own period and marked `description`.
+ *    An upper-only figure counts only with a salary word before it in its
+ *    clause and no benefit word there
+ *    ({@link ExtractSalaryOptions.upperBoundNeedsSalaryCue}): `"Compensation:
+ *    up to $90,000"` is read, `"relocation assistance up to $10,000"` and
+ *    `"401(k) match up to $5,000"` are not. A compensation without an amount (only
+ *    a currency, or `0` / `0`) does not block this fallback.
+ * 3. With `enforceAnnualSalary`, the chosen compensation is annualised by
+ *    {@link convertToAnnual}, so the interval says `yearly` whenever the
+ *    amounts are yearly, and a single bound is annualised too.
+ * 4. `salarySource` is cleared when no usable amount remains.
+ *
+ * `grammar: 'legacy'` (or `EVER_JOBS_SALARY_GRAMMAR=legacy`) applies the
+ * rules as they were before Spec 1695: any compensation object blocks the
+ * description fallback; direct amounts are annualised only when both bounds
+ * are set; the description is parsed pre-annualised (keeping its source
+ * interval) and accepted only with a lower bound; the source is cleared
+ * unless `minAmount` is truthy.
+ */
+export function postProcessCompensation(
+  input: PostProcessCompensationInput,
+): PostProcessCompensationResult {
+  const enforceAnnual = input.enforceAnnualSalary ?? false;
+  const country = input.country ?? Country.USA;
+  const grammar = resolveSalaryGrammar(input.grammar);
+  if (grammar === 'legacy') {
+    return legacyPostProcessCompensation(input.compensation, input.description, country, enforceAnnual);
   }
+
+  let compensation = input.compensation;
+  let salarySource: SalarySource | undefined;
+  if (hasSalaryAmount(compensation)) {
+    salarySource = SalarySource.DIRECT_DATA;
+  } else if (country === Country.USA && input.description) {
+    const fromText = salaryToCompensation(input.description, {
+      grammar,
+      upperBoundNeedsSalaryCue: true,
+    });
+    if (fromText) {
+      compensation = fromText;
+      salarySource = SalarySource.DESCRIPTION;
+    }
+  }
+
+  if (enforceAnnual && compensation) {
+    const annualised = copyCompensation(compensation);
+    if (convertToAnnual(annualised)) compensation = annualised;
+  }
+
+  if (!hasSalaryAmount(compensation)) salarySource = undefined;
+  return { compensation, salarySource };
+}
+
+/** The pre-Spec-1695 post-scrape salary rule, kept reachable behind the legacy grammar. */
+function legacyPostProcessCompensation(
+  original: CompensationDto | null | undefined,
+  description: string | null | undefined,
+  country: Country,
+  enforceAnnual: boolean,
+): PostProcessCompensationResult {
+  let compensation = original;
+  let salarySource: SalarySource | undefined;
+  if (compensation) {
+    salarySource = SalarySource.DIRECT_DATA;
+    const factor = compensation.interval
+      ? LEGACY_ANNUAL_MULTIPLIERS[compensation.interval]
+      : undefined;
+    if (
+      enforceAnnual &&
+      factor &&
+      compensation.minAmount != null &&
+      compensation.maxAmount != null
+    ) {
+      const annualised = copyCompensation(compensation);
+      annualised.minAmount = compensation.minAmount * factor;
+      annualised.maxAmount = compensation.maxAmount * factor;
+      annualised.interval = CompensationInterval.YEARLY;
+      compensation = annualised;
+    }
+  } else if (country === Country.USA && description) {
+    const extracted = extractSalary(description, {
+      enforceAnnualSalary: enforceAnnual,
+      grammar: 'legacy',
+    });
+    if (extracted.minAmount != null) {
+      salarySource = SalarySource.DESCRIPTION;
+      compensation = new CompensationDto({
+        interval: (extracted.interval as CompensationInterval | null) ?? undefined,
+        minAmount: extracted.minAmount,
+        maxAmount: extracted.maxAmount,
+        currency: extracted.currency ?? 'USD',
+      });
+    }
+  }
+  if (!compensation?.minAmount) salarySource = undefined;
+  return { compensation, salarySource };
+}
+
+/** The multiplier table the pre-Spec-1695 annualisation used (lowercase keys only). */
+const LEGACY_ANNUAL_MULTIPLIERS: Readonly<Record<string, number>> = {
+  hourly: 2080,
+  monthly: 12,
+  weekly: 52,
+  daily: 260,
+};
+
+/** Shallow copy that keeps every own field, including an explicit `currency: undefined`. */
+function copyCompensation(compensation: CompensationDto): CompensationDto {
+  return Object.assign(new CompensationDto(), compensation);
 }
 
 /**
@@ -1226,6 +1896,8 @@ export const DESIRED_ORDER: string[] = [
   'companyAddresses', 'companyNumEmployees', 'companyRevenue', 'companyDescription',
   'skills', 'experienceRange', 'companyRating', 'companyReviewsCount',
   'vacancyCount', 'workFromHomeType',
+  // Spec 1696 — appended so every column above keeps its position.
+  'datePostedAt', 'datePostedPrecision', 'datePostedBasis',
 ];
 
 /**

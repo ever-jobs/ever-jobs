@@ -267,7 +267,7 @@ export class DiceService implements IScraper, OnModuleDestroy {
       if (input.location) url.searchParams.set('location', input.location);
 
       this.logger.log(`Dice Playwright: navigating to ${url.toString()}`);
-      await page.goto(url.toString(), {
+      await BrowserPool.navigate(page, url.toString(), {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });

@@ -1,0 +1,111 @@
+<!-- Synthetic fixture for posted-time tests. Structure mirrors the guest search card markup observed 2026-09-24; all names/ids are fake. Assume fetchedAt = 2026-09-24T20:00:03Z. -->
+<li>
+  <div class="base-card base-search-card job-search-card" data-entity-urn="urn:li:jobPosting:9000000001">
+    <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/backend-engineer-at-acme-robotics-9000000001?refId=x&amp;trackingId=y"><span class="sr-only">Backend Engineer</span></a>
+    <div class="base-search-card__info">
+      <h3 class="base-search-card__title">
+        Backend Engineer
+      </h3>
+      <h4 class="base-search-card__subtitle"><a class="hidden-nested-link" href="https://www.linkedin.com/company/acme-robotics">Acme Robotics</a></h4>
+      <div class="base-search-card__metadata">
+        <span class="job-search-card__location">Austin, TX</span>
+        <time class="job-search-card__listdate--new" datetime="2026-09-24">
+
+          26 minutes ago
+
+        </time>
+      </div>
+    </div>
+  </div>
+</li>
+<li>
+  <div class="base-card base-search-card job-search-card" data-entity-urn="urn:li:jobPosting:9000000002">
+    <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/data-engineer-at-globex-9000000002"><span class="sr-only">Data Engineer</span></a>
+    <div class="base-search-card__info">
+      <h3 class="base-search-card__title">Data Engineer</h3>
+      <h4 class="base-search-card__subtitle"><a class="hidden-nested-link" href="https://www.linkedin.com/company/globex">Globex</a></h4>
+      <div class="base-search-card__metadata">
+        <span class="job-search-card__location">Warren, MI</span>
+        <time class="job-search-card__listdate--new" datetime="2026-09-24">
+          1 hour ago
+        </time>
+      </div>
+    </div>
+  </div>
+</li>
+<li>
+  <div class="base-card base-search-card job-search-card" data-entity-urn="urn:li:jobPosting:9000000003">
+    <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/sre-at-initech-9000000003"><span class="sr-only">Site Reliability Engineer</span></a>
+    <div class="base-search-card__info">
+      <h3 class="base-search-card__title">Site Reliability Engineer</h3>
+      <h4 class="base-search-card__subtitle"><a class="hidden-nested-link" href="https://www.linkedin.com/company/initech">Initech</a></h4>
+      <div class="base-search-card__metadata">
+        <span class="job-search-card__location">United States</span>
+        <time class="job-search-card__listdate" datetime="2026-09-22">
+          2 days ago
+        </time>
+      </div>
+    </div>
+  </div>
+</li>
+<li>
+  <div class="base-card base-search-card job-search-card" data-entity-urn="urn:li:jobPosting:9000000004">
+    <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/qa-lead-at-umbrella-9000000004"><span class="sr-only">QA Lead</span></a>
+    <div class="base-search-card__info">
+      <h3 class="base-search-card__title">QA Lead</h3>
+      <h4 class="base-search-card__subtitle"><a class="hidden-nested-link" href="https://www.linkedin.com/company/umbrella">Umbrella</a></h4>
+      <div class="base-search-card__metadata">
+        <span class="job-search-card__location">Denver, CO</span>
+        <!-- Real-world shape from the probe: the week label is COARSER than the attribute (12 days old, label says 1 week). -->
+        <time class="job-search-card__listdate" datetime="2026-09-12">
+          1 week ago
+        </time>
+      </div>
+    </div>
+  </div>
+</li>
+<li>
+  <div class="base-card base-search-card job-search-card" data-entity-urn="urn:li:jobPosting:9000000005">
+    <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/platform-engineer-at-hooli-9000000005"><span class="sr-only">Platform Engineer</span></a>
+    <div class="base-search-card__info">
+      <h3 class="base-search-card__title">Platform Engineer</h3>
+      <h4 class="base-search-card__subtitle"><a class="hidden-nested-link" href="https://www.linkedin.com/company/hooli">Hooli</a></h4>
+      <div class="base-search-card__metadata">
+        <span class="job-search-card__location">Berlin, Germany</span>
+        <!-- Localised label: must degrade to the attribute, never throw. -->
+        <time class="job-search-card__listdate--new" datetime="2026-09-24">
+          vor 3 Stunden
+        </time>
+      </div>
+    </div>
+  </div>
+</li>
+<li>
+  <div class="base-card base-search-card job-search-card" data-entity-urn="urn:li:jobPosting:9000000006">
+    <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/ml-engineer-at-vehement-9000000006"><span class="sr-only">ML Engineer</span></a>
+    <div class="base-search-card__info">
+      <h3 class="base-search-card__title">ML Engineer</h3>
+      <h4 class="base-search-card__subtitle"><a class="hidden-nested-link" href="https://www.linkedin.com/company/vehement">Vehement</a></h4>
+      <div class="base-search-card__metadata">
+        <span class="job-search-card__location">Remote</span>
+        <!-- Inconsistent pair: sub-day label vs a 4-day-old attribute. Attribute must win. -->
+        <time class="job-search-card__listdate" datetime="2026-09-20">
+          1 hour ago
+        </time>
+      </div>
+    </div>
+  </div>
+</li>
+<li>
+  <div class="base-card base-search-card job-search-card" data-entity-urn="urn:li:jobPosting:9000000007">
+    <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/devrel-at-massive-dynamic-9000000007"><span class="sr-only">Developer Advocate</span></a>
+    <div class="base-search-card__info">
+      <h3 class="base-search-card__title">Developer Advocate</h3>
+      <h4 class="base-search-card__subtitle"><a class="hidden-nested-link" href="https://www.linkedin.com/company/massive-dynamic">Massive Dynamic</a></h4>
+      <div class="base-search-card__metadata">
+        <span class="job-search-card__location">New York, NY</span>
+        <!-- No <time> element at all. -->
+      </div>
+    </div>
+  </div>
+</li>

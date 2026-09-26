@@ -1,0 +1,350 @@
+[
+    {
+        "source": "Simplify",
+        "category": "Quantitative Finance",
+        "company_name": "Umbrella Capital",
+        "id": "00000000-0000-4000-8000-000000000104",
+        "title": "Graduate Quant Researcher",
+        "active": true,
+        "date_updated": 1790240000,
+        "date_posted": 1790240000,
+        "url": "https://eeho.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX/job/555",
+        "locations": [
+            "Birmingham, UK"
+        ],
+        "company_url": "https://simplify.jobs/c/Umbrella-Capital",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": [
+            "Master's",
+            "PhD"
+        ]
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Acme Robotics",
+        "id": "00000000-0000-4000-8000-000000000101",
+        "title": "Software Engineer, New Grad",
+        "active": true,
+        "date_updated": 1790269320,
+        "date_posted": 1790269200,
+        "url": "https://boards.greenhouse.io/acmerobotics/jobs/1001",
+        "locations": [
+            "Cambridge, UK"
+        ],
+        "company_url": "https://simplify.jobs/c/Acme-Robotics",
+        "is_visible": true,
+        "sponsorship": "Does Not Offer Sponsorship",
+        "degrees": [
+            "Bachelor's"
+        ]
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Acme Robotics",
+        "id": "00000000-0000-4000-8000-000000000111",
+        "title": "Embedded Engineer",
+        "active": false,
+        "date_updated": 1790279000,
+        "date_posted": 1790279000,
+        "url": "https://boards.greenhouse.io/acmerobotics/jobs/1011",
+        "locations": [
+            "Boston, MA"
+        ],
+        "company_url": "https://simplify.jobs/c/Acme-Robotics",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Data Science, AI & Machine Learning",
+        "company_name": "Initech",
+        "id": "00000000-0000-4000-8000-000000000103",
+        "title": "Data Analyst",
+        "active": true,
+        "date_updated": 1790250000,
+        "date_posted": 1790250000,
+        "url": "https://jobs.lever.co/initech/0b6f7c1e-analyst",
+        "locations": [
+            "Birmingham, AL"
+        ],
+        "company_url": "https://simplify.jobs/c/Initech",
+        "is_visible": true,
+        "sponsorship": "Offers Sponsorship",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Hardware",
+        "company_name": "Globex",
+        "id": "00000000-0000-4000-8000-000000000102",
+        "title": "Hardware Engineer I",
+        "active": true,
+        "date_updated": 1790269199,
+        "date_posted": 1790269199,
+        "url": "https://globex.wd5.myworkdayjobs.com/en-US/Careers/job/Cambridge-MA/Hardware-Engineer-I_R100",
+        "locations": [
+            "Cambridge, MA"
+        ],
+        "company_url": "https://simplify.jobs/c/Globex",
+        "is_visible": true,
+        "sponsorship": "U.S. Citizenship is Required",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Globex",
+        "id": "00000000-0000-4000-8000-000000000112",
+        "title": "Hidden Role",
+        "active": true,
+        "date_updated": 1790278000,
+        "date_posted": 1790278000,
+        "url": "https://globex.wd5.myworkdayjobs.com/Careers/job/Hidden_R112",
+        "locations": [
+            "Austin, TX"
+        ],
+        "company_url": "https://simplify.jobs/c/Acme-Robotics",
+        "is_visible": false,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Hooli",
+        "id": "00000000-0000-4000-8000-000000000105",
+        "title": "Software Engineer I",
+        "active": true,
+        "date_updated": 1790230000,
+        "date_posted": 1790230000,
+        "url": "https://jobs.ashbyhq.com/hooli/9f1c2d3e-0000-4000-8000-000000000105",
+        "locations": [
+            "NYC"
+        ],
+        "company_url": "https://simplify.jobs/c/Hooli",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Hooli",
+        "id": "00000000-0000-4000-8000-000000000113",
+        "title": "No Link Role",
+        "active": true,
+        "date_updated": 1790277000,
+        "date_posted": 1790277000,
+        "url": "   ",
+        "locations": [
+            "NYC"
+        ],
+        "company_url": "https://simplify.jobs/c/Acme-Robotics",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Product",
+        "company_name": "Pied Piper",
+        "id": "00000000-0000-4000-8000-000000000106",
+        "title": "Product Manager, New Grad",
+        "active": true,
+        "date_updated": 1790220000,
+        "date_posted": 1790220000,
+        "url": "https://piedpiper.wd1.myworkdayjobs.com/en-US/Careers/job/San-Francisco/PM-New-Grad_R106",
+        "locations": [
+            "SF"
+        ],
+        "company_url": "https://simplify.jobs/c/Pied-Piper",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Vandelay Industries",
+        "id": "00000000-0000-4000-8000-000000000107",
+        "title": "Backend Engineer",
+        "active": true,
+        "date_updated": 1790210000,
+        "date_posted": 1790210000,
+        "url": "https://careers-vandelay.icims.com/jobs/7777/backend-engineer/job",
+        "locations": [
+            "Remote in USA"
+        ],
+        "company_url": "https://simplify.jobs/c/Vandelay-Industries",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Hardware",
+        "company_name": "Stark Photonics",
+        "id": "00000000-0000-4000-8000-000000000108",
+        "title": "Firmware Engineer",
+        "active": true,
+        "date_updated": 1790200000,
+        "date_posted": 1790200000,
+        "url": "https://stark.wd3.myworkdayjobs.com/Careers/job/Kanata/Firmware-Engineer_R108",
+        "locations": [
+            "Kanata, Ottawa, ON, Canada"
+        ],
+        "company_url": "https://simplify.jobs/c/Stark-Photonics",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Wayne Systems",
+        "id": "00000000-0000-4000-8000-000000000109",
+        "title": "Associate Software Engineer",
+        "active": true,
+        "date_updated": 1790190000,
+        "date_posted": 1790190000,
+        "url": "https://careers.wayne-systems.example/openings?gh_jid=4242",
+        "locations": [
+            "Research Triangle, Durham, NC"
+        ],
+        "company_url": "https://simplify.jobs/c/Wayne-Systems",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Soylent Corp",
+        "id": "00000000-0000-4000-8000-000000000110",
+        "title": "Rotational Engineer",
+        "active": true,
+        "date_updated": 1790180000,
+        "date_posted": 1790180000,
+        "url": "https://soylent.taleo.net/careersection/2/jobdetail.ftl?job=110",
+        "locations": [
+            "Austin, TX",
+            "Troy, MI",
+            "Remote in USA"
+        ],
+        "company_url": "https://simplify.jobs/c/Soylent-Corp",
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Tyrell",
+        "id": "00000000-0000-4000-8000-000000000114",
+        "title": "Site Reliability Engineer",
+        "active": true,
+        "date_updated": 1790170000,
+        "date_posted": 1790170000,
+        "url": "https://jobs.lever.co/tyrell/sre-114",
+        "locations": [
+            "Seattle, WA"
+        ],
+        "company_url": "https://simplify.jobs/c/Tyrell",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Tyrell",
+        "id": "00000000-0000-4000-8000-000000000115",
+        "title": "Site Reliability Engineer",
+        "active": true,
+        "date_updated": 1790160000,
+        "date_posted": 1790160000,
+        "url": "https://jobs.lever.co/tyrell/sre-114",
+        "locations": [
+            "Portland, OR"
+        ],
+        "company_url": "https://simplify.jobs/c/Tyrell",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Tyrell",
+        "id": "00000000-0000-4000-8000-000000000116",
+        "title": "",
+        "active": true,
+        "date_updated": 1790276000,
+        "date_posted": 1790276000,
+        "url": "https://jobs.lever.co/tyrell/untitled-116",
+        "locations": [
+            "Seattle, WA"
+        ],
+        "company_url": "https://simplify.jobs/c/Acme-Robotics",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "  ",
+        "id": "00000000-0000-4000-8000-000000000117",
+        "title": "Support Engineer",
+        "active": true,
+        "date_updated": 1790275500,
+        "date_posted": 1790275500,
+        "url": "https://jobs.lever.co/nobody/117",
+        "locations": [
+            "Seattle, WA"
+        ],
+        "company_url": "https://simplify.jobs/c/Acme-Robotics",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "AI/ML/Data",
+        "company_name": "Cyberdyne",
+        "id": "00000000-0000-4000-8000-000000000118",
+        "title": "Machine Learning Engineer",
+        "active": true,
+        "date_updated": 1790150000,
+        "date_posted": 1790150000,
+        "url": "https://Cyberdyne.wd5.myworkdayjobs.com/Careers/job/ML_R9/",
+        "locations": [
+            "Austin, TX"
+        ],
+        "company_url": "https://simplify.jobs/c/Cyberdyne",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Café Nova",
+        "id": "00000000-0000-4000-8000-000000000119",
+        "title": "Développeur logiciel",
+        "active": true,
+        "date_updated": 1790140000,
+        "date_posted": 1790140000,
+        "url": "https://cafenova.wd3.myworkdayjobs.com/fr-CA/Careers/job/Montreal/Developpeur_R119",
+        "locations": [
+            "Montréal, QC, Canada"
+        ],
+        "company_url": "https://simplify.jobs/c/Cafe-Nova",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": []
+    }
+]

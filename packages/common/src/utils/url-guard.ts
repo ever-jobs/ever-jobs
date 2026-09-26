@@ -31,8 +31,12 @@
  * namespaces), but a two-label in-cluster name such as `argocd-server.argocd`
  * or `valkey.valkey` still passes — the pod's DNS search path resolves it.
  * Only a connect-time check of the resolved IP (a custom `lookup`) closes
- * that, and DNS rebinding with it; until then, pin to a constant public
- * allowlist rather than trusting the hostname guard alone.
+ * that, and DNS rebinding with it. The crawl policy's egress guard (Spec 1690,
+ * `http/crawl/egress-guard.ts`) is that check for direct `HttpClient`
+ * connections while `blockPrivateNetworks` is on (the default); it does not
+ * cover Playwright navigations, proxied requests or a disabled guard — so
+ * still pin to a constant public allowlist rather than trusting the hostname
+ * guard alone.
  */
 
 /** Longest URL `pinUrlToHosts` will consider; longer input is refused. */

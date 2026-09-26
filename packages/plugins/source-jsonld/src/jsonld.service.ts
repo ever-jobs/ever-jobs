@@ -144,8 +144,8 @@ export class JsonLdService implements IScraper {
 
   /**
    * Map schema.org `employmentType` to {@link JobType}s. Handles the underscore
-   * spelling (`FULL_TIME`) that {@link getJobTypeFromString} doesn't normalise,
-   * and the `, `-joined multi-value form produced by the shared helper.
+   * spelling (`FULL_TIME`), which {@link getJobTypeFromString} also normalises
+   * since Spec 1697, and the `, `-joined multi-value form produced by the shared helper.
    */
   private mapJobTypes(employmentType: string | null): JobType[] {
     if (!employmentType) return [];
