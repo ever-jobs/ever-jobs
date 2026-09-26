@@ -39,7 +39,7 @@
 
 ---
 
-## 2026-09-25 — Q-107 correction (Specs 1735–1737 review): the fan-out deadline applies today
+## 2026-09-25 — Spec 1737 — Q-107 correction (Specs 1735–1737 review): the fan-out deadline applies today
 
 **Change:** The entry below, Q-107 follow-up 2 and Spec 1736 §7 repeated a review claim that `configuration.ts` parses `EVER_JOBS_SEARCH_DEADLINE_MS` / `EVER_JOBS_SEARCH_CONCURRENCY` with a radix (`parseInt(env, 120_000)`), so the deadline is always `NaN` and never applies. That is wrong: `configuration.ts` shadows `parseInt` with a local `(value, fallback)` helper, so the defaults are 120 000 ms / 64 and both variables (and `CACHE_EXPIRY` / `CACHE_MAX_ITEMS`) take effect. Consequence corrected in Q-107 and Spec 1736 §7: the tail-registered company plugins are the first sources the 120 s deadline skips or abandons **today**, and sequential Workday enrichment makes each Workday board slower; a full sync that needs them should select them or raise the deadline. Nothing is handed to the C4 lane. Spec 1736 §7 now also records that the 55-token `EVER_JOBS_DISABLED_SOURCES` list was checked against the source (exactly the plugins delegating to `Site.WORKDAY`).
 
