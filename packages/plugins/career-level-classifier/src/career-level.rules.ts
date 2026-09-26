@@ -606,7 +606,7 @@ function numeralSignal(value: number, label: string, isRange: boolean): Signal {
 
 /** Level numerals (`Engineer II`, `Level 1`, `SDE 2`, `Analyst I/II`) — segment-aware. */
 function numeralSignals(segments: string[]): Signal[] {
-  const out: Signal[] = [];
+  let out: Signal[] = [];
   const segTokens = segments.map(tokenize);
   segTokens.forEach((toks, s) => {
     // A segment that is only a numeral ("Engineer - II", "Engineer (II)"). Bare `i` / `v` are
@@ -1096,7 +1096,7 @@ function yearsLevel(min: number): Level {
 }
 
 function structuredSignals(input: CareerLevelInput): Signal[] {
-  const out: Signal[] = [];
+  let out: Signal[] = [];
   const types = Array.isArray(input.jobType) ? input.jobType : [];
   if (types.some((t) => typeof t === 'string' && t.toLowerCase() === 'internship')) {
     out.push({ level: 'internship', confidence: 'medium', reason: 'jobType: internship', source: 'jobType' });
@@ -1362,7 +1362,7 @@ function experienceYears(text: string): number[] {
 function descriptionSignals(description: string | null | undefined): Signal[] {
   if (typeof description !== 'string' || !description.trim()) return [];
   const text = prepareDescription(description);
-  const out: Signal[] = [];
+  let out: Signal[] = [];
   const anchors = new Set<string>();
   execAll(DESCRIPTION_ANCHOR_RE, text, (m) => {
     for (const n of NEEDLE_PREFIXES.get(m[0]) ?? []) anchors.add(n);
