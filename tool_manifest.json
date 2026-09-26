@@ -369,7 +369,7 @@
           "type": "object",
           "properties": {
             "id": { "type": "string" },
-            "dedupKey": { "type": "string", "description": "Stable cross-source key (sha-256 of normalised company|title|location); the same posting from any source or run has the same key." },
+            "dedupKey": { "type": "string", "description": "Stable cross-source key (sha-256 of normalised company|title|location); the same posting from any source or run has the same key. With dedup=true a posting whose employment class is not full-time or unknown (internship, contract, part-time, ...) carries a key scoped by that class, so it never shares a key with a full-time posting of the same title, company and location; with dedup=false the key is class-free." },
             "site": { "type": "string" },
             "title": { "type": "string" },
             "companyName": { "type": "string" },
