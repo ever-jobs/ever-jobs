@@ -1,5 +1,5 @@
 import { JobPostDto, JobType, LocationDto, Site } from '@ever-jobs/models';
-import { dedupKeyForJob } from '@ever-jobs/common';
+import { clusterKeyForJob, dedupKeyForJob } from '@ever-jobs/common';
 import { DedupHybridService } from '../src/dedup-hybrid.service';
 import {
   employmentClassesOf,
@@ -110,8 +110,14 @@ describe('merge gate — Jane Street list-mode regression (Spec 1724)', () => {
     expect(a).toMatch(/^[0-9a-f]{64}$/);
     expect(b).toMatch(/^[0-9a-f]{64}$/);
     expect(a).not.toBe(b);
-    // Neither inherits the plain id both would have shared.
-    expect([a, b]).not.toContain(dedupKeyForJob(soc[0]!.j));
+    // Spec 1724 review: the ids come from each posting's own fields. The new
+    // grad (full-time) keeps the plain id; the internship carries the id
+    // scoped by its class — the same one clusterKeyForJob gives it.
+    const byLabel = new Map(soc.map(({ j, i }) => [j.employmentType, out.assignments[i]]));
+    expect(byLabel.get('Full-Time: New Grad')).toBe(dedupKeyForJob(soc[0]!.j));
+    const intern = soc.find(({ j }) => j.employmentType === 'Summer Internship')!.j;
+    expect(byLabel.get('Summer Internship')).toBe(clusterKeyForJob(intern));
+    expect(byLabel.get('Summer Internship')).not.toBe(dedupKeyForJob(intern));
     // Deterministic across runs.
     const again = await new DedupHybridService().dedup(janeStreetJobs());
     expect(soc.map(({ i }) => again.assignments[i])).toEqual([a, b]);
@@ -184,6 +190,33 @@ describe('merge gate — employment-type rule (Spec 1724)', () => {
   let service: DedupHybridService;
   beforeEach(() => {
     service = new DedupHybridService();
+  });
+
+  it('a posting keeps one id whether or not its conflicting twin is in the batch (Spec 1724 review)', async () => {
+    const intern = () => job({ id: '1', location: NEW_YORK, employmentType: 'Summer Internship' });
+    const fullTime = () => job({ id: '2', location: NEW_YORK, employmentType: 'Full-Time: New Grad' });
+
+    const both = await service.dedup([intern(), fullTime()]);
+    const internAlone = await service.dedup([intern()]);
+    const fullTimeAlone = await service.dedup([fullTime()]);
+
+    expect(both.assignments[0]).toBe(internAlone.assignments[0]);
+    expect(both.assignments[1]).toBe(fullTimeAlone.assignments[0]);
+    expect(both.assignments[0]).not.toBe(both.assignments[1]);
+    // The stored record id is the assignment, so a later run updates the same row.
+    expect(internAlone.canonical[0]!.canonicalJobId).toBe(both.assignments[0]);
+    // A merged cross-source cluster whose head names no employment class keeps the plain id.
+    const unlabeled = await service.dedup([job({ id: '3', site: Site.LINKEDIN, location: NEW_YORK })]);
+    expect(unlabeled.assignments[0]).toBe(fullTimeAlone.assignments[0]);
+  });
+
+  it('control: two full-time labels from one source still get distinct (batch) ids', async () => {
+    const out = await service.dedup([
+      job({ id: '1', location: NEW_YORK, employmentType: 'Full-Time: New Grad' }),
+      job({ id: '2', location: NEW_YORK, employmentType: 'Full-Time: Experienced' }),
+    ]);
+    expect(out.canonical).toHaveLength(2);
+    expect(new Set(out.assignments).size).toBe(2);
   });
 
   it('does not hash-merge an internship with a full-time posting of the same title and city', async () => {

@@ -17,6 +17,8 @@ import {
   canonicalJobId,
   canonicalKey,
   canonicalKeyInputForJob,
+  employmentClassesOf,
+  employmentScopeOf,
   formatJobLocation,
   normalizeCompany,
   normalizeLocation,
@@ -321,29 +323,41 @@ export class DedupHybridService implements IDedupEngine {
 /**
  * One `canonicalJobId` per cluster (Spec 1724).
  *
- * A cluster's id is its head's `canonicalJobId` — unless the merge gate kept
- * two clusters apart whose heads share one canonical key (same company, title
- * and location, conflicting employment type: an internship and a new-grad
- * posting). Then EVERY cluster of that key gets
+ * A cluster's id depends only on its head's own fields, never on what else is
+ * in the batch (Spec 1724 review), so a stored row keeps its id from run to
+ * run: the head's plain `canonicalJobId` for the default engagement
+ * (full-time, or no employment information), else
+ * `sha256(<canonicalKey>|<employment scope>)` — `clusterKeyForJob` in
+ * `@ever-jobs/common`, which the aggregator's `dedupKey` uses too. An
+ * internship and a full-time posting with the same company, title and
+ * location thus never share an id, whether or not both are in the batch.
+ *
+ * Residual collisions — two clusters the gate kept apart whose heads still
+ * share an id (two full-time labels from one source, or two sites that
+ * normalise to one location key) — fall back to
  * `sha256(<canonicalKey>|<discriminator>)` (the head's employment label, else
  * its classes, else its sites), plus an ordinal if that still collides, so
- * ids stay unique per batch — the aggregator keys its representatives and the
- * store upserts by them — and no posting inherits another posting's plain id.
+ * ids stay unique per batch. Only that rare case depends on the batch.
  */
 function assignClusterIds(
   clusters: ReadonlyArray<ReadonlyArray<number>>,
   prepared: ReadonlyArray<PreparedJob>,
   gate: MergeGate,
 ): string[] {
-  const perId = new Map<string, number>();
-  for (const cluster of clusters) {
-    const id = prepared[cluster[0]].canonicalJobId;
-    perId.set(id, (perId.get(id) ?? 0) + 1);
-  }
-  const used = new Set<string>();
-  return clusters.map((cluster) => {
+  const own = clusters.map((cluster) => {
     const head = prepared[cluster[0]];
-    if ((perId.get(head.canonicalJobId) ?? 0) < 2) return head.canonicalJobId;
+    // Only the classes: a full gate profile (with its location parse) is
+    // computed lazily, and most clusters are singletons that never needed one.
+    const scope = employmentScopeOf(employmentClassesOf(head.raw));
+    return scope ? discriminatedCanonicalJobId(head.canonicalKey, scope) : head.canonicalJobId;
+  });
+  const perId = new Map<string, number>();
+  for (const id of own) perId.set(id, (perId.get(id) ?? 0) + 1);
+  // Ids nobody shares are final; the fallback must not reuse one of them.
+  const used = new Set<string>(own.filter((id) => perId.get(id) === 1));
+  return clusters.map((cluster, c) => {
+    if (perId.get(own[c]) === 1) return own[c];
+    const head = prepared[cluster[0]];
     const discriminator = clusterDiscriminator(gate.profile(cluster[0]));
     let id = discriminatedCanonicalJobId(head.canonicalKey, discriminator);
     for (let n = 2; used.has(id); n++) {

@@ -52,6 +52,16 @@ The ladder nouns were red first (14 failing).
 
 ---
 
+## 2026-09-26 — Spec 1724 — PR #98 review: stable cluster ids, no cached cut-off GraphQL crawls, observation sets kept on a bad date
+
+- **Stable ids (Spec 1724 FR-5, D-04 superseded).** A cluster id no longer depends on the batch: the default engagement (full-time or unknown) keeps the plain `canonicalJobId`, any other employment class always gets `sha256(<canonicalKey>|<classes>)`. The same rule is `clusterKeyForJob` in `@ever-jobs/common` (the employment-class helpers moved there from the merge gate, re-exported), which the aggregator uses for a `dedup=true` representative's `dedupKey`. Before, an internship's id and stored row changed with whether its full-time twin was in the same crawl. A representative whose key differs from its plain per-job key is returned as a copy, so a cached raw job never carries it into a later `dedup=false` response.
+- **GraphQL cache (Spec 1721 FR-20).** The resolver now calls `searchJobsWithDiagnostics` and, like REST, never caches an incomplete crawl.
+- **Postgres observations (Spec 1722 FR-13).** `putAllMany` skips a canonical entry with an unparsable `observedAt` whole and leaves its stored set untouched (what its own `putAll` did); dropping only that row made the replace statement delete the stored observation.
+- **Multi-location deadline (Spec 1700 × 1721).** The location loop remembers a deadline cut, so a timer that fires before `Date.now()` reaches the deadline cannot start the next location.
+- **Spec 1721 FR-1** says `201`, the status the POST search has always returned (the spec said `200`).
+- **docs/log.md** headings carry a unique `Spec NNNN` per date so `lint:docs` passes on the merged tree.
+
+
 ## 2026-09-26 — Spec 1720 — Bayt listed in list mode; develop's cache-key tests follow `search-v2`
 
 - Spec 1710 (develop) rebuilt Bayt's search URL: an empty term now lists `/en/<market>/jobs/` instead of the malformed `/jobs/-jobs/` that made Spec 1720 flag it. The flag is removed; `naukri`, `stepstone` and `careeronestop` keep it. The audit test asserts Bayt carries no flag.

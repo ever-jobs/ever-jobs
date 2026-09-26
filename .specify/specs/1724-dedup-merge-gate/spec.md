@@ -56,7 +56,7 @@ mode loses a third of the board without any signal.
 | FR-2 | **Location.** Each posting is reduced to a set of normalised sites — per-site `locations[]` when they yield any, else the flat `location`; each site is city / state / country (`normalizeLocation`, countries through `canonicalCountryName`), or `remote`. A remote posting with no concrete site (no city/state) is the single site `remote`, exactly as the canonical key's remote bucket (Spec 1689). Two sites match when no field both name disagrees (`remote` only matches `remote`). Two site sets are compatible when either is empty, or every site of one matches a site of the other (one covers the other). | must |
 | FR-3 | **Employment type.** `jobType[]` and the free-text `employmentType` map to coarse classes (`fulltime`, `parttime`, `internship`, `contract`, `temporary`, `volunteer`, `apprenticeship`). Two postings conflict when both have classes and the sets are disjoint, or when both come from the same source (`site`) and carry different normalised `employmentType` labels. Labels of different sources are compared only through their classes. | must |
 | FR-4 | Compatibility is checked between every pair of distinct member profiles of the two groups being joined — never against a merged summary — so no chain can bridge two incompatible postings. | must |
-| FR-5 | Cluster ids stay unique per batch. A cluster's id is its head's `canonicalJobId`, unless another cluster's head has the same canonical key (the gate split them); then every such cluster gets `sha256(<canonicalKey>|<discriminator>)` — the head's employment label, else its classes, else its sites — plus an ordinal while it still collides. | must |
+| FR-5 | Cluster ids stay unique per batch AND stable across batches (review 2026-09-26). A cluster's id depends only on its head's own fields: its plain `canonicalJobId` for the default engagement (full-time, or no employment information), else `sha256(<canonicalKey>|<employment classes>)` (`clusterKeyForJob`, `@ever-jobs/common`). A residual collision (two clusters kept apart whose heads still share an id: two full-time labels from one source, two sites that normalise to one location key) falls back to `sha256(<canonicalKey>|<discriminator>)` — the head's employment label, else its classes, else its sites — plus an ordinal while it still collides; only that rare case depends on the batch. | must |
 | FR-6 | The aggregator's kept job (the first raw job of each cluster, as before) carries the cluster's `locations[]` union (the engine's `CanonicalJob.locations`, head first) when that adds a site; such a job is returned as a shallow copy, never by mutating the input (it may be the cached fan-out). | must |
 | FR-7 | `dedupKey` on the `dedup=true` path: the kept job's own per-job key computed before the union (= its cluster id, Spec 1721 FR-10); when two kept jobs would share that key, each carries its cluster id instead. `dedup=false` is unchanged: per-job keys, so two postings whose title, company and location coincide still share one there. | must |
 | FR-8 | No existing merge that FR-2/FR-3 allow changes. | must |
@@ -130,6 +130,13 @@ None new. The judgement calls are recorded as decisions below.
   plain one. Which cluster comes first follows the output order (site, newest first), so "first
   keeps the plain id" would hand an existing posting's id to a newer one; a symmetric rule never
   re-assigns a posting's id to a different posting.
+  **Superseded 2026-09-26 (PR review):** a batch-dependent id moved a posting between two stored
+  rows depending on whether its conflicting twin happened to be in the same crawl. The id is now a
+  function of the posting alone (FR-5): the default engagement keeps the plain id and any other
+  employment class is always scoped by its classes, so no posting's id is ever handed to another
+  and none changes from run to run. With `dedup=true` the representative's `dedupKey` is the same
+  class-scoped key; with `dedup=false` it stays the class-free per-job key (D-05), so a consumer
+  that dedupes across sources itself can still merge a labelled copy with an unlabelled one.
 - D-05 — **`dedupKey` on `dedup=false` is unchanged.** Without the engine nothing knows the two
   postings conflict; making the per-job key read employment type would change every key that has
   an employment type and split cross-source matches whose boards disagree on it. Consumers that

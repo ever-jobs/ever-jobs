@@ -1,6 +1,15 @@
-import { createHash } from 'crypto';
-import { JobPostDto, JobType } from '@ever-jobs/models';
-import { canonicalCountryName, normalizeLocation } from '@ever-jobs/common';
+import { JobPostDto } from '@ever-jobs/models';
+import {
+  canonicalCountryName,
+  discriminatedCanonicalJobId,
+  employmentClassesOf,
+  normalizeEmploymentLabel,
+  normalizeLocation,
+} from '@ever-jobs/common';
+
+// Moved to @ever-jobs/common (Spec 1724 review) so the aggregator's stable
+// cluster key uses the same classes; re-exported for existing importers.
+export { discriminatedCanonicalJobId, employmentClassesOf, normalizeEmploymentLabel };
 
 import { UnionFind } from './union-find';
 
@@ -147,50 +156,6 @@ export function siteSetsCompatible(
   return covers(a, b) || covers(b, a);
 }
 
-const JOB_TYPE_CLASS: Partial<Record<string, string>> = {
-  [JobType.FULL_TIME]: 'fulltime',
-  [JobType.PART_TIME]: 'parttime',
-  [JobType.CONTRACT]: 'contract',
-  [JobType.TEMPORARY]: 'temporary',
-  [JobType.INTERNSHIP]: 'internship',
-  [JobType.VOLUNTEER]: 'volunteer',
-};
-
-/** Keyword → class, matched on the normalised label (lower case, words separated by one space). */
-const LABEL_CLASSES: ReadonlyArray<readonly [string, RegExp]> = [
-  ['internship', /\b(?:intern|interns|internship|internships|co op|coop|praktikum|werkstudent)\b/],
-  ['fulltime', /\b(?:full time|fulltime|permanent|regular|vollzeit)\b/],
-  ['parttime', /\b(?:part time|parttime|teilzeit)\b/],
-  ['contract', /\b(?:contract|contractor|freelance|freelancer)\b/],
-  ['temporary', /\b(?:temporary|temp|seasonal|fixed term)\b/],
-  ['volunteer', /\bvolunteer\b/],
-  ['apprenticeship', /\b(?:apprentice|apprenticeship)\b/],
-];
-
-/** Lower-cased, NFKC, every run of non-letters/digits collapsed to one space. */
-export function normalizeEmploymentLabel(label: string | null | undefined): string {
-  if (!label) return '';
-  return label
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
-}
-
-/** Coarse employment classes of a posting, from `jobType[]` and the `employmentType` label. */
-export function employmentClassesOf(job: Pick<JobPostDto, 'jobType' | 'employmentType'>): string[] {
-  const classes = new Set<string>();
-  for (const t of job.jobType ?? []) {
-    const c = JOB_TYPE_CLASS[String(t)];
-    if (c) classes.add(c);
-  }
-  const label = normalizeEmploymentLabel(job.employmentType);
-  if (label) {
-    for (const [c, re] of LABEL_CLASSES) if (re.test(label)) classes.add(c);
-  }
-  return [...classes].sort();
-}
-
 /** Build the gate's view of one posting. */
 export function mergeProfileOf(job: JobPostDto): MergeProfile {
   const sites = sitesOf(job);
@@ -331,12 +296,3 @@ export function clusterDiscriminator(profile: MergeProfile): string {
   return profile.label || profile.classesSig || profile.sitesSig;
 }
 
-/**
- * `canonicalJobId` of a cluster that shares its head's canonical key with
- * another cluster of the same batch: sha-256 of `<canonicalKey>|<discriminator>`.
- * A canonical key has exactly two `|`, so the input can never equal another
- * posting's key.
- */
-export function discriminatedCanonicalJobId(canonicalKey: string, discriminator: string): string {
-  return createHash('sha256').update(`${canonicalKey}|${discriminator}`, 'utf8').digest('hex');
-}

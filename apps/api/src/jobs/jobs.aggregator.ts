@@ -26,6 +26,7 @@ import {
   JobExclusionSpec,
   MAX_EXCLUSION_SAMPLES,
   buildExclusionMetrics,
+  clusterKeyForJob,
   compileJobExclusions,
   dedupKeyForJob,
   matchJobExclusion,
@@ -803,16 +804,20 @@ const PRE_KEYED = new WeakSet<JobPostDto>();
  *    `CanonicalJob.locations`, head first) when that adds a site it did not
  *    list itself — e.g. a board listing merged into the ATS posting that
  *    names every office.
- * 2. **Distinct keys.** `dedupKey` is the representative's own per-job key,
- *    computed from its fields BEFORE the union, so it stays equal to the
- *    engine's cluster id. When two representatives share that key — the
- *    engine kept them apart although title, company and location coincide
- *    (conflicting employment types) — each carries its cluster id instead, so
- *    distinct postings never share a `dedupKey`.
+ * 2. **Stable, distinct keys.** `dedupKey` is the representative's
+ *    `clusterKeyForJob` (Spec 1724 review), computed from its own fields
+ *    BEFORE the union, so it equals the default engine's cluster id and never
+ *    depends on what else is in the batch: the plain per-job key for the
+ *    default engagement (full-time, or no employment information), else a key
+ *    scoped by the employment class — so an internship and a full-time posting
+ *    with the same title, company and location never share a key. When two
+ *    representatives still share one (a rare residual: the engine kept them
+ *    apart for another reason), each carries its cluster id instead.
  *
- * Representatives that change are shallow COPIES: the input may be the cached
- * fan-out, which a later `dedup=false` request must see unchanged. The rest
- * are keyed in place, as {@link stampDedupKeys} would.
+ * Representatives whose key or locations differ from what {@link stampDedupKeys}
+ * would write are shallow COPIES: the input may be the cached fan-out, which a
+ * later `dedup=false` request must see unchanged (with its plain per-job key).
+ * The rest are keyed in place, as {@link stampDedupKeys} would.
  */
 async function finalizeRepresentatives(
   representatives: JobPostDto[],
@@ -821,12 +826,15 @@ async function finalizeRepresentatives(
   canonical: ReadonlyArray<CanonicalJob>,
 ): Promise<JobPostDto[]> {
   const keys: (string | undefined)[] = new Array(representatives.length);
+  const plainKeys: (string | undefined)[] = new Array(representatives.length);
   const perKey = new Map<string, number>();
   for (let i = 0; i < representatives.length; i++) {
     if (i > 0 && i % DEDUP_KEY_YIELD_EVERY === 0) {
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
-    const key = dedupKeyForJob(representatives[i]!);
+    const plain = dedupKeyForJob(representatives[i]!);
+    const key = clusterKeyForJob(representatives[i]!, plain);
+    plainKeys[i] = plain;
     keys[i] = key;
     if (key !== undefined) perKey.set(key, (perKey.get(key) ?? 0) + 1);
   }
@@ -843,7 +851,9 @@ async function finalizeRepresentatives(
       const own = new Set<LocationDto>(job.locations ?? []);
       if (merged && merged.some((loc) => !own.has(loc))) union = [...merged];
     }
-    if (key === ownKey && union === undefined) {
+    // In place only when the key is the job's plain per-job key — what any
+    // other request's stamp pass would write on this (possibly cached) job.
+    if (key === plainKeys[i] && union === undefined) {
       if (key !== undefined) job.dedupKey = key;
       PRE_KEYED.add(job);
       return job;
@@ -862,11 +872,14 @@ async function finalizeRepresentatives(
  * `dedupKeyForJob` — the function the default dedup engine uses for
  * `canonicalJobId` — rather than from the engine's cluster assignment, so the
  * key is identical with `dedup=false`, with a swapped engine, from a cache hit
- * or a fresh fan-out, and across runs. For every representative the default
- * engine returns, the two coincide (the representative is the cluster head).
- * One exception (Spec 1724): deduped representatives that would share a key
- * carry their cluster ids — see {@link finalizeRepresentatives}, which also
- * keys the deduped path so this pass does not hash those jobs twice.
+ * or a fresh fan-out, and across runs. For a representative of the default
+ * engagement the default engine returns, the two coincide (it is the cluster
+ * head).
+ * Deduped representatives are keyed by {@link finalizeRepresentatives}
+ * instead (Spec 1724): a posting of a non-default employment class carries its
+ * class-scoped `clusterKeyForJob`, and representatives that would still share
+ * a key carry their cluster ids. It also marks the jobs it keyed, so this pass
+ * does not hash them twice.
  *
  * Yields to the event loop every {@link DEDUP_KEY_YIELD_EVERY} jobs: a
  * 25 k-job list-mode corpus would otherwise block for ~0.3 s.

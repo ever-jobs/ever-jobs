@@ -67,7 +67,7 @@ In addition:
 
 | ID    | Requirement | Priority |
 | ----- | ----------- | -------- |
-| FR-1  | `POST /api/jobs/search?format=ndjson` answers `200` with `Content-Type: application/x-ndjson; charset=utf-8`, `Cache-Control: no-cache`, `X-Accel-Buffering: no`. The first line is written as soon as the fan-out starts (on a cache hit, the first job line), so headers reach the client immediately. | must |
+| FR-1  | `POST /api/jobs/search?format=ndjson` answers `201` — Nest's POST default, the status the JSON search has always returned; clients test for a 2xx (review 2026-09-26: the spec said `200`, the API never did) — with `Content-Type: application/x-ndjson; charset=utf-8`, `Cache-Control: no-cache`, `X-Accel-Buffering: no`. The first line is written as soon as the fan-out starts (on a cache hit, the first job line), so headers reach the client immediately. | must |
 | FR-2  | While scraping (and while dedup/liveness run), a `{"type":"progress","sourcesDone":n,"sourcesTotal":m,"jobs":k}` line is written at fan-out start and then at most every ~10 s (`NDJSON_HEARTBEAT_MS = 10 000`). `jobs` counts raw jobs collected so far. | must |
 | FR-3  | Then exactly one `{"type":"job","data":{…}}` line per job, in the same order and with the same per-job JSON as the unpaginated JSON response (`JSON.stringify(job)`; any extra field another feature adds passes through untouched). | must |
 | FR-4  | Then exactly one `{"type":"end","total":N,"deduped":bool,"durationMs":ms}` (plus FR-15's completeness fields); `total` equals the number of job lines. | must |

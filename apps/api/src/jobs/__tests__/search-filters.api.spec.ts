@@ -324,7 +324,7 @@ describe('JobsController — Spec 1700', () => {
 
 describe('JobsResolver — Spec 1700', () => {
   function createResolver(jobs = JOBS(), realAggregator = false) {
-    const jobsService = { searchJobs: jest.fn().mockResolvedValue(jobs) };
+    const jobsService = { searchJobsWithDiagnostics: jest.fn().mockResolvedValue({ jobs, perSource: [] }) };
     const cacheService = { get: jest.fn().mockResolvedValue(null), set: jest.fn() };
     const aggregator = realAggregator
       ? new JobsAggregator(jobsService as any)
@@ -352,13 +352,13 @@ describe('JobsResolver — Spec 1700', () => {
   it('forwards locations to the service', async () => {
     const { resolver, jobsService } = createResolver();
     await resolver.searchJobs(input({ locations: ['New York, NY', 'Chicago, IL'] }));
-    expect(jobsService.searchJobs.mock.calls[0][0].locations).toEqual(['New York, NY', 'Chicago, IL']);
+    expect(jobsService.searchJobsWithDiagnostics.mock.calls[0][0].locations).toEqual(['New York, NY', 'Chicago, IL']);
   });
 
   it('does not add a locations key when none was sent', async () => {
     const { resolver, jobsService } = createResolver();
     await resolver.searchJobs(input({ location: 'Berlin' }));
-    expect('locations' in jobsService.searchJobs.mock.calls[0][0]).toBe(false);
+    expect('locations' in jobsService.searchJobsWithDiagnostics.mock.calls[0][0]).toBe(false);
   });
 
   it('normalises the cache key, keeps the caller order and keeps exclusions out of it', async () => {

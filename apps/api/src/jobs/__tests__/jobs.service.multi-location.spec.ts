@@ -517,6 +517,35 @@ describe('JobsService — multi-location search (Spec 1700)', () => {
       expect(muse.scrape).toHaveBeenCalledTimes(2);
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('(source, location) calls'));
     });
+
+    it('skips the remaining locations once the deadline cut a call, even if the clock lags the timer', async () => {
+      // Node can fire the deadline timer a few ms before Date.now() reaches the
+      // deadline (libuv caches loop time). A frozen clock makes that lag
+      // permanent: without the loop remembering the cut, AUSTIN would start.
+      const frozen = Date.now();
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(frozen);
+      try {
+        const muse = scraperOf(async (input) => {
+          if (input.location === NEW_YORK) return new JobResponseDto(newYorkJobs());
+          return new Promise<JobResponseDto>(() => undefined); // never settles
+        });
+        const { service } = createService([[Site.THEMUSE, muse]], { deadlineMs: 80 });
+
+        const out = await service.searchJobsWithDiagnostics(
+          new ScraperInputDto({ siteType: [Site.THEMUSE], locations: [NEW_YORK, CHICAGO, AUSTIN] }),
+        );
+
+        expect(muse.scrape).toHaveBeenCalledTimes(2);
+        expect(rowsFor(out.perSource, Site.THEMUSE).map((r) => [r.location, r.reason])).toEqual([
+          [NEW_YORK, 'ok'],
+          [CHICAGO, 'timeout'],
+          [AUSTIN, 'timeout'],
+        ]);
+        expect(out.completeness).toMatchObject({ complete: false, stopReason: 'deadline', sourcesSkipped: 1 });
+      } finally {
+        clock.mockRestore();
+      }
+    });
   });
 
   describe('the location cap', () => {
