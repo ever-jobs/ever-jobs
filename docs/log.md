@@ -12,6 +12,8 @@
 
 ## 2026-09-26 — Spec 1730 FR-12 — classify only the jobs a search returns; rebased onto the list-mode second review; live-sample ladder nouns
 
+**PR #101 review:** the rules' HTML stripper now ends a tag at the first `>` outside a quoted attribute (and only a real tag start opens one), so `<div data-x="> 10-week internship">` no longer leaks its attribute text into the description rules; a scan window cut inside such a tag drops it whole. `tool_manifest.json` gains the `careerLevels` request filter and the `careerLevel` response object. The NDJSON path skips liveness and classification for a client that left during the fan-out, and checks before each 256-job chunk. New tests fail on the previous code.
+
 **Why:** the classifier branch was rebased onto the list-mode branch after its second review
 (Specs 1720, 1721, 1724), and the integration review asked for classification scoped to what a
 request returns (T19): page 2 of a 30,000-job list-mode search classified 30,000 jobs to return
