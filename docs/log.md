@@ -5,7 +5,7 @@
 
 ---
 
-## 2026-09-26 — Merge — Specs 1720-1724 (with develop's Specs 1690-1713) into Spec 1730
+## 2026-09-26 — Spec 1723 — merge: Specs 1720-1724 (with develop's Specs 1690-1713) into Spec 1730
 
 - The aggregator runs dedup, the Spec 1700 exclusions, dedup keys, then career-level classification and the `careerLevels` filter: a job must pass both filters. `AggregateRawOptions` still requires the `careerLevels` key, so every call site passes it next to `exclusions` (REST/NDJSON `runSearch`, GraphQL).
 - The cache key blanks `careerLevels` through `searchCacheParams`' extra argument (it filters after the cache, like the exclusions).
@@ -58,7 +58,7 @@ The ladder nouns were red first (14 failing).
 - Develop's Spec 1690/1700 tests asserted the REST cache key with `endpoint: 'search'`; since Spec 1721 FR-19 the entry is the `search-v2` envelope, so they now use `SEARCH_CACHE_ENDPOINT`.
 
 
-## 2026-09-26 — Merge — develop (Specs 1690-1713: crawl policy, multi-location search, exclusions, board fixes) into Specs 1720-1724
+## 2026-09-26 — Spec 1722 — merge: develop (Specs 1690-1713: crawl policy, multi-location search, exclusions, board fixes) into Specs 1720-1724
 
 - `searchJobsWithDiagnostics` runs both feature sets: list mode, `siteCategories`, the job ceiling, caller cancellation, NDJSON progress and the completeness record (Specs 1720/1721) now also cover multi-location searches (Spec 1700) and the crawl-policy scrape context with its deadline abort (Spec 1690). The deadline race rejects with `FanoutDeadlineError` and still calls the abort hook.
 - Completeness counts SOURCES in both modes: a multi-location source cut short by the deadline, or not started by a bound, counts once in `sourcesSkipped` and appears once in `problemSources` (`skipped`); a source that ran reports its first problem location. `mergeLocationOutcomes` returns each source's rows for this.
