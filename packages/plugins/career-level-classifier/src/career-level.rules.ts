@@ -1284,7 +1284,15 @@ const DESCRIPTION_WINDOWS: readonly number[] = [MAX_DESCRIPTION_CHARS * 1.5, 16 
  * An HTML tag. `[^<>]` (not `[^>]`) keeps the scan linear: on "<b<b<b…" with no ">" a `[^>]*`
  * attempt from every "<" would run to the end of the window.
  */
-const TAG_RE = /<[^<>]*>/g;
+/**
+ * One HTML tag: a real tag start (letter, "/", "!" or "?") up to the first
+ * `>` outside a quoted attribute value, so `<div data-x="> 10-week internship">`
+ * is removed whole instead of leaking its attribute text (PR #101 review), and
+ * a plain-text "a < b > c" is left alone.
+ */
+const TAG_RE = /<[a-z/!?](?:[^<>"']|"[^"]*"|'[^']*')*>/gi;
+/** {@link TAG_RE}, anchored: does the text start with one whole tag? */
+const CLOSED_TAG_RE = /^<[a-z/!?](?:[^<>"']|"[^"]*"|'[^']*')*>/i;
 const ENTITY_RE = /&nbsp;|&amp;|&#?\w+;/g;
 const MARKDOWN_RE = /[*_#`>|~]+/g;
 /** What follows "<" when it opens a tag, as opposed to a plain-text less-than ("< 2 years"). */
@@ -1299,8 +1307,10 @@ function visibleText(desc: string, window: number): { text: string; cut: boolean
   const cut = desc.length > window;
   let text = cut ? desc.slice(0, window) : desc;
   if (cut) {
+    // A tag the window cut open is dropped whole; a ">" inside one of its
+    // quoted attribute values does not close it.
     const open = text.lastIndexOf('<');
-    if (open >= 0 && text.indexOf('>', open) < 0 && TAG_START_RE.test(text.charAt(open + 1))) {
+    if (open >= 0 && TAG_START_RE.test(text.charAt(open + 1)) && !CLOSED_TAG_RE.test(text.slice(open))) {
       text = text.slice(0, open);
     }
   }

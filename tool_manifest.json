@@ -78,6 +78,11 @@
         "items": { "type": "string", "enum": ["job-board", "niche", "regional", "remote", "government", "freelance", "company", "ats"] },
         "description": "Restrict the default fan-out to these plugin categories. Ignored when siteType is set. ATS sources still need companySlug. Unknown values return HTTP 400."
       },
+      "careerLevels": {
+        "type": "array",
+        "items": { "type": "string", "enum": ["internship", "new_grad", "entry", "mid", "senior", "staff", "principal", "manager", "director", "executive", "unknown"] },
+        "description": "Keep only jobs whose server-computed careerLevel.level is in this list (Spec 1730). Applied after dedup and exclusions; omit or [] for no filter. Fails closed: HTTP 503 when the filter cannot be applied. Unknown values return HTTP 400."
+      },
       "companyDomain": {
         "type": "array",
         "items": { "type": "string" },
@@ -371,6 +376,16 @@
             "id": { "type": "string" },
             "dedupKey": { "type": "string", "description": "Stable cross-source key (sha-256 of normalised company|title|location); the same posting from any source or run has the same key." },
             "site": { "type": "string" },
+            "careerLevel": {
+              "type": "object",
+              "description": "Server-computed career level (Spec 1730), from the title, the opening of the description and the structured type fields. Absent when EVER_JOBS_CLASSIFY_CAREER_LEVEL=false.",
+              "properties": {
+                "level": { "type": "string", "enum": ["internship", "new_grad", "entry", "mid", "senior", "staff", "principal", "manager", "director", "executive", "unknown"] },
+                "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+                "reasons": { "type": "array", "items": { "type": "string" }, "maxItems": 5 }
+              },
+              "required": ["level", "confidence", "reasons"]
+            },
             "title": { "type": "string" },
             "companyName": { "type": "string" },
             "companyUrl": { "type": "string" },

@@ -619,6 +619,14 @@ describe('classifyCareerLevel — rules (Spec 1730)', () => {
       ).toBe('senior');
     });
 
+    it('a ">" inside a quoted attribute does not end the tag (PR #101 review)', () => {
+      const body = 'We build trading systems.</div>';
+      expect(level('Engineer', { description: `<div data-x="> This is a 10-week internship.">${body}` })).toBe('unknown');
+      expect(level('Engineer', { description: `<div data-x='> This is a 10-week internship.'>${body}` })).toBe('unknown');
+      // Control: the same words as visible text still count.
+      expect(level('Engineer', { description: `<div data-x="x">This is a 10-week internship.</div>` })).toBe('internship');
+    });
+
     it('strips HTML and only reads the first 3,000 characters', () => {
       expect(level('Engineer', { description: '<p>This is a <b>10-week</b> internship.</p>' })).toBe('internship');
       const late = `${'Lorem ipsum dolor sit amet. '.repeat(200)} This is a 10-week internship.`;
@@ -654,6 +662,17 @@ describe('classifyCareerLevel — rules (Spec 1730)', () => {
       expect(filler.length + leaky.indexOf('internship.') + 11).toBeLessThan(4_500);
       const description = `${filler}${leaky}<p>Great team.</p>`;
       expect(filler.length).toBeLessThan(4_500);
+      expect(filler.length + leaky.length).toBeGreaterThan(4_500);
+      expect(level('Engineer', { description })).toBe('unknown');
+    });
+
+    it('a window that ends inside a tag with a quoted ">" drops the tag whole (PR #101 review)', () => {
+      const leaky = `<img alt="> This is a 10-week internship." data-tracking="${'t'.repeat(120)}">`;
+      let filler = noise(4_400);
+      while (filler.length > 4_400) filler = filler.slice(0, filler.lastIndexOf('<div'));
+      while (filler.length + 4 <= 4_440) filler += '<br>';
+      const description = `${filler}${leaky}<p>Great team.</p>`;
+      expect(filler.length + leaky.indexOf('internship.') + 11).toBeLessThan(4_500);
       expect(filler.length + leaky.length).toBeGreaterThan(4_500);
       expect(level('Engineer', { description })).toBe('unknown');
     });

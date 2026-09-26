@@ -705,6 +705,13 @@ export class JobsController {
       );
       hooks.onFetched(aggregated.rawCount);
       const jobs = aggregated.jobs;
+      // A client that left during the fan-out gets no liveness probes (outbound
+      // requests) or classification it can never receive (PR #101 review).
+      if (hooks.isCancelled()) {
+        this.logger.warn(`NDJSON client left before streaming; skipping enrichment of ${jobs.length} jobs`);
+        writer.end();
+        return;
+      }
       await this.applyCorpusSignals(jobs, flags.liveness, flags.legitimacy);
 
       hooks.onStreamStart();
@@ -713,6 +720,7 @@ export class JobsController {
       // set and a consumer that leaves early stops the classification too.
       let classify = aggregated.careerLevelDeferred === true;
       for (let start = 0; start < jobs.length; start += NDJSON_CAREER_LEVEL_CHUNK) {
+        if (hooks.isCancelled()) return; // consumer went away: classify no further chunk
         const chunk = jobs.slice(start, start + NDJSON_CAREER_LEVEL_CHUNK);
         // A classifier that failed once is not retried per chunk (one warning,
         // not one per 256 jobs); the rest of the stream stays unclassified.

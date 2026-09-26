@@ -445,6 +445,35 @@ describe('JobsController — NDJSON stream (Spec 1721)', () => {
     expect(stream.destroyed).toBe(true);
   });
 
+  it('a client that left during the fan-out triggers no liveness probes (PR #101 review)', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const harness = createHarness({
+      search: async (_input, options) => {
+        options?.onProgress?.({ sourcesDone: 0, sourcesTotal: 1, jobs: 0 });
+        await gate;
+        return { jobs: [makeJob(1), makeJob(2)], perSource: [] };
+      },
+    });
+    const res = new FakeResponse();
+    await callNdjson(harness.controller, new ScraperInputDto({}), { liveness: 'true' }, res);
+
+    res.emit('close');
+    release();
+    for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
+
+    // The complete set is still aggregated (and cached, see below); no URL is probed for nobody.
+    expect(harness.aggregator.aggregateRaw).toHaveBeenCalled();
+    expect(harness.liveness.checkBatch).not.toHaveBeenCalled();
+  });
+
+  it('control: a client that stays gets its liveness probes', async () => {
+    const harness = createHarness();
+    const { file } = await callNdjson(harness.controller, new ScraperInputDto({}), { liveness: 'true' });
+    await readAll(file);
+    expect(harness.liveness.checkBatch).toHaveBeenCalledTimes(1);
+  });
+
   it('a complete fan-out whose client left is still cached (a retry gets the whole set)', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
