@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/JGWentworthHomeLendingLLC/743999658739733",
+      "ref": "https://api.smartrecruiters.com/v1/companies/JGWentworthHomeLendingLLC/postings/743999658739733",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/JGWentworthHomeLendingLLC/743999658429048",
+      "ref": "https://api.smartrecruiters.com/v1/companies/JGWentworthHomeLendingLLC/postings/743999658429048",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/JGWentworthHomeLendingLLC/743999658428674",
+      "ref": "https://api.smartrecruiters.com/v1/companies/JGWentworthHomeLendingLLC/postings/743999658428674",
       "jobAd": {
         "sections": {
           "jobDescription": {

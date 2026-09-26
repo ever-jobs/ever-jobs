@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "stryker:1:StrykerCareers"
+      },
+      "atsIdPrefix": "wd-stryker-"
+    }
+  ],
+  "responses": {
+    "https://stryker.wd1.myworkdayjobs.com/wday/cxs/stryker/StrykerCareers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Pricing Manager - Southern Europe",
+          "externalPath": "/job/Rome-Italy/Pricing-Manager---Southern-Europe_R556652",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted 7 Days Ago",
+          "bulletFields": [
+            "R556652"
+          ]
+        },
+        {
+          "title": "Associate Territory Manager - Orthopaedics",
+          "externalPath": "/job/Melbourne-Australia/Associate-Territory-Manager---Orthopaedics_R569606",
+          "locationsText": "Melbourne, Australia",
+          "postedOn": "Posted 17 Days Ago",
+          "bulletFields": [
+            "R569606"
+          ]
+        },
+        {
+          "title": "Lead Specialist, Marketing Communications, Neurovascular (APAC)",
+          "externalPath": "/job/Singapore-Singapore-1-George-Street-20-010203/Lead-Specialist--Marketing-Communications--Neurovascular--APAC-_R569597",
+          "locationsText": "Singapore, Singapore 1 George Street 20-01/02/03",
+          "postedOn": "Posted 30+ Days Ago",
+          "bulletFields": [
+            "R569597"
+          ]
+        }
+      ]
+    },
+    "https://stryker.wd1.myworkdayjobs.com/wday/cxs/stryker/StrykerCareers/job/Rome-Italy/Pricing-Manager---Southern-Europe_R556652": {
+      "jobPostingInfo": {
+        "title": "Pricing Manager - Southern Europe",
+        "jobDescription": "<p>Pricing Manager - Southern Europe at Stryker.</p>",
+        "location": "2 Locations",
+        "jobReqId": "R556652",
+        "externalUrl": "https://stryker.wd1.myworkdayjobs.com/StrykerCareers/job/Rome-Italy/Pricing-Manager---Southern-Europe_R556652",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "stryker"
+      }
+    },
+    "https://stryker.wd1.myworkdayjobs.com/wday/cxs/stryker/StrykerCareers/job/Melbourne-Australia/Associate-Territory-Manager---Orthopaedics_R569606": {
+      "jobPostingInfo": {
+        "title": "Associate Territory Manager - Orthopaedics",
+        "jobDescription": "<p>Associate Territory Manager - Orthopaedics at Stryker.</p>",
+        "location": "Melbourne, Australia",
+        "jobReqId": "R569606",
+        "externalUrl": "https://stryker.wd1.myworkdayjobs.com/StrykerCareers/job/Melbourne-Australia/Associate-Territory-Manager---Orthopaedics_R569606",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "stryker"
+      }
+    },
+    "https://stryker.wd1.myworkdayjobs.com/wday/cxs/stryker/StrykerCareers/job/Singapore-Singapore-1-George-Street-20-010203/Lead-Specialist--Marketing-Communications--Neurovascular--APAC-_R569597": {
+      "jobPostingInfo": {
+        "title": "Lead Specialist, Marketing Communications, Neurovascular (APAC)",
+        "jobDescription": "<p>Lead Specialist, Marketing Communications, Neurovascular (APAC) at Stryker.</p>",
+        "location": "Singapore, Singapore 1 George Street 20-01/02/03",
+        "jobReqId": "R569597",
+        "externalUrl": "https://stryker.wd1.myworkdayjobs.com/StrykerCareers/job/Singapore-Singapore-1-George-Street-20-010203/Lead-Specialist--Marketing-Communications--Neurovascular--APAC-_R569597",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "stryker"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "stryker-R556652",
+      "title": "Pricing Manager - Southern Europe"
+    },
+    {
+      "id": "stryker-R569606",
+      "title": "Associate Territory Manager - Orthopaedics"
+    },
+    {
+      "id": "stryker-R569597",
+      "title": "Lead Specialist, Marketing Communications, Neurovascular (APAC)"
+    }
+  ]
+}

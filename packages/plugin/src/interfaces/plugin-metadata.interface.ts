@@ -1,5 +1,5 @@
 import type { PluginCrawlPolicy } from '@ever-jobs/common';
-import { Site } from '@ever-jobs/models';
+import { Site, SiteCategory } from '@ever-jobs/models';
 
 /**
  * Metadata describing a source plugin.
@@ -41,6 +41,15 @@ export interface IPluginMetadata {
   companyDomains?: string[];
 
   /**
+   * The source cannot list anything without a keyword (Spec 1720) — e.g. it
+   * puts the term in the URL path. In list mode (no `searchTerm`) the
+   * orchestrator does not dispatch it and reports an `empty` diagnostic
+   * instead of sending a malformed request.
+   * @default false
+   */
+  requiresSearchTerm?: boolean;
+
+  /**
    * Smallest gap, milliseconds, the plugin keeps between two requests to its
    * host (Spec 1700). A plugin paces requests only inside one `scrape()` call,
    * so the first request of the next call is unpaced; a multi-location search
@@ -70,12 +79,9 @@ export interface IPluginMetadata {
   crawl?: PluginCrawlPolicy;
 }
 
-export type PluginCategory =
-  | 'job-board'
-  | 'ats'
-  | 'company'
-  | 'niche'
-  | 'government'
-  | 'remote'
-  | 'regional'
-  | 'freelance';
+/**
+ * Category of a source plugin. Alias of `SiteCategory` in `@ever-jobs/models`
+ * (Spec 1720), which is the single list the search API validates
+ * `siteCategories` against.
+ */
+export type PluginCategory = SiteCategory;

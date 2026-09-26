@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "analogdevices:1:External"
+      },
+      "atsIdPrefix": "wd-analogdevices-"
+    }
+  ],
+  "responses": {
+    "https://analogdevices.wd1.myworkdayjobs.com/wday/cxs/analogdevices/External/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Senior Engineer, Full Stack Developer",
+          "externalPath": "/job/Ireland-Dublin-Glasnevin/Senior-Engineer--Full-Stack-Developer_R266595",
+          "locationsText": "Ireland, Dublin, Glasnevin",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R266595"
+          ]
+        },
+        {
+          "title": "PTE Engineer, Consumer Audio",
+          "externalPath": "/job/India-Bangalore-Nova/PTE-Engineer--Consumer-Audio_R266064",
+          "locationsText": "India, Bangalore, Nova",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R266064"
+          ]
+        },
+        {
+          "title": "Sr. Manager, Digital Design",
+          "externalPath": "/job/India-Hyderabad/Sr-Manager--Digital-Design_R266397",
+          "locationsText": "India, Hyderabad",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R266397"
+          ]
+        }
+      ]
+    },
+    "https://analogdevices.wd1.myworkdayjobs.com/wday/cxs/analogdevices/External/job/Ireland-Dublin-Glasnevin/Senior-Engineer--Full-Stack-Developer_R266595": {
+      "jobPostingInfo": {
+        "title": "Senior Engineer, Full Stack Developer",
+        "jobDescription": "<p>Senior Engineer, Full Stack Developer at Analog Devices.</p>",
+        "location": "Ireland, Dublin, Glasnevin",
+        "jobReqId": "R266595",
+        "externalUrl": "https://analogdevices.wd1.myworkdayjobs.com/External/job/Ireland-Dublin-Glasnevin/Senior-Engineer--Full-Stack-Developer_R266595",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "analogdevices"
+      }
+    },
+    "https://analogdevices.wd1.myworkdayjobs.com/wday/cxs/analogdevices/External/job/India-Bangalore-Nova/PTE-Engineer--Consumer-Audio_R266064": {
+      "jobPostingInfo": {
+        "title": "PTE Engineer, Consumer Audio",
+        "jobDescription": "<p>PTE Engineer, Consumer Audio at Analog Devices.</p>",
+        "location": "India, Bangalore, Nova",
+        "jobReqId": "R266064",
+        "externalUrl": "https://analogdevices.wd1.myworkdayjobs.com/External/job/India-Bangalore-Nova/PTE-Engineer--Consumer-Audio_R266064",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "analogdevices"
+      }
+    },
+    "https://analogdevices.wd1.myworkdayjobs.com/wday/cxs/analogdevices/External/job/India-Hyderabad/Sr-Manager--Digital-Design_R266397": {
+      "jobPostingInfo": {
+        "title": "Sr. Manager, Digital Design",
+        "jobDescription": "<p>Sr. Manager, Digital Design at Analog Devices.</p>",
+        "location": "India, Hyderabad",
+        "jobReqId": "R266397",
+        "externalUrl": "https://analogdevices.wd1.myworkdayjobs.com/External/job/India-Hyderabad/Sr-Manager--Digital-Design_R266397",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "analogdevices"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "analogdevices-R266595",
+      "title": "Senior Engineer, Full Stack Developer"
+    },
+    {
+      "id": "analogdevices-R266064",
+      "title": "PTE Engineer, Consumer Audio"
+    },
+    {
+      "id": "analogdevices-R266397",
+      "title": "Sr. Manager, Digital Design"
+    }
+  ]
+}

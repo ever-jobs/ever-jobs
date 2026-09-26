@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/GrupoMariposa1/3743990013928471",
+      "ref": "https://api.smartrecruiters.com/v1/companies/GrupoMariposa1/postings/3743990013928471",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/GrupoMariposa1/3743990013928227",
+      "ref": "https://api.smartrecruiters.com/v1/companies/GrupoMariposa1/postings/3743990013928227",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/GrupoMariposa1/3743990013927436",
+      "ref": "https://api.smartrecruiters.com/v1/companies/GrupoMariposa1/postings/3743990013927436",
       "jobAd": {
         "sections": {
           "jobDescription": {

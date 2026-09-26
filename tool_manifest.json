@@ -18,7 +18,7 @@
         "company_pages": ["amazon", "apple", "microsoft", "nvidia", "tiktok", "uber", "cursor", "google_careers", "meta", "netflix", "stripe", "openai"],
         "aggregators": ["usajobs", "adzuna", "reed", "jooble", "careerjet"]
       },
-      "output_formats": ["json", "csv", "table", "summary"],
+      "output_formats": ["json", "csv", "ndjson", "table", "summary"],
       "features": [
         "Multi-board concurrent searching (65+ sources)",
         "Country-aware domain resolution (65+ countries)",
@@ -37,7 +37,14 @@
         "HTTP job-posting liveness verification (active/expired/uncertain verdicts)",
         "Description format selection (markdown, html, plain)",
         "Analytics (summary stats, company intelligence, site comparison)",
-        "MCP server for AI assistant integration"
+        "MCP server for AI assistant integration",
+        "List mode: omit searchTerm to get every job each selected source can list (Spec 1720)",
+        "Source selection by plugin category via siteCategories (Spec 1720)",
+        "NDJSON streaming of the full result set via ?format=ndjson (Spec 1721) - the way to fetch a list-mode result; ?paginate=true re-runs the whole fan-out per page unless the raw set is cached (ENABLE_CACHE=true and within EVER_JOBS_CACHE_MAX_JOBS)",
+        "NDJSON end line reports crawl completeness: complete, stopReason (deadline | job_ceiling), sourcesSkipped, sourcesFailed (Spec 1721 / FR-15)",
+        "NDJSON end line lists the sources whose postings must not be expired: sourcesPartial, problemSources [{site, reason}] (max 2500, the whole catalogue fits), problemSourcesTotal; decide expiry per source from a dedup=false crawl; incomplete crawls are never cached (Spec 1721 / FR-20, FR-21)",
+        "Stable cross-source dedupKey on every job (Spec 1721)",
+        "Optional persistence to memory, SQLite or Postgres selected by EVER_JOBS_STORE (Spec 1722)"
       ]
     }
   },
@@ -59,12 +66,22 @@
     "properties": {
       "searchTerm": {
         "type": "string",
-        "description": "Job search keywords (e.g., 'software engineer')"
+        "description": "Job search keywords (e.g., 'software engineer'). Omit (or send null / empty / whitespace) for list mode: every selected source returns what it can list without a keyword, up to resultsWanted per source."
       },
       "siteType": {
         "type": "array",
         "items": { "type": "string" },
         "description": "Sites to search. Omit (and omit companyDomain) to search all search + company sources. Provide companySlug for ATS sources."
+      },
+      "siteCategories": {
+        "type": "array",
+        "items": { "type": "string", "enum": ["job-board", "niche", "regional", "remote", "government", "freelance", "company", "ats"] },
+        "description": "Restrict the default fan-out to these plugin categories. Ignored when siteType is set. ATS sources still need companySlug. Unknown values return HTTP 400."
+      },
+      "careerLevels": {
+        "type": "array",
+        "items": { "type": "string", "enum": ["internship", "new_grad", "entry", "mid", "senior", "staff", "principal", "manager", "director", "executive", "unknown"] },
+        "description": "Keep only jobs whose server-computed careerLevel.level is in this list (Spec 1730). Applied after dedup and exclusions; omit or [] for no filter. Fails closed: HTTP 503 when the filter cannot be applied. Unknown values return HTTP 400."
       },
       "companyDomain": {
         "type": "array",
@@ -88,7 +105,7 @@
       "resultsWanted": {
         "type": "integer",
         "default": 15,
-        "description": "Number of results per site (per site and location when 'locations' is set)"
+        "description": "Number of results per site (and per location when 'locations' is set; also in list mode). The server clamps it to EVER_JOBS_MAX_RESULTS_WANTED (default 1000)."
       },
       "excludeTitleTerms": {
         "type": "array",
@@ -357,7 +374,18 @@
           "type": "object",
           "properties": {
             "id": { "type": "string" },
+            "dedupKey": { "type": "string", "description": "Stable cross-source key (sha-256 of normalised company|title|location); the same posting from any source or run has the same key. With dedup=true a posting whose employment class is not full-time or unknown (internship, contract, part-time, ...) carries a key scoped by that class, so it never shares a key with a full-time posting of the same title, company and location; with dedup=false the key is class-free." },
             "site": { "type": "string" },
+            "careerLevel": {
+              "type": "object",
+              "description": "Server-computed career level (Spec 1730), from the title, the opening of the description and the structured type fields. Absent when EVER_JOBS_CLASSIFY_CAREER_LEVEL=false.",
+              "properties": {
+                "level": { "type": "string", "enum": ["internship", "new_grad", "entry", "mid", "senior", "staff", "principal", "manager", "director", "executive", "unknown"] },
+                "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+                "reasons": { "type": "array", "items": { "type": "string" }, "maxItems": 5 }
+              },
+              "required": ["level", "confidence", "reasons"]
+            },
             "title": { "type": "string" },
             "companyName": { "type": "string" },
             "companyUrl": { "type": "string" },

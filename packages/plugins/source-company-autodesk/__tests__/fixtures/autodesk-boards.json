@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "autodesk:1:Ext"
+      },
+      "atsIdPrefix": "wd-autodesk-"
+    }
+  ],
+  "responses": {
+    "https://autodesk.wd1.myworkdayjobs.com/wday/cxs/autodesk/Ext/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Senior Manager, Product",
+          "externalPath": "/job/AMER---United-States---Colorado---Denver---Wewatta/Senior-Manager--Product_26WD101260-1",
+          "locationsText": "8 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "26WD101260"
+          ]
+        },
+        {
+          "title": "Director, Operations Business Partner - Enterprise",
+          "externalPath": "/job/San-Francisco-CA-USA/Director--Operations-Business-Partner---Enterprise_26WD101226-1",
+          "locationsText": "5 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "26WD101226"
+          ]
+        },
+        {
+          "title": "Software Engineer",
+          "externalPath": "/job/Portland-OR-USA/Software-Engineer_26WD101204-1",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "26WD101204"
+          ]
+        }
+      ]
+    },
+    "https://autodesk.wd1.myworkdayjobs.com/wday/cxs/autodesk/Ext/job/AMER---United-States---Colorado---Denver---Wewatta/Senior-Manager--Product_26WD101260-1": {
+      "jobPostingInfo": {
+        "title": "Senior Manager, Product",
+        "jobDescription": "<p>Senior Manager, Product at Autodesk.</p>",
+        "location": "8 Locations",
+        "jobReqId": "26WD101260",
+        "externalUrl": "https://autodesk.wd1.myworkdayjobs.com/Ext/job/AMER---United-States---Colorado---Denver---Wewatta/Senior-Manager--Product_26WD101260-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "autodesk"
+      }
+    },
+    "https://autodesk.wd1.myworkdayjobs.com/wday/cxs/autodesk/Ext/job/San-Francisco-CA-USA/Director--Operations-Business-Partner---Enterprise_26WD101226-1": {
+      "jobPostingInfo": {
+        "title": "Director, Operations Business Partner - Enterprise",
+        "jobDescription": "<p>Director, Operations Business Partner - Enterprise at Autodesk.</p>",
+        "location": "5 Locations",
+        "jobReqId": "26WD101226",
+        "externalUrl": "https://autodesk.wd1.myworkdayjobs.com/Ext/job/San-Francisco-CA-USA/Director--Operations-Business-Partner---Enterprise_26WD101226-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "autodesk"
+      }
+    },
+    "https://autodesk.wd1.myworkdayjobs.com/wday/cxs/autodesk/Ext/job/Portland-OR-USA/Software-Engineer_26WD101204-1": {
+      "jobPostingInfo": {
+        "title": "Software Engineer",
+        "jobDescription": "<p>Software Engineer at Autodesk.</p>",
+        "location": "2 Locations",
+        "jobReqId": "26WD101204",
+        "externalUrl": "https://autodesk.wd1.myworkdayjobs.com/Ext/job/Portland-OR-USA/Software-Engineer_26WD101204-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "autodesk"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "autodesk-26WD101260",
+      "title": "Senior Manager, Product"
+    },
+    {
+      "id": "autodesk-26WD101226",
+      "title": "Director, Operations Business Partner - Enterprise"
+    },
+    {
+      "id": "autodesk-26WD101204",
+      "title": "Software Engineer"
+    }
+  ]
+}

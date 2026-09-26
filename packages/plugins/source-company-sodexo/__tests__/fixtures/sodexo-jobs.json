@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Sodexo/744000135654350",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Sodexo/postings/744000135654350",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Sodexo/744000135401609",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Sodexo/postings/744000135401609",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Sodexo/744000135122660",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Sodexo/postings/744000135122660",
       "jobAd": {
         "sections": {
           "jobDescription": {

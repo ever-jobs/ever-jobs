@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PericomSemiconductorCorporation/91258754",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PericomSemiconductorCorporation/postings/91258754",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PericomSemiconductorCorporation/81591350",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PericomSemiconductorCorporation/postings/81591350",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PericomSemiconductorCorporation/80240823",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PericomSemiconductorCorporation/postings/80240823",
       "jobAd": {
         "sections": {
           "jobDescription": {

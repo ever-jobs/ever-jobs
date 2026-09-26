@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Alnylam/744000110395880",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Alnylam/postings/744000110395880",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Alnylam/744000110383178",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Alnylam/postings/744000110383178",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Alnylam/744000109723418",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Alnylam/postings/744000109723418",
       "jobAd": {
         "sections": {
           "jobDescription": {

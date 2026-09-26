@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ImplementConsultingGroup/744000135480569",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ImplementConsultingGroup/postings/744000135480569",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ImplementConsultingGroup/744000135430009",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ImplementConsultingGroup/postings/744000135430009",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ImplementConsultingGroup/744000135422339",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ImplementConsultingGroup/postings/744000135422339",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -3,6 +3,7 @@ import { DatePostedBasis, DatePostedPrecision } from '../enums/date-posted.enum'
 import { LocationDto } from './location.dto';
 import { OfficeDto } from './office.dto';
 import { CompensationDto } from './compensation.dto';
+import type { CareerLevelVerdict } from '../interfaces/career-level-classifier.interface';
 
 export class JobPostDto {
   id?: string | null;
@@ -97,6 +98,14 @@ export class JobPostDto {
   // Site identifier (filled in during aggregation)
   site?: string | null;
 
+  /**
+   * Stable cross-source identity of the posting (Spec 1721): sha-256 of the
+   * normalised `company|title|location` triple — the same `canonicalJobId` the
+   * dedup engine clusters on. The same posting seen via different sources or
+   * on different runs gets the same key. Stamped on every returned job.
+   */
+  dedupKey?: string | null;
+
   // Corpus signals (Spec 740) — opt-in via ?liveness=true / ?legitimacy=true; absent by default.
   // Shapes mirror what the Hust frontend already consumes (forward-compatible).
   liveness?: {
@@ -107,6 +116,11 @@ export class JobPostDto {
     state: 'verified' | 'likely' | 'uncertain';
     reasons?: string[];
   } | null;
+
+  // Career level (Spec 1730, contract C7) — computed server-side after dedup by the bound
+  // `ICareerLevelClassifier`; on by default, off with EVER_JOBS_CLASSIFY_CAREER_LEVEL=false.
+  // Derived from title / description / the source fields above, which it never mutates.
+  careerLevel?: CareerLevelVerdict | null;
 
   constructor(partial?: Partial<JobPostDto>) {
     Object.assign(this, partial);

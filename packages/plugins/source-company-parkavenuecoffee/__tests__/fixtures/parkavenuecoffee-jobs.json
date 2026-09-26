@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ParkAvenueCoffee/744000122327367",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ParkAvenueCoffee/postings/744000122327367",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ParkAvenueCoffee/744000113746829",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ParkAvenueCoffee/postings/744000113746829",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ParkAvenueCoffee/744000112960437",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ParkAvenueCoffee/postings/744000112960437",
       "jobAd": {
         "sections": {
           "jobDescription": {

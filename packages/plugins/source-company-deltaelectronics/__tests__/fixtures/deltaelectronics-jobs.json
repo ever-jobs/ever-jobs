@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeltaElectronics/744000135692101",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeltaElectronics/postings/744000135692101",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeltaElectronics/744000135447299",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeltaElectronics/postings/744000135447299",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/DeltaElectronics/744000135447019",
+      "ref": "https://api.smartrecruiters.com/v1/companies/DeltaElectronics/postings/744000135447019",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -1,9 +1,10 @@
 import { ObjectType, Field, InputType, Int, Float, ID, registerEnumType } from '@nestjs/graphql';
 import {
-  ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, MaxLength, ValidateNested,
+  ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, MaxLength, ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
+  CAREER_LEVELS,
   COUNTRY_CONFIG,
   CRAWL_POLICY_DTO_VALUES,
   Country,
@@ -12,6 +13,7 @@ import {
   DatePostedPrecision,
   ExclusionPreset,
   MAX_CRAWL_RETRIES,
+  SITE_CATEGORIES,
   Site,
   getIndeedDomain,
   HARD_MAX_SEARCH_LOCATIONS,
@@ -144,13 +146,19 @@ export class CrawlPolicyGqlInput extends CrawlPolicyDto {
  * GraphQL search input.
  *
  * 🛑 Every field carries a class-validator decorator (Spec 1689). The API
- * installs a global `ValidationPipe({ whitelist: true })` (apps/api/src/main.ts),
- * and Nest runs global pipes on resolver `@Args` too. Whitelisting strips every
- * property that has no class-validator metadata, so without these decorators
- * the resolver received an EMPTY input — no search term, no source filter —
- * and every GraphQL search shared one cache key. The decorators mirror the
- * GraphQL types, so nothing the schema accepts is rejected; the nested
- * `crawl` input is validated by `CrawlPolicyDto`'s own rules (Spec 1690).
+ * installs a global `ValidationPipe({ whitelist: true })` (apps/api/src/main.ts,
+ * built by `pipes/global-validation.pipe.ts`), and Nest runs global pipes on
+ * resolver `@Args` too. Whitelisting strips every property that has no
+ * class-validator metadata, so without these decorators the resolver received
+ * an EMPTY input — no search term, no source filter — and every GraphQL search
+ * shared one cache key. The decorators mirror the GraphQL types, so nothing the
+ * schema accepts is rejected, except the two enumerated lists, whose values are
+ * checked exactly like the REST DTO: `siteCategories` (`SITE_CATEGORIES`,
+ * Spec 1720) and `careerLevels` (`CAREER_LEVELS`, Spec 1730).
+ * The nested `crawl` input is validated by `CrawlPolicyDto`'s own rules
+ * (Spec 1690).
+ * `apps/api/__tests__/integration/search-input-pipe.integration.spec.ts`
+ * fails when a field is added without one.
  */
 @InputType()
 export class SearchJobsInput {
@@ -160,9 +168,29 @@ export class SearchJobsInput {
   @IsEnum(Site, { each: true })
   siteType?: Site[];
 
-  @Field({ description: 'Search term / keywords' })
+  @Field(() => [String], {
+    nullable: true,
+    description:
+      'Restrict the default fan-out to these plugin categories (job-board, niche, regional, remote, government, ' +
+      'freelance, company, ats). Ignored when siteType is given. Unknown values are rejected (Spec 1720).',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsIn(SITE_CATEGORIES, {
+    each: true,
+    message: `siteCategories must contain only: ${SITE_CATEGORIES.join(', ')}`,
+  })
+  siteCategories?: string[];
+
+  @Field(() => String, {
+    nullable: true,
+    description:
+      'Search term / keywords. Omit (or pass null / "") for list mode: every selected source returns what it can ' +
+      'list without a keyword (Spec 1720).',
+  })
+  @IsOptional()
   @IsString()
-  searchTerm!: string;
+  searchTerm?: string | null;
 
   @Field({ nullable: true, description: 'Location filter (city, state, country)' })
   @IsOptional()
@@ -222,6 +250,16 @@ export class SearchJobsInput {
   @IsOptional()
   @IsBoolean()
   dedup?: boolean;
+
+  @Field(() => [String], {
+    nullable: true,
+    description:
+      'Keep only jobs whose careerLevel.level is in this list (Spec 1730): internship, new_grad, entry, mid, senior, staff, principal, manager, director, executive, unknown. Unknown values are rejected.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsIn(CAREER_LEVELS, { each: true })
+  careerLevels?: string[];
 
   @Field(() => [String], {
     nullable: true,
@@ -362,6 +400,23 @@ export class CompensationGql {
   interval?: string;
 }
 
+@ObjectType({
+  description: 'Server-computed career level (Spec 1730). Same shape as the REST `careerLevel`.',
+})
+export class CareerLevelGql {
+  @Field({
+    description:
+      'internship | new_grad | entry | mid | senior | staff | principal | manager | director | executive | unknown',
+  })
+  level!: string;
+
+  @Field({ description: 'high | medium | low' })
+  confidence!: string;
+
+  @Field(() => [String], { description: 'Short, human-readable reasons naming the rules that fired.' })
+  reasons!: string[];
+}
+
 @ObjectType()
 export class JobPostGql {
   @Field(() => ID, { nullable: true })
@@ -448,6 +503,17 @@ export class JobPostGql {
 
   @Field({ nullable: true })
   logoUrl?: string;
+
+  @Field({
+    nullable: true,
+    description:
+      'Stable cross-source key of the posting (sha-256 of normalised company|title|location) — the same posting ' +
+      'from different sources or runs has the same key (Spec 1721).',
+  })
+  dedupKey?: string;
+
+  @Field(() => CareerLevelGql, { nullable: true })
+  careerLevel?: CareerLevelGql;
 }
 
 @ObjectType({

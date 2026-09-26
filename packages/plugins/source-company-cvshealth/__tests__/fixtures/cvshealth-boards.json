@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "cvshealth:1:CVS_Health_Careers"
+      },
+      "atsIdPrefix": "wd-cvshealth-"
+    }
+  ],
+  "responses": {
+    "https://cvshealth.wd1.myworkdayjobs.com/wday/cxs/cvshealth/CVS_Health_Careers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Onsite Health & Wellness Program Specialist",
+          "externalPath": "/job/Pompano-Beach--City-of-Pompano-Beach/Onsite-Health---Wellness-Program-Specialist_R0979303",
+          "locationsText": "Pompano Beach- City of Pompano Beach",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0979303"
+          ]
+        },
+        {
+          "title": "Pharmacy Intern",
+          "externalPath": "/job/CA---Galt/Pharmacy-Intern_R1055922",
+          "locationsText": "CA - Galt",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R1055922"
+          ]
+        },
+        {
+          "title": "Pharmacy Technician Front End",
+          "externalPath": "/job/CA---Santa-Rosa/Pharmacy-Technician-Front-End_R1049409",
+          "locationsText": "CA - Santa Rosa",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R1049409"
+          ]
+        }
+      ]
+    },
+    "https://cvshealth.wd1.myworkdayjobs.com/wday/cxs/cvshealth/CVS_Health_Careers/job/Pompano-Beach--City-of-Pompano-Beach/Onsite-Health---Wellness-Program-Specialist_R0979303": {
+      "jobPostingInfo": {
+        "title": "Onsite Health & Wellness Program Specialist",
+        "jobDescription": "<p>Onsite Health &amp; Wellness Program Specialist at CVS Health.</p>",
+        "location": "Pompano Beach- City of Pompano Beach",
+        "jobReqId": "R0979303",
+        "externalUrl": "https://cvshealth.wd1.myworkdayjobs.com/CVS_Health_Careers/job/Pompano-Beach--City-of-Pompano-Beach/Onsite-Health---Wellness-Program-Specialist_R0979303",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "cvshealth"
+      }
+    },
+    "https://cvshealth.wd1.myworkdayjobs.com/wday/cxs/cvshealth/CVS_Health_Careers/job/CA---Galt/Pharmacy-Intern_R1055922": {
+      "jobPostingInfo": {
+        "title": "Pharmacy Intern",
+        "jobDescription": "<p>Pharmacy Intern at CVS Health.</p>",
+        "location": "CA - Galt",
+        "jobReqId": "R1055922",
+        "externalUrl": "https://cvshealth.wd1.myworkdayjobs.com/CVS_Health_Careers/job/CA---Galt/Pharmacy-Intern_R1055922",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "cvshealth"
+      }
+    },
+    "https://cvshealth.wd1.myworkdayjobs.com/wday/cxs/cvshealth/CVS_Health_Careers/job/CA---Santa-Rosa/Pharmacy-Technician-Front-End_R1049409": {
+      "jobPostingInfo": {
+        "title": "Pharmacy Technician Front End",
+        "jobDescription": "<p>Pharmacy Technician Front End at CVS Health.</p>",
+        "location": "CA - Santa Rosa",
+        "jobReqId": "R1049409",
+        "externalUrl": "https://cvshealth.wd1.myworkdayjobs.com/CVS_Health_Careers/job/CA---Santa-Rosa/Pharmacy-Technician-Front-End_R1049409",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "cvshealth"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "cvshealth-R0979303",
+      "title": "Onsite Health & Wellness Program Specialist"
+    },
+    {
+      "id": "cvshealth-R1055922",
+      "title": "Pharmacy Intern"
+    },
+    {
+      "id": "cvshealth-R1049409",
+      "title": "Pharmacy Technician Front End"
+    }
+  ]
+}

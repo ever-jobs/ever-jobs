@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ORICPharmaceuticals/3743990013591186",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ORICPharmaceuticals/postings/3743990013591186",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ORICPharmaceuticals/3743990013504016",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ORICPharmaceuticals/postings/3743990013504016",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ORICPharmaceuticals/3743990013501357",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ORICPharmaceuticals/postings/3743990013501357",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NielsenIQ/744000135767219",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NielsenIQ/postings/744000135767219",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NielsenIQ/744000135766529",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NielsenIQ/postings/744000135766529",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NielsenIQ/744000135731320",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NielsenIQ/postings/744000135731320",
       "jobAd": {
         "sections": {
           "jobDescription": {

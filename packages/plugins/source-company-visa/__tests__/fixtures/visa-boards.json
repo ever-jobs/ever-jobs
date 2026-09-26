@@ -1,0 +1,188 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "visa:5:Visa_Early_Careers"
+      },
+      "atsIdPrefix": "wd-visa-"
+    },
+    {
+      "input": {
+        "companySlug": "visa:5:Visa"
+      },
+      "atsIdPrefix": "wd-visa-"
+    }
+  ],
+  "responses": {
+    "https://visa.wd5.myworkdayjobs.com/wday/cxs/visa/Visa_Early_Careers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "2027 Sophomore Internship Program - Software Engineer Intern, Bellevue",
+          "externalPath": "/job/US---Bellevue-WA/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Bellevue_REF088594W",
+          "locationsText": "US - Bellevue, WA",
+          "postedOn": "Posted 6 Days Ago",
+          "bulletFields": [
+            "REF088594W"
+          ]
+        },
+        {
+          "title": "2027 Sophomore Internship Program - Software Engineer Intern, Austin",
+          "externalPath": "/job/US---Austin-TX/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Austin_REF088596W",
+          "locationsText": "US - Austin, TX",
+          "postedOn": "Posted 6 Days Ago",
+          "bulletFields": [
+            "REF088596W"
+          ]
+        },
+        {
+          "title": "2027 Sophomore Internship Program - Software Engineer Intern, Foster City",
+          "externalPath": "/job/US---Foster-City-CA/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Foster-City_REF088591W",
+          "locationsText": "US - Foster City, CA",
+          "postedOn": "Posted 6 Days Ago",
+          "bulletFields": [
+            "REF088591W"
+          ]
+        }
+      ]
+    },
+    "https://visa.wd5.myworkdayjobs.com/wday/cxs/visa/Visa_Early_Careers/job/US---Bellevue-WA/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Bellevue_REF088594W": {
+      "jobPostingInfo": {
+        "title": "2027 Sophomore Internship Program - Software Engineer Intern, Bellevue",
+        "jobDescription": "<p>2027 Sophomore Internship Program - Software Engineer Intern, Bellevue at Visa.</p>",
+        "location": "US - Bellevue, WA",
+        "jobReqId": "REF088594W",
+        "externalUrl": "https://visa.wd5.myworkdayjobs.com/Visa_Early_Careers/job/US---Bellevue-WA/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Bellevue_REF088594W",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "visa"
+      }
+    },
+    "https://visa.wd5.myworkdayjobs.com/wday/cxs/visa/Visa_Early_Careers/job/US---Austin-TX/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Austin_REF088596W": {
+      "jobPostingInfo": {
+        "title": "2027 Sophomore Internship Program - Software Engineer Intern, Austin",
+        "jobDescription": "<p>2027 Sophomore Internship Program - Software Engineer Intern, Austin at Visa.</p>",
+        "location": "US - Austin, TX",
+        "jobReqId": "REF088596W",
+        "externalUrl": "https://visa.wd5.myworkdayjobs.com/Visa_Early_Careers/job/US---Austin-TX/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Austin_REF088596W",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "visa"
+      }
+    },
+    "https://visa.wd5.myworkdayjobs.com/wday/cxs/visa/Visa_Early_Careers/job/US---Foster-City-CA/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Foster-City_REF088591W": {
+      "jobPostingInfo": {
+        "title": "2027 Sophomore Internship Program - Software Engineer Intern, Foster City",
+        "jobDescription": "<p>2027 Sophomore Internship Program - Software Engineer Intern, Foster City at Visa.</p>",
+        "location": "US - Foster City, CA",
+        "jobReqId": "REF088591W",
+        "externalUrl": "https://visa.wd5.myworkdayjobs.com/Visa_Early_Careers/job/US---Foster-City-CA/XMLNAME-2027-Sophomore-Internship-Program---Software-Engineer-Intern--Foster-City_REF088591W",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "visa"
+      }
+    },
+    "https://visa.wd5.myworkdayjobs.com/wday/cxs/visa/Visa/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Network Engineer- WAN (Sr. Consultant level)",
+          "externalPath": "/job/US---Ashburn-VA/Sr-Consultant-Network-Engineer_REF082480W",
+          "locationsText": "US - Ashburn, VA",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REF082480W"
+          ]
+        },
+        {
+          "title": "Director, Platform Engineering",
+          "externalPath": "/job/US---Foster-City-CA/Director--Platform-Engineering_REF088255W",
+          "locationsText": "US - Foster City, CA",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REF088255W"
+          ]
+        },
+        {
+          "title": "Sr. Software Engineer - Core Automation Platform",
+          "externalPath": "/job/US---Ashburn-VA/Sr-Software-Engineer---Core-Automation-Platform_REF085123W",
+          "locationsText": "US - Ashburn, VA",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "REF085123W"
+          ]
+        }
+      ]
+    },
+    "https://visa.wd5.myworkdayjobs.com/wday/cxs/visa/Visa/job/US---Ashburn-VA/Sr-Consultant-Network-Engineer_REF082480W": {
+      "jobPostingInfo": {
+        "title": "Network Engineer- WAN (Sr. Consultant level)",
+        "jobDescription": "<p>Network Engineer- WAN (Sr. Consultant level) at Visa.</p>",
+        "location": "US - Ashburn, VA",
+        "jobReqId": "REF082480W",
+        "externalUrl": "https://visa.wd5.myworkdayjobs.com/Visa/job/US---Ashburn-VA/Sr-Consultant-Network-Engineer_REF082480W",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "visa"
+      }
+    },
+    "https://visa.wd5.myworkdayjobs.com/wday/cxs/visa/Visa/job/US---Foster-City-CA/Director--Platform-Engineering_REF088255W": {
+      "jobPostingInfo": {
+        "title": "Director, Platform Engineering",
+        "jobDescription": "<p>Director, Platform Engineering at Visa.</p>",
+        "location": "US - Foster City, CA",
+        "jobReqId": "REF088255W",
+        "externalUrl": "https://visa.wd5.myworkdayjobs.com/Visa/job/US---Foster-City-CA/Director--Platform-Engineering_REF088255W",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "visa"
+      }
+    },
+    "https://visa.wd5.myworkdayjobs.com/wday/cxs/visa/Visa/job/US---Ashburn-VA/Sr-Software-Engineer---Core-Automation-Platform_REF085123W": {
+      "jobPostingInfo": {
+        "title": "Sr. Software Engineer - Core Automation Platform",
+        "jobDescription": "<p>Sr. Software Engineer - Core Automation Platform at Visa.</p>",
+        "location": "US - Ashburn, VA",
+        "jobReqId": "REF085123W",
+        "externalUrl": "https://visa.wd5.myworkdayjobs.com/Visa/job/US---Ashburn-VA/Sr-Software-Engineer---Core-Automation-Platform_REF085123W",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "visa"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "visa-REF088594W",
+      "title": "2027 Sophomore Internship Program - Software Engineer Intern, Bellevue"
+    },
+    {
+      "id": "visa-REF088596W",
+      "title": "2027 Sophomore Internship Program - Software Engineer Intern, Austin"
+    },
+    {
+      "id": "visa-REF088591W",
+      "title": "2027 Sophomore Internship Program - Software Engineer Intern, Foster City"
+    },
+    {
+      "id": "visa-REF082480W",
+      "title": "Network Engineer- WAN (Sr. Consultant level)"
+    },
+    {
+      "id": "visa-REF088255W",
+      "title": "Director, Platform Engineering"
+    },
+    {
+      "id": "visa-REF085123W",
+      "title": "Sr. Software Engineer - Core Automation Platform"
+    }
+  ]
+}

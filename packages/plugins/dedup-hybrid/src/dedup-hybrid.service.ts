@@ -13,9 +13,20 @@ import {
   SourceObservation,
   provenance,
 } from '@ever-jobs/models';
-import { canonicalJobId, canonicalKey, normalizeCompany, normalizeLocation, normalizeTitle } from '@ever-jobs/common';
+import {
+  canonicalJobId,
+  canonicalKey,
+  canonicalKeyInputForJob,
+  employmentClassesOf,
+  employmentScopeOf,
+  formatJobLocation,
+  normalizeCompany,
+  normalizeLocation,
+  normalizeTitle,
+} from '@ever-jobs/common';
 
 import { YieldBudget, yieldToEventLoop } from './cooperative';
+import { MergeGate, clusterDiscriminator, discriminatedCanonicalJobId } from './merge-gate';
 import { HashStrategy } from './strategies/hash-strategy';
 import { MinHashStrategy } from './strategies/minhash-strategy';
 import { ClusterPartition, DedupHybridOptions, IDedupStrategy, PreparedJob } from './types';
@@ -29,6 +40,11 @@ import { UnionFind } from './union-find';
  *  1. {@link HashStrategy} — exact `canonicalJobId` bucketing (O(N), fast path).
  *  2. {@link MinHashStrategy} — MinHash + LSH near-duplicate detection on
  *     long-form text (description, falling back to title + company).
+ *
+ * Every merge either stage proposes passes the {@link MergeGate} (Spec 1724):
+ * postings are only merged when their locations are compatible and their
+ * employment types do not conflict, so one role posted per office (or per
+ * program) keeps one record per office (or program).
  *
  * The service:
  *  - validates inputs (rejects entries missing `title` or `companyName`)
@@ -145,13 +161,10 @@ export class DedupHybridService implements IDedupEngine {
       // 'Remote' (no location) or 'Remote - US' (`{ country }` only) keys to
       // `remote`, the same as a source emitting `{ city: 'Remote' }`, so the
       // two hash-merge in stage 1 instead of relying on MinHash.
-      const keyInput = {
-        title: raw.title ?? '',
-        company: raw.companyName ?? '',
-        location: raw.location ? formatLocation(raw.location) : '',
-        locations: raw.locations,
-        isRemote: raw.isRemote,
-      };
+      // Spec 1721 — built by the shared helper that also builds the API's
+      // `dedupKey`, so the cluster id and the key can never read different
+      // fields (title, company, flat location, `locations[]`, `isRemote`).
+      const keyInput = canonicalKeyInputForJob(raw);
       prepared.push({
         index: i,
         canonicalKey: canonicalKey(keyInput),
@@ -161,7 +174,12 @@ export class DedupHybridService implements IDedupEngine {
     }
 
     // Pass 2 — run strategies; union all partitions in a single Union-Find.
+    // Spec 1724 — every proposed merge goes through the merge gate: postings
+    // are only merged when their locations are compatible and their
+    // employment types do not conflict (see ./merge-gate). A proposed cluster
+    // the gate refuses is split into compatible sub-groups, in input order.
     const uf = new UnionFind(prepared.length);
+    const gate = new MergeGate(prepared.map((p) => p.raw));
     const indexToPos = new Map<number, number>();
     for (let pos = 0; pos < prepared.length; pos++) {
       indexToPos.set(prepared[pos].index, pos);
@@ -177,22 +195,36 @@ export class DedupHybridService implements IDedupEngine {
       budget.renew();
       for (const cluster of partition.clusters) {
         if (cluster.length < 2) continue;
-        const headPos = indexToPos.get(cluster[0]);
-        if (headPos === undefined) continue;
-        for (let k = 1; k < cluster.length; k++) {
-          const nextPos = indexToPos.get(cluster[k]);
-          if (nextPos !== undefined) uf.union(headPos, nextPos);
+        const heads: number[] = [];
+        for (const index of cluster) {
+          // Yield checkpoint — a gate check is a few string comparisons per
+          // pair of distinct member profiles; a cluster the gate splits into
+          // many sub-groups costs sub-groups x members of them.
+          if (budget.expired) {
+            await yieldToEventLoop();
+            budget.renew();
+          }
+          const pos = indexToPos.get(index);
+          if (pos !== undefined) gate.place(uf, heads, pos);
         }
       }
+    }
+    if (gate.refused > 0) {
+      this.logger.debug(
+        `dedup gate kept ${gate.refused} proposed merges apart (location or employment-type conflict)`,
+      );
     }
 
     // Pass 3 — materialise canonical records.
     const clusters = uf.toClusters();
     const mergedAt = new Date().toISOString();
+    const clusterIds = assignClusterIds(clusters, prepared, gate);
     const canonical: CanonicalJob[] = [];
     const assignments: (string | null)[] = new Array(inputCount).fill(null);
 
-    for (const cluster of clusters) {
+    for (let c = 0; c < clusters.length; c++) {
+      const cluster = clusters[c];
+      const clusterId = clusterIds[c];
       // Yield checkpoint — materialisation re-normalises title/company/location
       // per cluster head (~10 us) and allocates a `CanonicalJob`; a
       // mostly-unique 7 K batch emits ~7 K of them.
@@ -246,7 +278,7 @@ export class DedupHybridService implements IDedupEngine {
       }
 
       const record: CanonicalJob = {
-        canonicalJobId: head.canonicalJobId,
+        canonicalJobId: clusterId,
         title: titleVal,
         company: companyVal,
         location: locationVal,
@@ -262,7 +294,7 @@ export class DedupHybridService implements IDedupEngine {
       canonical.push(record);
 
       for (const pos of cluster) {
-        assignments[prepared[pos].index] = head.canonicalJobId;
+        assignments[prepared[pos].index] = clusterId;
       }
     }
 
@@ -286,6 +318,54 @@ export class DedupHybridService implements IDedupEngine {
       metrics,
     };
   }
+}
+
+/**
+ * One `canonicalJobId` per cluster (Spec 1724).
+ *
+ * A cluster's id depends only on its head's own fields, never on what else is
+ * in the batch (Spec 1724 review), so a stored row keeps its id from run to
+ * run: the head's plain `canonicalJobId` for the default engagement
+ * (full-time, or no employment information), else
+ * `sha256(<canonicalKey>|<employment scope>)` — `clusterKeyForJob` in
+ * `@ever-jobs/common`, which the aggregator's `dedupKey` uses too. An
+ * internship and a full-time posting with the same company, title and
+ * location thus never share an id, whether or not both are in the batch.
+ *
+ * Residual collisions — two clusters the gate kept apart whose heads still
+ * share an id (two full-time labels from one source, or two sites that
+ * normalise to one location key) — fall back to
+ * `sha256(<canonicalKey>|<discriminator>)` (the head's employment label, else
+ * its classes, else its sites), plus an ordinal if that still collides, so
+ * ids stay unique per batch. Only that rare case depends on the batch.
+ */
+function assignClusterIds(
+  clusters: ReadonlyArray<ReadonlyArray<number>>,
+  prepared: ReadonlyArray<PreparedJob>,
+  gate: MergeGate,
+): string[] {
+  const own = clusters.map((cluster) => {
+    const head = prepared[cluster[0]];
+    // Only the classes: a full gate profile (with its location parse) is
+    // computed lazily, and most clusters are singletons that never needed one.
+    const scope = employmentScopeOf(employmentClassesOf(head.raw));
+    return scope ? discriminatedCanonicalJobId(head.canonicalKey, scope) : head.canonicalJobId;
+  });
+  const perId = new Map<string, number>();
+  for (const id of own) perId.set(id, (perId.get(id) ?? 0) + 1);
+  // Ids nobody shares are final; the fallback must not reuse one of them.
+  const used = new Set<string>(own.filter((id) => perId.get(id) === 1));
+  return clusters.map((cluster, c) => {
+    if (perId.get(own[c]) === 1) return own[c];
+    const head = prepared[cluster[0]];
+    const discriminator = clusterDiscriminator(gate.profile(cluster[0]));
+    let id = discriminatedCanonicalJobId(head.canonicalKey, discriminator);
+    for (let n = 2; used.has(id); n++) {
+      id = discriminatedCanonicalJobId(head.canonicalKey, `${discriminator}#${n}`);
+    }
+    used.add(id);
+    return id;
+  });
 }
 
 /**
@@ -373,14 +453,10 @@ function jobToObservation(raw: JobPostDto): SourceObservation | null {
  * Render `LocationDto` into the flat string the canonicaliser expects.
  * `displayLocation()` is the canonical UI rendering already; we lean on it
  * here to avoid drifting from the user-visible shape.
+ *
+ * Delegates to the shared `formatJobLocation` (Spec 1721) so the key this
+ * engine clusters on and the `dedupKey` the API returns are one function.
  */
 function formatLocation(loc: NonNullable<JobPostDto['location']>): string {
-  if (typeof (loc as { displayLocation?: () => string }).displayLocation === 'function') {
-    return (loc as { displayLocation: () => string }).displayLocation();
-  }
-  const parts: string[] = [];
-  if (loc.city) parts.push(loc.city);
-  if (loc.state) parts.push(loc.state);
-  if (loc.country) parts.push(typeof loc.country === 'string' ? loc.country : String(loc.country));
-  return parts.join(', ');
+  return formatJobLocation(loc);
 }

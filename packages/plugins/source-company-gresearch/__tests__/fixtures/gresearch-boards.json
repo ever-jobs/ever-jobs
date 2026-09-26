@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "gresearch:103:G-Research"
+      },
+      "atsIdPrefix": "wd-gresearch-"
+    }
+  ],
+  "responses": {
+    "https://gresearch.wd103.myworkdayjobs.com/wday/cxs/gresearch/G-Research/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Software Engineering Internship",
+          "externalPath": "/job/London-UK/Software-Engineering-Intern_R3746",
+          "locationsText": "London, UK",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "R3746"
+          ]
+        },
+        {
+          "title": "Platform Desktop Engineer",
+          "externalPath": "/job/London-UK/Platform-Desktop-Engineer_R3739",
+          "locationsText": "London, UK",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "R3739"
+          ]
+        },
+        {
+          "title": "Quantitative Analyst",
+          "externalPath": "/job/London-UK/Quantitative-Analyst_R2633",
+          "locationsText": "London, UK",
+          "postedOn": "Posted 6 Days Ago",
+          "bulletFields": [
+            "R2633"
+          ]
+        }
+      ]
+    },
+    "https://gresearch.wd103.myworkdayjobs.com/wday/cxs/gresearch/G-Research/job/London-UK/Software-Engineering-Intern_R3746": {
+      "jobPostingInfo": {
+        "title": "Software Engineering Internship",
+        "jobDescription": "<p>Software Engineering Internship at G-Research.</p>",
+        "location": "London, UK",
+        "jobReqId": "R3746",
+        "externalUrl": "https://gresearch.wd103.myworkdayjobs.com/G-Research/job/London-UK/Software-Engineering-Intern_R3746",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "gresearch"
+      }
+    },
+    "https://gresearch.wd103.myworkdayjobs.com/wday/cxs/gresearch/G-Research/job/London-UK/Platform-Desktop-Engineer_R3739": {
+      "jobPostingInfo": {
+        "title": "Platform Desktop Engineer",
+        "jobDescription": "<p>Platform Desktop Engineer at G-Research.</p>",
+        "location": "London, UK",
+        "jobReqId": "R3739",
+        "externalUrl": "https://gresearch.wd103.myworkdayjobs.com/G-Research/job/London-UK/Platform-Desktop-Engineer_R3739",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "gresearch"
+      }
+    },
+    "https://gresearch.wd103.myworkdayjobs.com/wday/cxs/gresearch/G-Research/job/London-UK/Quantitative-Analyst_R2633": {
+      "jobPostingInfo": {
+        "title": "Quantitative Analyst",
+        "jobDescription": "<p>Quantitative Analyst at G-Research.</p>",
+        "location": "London, UK",
+        "jobReqId": "R2633",
+        "externalUrl": "https://gresearch.wd103.myworkdayjobs.com/G-Research/job/London-UK/Quantitative-Analyst_R2633",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "gresearch"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "gresearch-R3746",
+      "title": "Software Engineering Internship"
+    },
+    {
+      "id": "gresearch-R3739",
+      "title": "Platform Desktop Engineer"
+    },
+    {
+      "id": "gresearch-R2633",
+      "title": "Quantitative Analyst"
+    }
+  ]
+}

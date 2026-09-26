@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "towerresearchcapital"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/towerresearchcapital/jobs": {
+      "jobs": [
+        {
+          "id": 7583213,
+          "title": "Agentic System Developer",
+          "updated_at": "2026-09-10T17:54:11.000Z",
+          "location": {
+            "name": "New York"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/towerresearchcapital/jobs/7583213",
+          "content": "&lt;p&gt;Agentic System Developer at Tower Research Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "towerresearchcapital"
+        },
+        {
+          "id": 7704976,
+          "title": "Analyste en sécurité de l’information / Information Security Analyst",
+          "updated_at": "2026-08-13T19:16:39.000Z",
+          "location": {
+            "name": "Montreal"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/towerresearchcapital/jobs/7704976",
+          "content": "&lt;p&gt;Analyste en sécurité de l’information / Information Security Analyst at Tower Research Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "towerresearchcapital"
+        },
+        {
+          "id": 7693090,
+          "title": "Associate, Finance",
+          "updated_at": "2026-08-18T14:14:49.000Z",
+          "location": {
+            "name": "Gurgaon"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/towerresearchcapital/jobs/7693090",
+          "content": "&lt;p&gt;Associate, Finance at Tower Research Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "towerresearchcapital"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "towerresearchcapital-7583213",
+      "title": "Agentic System Developer"
+    },
+    {
+      "id": "towerresearchcapital-7704976",
+      "title": "Analyste en sécurité de l’information / Information Security Analyst"
+    },
+    {
+      "id": "towerresearchcapital-7693090",
+      "title": "Associate, Finance"
+    }
+  ]
+}

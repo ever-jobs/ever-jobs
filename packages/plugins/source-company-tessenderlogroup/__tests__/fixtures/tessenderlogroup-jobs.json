@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TessenderloGroup/744000135753369",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TessenderloGroup/postings/744000135753369",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TessenderloGroup/744000135713209",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TessenderloGroup/postings/744000135713209",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TessenderloGroup/744000135506679",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TessenderloGroup/postings/744000135506679",
       "jobAd": {
         "sections": {
           "jobDescription": {

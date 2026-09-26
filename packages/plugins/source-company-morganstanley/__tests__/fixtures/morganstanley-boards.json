@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "ms:5:External"
+      },
+      "atsIdPrefix": "wd-ms-"
+    }
+  ],
+  "responses": {
+    "https://ms.wd5.myworkdayjobs.com/wday/cxs/ms/External/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Business Service Officer",
+          "externalPath": "/job/Cleveland-Ohio-United-States-of-America/Business-Service-Officer_JR041565-2",
+          "locationsText": "Cleveland, Ohio, United States of America",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR041565"
+          ]
+        },
+        {
+          "title": "WM Client Segment Risk Head of Scams and Exploitation Risk Team and Internal Fraud: Executive Director",
+          "externalPath": "/job/Purchase-New-York-United-States-of-America/WM-Client-Segment-Risk-Head-of-Scams-and-Exploitation-Risk-Team-and-Internal-Fraud--Vice-President_PT-JR043680-1",
+          "locationsText": "Purchase, New York, United States of America",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "PT-JR043680"
+          ]
+        },
+        {
+          "title": "Intern",
+          "externalPath": "/job/Baltimore-Maryland-United-States-of-America/Intern_JR042973-2",
+          "locationsText": "Baltimore, Maryland, United States of America",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR042973"
+          ]
+        }
+      ]
+    },
+    "https://ms.wd5.myworkdayjobs.com/wday/cxs/ms/External/job/Cleveland-Ohio-United-States-of-America/Business-Service-Officer_JR041565-2": {
+      "jobPostingInfo": {
+        "title": "Business Service Officer",
+        "jobDescription": "<p>Business Service Officer at Morgan Stanley.</p>",
+        "location": "Cleveland, Ohio, United States of America",
+        "jobReqId": "JR041565",
+        "externalUrl": "https://ms.wd5.myworkdayjobs.com/External/job/Cleveland-Ohio-United-States-of-America/Business-Service-Officer_JR041565-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "ms"
+      }
+    },
+    "https://ms.wd5.myworkdayjobs.com/wday/cxs/ms/External/job/Purchase-New-York-United-States-of-America/WM-Client-Segment-Risk-Head-of-Scams-and-Exploitation-Risk-Team-and-Internal-Fraud--Vice-President_PT-JR043680-1": {
+      "jobPostingInfo": {
+        "title": "WM Client Segment Risk Head of Scams and Exploitation Risk Team and Internal Fraud: Executive Director",
+        "jobDescription": "<p>WM Client Segment Risk Head of Scams and Exploitation Risk Team and Internal Fraud: Executive Director at Morgan Stanley.</p>",
+        "location": "Purchase, New York, United States of America",
+        "jobReqId": "PT-JR043680",
+        "externalUrl": "https://ms.wd5.myworkdayjobs.com/External/job/Purchase-New-York-United-States-of-America/WM-Client-Segment-Risk-Head-of-Scams-and-Exploitation-Risk-Team-and-Internal-Fraud--Vice-President_PT-JR043680-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "ms"
+      }
+    },
+    "https://ms.wd5.myworkdayjobs.com/wday/cxs/ms/External/job/Baltimore-Maryland-United-States-of-America/Intern_JR042973-2": {
+      "jobPostingInfo": {
+        "title": "Intern",
+        "jobDescription": "<p>Intern at Morgan Stanley.</p>",
+        "location": "Baltimore, Maryland, United States of America",
+        "jobReqId": "JR042973",
+        "externalUrl": "https://ms.wd5.myworkdayjobs.com/External/job/Baltimore-Maryland-United-States-of-America/Intern_JR042973-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "ms"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "morganstanley-JR041565",
+      "title": "Business Service Officer"
+    },
+    {
+      "id": "morganstanley-PT-JR043680",
+      "title": "WM Client Segment Risk Head of Scams and Exploitation Risk Team and Internal Fraud: Executive Director"
+    },
+    {
+      "id": "morganstanley-JR042973",
+      "title": "Intern"
+    }
+  ]
+}

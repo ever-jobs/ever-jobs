@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EMCOCorporation/744000135748165",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EMCOCorporation/postings/744000135748165",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EMCOCorporation/744000135751940",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EMCOCorporation/postings/744000135751940",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EMCOCorporation/744000135749244",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EMCOCorporation/postings/744000135749244",
       "jobAd": {
         "sections": {
           "jobDescription": {

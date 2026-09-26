@@ -1,3 +1,10 @@
+import {
+  resolveCacheMaxJobs,
+  resolveFanoutDeadlineMs,
+  resolveLivenessConfig,
+  resolveResultCaps,
+} from './search-config';
+import { resolvePersistSearch } from './store-config';
 import { readCrawlPolicyEnv, resolveCrawlPolicy } from '@ever-jobs/common';
 import { CircuitBreakerService } from '@ever-jobs/plugin';
 
@@ -63,6 +70,11 @@ export default () => {
       expirySec: parseInt(process.env.CACHE_EXPIRY, 3600),
       redisUrl: process.env.REDIS_URL || null,
       maxItems: parseInt(process.env.CACHE_MAX_ITEMS, 500),
+      /**
+       * Spec 1720 / FR-13 — `EVER_JOBS_CACHE_MAX_JOBS` (default 5000): a raw
+       * fan-out larger than this is served but not cached; `0` never caches.
+       */
+      maxJobs: resolveCacheMaxJobs(process.env),
     },
 
     // Search fan-out bounds (Spec 5026)
@@ -76,20 +88,31 @@ export default () => {
        * Wall-clock budget for one fan-out, ms. Once exceeded, no further
        * sources are STARTED (in-flight ones finish). `0` disables.
        * Defaults to the Hust client's own 120 s abort.
+       * Spec 1721: `EVER_JOBS_FANOUT_DEADLINE_MS`, falling back to
+       * `EVER_JOBS_SEARCH_DEADLINE_MS`.
        */
-      deadlineMs: parseInt(process.env.EVER_JOBS_SEARCH_DEADLINE_MS, 120_000),
+      deadlineMs: resolveFanoutDeadlineMs(process.env),
+      /**
+       * Spec 1720 / FR-12 — `EVER_JOBS_MAX_RESULTS_WANTED` (default 1000)
+       * clamps `resultsWanted` per source; `EVER_JOBS_MAX_JOBS_PER_SEARCH`
+       * (default 40000 since FR-13) stops starting sources once that many raw
+       * jobs are in. `0` disables either.
+       */
+      ...resolveResultCaps(process.env),
     },
+    // Liveness server gate + per-request cap (Spec 1723)
+    liveness: resolveLivenessConfig(process.env),
     // Persistence (Spec 5024 — bounded retention on the interactive path)
     store: {
       /**
        * Persist the post-dedup canonical corpus on every `/api/jobs/search`
-       * (and the GraphQL equivalent). Defaults to `true` — the historical
-       * behaviour. Operators running the `memory` backend SHOULD set
-       * `EVER_JOBS_PERSIST_SEARCH=false`: with an in-process store the write
-       * is a pure sink (nothing in `apps/api` reads the corpus back) and it
-       * pins every job description for the process lifetime.
+       * (and the GraphQL equivalent). Spec 1722: an explicit
+       * `EVER_JOBS_PERSIST_SEARCH` always wins; unset, it is `false` for the
+       * `memory` backend (a pure heap sink nothing reads back) and `true`
+       * when a durable backend is explicitly selected via `EVER_JOBS_STORE`
+       * (`sqlite` / `postgres`).
        */
-      persistSearch: parseBool(process.env.EVER_JOBS_PERSIST_SEARCH, true),
+      persistSearch: resolvePersistSearch(process.env),
       /**
        * Hard ceiling on rows retained by an in-process store backend.
        * Bounds RSS regardless of {@link persistSearch}; see
@@ -157,6 +180,16 @@ export default () => {
     plugins: {
       enabled: parseBool(process.env.ENABLE_PLUGINS, false),
       dir: process.env.PLUGINS_DIR || null,
+    },
+
+    // Career level (Spec 1730, contract C7)
+    careerLevel: {
+      /**
+       * Attach `careerLevel` ({ level, confidence, reasons }) to every job the search returns,
+       * computed in-process after dedup. Default `true`; `false` removes the field from every
+       * response. An explicit `careerLevels` request filter is still honoured when `false`.
+       */
+      classify: parseBool(process.env.EVER_JOBS_CLASSIFY_CAREER_LEVEL, true),
     },
 
     // Logging

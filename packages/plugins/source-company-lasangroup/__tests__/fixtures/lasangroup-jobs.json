@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LasanGroup/743999705178834",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LasanGroup/postings/743999705178834",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LasanGroup/743999703971543",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LasanGroup/postings/743999703971543",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LasanGroup/743999698269169",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LasanGroup/postings/743999698269169",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -1,0 +1,55 @@
+{
+  "time": 12,
+  "href": "https://api.reliefweb.int/v2/jobs?appname=ever-jobs&limit=3&offset=0",
+  "links": {
+    "self": { "href": "https://api.reliefweb.int/v2/jobs?appname=ever-jobs&limit=3&offset=0" },
+    "next": { "href": "https://api.reliefweb.int/v2/jobs?appname=ever-jobs&limit=3&offset=3" }
+  },
+  "totalCount": 2914,
+  "count": 3,
+  "data": [
+    {
+      "id": "4231248",
+      "score": 1,
+      "href": "https://api.reliefweb.int/v2/jobs/4231248",
+      "fields": {
+        "title": "Full Stack Software Developer",
+        "body": "## About the role\n\nBuild and maintain **humanitarian data** tools.\n\nContact: jobs@example.org",
+        "body-html": "<h2>About the role</h2>\n<p>Build and maintain <strong>humanitarian data</strong> tools.</p>\n<p>Contact: jobs@example.org</p>",
+        "url": "https://reliefweb.int/node/4231248",
+        "url_alias": "https://reliefweb.int/job/4231248/full-stack-software-developer",
+        "source": [{ "name": "UN Office for the Coordination of Humanitarian Affairs", "shortname": "OCHA", "href": "https://api.reliefweb.int/v2/sources/1503" }],
+        "date": { "created": "2026-09-18T00:00:00+00:00", "closing": "2026-10-09T00:00:00+00:00", "changed": "2026-09-19T08:12:03+00:00" },
+        "country": [{ "name": "Kenya", "iso3": "ken" }],
+        "theme": [{ "name": "Coordination" }],
+        "type": [{ "name": "Job" }]
+      }
+    },
+    {
+      "id": "4228316",
+      "score": 1,
+      "href": "https://api.reliefweb.int/v2/jobs/4228316",
+      "fields": {
+        "title": "Operations Officer",
+        "body": "Support field operations.",
+        "body-html": "<p>Support field operations.</p>",
+        "url": "https://reliefweb.int/node/4228316",
+        "source": [{ "name": "International Organization for Migration", "shortname": "IOM" }],
+        "date": { "created": "2026-09-10T00:00:00+00:00" },
+        "country": [{ "name": "Somalia", "iso3": "som" }]
+      }
+    },
+    {
+      "id": "4225051",
+      "score": 1,
+      "href": "https://api.reliefweb.int/v2/jobs/4225051",
+      "fields": {
+        "title": "Senior Corporate Development Officer",
+        "body": "Lead partnerships.",
+        "source": [{ "name": "International Rescue Committee", "shortname": "IRC" }],
+        "date": { "created": "2026-09-05T00:00:00+00:00" },
+        "country": [{ "name": "United States of America", "iso3": "usa" }]
+      }
+    }
+  ]
+}
