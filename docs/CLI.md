@@ -209,15 +209,24 @@ The compare command outputs:
 
 ### CSV
 
-Flat columns: `id, site, title, companyName, location, jobUrl, datePosted, jobType, isRemote, minAmount, maxAmount, currency, interval, description`
+Flat columns: `id, site, title, companyName, location, jobUrl, datePosted, jobType, isRemote, minAmount, maxAmount, currency, interval, description, datePostedAt, datePostedPrecision, datePostedBasis`
+
+The last three (Spec 1696) are appended after `description`, so the earlier columns keep their
+positions. They are empty unless the source gives the posting time: `datePostedAt` is an ISO-8601
+UTC instant (precision `exact`, `minute` or `hour`), `datePostedPrecision` is one of
+`exact | minute | hour | day | week | month | year` and `datePostedBasis` one of
+`timestamp | date | relative` (`relative` = estimated from an age label at fetch time).
 
 ### Table
 
 ```
-Site         │ Title                                   │ Company                  │ Location                 │ Posted       │ Remote
-─────────────┼─────────────────────────────────────────┼──────────────────────────┼──────────────────────────┼──────────────┼───────
-linkedin     │ Senior React Developer                  │ Acme Corp                │ San Francisco, CA        │ 2025-02-15   │ Yes
+Site         │ Title                                   │ Company                  │ Location                 │ Posted       │ Remote  │ Posted at (UTC)
+─────────────┼─────────────────────────────────────────┼──────────────────────────┼──────────────────────────┼──────────────┼─────────┼──────────────────
+linkedin     │ Senior React Developer                  │ Acme Corp                │ San Francisco, CA        │ 2025-02-15   │ Yes     │ ~2025-02-15 09:12
 ```
+
+`Posted at (UTC)` shows `datePostedAt` to the minute, with `~` when it was estimated from an age
+label ("26 minutes ago"); it is blank when the source gave only a date.
 
 ### Summary
 

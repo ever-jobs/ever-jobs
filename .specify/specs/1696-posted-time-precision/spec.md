@@ -7,7 +7,7 @@
 | Status         | in-progress                              |
 | Owner          | agent                                    |
 | Created        | 2026-09-25                               |
-| Last updated   | 2026-09-25                               |
+| Last updated   | 2026-09-26                               |
 | Supersedes     | (none)                                   |
 | Related specs  | 5024, 720                                |
 
@@ -242,3 +242,29 @@ lands, in the LinkedIn debug counter), not as an error.
 - `packages/common/src/converters/posted-time.ts`, `packages/common/src/converters/date-converter.ts`
 - `packages/models/src/enums/date-posted.enum.ts`, `packages/models/src/dtos/job-post.dto.ts`
 - Spec 5024 (`toDateOnly` keeps the local day), Spec 720 (Workday relative labels)
+
+## 12. As built: surfaces (FR-11, T14, 2026-09-26)
+
+Until this change the three fields stopped at REST JSON. They now reach every surface; each one
+follows FR-7 (a job without the detail looks exactly as it did before):
+
+| Surface | As built |
+| ------- | -------- |
+| GraphQL | `JobPostGql.datePostedAt`, `datePostedPrecision`, `datePostedBasis`: nullable `String`s, `null` when absent. Strings, not GraphQL enums, so the values match REST (`minute`, not `MINUTE`); each description lists every enum value, generated from the enums. The resolver returns `JobPostDto`s as-is, so no mapping code changed. |
+| Tool manifest | `output_schema` job items gain `datePostedAt` (`format: date-time`), `datePostedPrecision` and `datePostedBasis` (`enum`s in enum order). |
+| MCP | `search_jobs`, `search_remote_jobs` and `get_job_details` add `date_posted_at`, `date_posted_precision` and `date_posted_basis` right after `date_posted`, each only when the API sent a non-blank string (camelCase or snake_case). The keys are omitted rather than `null`, so a date-only job's result keeps its previous keys. |
+| CLI CSV | Three columns appended after `description`; every earlier column keeps its position. Empty cells when absent. |
+| CLI table | A trailing `Posted at (UTC)` column: `datePostedAt` as `YYYY-MM-DD HH:MM`, prefixed `~` when `datePostedBasis` is `relative`; blank otherwise. The original six columns are unchanged. |
+| CLI JSON, REST JSON | Already carried the fields (the DTO is serialised as-is). |
+| REST CSV (`?format=csv`) | Its columns are the union of the jobs' keys, so it already carried them; a test now pins that. |
+| `DESIRED_ORDER` | Ends with the three, after every earlier column. |
+
+The kill switch (`EVER_JOBS_POSTED_TIME_DETAIL=false`) acts where the fields are made
+(`postedTimeFields`), so every surface falls back with it: GraphQL `null`, no MCP keys, empty CSV
+cells, a blank table cell.
+
+Tests: `gql-types.schema.spec.ts` (types, descriptions, a real query with and without the detail),
+`tool-manifest.spec.ts`, `tools-posted-time.spec.ts` (MCP mapping, both key spellings, key order,
+unchanged keys for a date-only job), `search-posted-time.command.spec.ts` (CSV header and cells,
+table cells, `postedAtLabel`), `jobs.controller.spec.ts` (REST CSV) and `posted-time.spec.ts`
+(`DESIRED_ORDER`). Docs: `docs/API_CHANGELOG.md`, `docs/CLI.md`, `apps/mcp/README.md`.

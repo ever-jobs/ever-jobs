@@ -8,6 +8,7 @@
 - **Exclusion filters**: `excludeTitleTerms`, `excludeKeywords` and `excludePresets` (`security_clearance`). Whole-word, case- and accent-insensitive, negation-aware literal matching (trailing `*` = prefix, never a regex), applied after dedup; the cache and stored corpus are unaffected (Spec 1700).
 - **`linkedinFetchCompanyDetails`** input flag (CLI `--linkedin-fetch-company-details`): opt-in LinkedIn company enrichment; unset = `EVER_JOBS_LINKEDIN_FETCH_COMPANY_DETAILS` (Spec 1701).
 - **Job fields** (REST JSON; GraphQL selection is a follow-up): `datePostedAt`, `datePostedPrecision`, `datePostedBasis` (Spec 1696), `companySourceId`, `applicantsCount`, `applicantsCountBound` (Spec 1701), `aiLevel` (Spec 1693). Absent unless a source provides them.
+- **Posted-time fields on every surface** (Spec 1696): GraphQL `JobPost.datePostedAt`, `datePostedPrecision`, `datePostedBasis` (nullable `String`s carrying the REST values, e.g. `minute`); the MCP `search_jobs`, `search_remote_jobs` and `get_job_details` results gain `date_posted_at`, `date_posted_precision`, `date_posted_basis` after `date_posted`, present only when the source gave them; the CLI CSV gains the three columns after `description` (earlier columns keep their positions) and the table a trailing `Posted at (UTC)` column; the tool manifest's output schema lists them. `EVER_JOBS_POSTED_TIME_DETAIL=false` still removes them everywhere.
 - **Sources**: `inhire` (ATS, Spec 1692), `jobsbylevel` (Spec 1693), `simplifyjobs` (Spec 1694).
 - **Job types**: `permanent` and `apprenticeship` (Spec 1697).
 

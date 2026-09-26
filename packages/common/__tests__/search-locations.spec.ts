@@ -4,6 +4,7 @@ import {
   normalizeSearchLocation,
   resolveSearchLocations,
   searchLocationsCacheKey,
+  searchLocationsOrderedCacheKey,
 } from '../src/utils/search-locations';
 
 /** Spec 1700 — multi-location search input resolution. */
@@ -96,6 +97,32 @@ describe('searchLocationsCacheKey', () => {
 
   it('keeps diacritics in the key', () => {
     expect(searchLocationsCacheKey(['São Paulo'])).not.toEqual(searchLocationsCacheKey(['Sao Paulo']));
+  });
+});
+
+describe('searchLocationsOrderedCacheKey', () => {
+  it('keeps the caller order', () => {
+    expect(searchLocationsOrderedCacheKey(['B', 'a'])).toEqual(['b', 'a']);
+    expect(searchLocationsOrderedCacheKey(['B', 'a'])).not.toEqual(searchLocationsOrderedCacheKey(['a', 'B']));
+  });
+
+  it('normalises case and whitespace per entry and drops blanks', () => {
+    expect(searchLocationsOrderedCacheKey(['  New   York, NY ', '', '   ', 'CHICAGO, IL'])).toEqual([
+      'new york, ny',
+      'chicago, il',
+    ]);
+  });
+
+  it('drops duplicates keeping the first occurrence, like resolveSearchLocations', () => {
+    const raw = ['Chicago, IL', 'new york, ny', 'CHICAGO,  IL', 'New York, NY', 'Austin, TX'];
+    expect(searchLocationsOrderedCacheKey(raw)).toEqual(['chicago, il', 'new york, ny', 'austin, tx']);
+    const resolved = resolveSearchLocations({ locations: raw }).locations;
+    expect(searchLocationsOrderedCacheKey(resolved)).toEqual(searchLocationsOrderedCacheKey(raw));
+    expect(searchLocationsOrderedCacheKey(resolved)).toEqual(resolved.map((l) => l.toLocaleLowerCase('en')));
+  });
+
+  it('keeps diacritics in the key', () => {
+    expect(searchLocationsOrderedCacheKey(['São Paulo'])).not.toEqual(searchLocationsOrderedCacheKey(['Sao Paulo']));
   });
 });
 

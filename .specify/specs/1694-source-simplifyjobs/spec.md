@@ -141,7 +141,7 @@ Environment variables (all optional):
 | One list failed | the other list's jobs + `partial` (`<list>: <reason>: <detail>`) |
 | A list served from a copy < 6 h old after an error | jobs + `partial` (`<list>: served cached copy (age Nm) after <msg>`) |
 | Every needed list failed, no usable copy | `[]` + the first failure's reason; details of each list joined |
-| Body not a JSON array / invalid element / truncated | `fetch_error`, detail `simplifyjobs: invalid feed JSON: …` |
+| Body not a JSON array / invalid element / a missing, doubled, leading or trailing comma or anything else between elements / truncated | `fetch_error`, detail `simplifyjobs: invalid feed JSON: …`; a cached copy under 6 h old is still served (row above) and is not replaced |
 | robots.txt disallows the list | `blocked`, detail `simplifyjobs: robots.txt disallows <path>` |
 | robots.txt unreachable, never read | `fetch_error`, detail `… robots.txt unreachable …` |
 | A row throws while mapping | row skipped with a warning naming its id |
@@ -181,6 +181,12 @@ Environment variables (all optional):
   byte scanner hands each top-level element's own text to `JSON.parse`; the row is compacted or
   dropped before the next. Structural JSON bytes are ASCII and UTF-8 continuation bytes never are,
   so byte scanning is exact. The scanner is incremental, so a streamed body can use it unchanged.
+  Parsing each element alone never sees the array's own syntax, so the scanner checks it (review
+  fix, 2026-09-26): exactly one comma between two top-level elements and none before the first or
+  after the last, and a number / `true` / `false` / `null` element must be one. `[{..}{..}]`,
+  `[{..},]` or `[{..} x {..}]` used to parse as a fresh feed; now they are `fetch_error` and the
+  last good copy keeps being served. A test compares the scanner with `JSON.parse` over every
+  separator position.
 - **D-02 — Buffered, not streamed, transport.** A streamed response would also avoid the
   off-heap body, but an unconsumed error-status stream would hold its socket through the HTTP
   client's retries, and axios's timeout stops covering the body once headers arrive. Buffered

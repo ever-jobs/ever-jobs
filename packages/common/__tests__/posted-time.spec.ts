@@ -763,3 +763,12 @@ describe('posted-time — Spec 1696', () => {
     });
   });
 });
+
+describe('DESIRED_ORDER (Spec 1696 surfaces)', () => {
+  it('ends with the posted-time columns, after every earlier column, each once', () => {
+    const order = commonBarrel.DESIRED_ORDER;
+    expect(order.slice(-3)).toEqual(['datePostedAt', 'datePostedPrecision', 'datePostedBasis']);
+    expect(order.indexOf('datePosted')).toBeLessThan(order.length - 3);
+    expect(new Set(order).size).toBe(order.length);
+  });
+});

@@ -192,8 +192,9 @@ export class JobsController {
 
     // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
     // Spec 1700: exclusion fields never reach the key (they filter after the
-    // cache) and `locations` keys order- and case-insensitively. A request
-    // without either keys exactly as before.
+    // cache) and `locations` keys case-insensitively in the caller's order
+    // (the fan-out merges in that order). A request without either keys
+    // exactly as before.
     const cacheParams = searchCacheParams(
       input,
       { endpoint: 'search' },

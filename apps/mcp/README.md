@@ -122,6 +122,13 @@ Remote-only jobs: whether their `location` reads `Remote` depends on the API's
 `null` and `Remote - US` gives `United States`, with `is_remote` carrying the
 signal; `true` restores `Remote` / `Remote, United States`). See `.env.example`.
 
+Posting time: every job from `search_jobs`, `search_remote_jobs` and `get_job_details` carries
+`date_posted` (a `YYYY-MM-DD` date). When the source gives more (Spec 1696), three keys follow it:
+`date_posted_at` (ISO-8601 UTC instant; precision `exact`, `minute` or `hour` only),
+`date_posted_precision` (`exact | minute | hour | day | week | month | year`) and
+`date_posted_basis` (`timestamp | date | relative`, where `relative` means estimated from an age
+label such as "3 hours ago" at fetch time). A job without that detail has none of the three keys.
+
 ## Source Coverage
 
 - **21** Job Boards (LinkedIn, Indeed, Glassdoor, Dice, Monster, Upwork, Exa, BuiltIn, Snagajob, Dribbble, ...)

@@ -7,7 +7,7 @@
 | Status         | done                                         |
 | Owner          | agent                                        |
 | Created        | 2026-09-25                                   |
-| Last updated   | 2026-09-25                                   |
+| Last updated   | 2026-09-26                                   |
 | Supersedes     | (none)                                       |
 | Related specs  | 5026, 5082, 5095, 1680, 1689                 |
 
@@ -82,7 +82,7 @@ removal.
 | FR-8  | Same-source identity de-dup across locations (site + id + jobUrl; either alone when the other is missing; neither → keep). | must |
 | FR-9  | One diagnostic row per (site, location) carrying `location`; `site` stays the bare key. | must |
 | FR-10 | Pause of `EVER_JOBS_SEARCH_LOCATION_INTERVAL_MS` (default 500, `0` disables) between consecutive attempted location calls to one source. | should |
-| FR-11 | Cache key: exclusion fields never keyed; `locations` keyed order- and case-insensitively on the searched set; a one-entry list keys like `location`. | must |
+| FR-11 | Cache key: exclusion fields never keyed; `locations` keyed case-insensitively on the searched list **in caller order** (`location` first, duplicates dropped keeping the first; see §13); a one-entry list keys like `location`. | must |
 | FR-12 | Exclusion matcher: whole tokens, phrases, trailing-`*` prefix (≥ 3 chars), aliases (`sr`/`snr`↔`senior`, `jr`↔`junior`), negation-aware in the same clause, HTML-safe, linear, never a regex over caller input; separator-less scripts use a literal substring. | must |
 | FR-13 | Exclusions run in the aggregator after dedup; a cluster is dropped when any member matches; persistence still receives every canonical record. | must |
 | FR-14 | REST `exclusion_metrics` (`samples` only with `?diagnostics`), GraphQL `exclusionMetrics`, CLI stderr summary, MCP `excluded` — each present only when an exclusion field was supplied. `/analyze` analyses the filtered set. | must |
@@ -115,7 +115,8 @@ class ScraperInputDto {
 
 // packages/common
 resolveSearchLocations(input, max?): { locations: string[]; overCap: string[] };
-searchLocationsCacheKey(locations): string[];
+searchLocationsCacheKey(locations): string[];          // sorted; not the search cache key (§13)
+searchLocationsOrderedCacheKey(locations): string[];   // caller order, first occurrence wins
 clampMaxLocations(raw): number;
 compileJobExclusions(spec): CompiledJobExclusions;
 matchJobExclusion(job, compiled): ExclusionMatch | null;
@@ -242,3 +243,29 @@ Recorded for `docs/questions.md` (integrator), each with the default this change
   walks treat `rate_limited` the same way.
 - **Pacing.** The location pause (`EVER_JOBS_SEARCH_LOCATION_INTERVAL_MS`, raised to the plugin's
   `minRequestIntervalMs`) is kept; the per-host limiter now paces every request on top of it.
+
+## 13. Review fix: the cache key keeps the caller's location order (2026-09-26)
+
+The first build keyed `locations` order-insensitively (`searchLocationsCacheKey` sorts). The merge
+is not order-insensitive: `runLocationLoop` searches the locations in caller order and
+`mergeLocationOutcomes` keeps the **first** same-source duplicate (a refusal also skips the
+locations after it). `["A", "B"]` and `["B", "A"]` could therefore return different rows (the same
+posting as fetched for A, or as fetched for B) yet shared one cache entry, so the second caller got
+the first caller's winners.
+
+- `searchCacheParams` now keys the resolved list with `searchLocationsOrderedCacheKey`: each entry
+  normalised (NFC, trim, whitespace collapse) and lower-cased, blanks dropped, duplicates removed
+  keeping the first occurrence, **order kept**. That is the list the service searches
+  (`resolveSearchLocations`), in its order, lower-cased. `location` still folds in first, a
+  one-entry list still keys like a plain `location`, case and whitespace variants of the same
+  ordered list still share an entry, and diacritics stay distinct.
+- `searchLocationsCacheKey` is kept (marked deprecated for the search cache) for callers that want
+  set semantics.
+- Only multi-location keys change; single-location and plain requests key exactly as before. An
+  entry written under a sorted key is not found again and expires by its TTL. The feature is
+  unreleased, so no migration is needed.
+- Tests: `search-locations.spec.ts` (order, normalisation, first-wins parity with
+  `resolveSearchLocations`), `search-filters.api.spec.ts` (reversed list gives a different key,
+  respelled list the same key, duplicates, `location` folding, REST and GraphQL) and
+  `jobs.service.multi-location.spec.ts` (one posting under both locations: the winner follows the
+  order, and each key equals the order the service actually searched).

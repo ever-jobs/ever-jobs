@@ -8,6 +8,8 @@ import {
   CRAWL_POLICY_DTO_VALUES,
   Country,
   CrawlPolicyDto,
+  DatePostedBasis,
+  DatePostedPrecision,
   ExclusionPreset,
   MAX_CRAWL_RETRIES,
   Site,
@@ -412,6 +414,28 @@ export class JobPostGql {
 
   @Field({ nullable: true })
   datePosted?: string;
+
+  // Spec 1696 — posting-time detail, additive and nullable (null unless the
+  // source gives finer-than-day information). Strings carrying the REST wire
+  // values, not GraphQL enums, so both surfaces spell them the same.
+  @Field(() => String, {
+    nullable: true,
+    description:
+      'Posting instant, ISO-8601 UTC ("...Z"), only when the source gives finer-than-day time (precision exact, minute or hour). `datePosted` stays the date.',
+  })
+  datePostedAt?: string | null;
+
+  @Field(() => String, {
+    nullable: true,
+    description: `Granularity of the posting time: ${oneOf(Object.values(DatePostedPrecision))}.`,
+  })
+  datePostedPrecision?: DatePostedPrecision | null;
+
+  @Field(() => String, {
+    nullable: true,
+    description: `Where the posting time came from: ${oneOf(Object.values(DatePostedBasis))} (relative = estimated from an age label at fetch time).`,
+  })
+  datePostedBasis?: DatePostedBasis | null;
 
   @Field(() => [String], { nullable: true })
   emails?: string[];

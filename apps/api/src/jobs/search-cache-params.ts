@@ -1,7 +1,7 @@
 import {
   EXCLUSION_INPUT_KEYS,
   resolveSearchLocations,
-  searchLocationsCacheKey,
+  searchLocationsOrderedCacheKey,
 } from '@ever-jobs/common';
 
 /**
@@ -14,9 +14,13 @@ import {
  *  - Exclusion fields (`excludeTitleTerms`, `excludeKeywords`,
  *    `excludePresets`) are blanked. They are a per-request view filter that
  *    runs after the cache, so a filtered request reuses the unfiltered entry.
- *  - `locations`, when present, is replaced by the resolved, order- and
- *    case-insensitive key of the locations actually searched (the cap
- *    applied), and `location` is folded into it. A request whose list
+ *  - `locations`, when present, is replaced by the key of the locations
+ *    actually searched (the cap applied), with `location` folded in first:
+ *    each entry normalized and lower-cased, duplicates dropped keeping the
+ *    first, and the caller's order kept. The service searches the locations
+ *    in that order and keeps the first same-source duplicate (and a refusal
+ *    skips the locations after it), so `[A, B]` and `[B, A]` can return
+ *    different rows and must not share an entry. A request whose list
  *    resolves to a single location keys exactly like a plain `location`
  *    request, because the service runs it that way.
  *
@@ -38,7 +42,7 @@ export function searchCacheParams(
     const resolved = resolveSearchLocations(source, maxLocations).locations;
     if (resolved.length > 1) {
       params.location = undefined;
-      params.locations = searchLocationsCacheKey(resolved);
+      params.locations = searchLocationsOrderedCacheKey(resolved);
     } else {
       params.locations = undefined;
       if (resolved.length === 1) params.location = resolved[0];

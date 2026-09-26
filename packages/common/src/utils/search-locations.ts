@@ -10,7 +10,7 @@ import {
  * understands a single `input.location`, so the fan-out runs one plugin call
  * per (source, location). These helpers turn the caller's raw input into the
  * ordered, de-duplicated, capped list of locations that is actually searched,
- * and into an order-insensitive cache-key form.
+ * and into its cache-key form (caller order kept: the fan-out merges in order).
  *
  * Pure and synchronous; no regex over caller input beyond a fixed whitespace
  * collapse.
@@ -100,10 +100,37 @@ export function resolveSearchLocations(
  * Order- and case-insensitive cache-key form of a resolved location list: the
  * lower-cased keys, sorted. `["Chicago, IL", "new york, ny"]` and
  * `["New York, NY", "Chicago, IL"]` therefore share one cache entry.
+ *
+ * @deprecated Not a safe search cache key: a multi-location search merges in
+ * caller order (the first same-source duplicate wins, a refusal skips the
+ * locations after it), so a permuted list can return different rows. The
+ * search cache uses {@link searchLocationsOrderedCacheKey}. Kept for callers
+ * that want set semantics.
  */
 export function searchLocationsCacheKey(locations: readonly string[]): string[] {
   return locations
     .map((l) => locationKey(normalizeSearchLocation(l)))
     .filter((l) => l.length > 0)
     .sort();
+}
+
+/**
+ * Cache-key form of a location list that keeps the caller's order, as the
+ * search runs it: each entry normalized ({@link normalizeSearchLocation}) and
+ * lower-cased, blanks dropped, duplicates removed keeping the first occurrence
+ * — the same identity and first-wins rule as {@link resolveSearchLocations}.
+ * `["New York, NY", " chicago,  il", "NEW YORK, NY"]` keys as
+ * `["new york, ny", "chicago, il"]`; `["Chicago, IL", "New York, NY"]` keys
+ * differently, because the fan-out merges its locations in order.
+ */
+export function searchLocationsOrderedCacheKey(locations: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const keys: string[] = [];
+  for (const entry of locations) {
+    const key = locationKey(normalizeSearchLocation(entry));
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    keys.push(key);
+  }
+  return keys;
 }

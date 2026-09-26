@@ -47,6 +47,19 @@ function isBomByte(byte: number): boolean {
   return byte === 0xef || byte === 0xbb || byte === 0xbf;
 }
 
+/**
+ * Where the scanner stands between the array's top-level elements:
+ * `first` right after `[` (an element or `]` may follow), `element` once an
+ * element has begun (only `,` or `]` may follow it), `comma` right after a
+ * comma (an element must follow; `]` here is a trailing comma).
+ */
+type TopLevelState = 'first' | 'element' | 'comma';
+
+/** A whole number / true / false / null element. Anchored, linear, run on at most {@link MAX_SCALAR_LENGTH} chars. */
+const JSON_SCALAR_RE = /^(?:-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)$/;
+/** Longest number / literal element accepted; longer is rejected before the regex runs. */
+const MAX_SCALAR_LENGTH = 64;
+
 export interface FeedArrayScannerOptions {
   /** One element's text may not exceed this many bytes. */
   maxElementBytes?: number;
@@ -62,9 +75,14 @@ export interface FeedArrayScannerOptions {
  * counted.
  *
  * Structural bytes are all ASCII and UTF-8 continuation bytes never are, so
- * scanning bytes is exact. Syntax between elements (commas) is not validated;
- * each element is validated by `JSON.parse`. A body that is not an array, is
- * truncated, or has data after its closing bracket is rejected.
+ * scanning bytes is exact. The syntax between elements is validated: exactly
+ * one comma between two elements, none before the first or after the last
+ * (`[{..}{..}]`, `[{..},]`, `[,{..}]`, `[{..},,{..}]` and anything else between
+ * two elements are rejected). Each object element is validated by `JSON.parse`
+ * and each number / true / false / null element by {@link JSON_SCALAR_RE}; a
+ * string or array element is skipped with only its quoting and brackets
+ * checked. A body that is not an array, is truncated, or has data after its
+ * closing bracket is rejected.
  */
 export class FeedArrayScanner {
   private started = false;
@@ -76,6 +94,12 @@ export class FeedArrayScanner {
   private capturing = false;
   /** Inside a number / true / false / null element. */
   private inScalar = false;
+  /** The current number / true / false / null element's text so far (ASCII only). */
+  private scalarText = '';
+  /** Separator state between top-level elements. */
+  private topLevel: TopLevelState = 'first';
+  /** Top-level elements begun so far (objects and skipped ones alike). */
+  private elementCount = 0;
   private carry: Buffer[] = [];
   private carryBytes = 0;
   private totalBytes = 0;
@@ -114,7 +138,7 @@ export class FeedArrayScanner {
         continue;
       }
       if (isJsonWhitespace(byte)) {
-        this.inScalar = false;
+        this.endScalar();
         continue;
       }
 
@@ -127,15 +151,19 @@ export class FeedArrayScanner {
       }
       if (this.ended) throw new SimplifyFeedFormatError('data after the closing bracket');
 
-      if (byte === COMMA || byte === CLOSE_BRACKET || byte === CLOSE_BRACE) this.inScalar = false;
+      if (byte === COMMA || byte === CLOSE_BRACKET || byte === CLOSE_BRACE) this.endScalar();
       switch (byte) {
         case QUOTE:
           this.inString = true;
-          if (this.depth === 1) this.skippedCount++;
+          if (this.depth === 1) {
+            this.beginElement();
+            this.skippedCount++;
+          }
           break;
         case OPEN_BRACE:
         case OPEN_BRACKET:
           if (this.depth === 1) {
+            this.beginElement();
             if (byte === OPEN_BRACE) {
               this.capturing = true;
               start = i;
@@ -153,18 +181,36 @@ export class FeedArrayScanner {
             start = -1;
           } else if (this.depth === 0) {
             if (byte !== CLOSE_BRACKET) throw new SimplifyFeedFormatError('unbalanced brackets');
+            if (this.topLevel === 'comma') {
+              throw new SimplifyFeedFormatError(`trailing comma after element ${this.elementCount}`);
+            }
             this.ended = true;
           } else if (this.depth < 0) {
             throw new SimplifyFeedFormatError('unbalanced brackets');
           }
           break;
         case COMMA:
+          // Only the array's own separators; commas inside an element are its own syntax.
+          if (this.depth === 1) {
+            if (this.topLevel !== 'element') {
+              throw new SimplifyFeedFormatError(
+                this.topLevel === 'first'
+                  ? 'comma before the first element'
+                  : `missing element after element ${this.elementCount}`,
+              );
+            }
+            this.topLevel = 'comma';
+          }
           break;
         default:
-          // A number / true / false / null element, counted once.
-          if (this.depth === 1 && !this.inScalar) {
-            this.inScalar = true;
-            this.skippedCount++;
+          // A number / true / false / null element, counted once and checked when it ends.
+          if (this.depth === 1) {
+            if (!this.inScalar) {
+              this.beginElement();
+              this.inScalar = true;
+              this.skippedCount++;
+            }
+            this.appendScalar(byte);
           }
       }
     }
@@ -182,6 +228,37 @@ export class FeedArrayScanner {
   end(): void {
     if (!this.started) throw new SimplifyFeedFormatError('the body is empty');
     if (!this.ended) throw new SimplifyFeedFormatError('the body ends before its closing bracket');
+  }
+
+  /**
+   * A top-level element begins. Right after another element only `,` or `]`
+   * may come, so a second element there is a missing comma (`[{..}{..}]`) or
+   * garbage between elements (`[{..} x {..}]`).
+   */
+  private beginElement(): void {
+    if (this.topLevel === 'element') {
+      throw new SimplifyFeedFormatError(`expected "," or "]" after element ${this.elementCount}`);
+    }
+    this.topLevel = 'element';
+    this.elementCount++;
+  }
+
+  private appendScalar(byte: number): void {
+    if (byte >= 0x80 || this.scalarText.length >= MAX_SCALAR_LENGTH) {
+      throw new SimplifyFeedFormatError(`element ${this.elementCount} is not valid JSON`);
+    }
+    this.scalarText += String.fromCharCode(byte);
+  }
+
+  /** A number / true / false / null element ends; it must be one of those. */
+  private endScalar(): void {
+    if (!this.inScalar) return;
+    const text = this.scalarText;
+    this.inScalar = false;
+    this.scalarText = '';
+    if (!JSON_SCALAR_RE.test(text)) {
+      throw new SimplifyFeedFormatError(`element ${this.elementCount} is not valid JSON`);
+    }
   }
 
   private emit(buf: Buffer, start: number, end: number): void {

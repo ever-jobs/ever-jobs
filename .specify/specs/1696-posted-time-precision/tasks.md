@@ -49,10 +49,14 @@
 ## Phase 3 — Surfaces
 
 - [x] T13 — `jobs.service.ts` sort via `postedSortKey`; aggregator doc comment ("then posted time desc"); specs.
-- [ ] T14 — GraphQL fields, tool manifest, MCP `date_posted_at`, CLI CSV columns appended at the end, `DESIRED_ORDER`, `docs/API_CHANGELOG.md`.
+- [x] T14 — GraphQL fields, tool manifest, MCP `date_posted_at`, CLI CSV columns appended at the end, `DESIRED_ORDER`, `docs/API_CHANGELOG.md`.
+  - **Files:** `apps/api/src/jobs/gql-types.ts`, `tool_manifest.json`, `apps/mcp/src/tools.ts`, `apps/cli/src/commands/search.command.ts`, `packages/common/src/utils/helpers.ts`, `docs/API_CHANGELOG.md`, `docs/CLI.md`, `apps/mcp/README.md`
+  - **Acceptance:** spec §12 — GraphQL nullable `String`s with the REST values; manifest output fields with the enums; MCP `date_posted_at` / `_precision` / `_basis` only when sent; CSV columns appended after `description`; a trailing table column; `DESIRED_ORDER` ends with the three.
 
 ## Notes
 
 - `docs/log.md` / `docs/index.md` entries are added with the integrating commit.
 
 Integration 2026-09-25: T10-T12 landed with the board lanes (Specs 1701, 1702, 1703). T13: `JobsService` sorts same-site results by `postedSortKey` (new same-day ordering case in `jobs.service.spec.ts`); the aggregator comment says "then posted time desc". T14 (GraphQL / MCP / CLI / manifest / API changelog) stays open.
+
+PR review follow-up 2026-09-26: T14 done (spec §12); the posted-time fields no longer stop at REST.

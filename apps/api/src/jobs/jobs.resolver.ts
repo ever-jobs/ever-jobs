@@ -85,7 +85,7 @@ export class JobsResolver {
     // The endpoint key is bumped to v2 so any v1 entries (which were
     // written before T15 wired dedup into the resolver) are invalidated.
     // Spec 1700: exclusion fields stay out of the key and `locations` keys
-    // order- and case-insensitively, exactly as on the REST path.
+    // case-insensitively in the caller's order, exactly as on the REST path.
     const dedup = input.dedup ?? true;
     const cacheParams = searchCacheParams(
       input,

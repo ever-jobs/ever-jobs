@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import { JobsService } from '../../../api/src/jobs/jobs.service';
 import {
   ScraperInputDto, JobPostDto, Site, Country,
-  DescriptionFormat, JobType, ExclusionPreset,
+  DescriptionFormat, JobType, ExclusionPreset, DatePostedBasis,
 } from '@ever-jobs/models';
 import {
   applyJobExclusions, exclusionSpecFromInput, hasExclusionInput,
@@ -73,6 +73,20 @@ export function applyCliExclusions(input: ScraperInputDto, jobs: JobPostDto[]): 
     console.error(`Ignored exclusion term "${ignored.term}" (${ignored.reason})`);
   }
   return kept;
+}
+
+/**
+ * The table's "Posted at (UTC)" cell (Spec 1696): `datePostedAt` as
+ * `YYYY-MM-DD HH:MM`, prefixed `~` when it was estimated from an age label
+ * (`datePostedBasis: relative`). Empty when the source gave no instant.
+ */
+export function postedAtLabel(job: Pick<JobPostDto, 'datePostedAt' | 'datePostedBasis'>): string {
+  const at = job.datePostedAt;
+  if (typeof at !== 'string') return '';
+  const ms = Date.parse(at);
+  if (!Number.isFinite(ms)) return '';
+  const text = new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
+  return job.datePostedBasis === DatePostedBasis.RELATIVE ? `~${text}` : text;
 }
 
 @Command({
@@ -285,6 +299,8 @@ export class SearchCommand extends CommandRunner {
       'id', 'site', 'title', 'companyName', 'location', 'jobUrl',
       'datePosted', 'jobType', 'isRemote', 'minAmount', 'maxAmount',
       'currency', 'interval', 'description',
+      // Spec 1696 — appended, so every column above keeps its position.
+      'datePostedAt', 'datePostedPrecision', 'datePostedBasis',
     ];
 
     const escape = (val: any): string => {
@@ -315,8 +331,9 @@ export class SearchCommand extends CommandRunner {
   private toTable(jobs: JobPostDto[]): string {
     if (jobs.length === 0) return 'No jobs found.';
 
-    const cols = ['Site', 'Title', 'Company', 'Location', 'Posted', 'Remote'];
-    const widths = [12, 40, 25, 25, 12, 7];
+    // Spec 1696 — "Posted at (UTC)" appended after the original columns.
+    const cols = ['Site', 'Title', 'Company', 'Location', 'Posted', 'Remote', 'Posted at (UTC)'];
+    const widths = [12, 40, 25, 25, 12, 7, 17];
 
     const pad = (str: string, width: number): string =>
       str.length > width ? str.slice(0, width - 1) + '…' : str.padEnd(width);
@@ -337,6 +354,7 @@ export class SearchCommand extends CommandRunner {
         pad(locStr, widths[3]),
         pad(dateStr, widths[4]),
         pad(remoteStr, widths[5]),
+        pad(postedAtLabel(job), widths[6]),
       ].join(' │ ');
     });
 

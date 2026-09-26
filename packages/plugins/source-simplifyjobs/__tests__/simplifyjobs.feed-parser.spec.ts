@@ -105,6 +105,91 @@ describe('FeedArrayScanner (Spec 1694)', () => {
     expect(() => scanAll([Buffer.from(text)])).toThrow(SimplifyFeedFormatError);
   });
 
+  describe('separators between top-level elements', () => {
+    it.each([
+      ['a missing comma between two objects', '[{"a":1}{"b":2}]'],
+      ['a missing comma across whitespace', '[{"a":1}\n  {"b":2}]'],
+      ['a missing comma after a skipped element', '[1 {"a":1}]'],
+      ['two numbers without a comma', '[1 2]'],
+      ['a string right after an object', '[{"a":1}"x"]'],
+      ['an array right after an object', '[{"a":1}[2]]'],
+      ['a trailing comma', '[{"a":1},]'],
+      ['a trailing comma across whitespace', '[{"a":1} ,\n ]'],
+      ['a leading comma', '[,{"a":1}]'],
+      ['a lone comma', '[,]'],
+      ['two commas in a row', '[{"a":1},,{"b":2}]'],
+      ['garbage between elements', '[{"a":1} x {"b":2}]'],
+      ['garbage before a comma', '[{"a":1}x,{"b":2}]'],
+      ['a colon between elements', '[{"a":1}:{"b":2}]'],
+      ['a bare word element', '[{"a":1}, garbage, {"b":2}]'],
+      ['a malformed number', '[{"a":1}, 01, {"b":2}]'],
+      ['a lone minus sign', '[-]'],
+      ['a truncated literal', '[tru]'],
+      ['a non-ASCII byte in a literal', '[nullé]'],
+      ['an over-long number', `[${'9'.repeat(65)}]`],
+    ])('rejects %s', (_label, text) => {
+      expect(() => scanAll([Buffer.from(text)])).toThrow(SimplifyFeedFormatError);
+      // The same body split byte by byte: the separator state survives chunk boundaries.
+      expect(() => scanAll(chunked(Buffer.from(text), 1))).toThrow(SimplifyFeedFormatError);
+    });
+
+    it('names the element a comma is missing after', () => {
+      expect(() => scanAll([Buffer.from('[{"a":1},{"b":2}{"c":3}]')])).toThrow(
+        'simplifyjobs: invalid feed JSON: expected "," or "]" after element 2',
+      );
+      expect(() => scanAll([Buffer.from('[{"a":1},{"b":2},]')])).toThrow(
+        'simplifyjobs: invalid feed JSON: trailing comma after element 2',
+      );
+      expect(() => scanAll([Buffer.from('[{"a":1},,]')])).toThrow(
+        'simplifyjobs: invalid feed JSON: missing element after element 1',
+      );
+    });
+
+    it('still accepts commas surrounded by any JSON whitespace, and literals split across chunks', () => {
+      const text = '[ {"a":1}\r\n,\t{"b":2} , true,null ,-3.5e2,0 ]';
+      for (const size of [1, 2, 3, 64]) {
+        const { objects, skipped } = scanAll(chunked(Buffer.from(text), size));
+        expect(objects).toEqual([{ a: 1 }, { b: 2 }]);
+        expect(skipped).toBe(4);
+      }
+    });
+
+    it('accepts exactly the separators JSON.parse accepts (oracle over every gap)', () => {
+      const elements = ['{"a":1}', '2', '"s, t"', '[3, 4]', '{"b":[5,{"c":"]"}]}', 'true', 'null'];
+      const replacements = ['', ',', ' , ', ',,', ' ', '\n,\n', 'x', ', x', ', x,', '::'];
+      const mismatches: string[] = [];
+      let checked = 0;
+      for (let gap = 0; gap <= elements.length; gap++) {
+        for (const replacement of replacements) {
+          // Gap 0 sits after `[`, gap n before `]`, the rest between elements.
+          const seps: string[] = elements.map((_, i) => (i === 0 ? '' : ','));
+          seps.push('');
+          seps[gap] = replacement;
+          const text = `[${elements.map((el, i) => seps[i] + el).join('')}${seps[elements.length]}]`;
+          let valid = true;
+          try {
+            JSON.parse(text);
+          } catch {
+            valid = false;
+          }
+          for (const size of [text.length, 1]) {
+            let accepted = true;
+            try {
+              scanAll(chunked(Buffer.from(text), size));
+            } catch (err) {
+              if (!(err instanceof SimplifyFeedFormatError)) throw err;
+              accepted = false;
+            }
+            checked++;
+            if (accepted !== valid) mismatches.push(`${JSON.stringify(text)} (chunk ${size}): scanner ${accepted}, JSON.parse ${valid}`);
+          }
+        }
+      }
+      expect(checked).toBe((elements.length + 1) * replacements.length * 2);
+      expect(mismatches).toEqual([]);
+    });
+  });
+
   it('rejects an element larger than the per-element cap, in one chunk or many', () => {
     const big = Buffer.from(`[{"a":"${'x'.repeat(200)}"}]`);
     const single = new FeedArrayScanner(() => undefined, { maxElementBytes: 100 });
@@ -254,6 +339,9 @@ describe('parseFeedBody (Spec 1694)', () => {
   it('rejects a body that is not a JSON array of objects', () => {
     expect(() => parseFeedBody('{"rows":[]}', 'newgrad')).toThrow(SimplifyFeedFormatError);
     expect(() => parseFeedBody('[{"a":1},{"b":oops}]', 'newgrad')).toThrow(/element 2 is not valid JSON/);
+    // Each element on its own is valid JSON; the array is not.
+    expect(() => parseFeedBody('[{"a":1}{"b":2}]', 'newgrad')).toThrow(/expected "," or "\]" after element 1/);
+    expect(() => parseFeedBody('[{"a":1},{"b":2},]', 'newgrad')).toThrow(/trailing comma after element 2/);
     expect(() => parseFeedBody(null, 'newgrad')).toThrow(/unexpected body type null/);
     expect(() => parseFeedBody(42, 'newgrad')).toThrow(/unexpected body type number/);
   });

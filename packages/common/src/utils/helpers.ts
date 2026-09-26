@@ -1896,6 +1896,8 @@ export const DESIRED_ORDER: string[] = [
   'companyAddresses', 'companyNumEmployees', 'companyRevenue', 'companyDescription',
   'skills', 'experienceRange', 'companyRating', 'companyReviewsCount',
   'vacancyCount', 'workFromHomeType',
+  // Spec 1696 — appended so every column above keeps its position.
+  'datePostedAt', 'datePostedPrecision', 'datePostedBasis',
 ];
 
 /**

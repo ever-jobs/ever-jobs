@@ -200,7 +200,21 @@ export const MCP_MAX_EXCLUSION_TERMS = 50;
 /** Longest accepted exclusion term (Spec 1700). */
 export const MCP_MAX_EXCLUSION_TERM_LENGTH = 100;
 
-export interface JobResult {
+/**
+ * Posting-time detail (Spec 1696). Each key is present only when the API sent
+ * it (the source gave finer-than-day information), so a job without it keeps
+ * its previous shape.
+ */
+export interface PostedTimeDetail {
+  /** Posting instant, ISO-8601 UTC; only for precision exact, minute or hour. `date_posted` stays the date. */
+  date_posted_at?: string;
+  /** exact | minute | hour | day | week | month | year. */
+  date_posted_precision?: string;
+  /** timestamp | date | relative (estimated from an age label at fetch time). */
+  date_posted_basis?: string;
+}
+
+export interface JobResult extends PostedTimeDetail {
   id: string;
   title: string;
   company: string;
@@ -227,7 +241,7 @@ export interface SearchResponse {
   excluded?: number;
 }
 
-export interface JobDetailsResponse {
+export interface JobDetailsResponse extends PostedTimeDetail {
   id: string;
   title: string;
   company: string;
@@ -470,6 +484,7 @@ export async function searchJobs(params: JobSearchParams): Promise<SearchRespons
       url: job.jobUrl ?? job.job_url ?? '',
       description: truncateDescription(job.description),
       date_posted: job.datePosted ?? job.date_posted ?? null,
+      ...postedTimeDetail(job),
       is_remote: job.isRemote ?? job.is_remote ?? false,
       source: job.site ?? '',
       salary: formatSalary(job.compensation),
@@ -535,6 +550,7 @@ export async function getJobDetails(params: {
       description: truncateDescription(job.description),
       full_description: job.description ?? null,
       date_posted: job.datePosted ?? job.date_posted ?? null,
+      ...postedTimeDetail(job),
       is_remote: job.isRemote ?? job.is_remote ?? false,
       source: job.site ?? '',
       salary: formatSalary(job.compensation),
@@ -832,6 +848,24 @@ export function formatJobLocation(
   if (geo.length > 0) return geo.join(', ');
 
   return nonEmpty(loc.name) ?? nonEmpty(loc.text);
+}
+
+/**
+ * The Spec 1696 posting-time detail of an API job, in the tools' snake_case:
+ * only the keys the API sent as a non-blank string, so a job without the
+ * detail maps exactly as before. Reads the camelCase (current API) and the
+ * snake_case spelling, like the other job fields.
+ */
+export function postedTimeDetail(job: unknown): PostedTimeDetail {
+  const j = (job && typeof job === 'object' ? job : {}) as Record<string, unknown>;
+  const at = nonEmpty(j.datePostedAt ?? j.date_posted_at);
+  const precision = nonEmpty(j.datePostedPrecision ?? j.date_posted_precision);
+  const basis = nonEmpty(j.datePostedBasis ?? j.date_posted_basis);
+  return {
+    ...(at ? { date_posted_at: at } : {}),
+    ...(precision ? { date_posted_precision: precision } : {}),
+    ...(basis ? { date_posted_basis: basis } : {}),
+  };
 }
 
 function nonEmpty(value: unknown): string | null {

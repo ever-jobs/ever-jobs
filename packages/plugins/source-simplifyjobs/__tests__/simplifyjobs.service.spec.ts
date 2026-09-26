@@ -34,6 +34,11 @@ const FIXTURES = path.join(__dirname, 'fixtures');
 const NEWGRAD = fs.readFileSync(path.join(FIXTURES, 'newgrad-listings.json'), 'utf8');
 const INTERNSHIPS = fs.readFileSync(path.join(FIXTURES, 'internships-listings.json'), 'utf8');
 
+/** The internships rows as one array body, joined by `separator` instead of a comma. */
+function rowsJoinedBy(separator: string): string {
+  return `[${(JSON.parse(INTERNSHIPS) as unknown[]).map((row) => JSON.stringify(row)).join(separator)}]`;
+}
+
 const NEWGRAD_URL =
   'https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json';
 const INTERNSHIPS_URL =
@@ -477,6 +482,9 @@ describe('SimplifyJobsService (Spec 1694)', () => {
       ['a non-array body', '{"message":"moved"}'],
       ['invalid JSON', '[{"id": "x", oops}]'],
       ['an HTML page', '<!doctype html><title>error</title>'],
+      ['a feed missing the commas between rows', rowsJoinedBy('')],
+      ['a feed with a trailing comma', `${rowsJoinedBy(',').slice(0, -1)},]`],
+      ['a feed with garbage between rows', rowsJoinedBy(' x ')],
     ])('reports %s as fetch_error', async (_label, body) => {
       handlers.internships = () => ok(body);
       const res = await newService().scrape(input({ jobType: JobType.INTERNSHIP }));
@@ -496,6 +504,31 @@ describe('SimplifyJobsService (Spec 1694)', () => {
       expect(res.jobs).toHaveLength(9);
       expect(res.diagnostics?.reason).toBe('partial');
       expect(res.diagnostics?.detail).toContain('internships: served cached copy (age 61m) after Request failed with status code 503');
+    });
+
+    it('keeps serving the good copy when a refresh body is missing its commas (Spec 1694 serve-stale)', async () => {
+      const svc = newService();
+      expect((await svc.scrape(input({ jobType: JobType.INTERNSHIP }))).jobs).toHaveLength(9);
+      clock += 61 * 60_000;
+      // A 200 whose every row parses alone, but the array does not.
+      handlers.internships = () => ok(rowsJoinedBy(''), '"in2"');
+      const res = await svc.scrape(input({ jobType: JobType.INTERNSHIP }));
+      expect(res.jobs).toHaveLength(9);
+      expect(res.diagnostics?.reason).toBe('partial');
+      expect(res.diagnostics?.detail).toContain(
+        'internships: served cached copy (age 61m) after simplifyjobs: invalid feed JSON: expected "," or "]" after element 1',
+      );
+
+      // The rejected body did not become the cached copy: the next refresh still
+      // revalidates against the good copy's ETag, and a 304 keeps its rows.
+      clock += 61_000;
+      handlers.internships = () => notModified();
+      const after = await svc.scrape(input({ jobType: JobType.INTERNSHIP }));
+      expect(after.jobs).toHaveLength(9);
+      expect(after.diagnostics).toBeUndefined();
+      const calls = feedCalls();
+      expect(calls).toHaveLength(3);
+      expect((calls[2][1].headers as Record<string, string>)['If-None-Match']).toBe('"in1"');
     });
 
     it('gives up on a cached copy older than 6 h', async () => {

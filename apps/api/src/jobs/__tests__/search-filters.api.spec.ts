@@ -95,18 +95,49 @@ describe('searchCacheParams (Spec 1700)', () => {
     expect(searchCacheParams(input, { endpoint: 'search' }, 10)).toEqual({ ...input, endpoint: 'search' });
   });
 
-  it('keys permuted and case-different locations identically', () => {
+  it('keys case- and whitespace-different spellings of the same ordered list identically', () => {
     const a = searchCacheParams(new ScraperInputDto({ locations: ['New York, NY', 'Chicago, IL'] }), {}, 10);
-    const b = searchCacheParams(new ScraperInputDto({ locations: ['chicago, il', ' New York,  NY'] }), {}, 10);
+    const b = searchCacheParams(new ScraperInputDto({ locations: [' new york,  ny', 'CHICAGO, IL'] }), {}, 10);
     expect(a).toEqual(b);
-    expect(a.locations).toEqual(['chicago, il', 'new york, ny']);
+    expect(a.locations).toEqual(['new york, ny', 'chicago, il']);
     expect(a.location).toBeUndefined();
   });
 
-  it('folds `location` into the list key', () => {
+  it('keys a reordered list differently: the fan-out merges in caller order', () => {
+    const a = searchCacheParams(new ScraperInputDto({ locations: ['New York, NY', 'Chicago, IL'] }), {}, 10);
+    const b = searchCacheParams(new ScraperInputDto({ locations: ['Chicago, IL', 'New York, NY'] }), {}, 10);
+    expect(a.locations).toEqual(['new york, ny', 'chicago, il']);
+    expect(b.locations).toEqual(['chicago, il', 'new york, ny']);
+    expect(a).not.toEqual(b);
+  });
+
+  it('drops duplicates keeping the first occurrence, as the service does', () => {
+    const p = searchCacheParams(
+      new ScraperInputDto({ locations: ['Chicago, IL', 'New  York, NY', ' chicago,il ', 'CHICAGO, IL', 'new york, ny'] }),
+      {},
+      10,
+    );
+    // ' chicago,il ' has no space after the comma: a different location, kept in place.
+    expect(p.locations).toEqual(['chicago, il', 'new york, ny', 'chicago,il']);
+    const plain = searchCacheParams(new ScraperInputDto({ locations: ['Chicago, IL', 'New York, NY', 'chicago,il'] }), {}, 10);
+    expect(p).toEqual(plain);
+  });
+
+  it('keeps diacritics distinct in the key', () => {
+    const a = searchCacheParams(new ScraperInputDto({ locations: ['São Paulo', 'Lima'] }), {}, 10);
+    const b = searchCacheParams(new ScraperInputDto({ locations: ['Sao Paulo', 'Lima'] }), {}, 10);
+    expect(a).not.toEqual(b);
+  });
+
+  it('folds `location` into the list key, first', () => {
     const a = searchCacheParams(new ScraperInputDto({ location: 'A', locations: ['B'] }), {}, 10);
-    const b = searchCacheParams(new ScraperInputDto({ locations: ['b', 'a'] }), {}, 10);
+    const b = searchCacheParams(new ScraperInputDto({ locations: ['a', 'b'] }), {}, 10);
     expect(a).toEqual(b);
+    expect(a.locations).toEqual(['a', 'b']);
+    // `location` is searched first, so it is not the same search as B then A.
+    expect(a).not.toEqual(searchCacheParams(new ScraperInputDto({ locations: ['b', 'a'] }), {}, 10));
+    // `location` repeated in the list is searched once, where `location` puts it.
+    expect(searchCacheParams(new ScraperInputDto({ location: 'A', locations: ['B', 'a'] }), {}, 10)).toEqual(a);
   });
 
   it('keys a single-entry list like a plain location', () => {
@@ -158,11 +189,15 @@ describe('JobsController — Spec 1700', () => {
     expect(second).toBe(first);
   });
 
-  it('permuted locations share one cache entry', async () => {
+  it('differently spelled locations in the same order share one cache entry; a reordered list does not', async () => {
     const { controller, cacheService } = createController();
     await search(controller, { locations: ['New York, NY', 'Chicago, IL'] });
+    await search(controller, { locations: ['new york,  ny', 'CHICAGO, IL'] });
     await search(controller, { locations: ['CHICAGO, IL', 'new york, ny'] });
-    expect(cacheService.get.mock.calls[1][0]).toEqual(cacheService.get.mock.calls[0][0]);
+    const [first, respelled, reordered] = cacheService.get.mock.calls.map((c) => c[0]);
+    expect(respelled).toEqual(first);
+    expect(reordered).not.toEqual(first);
+    expect(reordered.locations).toEqual(['chicago, il', 'new york, ny']);
   });
 
   it('passes exclusions to the aggregator only when supplied', async () => {
@@ -322,14 +357,17 @@ describe('JobsResolver — Spec 1700', () => {
     expect('locations' in jobsService.searchJobs.mock.calls[0][0]).toBe(false);
   });
 
-  it('normalises the cache key and keeps exclusions out of it', async () => {
+  it('normalises the cache key, keeps the caller order and keeps exclusions out of it', async () => {
     const { resolver, cacheService } = createResolver();
     await resolver.searchJobs(input({ locations: ['B', 'a'] }));
-    await resolver.searchJobs(input({ locations: ['A', 'b'], excludeTitleTerms: ['senior'] }));
-    const [first, second] = cacheService.get.mock.calls.map((c) => c[0]);
+    await resolver.searchJobs(input({ locations: ['b', 'A'], excludeTitleTerms: ['senior'] }));
+    await resolver.searchJobs(input({ locations: ['A', 'b'] }));
+    const [first, second, reordered] = cacheService.get.mock.calls.map((c) => c[0]);
     expect(second).toEqual(first);
     expect(first.endpoint).toBe('graphql-search-v2');
-    expect(first.locations).toEqual(['a', 'b']);
+    expect(first.locations).toEqual(['b', 'a']);
+    expect(reordered.locations).toEqual(['a', 'b']);
+    expect(reordered).not.toEqual(first);
   });
 
   it('keeps the pre-change cache params for a plain query', async () => {

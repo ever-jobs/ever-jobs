@@ -32,6 +32,7 @@ import {
   locationPauseMs,
   readMaxSearchLocations,
 } from '../jobs.service';
+import { searchCacheParams } from '../search-cache-params';
 import {
   AUSTIN,
   CHICAGO,
@@ -443,6 +444,40 @@ describe('JobsService — multi-location search (Spec 1700)', () => {
       );
 
       expect(out.jobs.map((j) => j.title).sort()).toEqual(['A', 'B', 'B']);
+    });
+
+    it('keeps the first location’s copy, so the cache key keeps the caller order', async () => {
+      // One posting under both locations, carrying the location it was fetched for.
+      const shared = (loc: string) => () => [
+        new JobPostDto({ id: 'shared-1', title: `Seen in ${loc}`, companyName: 'Acme', jobUrl: 'https://x/shared-1' }),
+      ];
+      const run = async (locations: string[]) => {
+        const muse = byLocation({ [NEW_YORK]: shared(NEW_YORK), [CHICAGO]: shared(CHICAGO) });
+        const { service } = createService([[Site.THEMUSE, muse]]);
+        const input = new ScraperInputDto({ siteType: [Site.THEMUSE], locations });
+        const out = await service.searchJobsWithDiagnostics(input);
+        const maxLocations = readMaxSearchLocations((service as any).configService);
+        return {
+          titles: out.jobs.map((j) => j.title),
+          searched: muse.scrape.mock.calls.map(([call]) => String((call as ScraperInputDto).location).toLocaleLowerCase('en')),
+          key: searchCacheParams(input, { endpoint: 'search' }, maxLocations).locations,
+        };
+      };
+
+      const nyFirst = await run([NEW_YORK, CHICAGO]);
+      const chicagoFirst = await run([CHICAGO, NEW_YORK]);
+      // Same set of locations, different winner ...
+      expect(nyFirst.titles).toEqual([`Seen in ${NEW_YORK}`]);
+      expect(chicagoFirst.titles).toEqual([`Seen in ${CHICAGO}`]);
+      // ... so they must not share a cache entry, and each key is the order the service searched.
+      expect(nyFirst.key).not.toEqual(chicagoFirst.key);
+      expect(nyFirst.key).toEqual(nyFirst.searched);
+      expect(chicagoFirst.key).toEqual(chicagoFirst.searched);
+
+      // Duplicates, case and whitespace: the key still lists what the service searched, in order.
+      const messy = await run([' chicago,  IL', NEW_YORK.toUpperCase(), CHICAGO]);
+      expect(messy.key).toEqual(messy.searched);
+      expect(messy.key).toEqual(['chicago, il', 'new york, ny']);
     });
 
     it('keeps two postings that share an index-derived id but not a URL', async () => {

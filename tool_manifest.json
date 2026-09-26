@@ -373,6 +373,21 @@
             },
             "description": { "type": "string" },
             "datePosted": { "type": "string", "format": "date" },
+            "datePostedAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Posting instant, ISO-8601 UTC. Present only when the source gives finer-than-day time (precision exact, minute or hour); datePosted stays the date."
+            },
+            "datePostedPrecision": {
+              "type": "string",
+              "enum": ["exact", "minute", "hour", "day", "week", "month", "year"],
+              "description": "Granularity of the posting time. Present only when the source supports it."
+            },
+            "datePostedBasis": {
+              "type": "string",
+              "enum": ["timestamp", "date", "relative"],
+              "description": "Where the posting time came from; relative = estimated from an age label at fetch time."
+            },
             "isRemote": { "type": "boolean" },
             "jobType": { "type": "array", "items": { "type": "string" } },
             "compensation": {
