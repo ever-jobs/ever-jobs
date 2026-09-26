@@ -1,3 +1,4 @@
+import type { PluginCrawlPolicy } from '@ever-jobs/common';
 import { Site, SiteCategory } from '@ever-jobs/models';
 
 /**
@@ -49,9 +50,33 @@ export interface IPluginMetadata {
   requiresSearchTerm?: boolean;
 
   /**
+   * Smallest gap, milliseconds, the plugin keeps between two requests to its
+   * host (Spec 1700). A plugin paces requests only inside one `scrape()` call,
+   * so the first request of the next call is unpaced; a multi-location search
+   * calls a source once per location and waits at least this long between
+   * those calls. Unset means only the operator's location interval applies.
+   *
+   * Not a crawl-policy field: the per-host limiter paces every request from
+   * `crawl.minIntervalMs` (below) and the layers around it (Spec 1690). This
+   * one only spaces a multi-location search's calls to the source.
+   */
+  minRequestIntervalMs?: number;
+
+  /**
    * Optional description of the plugin's capabilities or limitations.
    */
   description?: string;
+
+  /**
+   * How this source should be crawled (Spec 1690): pacing, identity, proxy
+   * rotation, retries, discovery. These are the plugin's *defaults* — operators
+   * (`EVER_JOBS_CRAWL_POLICIES`) and search callers (`crawl`) can override them.
+   * A plugin that sets `userAgentMode: 'plugin'` must explain why in
+   * `userAgentReason` (e.g. the API requires a registered e-mail as its UA).
+   *
+   * @example { rateLimitScope: 'domain', maxConcurrentPerHost: 1, minIntervalMs: 1000 }
+   */
+  crawl?: PluginCrawlPolicy;
 }
 
 /**

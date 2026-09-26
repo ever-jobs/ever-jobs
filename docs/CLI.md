@@ -81,9 +81,13 @@ ever-jobs search -s linkedin -s indeed -q "Backend" --analyze
 | `--search-term`                | `-q`  | `<term>`     | —        | Job search keywords                              |
 | `--google-search-term`         | —     | `<term>`     | —        | Google-specific search query override            |
 | `--location`                   | `-l`  | `<location>` | —        | Location to search near                          |
+| `--locations` | — | `<locations...>` | — | Several locations in one search; each source runs once per location, one after another, same-source duplicates removed (Spec 1700; the server caps the list at `EVER_JOBS_SEARCH_MAX_LOCATIONS`, 10) |
+| `--exclude-title` | — | `<terms...>` | — | Drop jobs whose title contains any of these words/phrases (whole-word, case/accent-insensitive, trailing `*` = prefix, never a regex) |
+| `--exclude-keyword` | — | `<terms...>` | — | Drop jobs whose title or description contains any of these words/phrases (same rules) |
+| `--exclude-preset` | — | `<presets...>` | — | Curated exclusion lists matched against title + description: `security_clearance` |
 | `--distance`                   | `-d`  | `<miles>`    | 50       | Search radius in miles                           |
 | `--remote`                     | `-r`  | —            | false    | Filter for remote jobs only                      |
-| `--job-type`                   | —     | `<type>`     | —        | `fulltime`, `parttime`, `internship`, `contract` |
+| `--job-type`                   | —     | `<type>`     | —        | One value; see the list below the table          |
 | `--easy-apply`                 | —     | —            | false    | Filter for easy-apply / hosted jobs              |
 | `--results`                    | `-n`  | `<count>`    | 15       | Results wanted per site                          |
 | `--offset`                     | —     | `<n>`        | 0        | Skip first N results                             |
@@ -91,13 +95,14 @@ ever-jobs search -s linkedin -s indeed -q "Backend" --analyze
 | `--country`                    | `-c`  | `<code>`     | USA      | Country for Indeed/Glassdoor domain              |
 | `--description-format`         | —     | `<fmt>`      | markdown | `markdown`, `html`, `plain`                      |
 | `--linkedin-fetch-description` | —     | —            | false    | Fetch full LinkedIn descriptions (slower)        |
+| `--linkedin-fetch-company-details` | — | — | off (env) | Fetch each LinkedIn company page once to fill website, size, HQ and industry (Spec 1701; unset = `EVER_JOBS_LINKEDIN_FETCH_COMPANY_DETAILS`) |
 | `--linkedin-company-ids`       | —     | `[ids...]`   | —        | Filter LinkedIn by company IDs                   |
 | `--enforce-annual-salary`      | —     | —            | false    | Convert all wages to annual equivalent           |
 | `--timeout`                    | —     | `<seconds>`  | 60       | Request timeout per source                       |
 | `--proxy`                      | `-p`  | `[urls...]`  | —        | Proxy URLs for rotation                          |
 | `--ca-cert`                    | —     | `<path>`     | —        | CA certificate path for proxies                  |
-| `--user-agent`                 | —     | `<ua>`       | —        | Custom User-Agent string                         |
-| `--rate-delay-min`             | —     | `<seconds>`  | —        | Minimum delay between requests                   |
+| `--user-agent`                 | —     | `<ua>`       | —        | Custom User-Agent string (implies `--user-agent-mode strict` unless one is given) |
+| `--rate-delay-min`             | —     | `<seconds>`  | —        | Minimum delay between requests (per host bucket) |
 | `--rate-delay-max`             | —     | `<seconds>`  | —        | Maximum delay between requests                   |
 | `--format`                     | `-f`  | `<format>`   | json     | `json`, `csv`, `table`, `summary`                |
 | `--output`                     | `-o`  | `<file>`     | stdout   | Write output to file                             |
@@ -108,6 +113,23 @@ ever-jobs search -s linkedin -s indeed -q "Backend" --analyze
 | `--stdin`                      | —     | —            | false    | Read JSON input from stdin                       |
 | `--company-slug`               | —     | `<slug>`     | —        | Company slug for ATS board scraping              |
 | `--upwork-auth-json`           | —     | `<json>`     | —        | Upwork auth as JSON string                       |
+| `--crawl`                      | —     | `<json>`     | —        | Per-request crawl policy (any field; see [CRAWL_POLICY.md](./CRAWL_POLICY.md)) |
+| `--user-agent-mode`            | —     | `<mode>`     | identify | `identify`, `strict`, `plugin`                   |
+| `--proxy-rotation`             | —     | `<mode>`     | per-host | `per-host`, `per-scrape`, `per-request`, `off`   |
+| `--max-per-host`               | —     | `<n>`        | 4        | Max requests in flight per host bucket (0 = unlimited) |
+| `--min-interval-ms`            | —     | `<ms>`       | 100      | Minimum gap between request starts per host bucket |
+| `--crawl-retries`              | —     | `<n>`        | 2        | Retries per request on 429/5xx                   |
+| `--robots-txt`                 | —     | `<mode>`     | off      | `off`, `crawl-delay`, `respect`                  |
+| `--discovery`                  | —     | `<mode>`     | auto     | `auto`, `sitemap`, `listing` (e.g. Softy)        |
+| `--crawl-preset`               | —     | `<preset>`   | polite   | `polite`, `legacy` (pre-1690), `strict` — sets `EVER_JOBS_CRAWL_PRESET` for this run |
+| `--caller-overrides`           | —     | `<mode>`     | any      | `any`, `stricter`, `none` — sets `EVER_JOBS_CRAWL_CALLER_OVERRIDES` for this run |
+
+`--job-type` (here and on `compare`) takes one of: `fulltime`, `parttime`, `contract`, `temporary`,
+`internship`, `permanent`, `apprenticeship`, `perdiem`, `nights`, `summer`, `volunteer`, `other`.
+`permanent` (open-ended employment, e.g. a French CDI) and `apprenticeship` (work-study contracts)
+came with Spec 1697. `permanent` describes duration, not hours, so a `fulltime` filter does not match
+a job tagged only `permanent`. A board whose search API has no filter for a value (for example
+LinkedIn for `permanent` or `apprenticeship`) searches unfiltered.
 
 ---
 
@@ -145,6 +167,8 @@ The compare command outputs:
 | ------------------ | ----- | ------------ | ----------------- | -------------------- |
 | `--search-term`    | `-q`  | `<term>`     | software engineer | Search keywords      |
 | `--location`       | `-l`  | `<location>` | —                 | Location filter      |
+| `--locations` | — | `<locations...>` | — | Several locations, searched one after another per source (Spec 1700) |
+| `--exclude-title` / `--exclude-keyword` / `--exclude-preset` | — | `<terms...>` | — | Same exclusion filters as `search` |
 | `--results`        | `-n`  | `<count>`    | 15                | Results per site     |
 | `--country`        | `-c`  | `<code>`     | USA               | Country domain       |
 | `--hours-old`      | —     | `<hours>`    | —                 | Max job age          |
@@ -152,6 +176,7 @@ The compare command outputs:
 | `--job-type`       | —     | `<type>`     | —                 | Job type filter      |
 | `--rate-delay-min` | —     | `<seconds>`  | —                 | Min request delay    |
 | `--rate-delay-max` | —     | `<seconds>`  | —                 | Max request delay    |
+| `--crawl` and the other crawl flags | — | — | — | Same as `search` (`--crawl`, `--user-agent-mode`, `--proxy-rotation`, `--max-per-host`, `--min-interval-ms`, `--crawl-retries`, `--robots-txt`, `--discovery`, `--crawl-preset`, `--caller-overrides`) |
 | `--output`         | `-o`  | `<file>`     | stdout            | Write output to file |
 | `--verbose`        | `-v`  | —            | false             | Verbose output       |
 
@@ -184,15 +209,24 @@ The compare command outputs:
 
 ### CSV
 
-Flat columns: `id, site, title, companyName, location, jobUrl, datePosted, jobType, isRemote, minAmount, maxAmount, currency, interval, description`
+Flat columns: `id, site, title, companyName, location, jobUrl, datePosted, jobType, isRemote, minAmount, maxAmount, currency, interval, description, datePostedAt, datePostedPrecision, datePostedBasis`
+
+The last three (Spec 1696) are appended after `description`, so the earlier columns keep their
+positions. They are empty unless the source gives the posting time: `datePostedAt` is an ISO-8601
+UTC instant (precision `exact`, `minute` or `hour`), `datePostedPrecision` is one of
+`exact | minute | hour | day | week | month | year` and `datePostedBasis` one of
+`timestamp | date | relative` (`relative` = estimated from an age label at fetch time).
 
 ### Table
 
 ```
-Site         │ Title                                   │ Company                  │ Location                 │ Posted       │ Remote
-─────────────┼─────────────────────────────────────────┼──────────────────────────┼──────────────────────────┼──────────────┼───────
-linkedin     │ Senior React Developer                  │ Acme Corp                │ San Francisco, CA        │ 2025-02-15   │ Yes
+Site         │ Title                                   │ Company                  │ Location                 │ Posted       │ Remote  │ Posted at (UTC)
+─────────────┼─────────────────────────────────────────┼──────────────────────────┼──────────────────────────┼──────────────┼─────────┼──────────────────
+linkedin     │ Senior React Developer                  │ Acme Corp                │ San Francisco, CA        │ 2025-02-15   │ Yes     │ ~2025-02-15 09:12
 ```
+
+`Posted at (UTC)` shows `datePostedAt` to the minute, with `~` when it was estimated from an age
+label ("26 minutes ago"); it is blank when the source gave only a date.
 
 ### Summary
 
@@ -244,4 +278,5 @@ Direct company career page scrapers (Amazon, Apple, Microsoft, Nvidia, etc.).
 | ------------------------------ | ------------------------------------------------------ |
 | `EVER_JOBS_API_URL`            | API base URL (default: `http://localhost:3001`)        |
 | `HTTP_PROXY` / `HTTPS_PROXY`   | Global proxy configuration                             |
+| `EVER_JOBS_CRAWL_*`            | Crawl policy (identity, pacing, proxies, retries, robots.txt, egress guard) — the CLI obeys the same variables as the API; full list in [CRAWL_POLICY.md](./CRAWL_POLICY.md) |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Set to `0` to skip TLS verification (development only) |

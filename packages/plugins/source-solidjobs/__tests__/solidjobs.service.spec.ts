@@ -5,6 +5,7 @@ import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import {
   CompensationInterval,
+  Country,
   DescriptionFormat,
   JobResponseDto,
   JobType,
@@ -24,6 +25,10 @@ jest.mock('@ever-jobs/common', () => {
   };
 });
 
+const API = 'https://solid.jobs/public-api/offers';
+/** An empty page: what every division not routed by a test returns. */
+const EMPTY_PAGE = { data: { jobs: [], totalCount: 0, totalPages: 0 } };
+
 import { SolidJobsModule } from '../src/solidjobs.module';
 import { SolidJobsService } from '../src/solidjobs.service';
 
@@ -36,13 +41,23 @@ function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
 }
 
+/** Rewrite every jobOfferKey so a second division serves distinct offers. */
+function rekey(page: any, suffix: string): any {
+  const copy = clone(page);
+  for (const job of copy.jobs) job.jobOfferKey = `${job.jobOfferKey}-${suffix}`;
+  return copy;
+}
+
 /**
  * Spec 718 / T06 — `SolidJobsService` unit tests (fixture of 3 real
- * offers captured from the live `it` division on 2026-06-11).
+ * offers captured from the live `it` division on 2026-06-11). Updated by
+ * Spec 1709: every division is scanned by default, requests carry
+ * `pageSize`/`pageIndex`, and unrouted divisions answer an empty page.
  */
 describe('SolidJobsService — Spec 718 / T06', () => {
   beforeEach(() => {
     mockGet.mockReset();
+    mockGet.mockResolvedValue(EMPTY_PAGE);
     delete process.env.SOLIDJOBS_DIVISIONS;
   });
 
@@ -90,14 +105,24 @@ describe('SolidJobsService — Spec 718 / T06', () => {
         expect(job.site).toBe(Site.SOLIDJOBS);
         expect(job.location?.city).toBe(wire.locations[0]);
         expect(job.location?.state ?? null).toBeNull();
-        expect(job.location?.country ?? null).toBeNull();
+        // Spec 1709: the board-level country (every offer is in Poland).
+        expect(job.location?.country).toBe(Country.POLAND);
         expect(job.isRemote).toBe(wire.isRemote === true);
       }
 
+      // Spec 1709: `it` first, sized to the request; the 3-offer page cannot
+      // fill 100, so the other seven divisions follow.
       const calledUrls = mockGet.mock.calls.map((c) => c[0] as string);
-      expect(calledUrls).toEqual([
-        'https://solid.jobs/public-api/offers/it?campaign=api',
-      ]);
+      expect(calledUrls[0]).toBe(`${API}/it?campaign=api&pageSize=100&pageIndex=0`);
+      expect(calledUrls).toHaveLength(8);
+      expect(calledUrls).toEqual(
+        expect.arrayContaining(
+          ['sales', 'marketing', 'logistics', 'finances', 'engineering', 'other', 'hr'].map(
+            (d) => `${API}/${d}?campaign=api&pageSize=100&pageIndex=0`,
+          ),
+        ),
+      );
+      expect(dto.diagnostics).toBeUndefined();
     });
   });
 
@@ -285,7 +310,11 @@ describe('SolidJobsService — Spec 718 / T06', () => {
   describe('SOLIDJOBS_DIVISIONS override', () => {
     it('fans out one request per configured division and concatenates results', async () => {
       process.env.SOLIDJOBS_DIVISIONS = 'it, engineering';
-      mockGet.mockResolvedValue({ data: clone(JOBS_PAGE_RAW) });
+      mockGet.mockImplementation(async (url: string) =>
+        url.includes('/engineering?')
+          ? { data: rekey(JOBS_PAGE_RAW, 'eng') }
+          : { data: clone(JOBS_PAGE_RAW) },
+      );
 
       const service = new SolidJobsService();
       const result = await service.scrape({
@@ -295,10 +324,29 @@ describe('SolidJobsService — Spec 718 / T06', () => {
 
       const calledUrls = mockGet.mock.calls.map((c) => c[0] as string);
       expect(calledUrls).toEqual([
-        'https://solid.jobs/public-api/offers/it?campaign=api',
-        'https://solid.jobs/public-api/offers/engineering?campaign=api',
+        `${API}/it?campaign=api&pageSize=100&pageIndex=0`,
+        `${API}/engineering?campaign=api&pageSize=100&pageIndex=0`,
       ]);
       expect(result.jobs).toHaveLength(6);
+      // Division order, not completion order.
+      expect(result.jobs.slice(0, 3).map((j) => j.id)).toEqual(
+        JOBS_PAGE_RAW.jobs.map((j: any) => `solidjobs-${j.jobOfferKey}`),
+      );
+    });
+
+    it('de-duplicates an offer served by two divisions (Spec 1709)', async () => {
+      process.env.SOLIDJOBS_DIVISIONS = 'it, engineering';
+      mockGet.mockResolvedValue({ data: clone(JOBS_PAGE_RAW) });
+
+      const service = new SolidJobsService();
+      const result = await service.scrape({
+        siteType: [Site.SOLIDJOBS],
+        resultsWanted: 100,
+      } as ScraperInputDto);
+
+      expect(mockGet).toHaveBeenCalledTimes(2);
+      expect(result.jobs).toHaveLength(3);
+      expect(new Set(result.jobs.map((j) => j.id)).size).toBe(3);
     });
 
     it('keeps the batch alive when one division request fails', async () => {
@@ -313,6 +361,9 @@ describe('SolidJobsService — Spec 718 / T06', () => {
       } as ScraperInputDto);
 
       expect(result.jobs).toHaveLength(3);
+      // Spec 1709: 3 < 100 wanted, so the failure is reported (the fan-out infers partial).
+      expect(result.diagnostics?.reason).toBe('fetch_error');
+      expect(result.diagnostics?.detail).toContain('it');
     });
   });
 
@@ -333,9 +384,13 @@ describe('SolidJobsService — Spec 718 / T06', () => {
         siteType: [Site.SOLIDJOBS],
       } as ScraperInputDto);
       expect(result.jobs).toEqual([]);
+      // Spec 1709: an invalid payload is a failure, not an empty board.
+      expect(result.diagnostics?.reason).toBe('unknown');
+      expect(result.diagnostics?.detail).toContain('invalid payload');
     });
 
     it('catches an HTTP failure → empty JobResponseDto, never throws', async () => {
+      process.env.SOLIDJOBS_DIVISIONS = 'it';
       mockGet.mockRejectedValueOnce(new Error('Request failed with status 500'));
       const service = new SolidJobsService();
       const result = await service.scrape({
@@ -343,6 +398,18 @@ describe('SolidJobsService — Spec 718 / T06', () => {
       } as ScraperInputDto);
       expect(result.jobs).toEqual([]);
       expect(mockGet).toHaveBeenCalledTimes(1);
+      expect(result.diagnostics?.reason).toBe('fetch_error');
+    });
+
+    it('reports fetch_error when every default division fails (Spec 1709)', async () => {
+      mockGet.mockRejectedValue(new Error('Request failed with status 500'));
+      const service = new SolidJobsService();
+      const result = await service.scrape({
+        siteType: [Site.SOLIDJOBS],
+      } as ScraperInputDto);
+      expect(result.jobs).toEqual([]);
+      expect(mockGet).toHaveBeenCalledTimes(8);
+      expect(result.diagnostics?.reason).toBe('fetch_error');
     });
 
     it('skips a malformed offer (missing title) with a Logger.warn while mapping siblings', async () => {

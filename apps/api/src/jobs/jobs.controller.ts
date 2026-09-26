@@ -31,7 +31,14 @@ import {
   type LegitimacyInput,
 } from '@ever-jobs/models';
 import { ConfigService } from '@nestjs/config';
-import { JobsService } from './jobs.service';
+import {
+  applyJobExclusions,
+  exclusionSpecFromInput,
+  hasExclusionInput,
+  runWithScrapeContext,
+} from '@ever-jobs/common';
+import { LIVENESS_CRAWL_SITE, livenessDeadlineMs } from './crawl-policy.mapping';
+import { JobsService, readMaxSearchLocations } from './jobs.service';
 import { AggregateResult, JobsAggregator } from './jobs.aggregator';
 import {
   NDJSON_CONTENT_TYPE,
@@ -55,6 +62,21 @@ import {
 } from '../config/search-config';
 import { AnalyticsService } from '@ever-jobs/analytics';
 import { CacheService } from '../cache/cache.service';
+import { searchCacheParams } from './search-cache-params';
+
+/**
+ * Crawl-policy site key for liveness enrichment (Spec 1690) — defined in
+ * `crawl-policy.mapping.ts` (so the crawl-policy endpoint can accept it) and
+ * re-exported here. The probes run in a scrape context under this site, so they
+ * obey the global crawl policy (honest UA, per-host pacing, back-off, egress
+ * guard) and an operator can tune them on their own with
+ * `EVER_JOBS_CRAWL_POLICIES={"sites":{"liveness-http":{...}}}`. The search
+ * caller's `crawl` is deliberately not applied: liveness probes other hosts than
+ * the search did, and a caller's `retries` would override the checker's own
+ * `retries: 0` (one cheap verdict, not a retry storm). The batch is bounded by
+ * `EVER_JOBS_LIVENESS_DEADLINE_MS` (default 60 s).
+ */
+export { LIVENESS_CRAWL_SITE };
 
 /**
  * The fan-out stopped starting sources because the NDJSON client disconnected
@@ -118,7 +140,11 @@ export class JobsController {
       'one crawl only while the search cache holds its raw set (ENABLE_CACHE=true, off by default, AND the raw set ' +
       'within EVER_JOBS_CACHE_MAX_JOBS, default 5000; incomplete crawls are never cached). Otherwise every page re-runs ' +
       'the whole fan-out, and pages can disagree (a job on two pages or on none, count changing between pages). ' +
-      'Every job carries a stable cross-source `dedupKey`.',
+      'Every job carries a stable cross-source `dedupKey`. ' +
+      'Spec 1700: `locations` searches several places in one request (per_source then has one row per ' +
+      '(source, location)); `excludeTitleTerms` / `excludeKeywords` / `excludePresets` drop matching jobs after ' +
+      'dedup — `count` and pagination are post-exclusion (NDJSON streams only the kept jobs), and the JSON response ' +
+      'carries `exclusion_metrics` (with `samples` when ?diagnostics is set) whenever an exclusion field was supplied.',
   })
   @ApiQuery({
     name: 'format',
@@ -231,7 +257,8 @@ export class JobsController {
     this.logger.log(
       `Search request: sites=${input.siteType?.join(',') ?? 'all'}` +
         `${input.siteCategories?.length ? `, categories=${input.siteCategories.join(',')}` : ''}` +
-        `, term=${describeTerm(input)}, location=${input.location ? JSON.stringify(input.location) : '<none>'}`,
+        `, term=${describeTerm(input)}, location=${input.location ? JSON.stringify(input.location) : '<none>'}` +
+        (input.locations ? `, locations=${JSON.stringify(input.locations)}` : ''),
     );
 
     // ── Helper parsers ────────────────────
@@ -332,11 +359,14 @@ export class JobsController {
     }
 
     // ── Per-source diagnostics (opt-in, filtered, capped) ──
+    const diagnosticsMode = parseDiagnosticsMode(diagnosticsRaw);
     const diagnostics = summarizeSourceDiagnostics(
       perSource,
-      parseDiagnosticsMode(diagnosticsRaw),
+      diagnosticsMode,
       parseLimit(diagnosticsLimitRaw) ?? DEFAULT_DIAGNOSTICS_LIMIT,
     );
+    // Spec 1700 — present only when an exclusion field was supplied.
+    const exclusionKeys = this.exclusionResponseKeys(aggregated, diagnosticsMode !== 'off');
 
     // ── Pagination ────────────────────────
     if (paginate) {
@@ -354,6 +384,7 @@ export class JobsController {
         per_source_summary: diagnostics.summary,
         next_page: page < totalPages ? page + 1 : null,
         previous_page: page > 1 ? page - 1 : null,
+        ...exclusionKeys,
       };
     }
 
@@ -370,7 +401,45 @@ export class JobsController {
       dedup_metrics: aggregated.dedupMetrics,
       per_source: diagnostics.rows,
       per_source_summary: diagnostics.summary,
+      ...exclusionKeys,
     };
+  }
+
+  /**
+   * Snake-cased exclusion keys for the JSON response (Spec 1700). Empty when
+   * no exclusion field was supplied, so an unfiltered response is unchanged.
+   * `samples` (at most 20) only with `?diagnostics=true|all`.
+   */
+  private exclusionResponseKeys(
+    aggregated: AggregateResult,
+    includeSamples: boolean,
+  ): Record<string, unknown> {
+    const keys: Record<string, unknown> = {};
+    const metrics = aggregated.exclusionMetrics;
+    if (metrics) {
+      keys.exclusion_metrics = {
+        excluded_count: metrics.excludedCount,
+        excluded_raw_count: metrics.excludedRawCount,
+        by_term: metrics.byTerm.map((t) => ({ term: t.term, source: t.source, count: t.count })),
+        ignored_terms: metrics.ignoredTerms.map((t) => ({ term: t.term, reason: t.reason })),
+        ...(includeSamples
+          ? {
+              samples: (aggregated.excludedSamples ?? []).map(({ job, match }) => ({
+                id: job.id ?? null,
+                site: job.site ?? null,
+                title: job.title ?? null,
+                term: match.term,
+                source: match.source,
+                field: match.field,
+              })),
+            }
+          : {}),
+      };
+    }
+    if (aggregated.exclusionError) {
+      keys.exclusion_error = aggregated.exclusionError;
+    }
+    return keys;
   }
 
   /**
@@ -393,7 +462,11 @@ export class JobsController {
     this.logger.log(
       `Analyze request: sites=${input.siteType?.join(',') ?? 'all'}, term=${describeTerm(input)}, location=${input.location ? JSON.stringify(input.location) : '<none>'}`,
     );
-    const jobs = await this.jobsService.searchJobs(input);
+    const found = await this.jobsService.searchJobs(input);
+    // Spec 1700 — analyse the same set a search with these exclusions returns.
+    const jobs = hasExclusionInput(input)
+      ? applyJobExclusions(found, exclusionSpecFromInput(input)).kept
+      : found;
     const analysis = this.analyticsService.analyze(jobs);
     this.logger.log(`Analysis complete: ${analysis.summary.totalJobs} jobs, ${analysis.companies.length} companies`);
     return analysis;
@@ -425,7 +498,13 @@ export class JobsController {
     // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
     // Spec 1721 / FR-19 — ONE entry holds the raw set and the completeness
     // record of the crawl that produced it (see ./search-cache).
-    const cacheParams = { ...input, endpoint: SEARCH_CACHE_ENDPOINT };
+    // Spec 1700: exclusion fields never reach the key (they filter after the
+    // cache) and `locations` keys case-insensitively in the caller's order.
+    const cacheParams = searchCacheParams(
+      input,
+      { endpoint: SEARCH_CACHE_ENDPOINT },
+      readMaxSearchLocations(this.configService),
+    );
     const hit = readCachedSearch(await this.cacheService.get<unknown>(cacheParams));
     let cached: JobPostDto[] | null = hit?.jobs ?? null;
     let completeness: SearchCompleteness | undefined = hit?.completeness;
@@ -484,7 +563,16 @@ export class JobsController {
     // off by default, on by default for an explicitly selected durable store).
     // The fallback below only applies when no configuration is loaded at all.
     const persist = this.configService.get<boolean>('store.persistSearch', true);
-    const aggregated = await this.aggregator.aggregateRaw(rawJobs, { dedup, persist });
+    // Spec 1700 — exclusions run in the aggregator, after dedup and before
+    // the pagination window, so `count` / `total_pages` are post-exclusion
+    // and excluded jobs are never liveness-probed. Passed only when supplied,
+    // so an unfiltered request takes exactly the pre-Spec-1700 path.
+    const aggregated = await this.aggregator.aggregateRaw(
+      rawJobs,
+      hasExclusionInput(input)
+        ? { dedup, persist, exclusions: exclusionSpecFromInput(input) }
+        : { dedup, persist },
+    );
 
     this.logger.log(
       `Returning ${aggregated.jobs.length} jobs (raw=${aggregated.rawCount}, deduped=${aggregated.deduped}, cached=${fromCache})`,
@@ -686,8 +774,13 @@ export class JobsController {
       jobs = jobs.slice(0, maxUrls);
     }
     try {
-      const verdicts = await this.livenessChecker!.checkBatch(
-        jobs.map((j) => j.jobUrl),
+      // Bounded (Spec 1690): probes queued behind a paced or cooling-down host are
+      // aborted at the deadline (the checker reports them `uncertain`) instead of
+      // holding the response for as long as a server's Retry-After.
+      const deadlineMs = livenessDeadlineMs();
+      const signal = deadlineMs > 0 ? AbortSignal.timeout(deadlineMs) : undefined;
+      const verdicts = await runWithScrapeContext({ site: LIVENESS_CRAWL_SITE, ...(signal ? { signal } : {}) }, () =>
+        this.livenessChecker!.checkBatch(jobs.map((j) => j.jobUrl)),
       );
       jobs.forEach((job, i) => {
         const v = verdicts[i];

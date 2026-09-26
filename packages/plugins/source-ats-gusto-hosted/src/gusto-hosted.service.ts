@@ -193,7 +193,7 @@ export class GustoHostedService implements IScraper, OnModuleDestroy {
     const readyMs = GUSTO_HOSTED_READY_TIMEOUT_SECONDS * 1000;
     const page = await BrowserPool.getPage({ proxy, stealth: true, headful: true });
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      await BrowserPool.navigate(page, url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
       if (opts.waitForSelector) {
         await page
           .waitForSelector(opts.waitForSelector, { timeout: readyMs })
@@ -413,8 +413,8 @@ export class GustoHostedService implements IScraper, OnModuleDestroy {
       GUSTO_HOSTED_REMOTE_REGEX.test(item.title);
 
     const employmentType = detail?.employmentType ?? null;
-    // schema.org employmentType is underscore-cased (e.g. `FULL_TIME`);
-    // getJobTypeFromString strips spaces/hyphens but not underscores.
+    // schema.org employmentType is underscore-cased (e.g. `FULL_TIME`). Since
+    // Spec 1697 getJobTypeFromString strips underscores itself; the replace stays.
     const jobType = employmentType
       ? getJobTypeFromString(employmentType.replace(/_/g, ' '))
       : null;

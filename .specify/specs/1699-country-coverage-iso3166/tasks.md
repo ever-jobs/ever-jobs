@@ -1,0 +1,15 @@
+# Tasks: 1699 — Country coverage: Slovenia's code, Sri Lanka, the ISO 3166 table
+
+- [x] T1 — Slovenia's code `sl` -> `si`. Acceptance: `getIndeedDomain(SLOVENIA).apiCountryCode === 'SI'`; the per-entry `COUNTRY_CONFIG` guard (every code names its own country) is green, and was red for SLOVENIA only before the fix.
+- [x] T2 — `Country.SRILANKA` (`sri lanka,srilanka`, `lk`). Acceptance: `countryFromString('Sri Lanka' | 'srilanka')` returns it; code `LK`; codes stay unique.
+- [x] T3 — `getCountryDisplayName` capitalises every word. Acceptance: `Sri Lanka`, `Costa Rica`, `United Arab Emirates`; `USA` / `UK` unchanged.
+- [x] T4 — `iso3166.ts` table + helpers, exported from `@ever-jobs/common`. Acceptance: 250 codes, bijective, frozen, every alpha-2 resolves through CLDR, no pseudo/reserved/retired code.
+- [x] T5 — ISO name map and lookup order (configured -> ISO name -> alpha-2 -> alpha-3). Acceptance: a row per ISO country — CLDR name, alpha-2 and (non-ambiguous) alpha-3 give one display; `Someplace, <CLDR name>` parses to `{ city, country }` and its label re-parses to itself.
+- [x] T6 — Alpha-3 rules. Acceptance: exactly the 42 ambiguous codes stay unresolved; `LKA` resolves, `lka` / `Lka` do not; `gbr` / `Deu` still resolve; `CZE` = `Czechia`, `TUR` = `Türkiye`, `HKG` = `Hong Kong SAR China`.
+- [x] T7 — US guards. Acceptance: `Jamaica, NY`, `Lebanon, PA`, `Peru, IN`, `Mexico, MO`, `Poland, OH`, `Norway, ME`, `Denmark, SC`, `Jordan, MN`, `Cuba, NY` are towns; nine `Town, X County, ST` labels keep the state; `India, IN`, `Germany, DE`, `United States, CA` keep their country; territories stay subdivisions.
+- [x] T8 — Georgia by context. Acceptance: bare `Georgia` stays a city, `Atlanta, Georgia` / `Savannah, Chatham County, Georgia` stay GA; `Tbilisi, Georgia`, `Batumi, Adjara, Georgia`, `Tbilisi, GE` are the country; qualifier and dash readings unchanged.
+- [x] T9 — Country names with `&` / ` - ` stay whole. Acceptance: `Sarajevo, Bosnia & Herzegovina` and `Port of Spain, Trinidad & Tobago` are one site each, `Denver, CO & San Francisco, CA` still splits, `Kinshasa, Congo - Kinshasa` is DR Congo; 44k-character uncapped labels parse in under 500 ms.
+- [x] T10 — `isoCountryNames` option + `EVER_JOBS_LOCATION_ISO_COUNTRY_NAMES`. Acceptance: false restores `Almaty, Kazakhstan` -> state, `CZE` -> `Czech Republic`, `Peru, IN` -> country, `Tbilisi, Georgia` -> GA, the `&` split; the env sets the default and a per-call option wins.
+- [x] T11 — Live-board regression. Acceptance: 45 trimmed labels from one public board API: every site has a country, none in `state`, none Sierra Leone.
+- [x] T12 — Regression and control runs. Acceptance: 537/537 parser, 333/333 ISO, all `common` + `models` suites, `apps/api` jobs suites and 35 plugin suites green; the new spec fails 256 cases (only in Spec 1699 blocks) against the pre-change code.
+- [x] T13 — This spec / plan / tasks. The `docs/index.md` row, `docs/log.md` entry, README "Supported Countries" table and the F1–F4 follow-ups are left to the integrator.

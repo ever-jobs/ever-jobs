@@ -1,18 +1,43 @@
 import { Resolver, Query, Args } from '@nestjs/graphql';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JobPostDto, Site } from '@ever-jobs/models';
-import { JobsService } from './jobs.service';
+import { CrawlPolicyDto, JobPostDto, Site } from '@ever-jobs/models';
+import { exclusionSpecFromInput, hasExclusionInput } from '@ever-jobs/common';
+import { JobsService, readMaxSearchLocations } from './jobs.service';
 import { JobsAggregator } from './jobs.aggregator';
 import { CacheService } from '../cache/cache.service';
 import { describeTerm, normalizeSearchInput } from './search-input';
 import { DEFAULT_CACHE_MAX_JOBS, isCacheableJobCount } from '../config/search-config';
+import { searchCacheParams } from './search-cache-params';
 import {
+  CrawlPolicyGqlInput,
   SearchJobsInput,
   SearchJobsResult,
   SourceListResult,
   resolveSearchCountry,
 } from './gql-types';
+
+/**
+ * Map the GraphQL `crawl` input onto the service DTO (Spec 1690 §5.2): copy
+ * the fields the caller set, drop `null`/`undefined` (GraphQL "not set"), and
+ * return `undefined` when nothing is left so an empty object never reaches the
+ * policy layer. Values are validated again by the policy layer, like every
+ * other entry point's.
+ */
+export function toCrawlPolicyDto(
+  crawl: CrawlPolicyGqlInput | null | undefined,
+): CrawlPolicyDto | undefined {
+  if (!crawl || typeof crawl !== 'object') return undefined;
+  const dto = new CrawlPolicyDto();
+  const fields = dto as unknown as Record<string, unknown>;
+  let set = 0;
+  for (const [key, value] of Object.entries(crawl)) {
+    if (value === null || value === undefined) continue;
+    fields[key] = Array.isArray(value) ? [...value] : value;
+    set++;
+  }
+  return set > 0 ? dto : undefined;
+}
 
 /**
  * GraphQL resolver exposing the same job search functionality as the REST API.
@@ -57,14 +82,21 @@ export class JobsResolver {
     // Normalised before the cache key so they share one entry.
     normalizeSearchInput(input);
     this.logger.log(
-      `GraphQL searchJobs: term=${describeTerm(input)}, location="${input.location ?? ''}"`,
+      `GraphQL searchJobs: term=${describeTerm(input)}, location="${input.location ?? ''}"` +
+        (input.locations ? `, locations=${JSON.stringify(input.locations)}` : ''),
     );
 
     // Cache stores RAW fan-out — dedup runs per-request.
     // The endpoint key is bumped to v2 so any v1 entries (which were
     // written before T15 wired dedup into the resolver) are invalidated.
+    // Spec 1700: exclusion fields stay out of the key and `locations` keys
+    // case-insensitively in the caller's order, exactly as on the REST path.
     const dedup = input.dedup ?? true;
-    const cacheParams = { ...input, endpoint: 'graphql-search-v2', dedup: undefined };
+    const cacheParams = searchCacheParams(
+      input,
+      { endpoint: 'graphql-search-v2', dedup: undefined },
+      readMaxSearchLocations(this.configService),
+    );
     const cached = await this.cacheService.get<JobPostDto[]>(cacheParams);
 
     let rawJobs: JobPostDto[];
@@ -95,6 +127,14 @@ export class JobsResolver {
         siteType: input.siteType,
         siteCategories: input.siteCategories,
       };
+      // Spec 1700 — only when supplied, so the service sees the legacy input otherwise.
+      if (input.locations != null) scraperInput.locations = input.locations;
+      // Spec 1690 §5.2 — per-request crawl policy. Only set fields are
+      // forwarded (GraphQL `null` = not set), and only when there is one.
+      const crawl = toCrawlPolicyDto(input.crawl);
+      if (crawl) {
+        scraperInput.crawl = crawl;
+      }
       rawJobs = await this.jobsService.searchJobs(scraperInput);
       // Spec 1720 / FR-13 — same bound as the REST path.
       if (
@@ -109,7 +149,13 @@ export class JobsResolver {
 
     // Spec 5024 — same opt-out as the REST path (`EVER_JOBS_PERSIST_SEARCH`).
     const persist = this.configService.get<boolean>('store.persistSearch', true);
-    const aggregated = await this.aggregator.aggregateRaw(rawJobs, { dedup, persist });
+    // Spec 1700 — exclusions are passed only when supplied.
+    const aggregated = await this.aggregator.aggregateRaw(
+      rawJobs,
+      hasExclusionInput(input)
+        ? { dedup, persist, exclusions: exclusionSpecFromInput(input) }
+        : { dedup, persist },
+    );
 
     this.logger.log(
       `GraphQL searchJobs: returning ${aggregated.jobs.length} jobs (raw=${aggregated.rawCount}, deduped=${aggregated.deduped}, cached=${fromCache})`,
@@ -122,6 +168,7 @@ export class JobsResolver {
       deduped: aggregated.deduped,
       rawCount: aggregated.rawCount,
       dedupMetrics: aggregated.dedupMetrics,
+      ...(aggregated.exclusionMetrics ? { exclusionMetrics: aggregated.exclusionMetrics } : {}),
     };
   }
 

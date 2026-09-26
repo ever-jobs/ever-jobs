@@ -22,6 +22,8 @@ jest.mock('@ever-jobs/common', () => {
     BrowserPool: {
       getPage: (...args: unknown[]) => getPageMock(...args),
       close: (...args: unknown[]) => closeMock(...args),
+      // The real policy-aware navigation (Spec 1690): it ends in the fake page's `goto`.
+      navigate: (...args: unknown[]) => actual.BrowserPool.navigate(...args),
     },
   };
 });

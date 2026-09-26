@@ -63,6 +63,136 @@ apart whose company, title and location coincide (an internship and a new-grad p
 same title in one city). On the default `dedup=true` path those representatives carry their
 (distinct, discriminated) cluster ids instead of the shared per-job key, so distinct postings
 never share a `dedupKey`; with `dedup=false` they still share one (Spec 1724 D-05).
+## Q-099 — Boards whose robots.txt disallows generic crawlers (Specs 1692-1713)
+
+**Context:** The board fixes in Specs 1701-1713 made each plugin honest about what it fetches:
+bounded pages, sequential requests, an identifying User-Agent where the plugin controls it, and a
+`blocked` / `fetch_error` diagnostic instead of a silent empty result. Most of them now make
+fewer requests than before (the old loops ran until `resultsWanted` with no page cap), but four
+can make more:
+
+| Plugin | Before | Now (per scrape, defaults) |
+|---|---|---|
+| `source-solidjobs` (Spec 1709) | 1 request (the `it` division) | up to 8 divisions × 20 pages, 2 divisions in flight, pages sequential with no pause, inside a wall-clock budget; `SOLIDJOBS_DIVISIONS=it` restores one division |
+| `source-internshala` (Spec 1706) | 1 listing stream, pages until `resultsWanted` | 2 streams × up to 10 pages (`INTERNSHALA_MAX_PAGES`, ceiling 50), plus up to 25 detail pages (`detail-all`: 100), 2-5 s apart; a refusal stops the detail pages |
+| `source-remoteok` (Spec 1707) | 1 request | up to 2 (a tag feed, then the global feed), 1-1.5 s apart |
+| `source-ats-wttj` (Spec 1705) | company boards only | an optional whole-index board search, **off by default** (`WTTJ_BOARD_MODE=on`), paced 0.5-1.0 s and capped at the index's 1,000-hit window |
+
+Page caps elsewhere: LinkedIn stops after 2 pages with no new id and at the board's `start`
+cap; Indeed 10 pages (`EVER_JOBS_INDEED_MAX_PAGES`); Glassdoor 30 (hard 100); Google 10 (hard
+30); Bayt 10 (ceiling 50); BDJobs 20; Wellfound 10; Naukri 50; ZipRecruiter 10. A
+multi-location search (Spec 1700) calls each source once per location; its response memo
+answers a repeated identical request from the first answer, so a whole-board source costs one
+fetch for N locations, while a source that sends the location to its host makes one request per
+location, paced by the larger of `EVER_JOBS_SEARCH_LOCATION_INTERVAL_MS` and the plugin's own gap
+and, since the Spec 1690 merge (2026-09-26), by the crawl policy's per-host limiter as well (a memo
+hit takes no limiter slot).
+
+Five of the fixed plugins still request paths that the host's robots.txt disallows for
+`User-agent: *` (checked 2026-09-24/25):
+
+| Plugin | Path it requests | robots.txt for `User-agent: *` |
+|---|---|---|
+| `source-linkedin` (Spec 1701) | `www.linkedin.com/jobs-guest/…` | `Disallow: /` (and `/jobs-guest/` is disallowed for the named crawlers too) |
+| `source-indeed` (Spec 1702) | `apis.indeed.com/graphql` | `Disallow: /` on `apis.indeed.com`; `www.indeed.com` also disallows `/graphql` |
+| `source-glassdoor` (Spec 1703) | `/graph` (the homepage it reads first is allowed) | `/graph` disallowed |
+| `source-google` (Spec 1704) | `www.google.com/search` | `/search` disallowed |
+| `source-ziprecruiter` (Spec 1713) | `api.ziprecruiter.com` search | `Disallow: /` on both `api.` and `www.`; `/jobs/` is denied even to the allow-listed crawlers, so no detail page is fetched |
+
+Two more rows need the owner's eye even though robots.txt does not govern the host they call:
+
+| Plugin | What it does | Why it matters |
+|---|---|---|
+| `source-ats-wttj` board mode (Spec 1705) | Queries the site's search provider for the whole job index, sending the site's own `Referer` / `Origin` (the header predates this branch; the provider checks it), and re-reads the provider key from a public detail page when the site rotates it (`WTTJ_CREDENTIAL_REFRESH`) | The site's robots.txt disallows its own search pages (`*/jobs?query=*`, `/*?`), which reads as not wanting its search crawled. **Off by default** until ruled on; `WTTJ_BOARD_MODE=on` enables it. Company mode (a named company's board) is unchanged. |
+| `source-ziprecruiter` app identity (Spec 1713) | Sends the mobile app's Basic credential and `x-zr-zva-override` (both pre-existing). Its headers also carry a desktop User-Agent, but since the Spec 1690 merge (2026-09-26) that one is only declared: our honest User-Agent goes out by default (checked on the wire), and the desktop one only with the operator opt-in `EVER_JOBS_CRAWL_POLICIES={"sites":{"zip_recruiter":{"userAgentMode":"plugin"}}}`. Before Spec 1690 the client's own Chrome/120 default went out instead of it. So the crawl default already settles the User-Agent half of this row; what remains open is whether to opt the app identity back in | Spec 1713's form-encoded session event on a cookie jar is what makes the app handshake succeed, so it makes that identity more convincing. It is **opt-in** until ruled on (`ZIPRECRUITER_SESSION_EVENT=form`); the default is the pre-1713 JSON event with no cookie jar. The geo-block diagnostic now states the North-America-only rule without suggesting a way around it. |
+
+The other fixed boards read allowed paths: Internshala and Bayt now build only robots-allowed
+URLs (both enforced by tests), RemoteOK's `/api` and Solid.Jobs' API are allowed, BDJobs' API host
+has no robots.txt, and Wellfound reads robots-allowed landing pages (the Welcome to the Jungle
+board search is its own row above). The three new sources (Specs 1692-1694)
+read only allowed paths; Level's documented REST API sits under a disallowed `/api/`, so that
+plugin reads the operator's published MCP server instead and never calls `/api/`.
+
+**Options:**
+
+- **A. Keep as is.** The five plugins stay in the default site list. Operators who want
+  robots.txt compliance for every request set the crawl policy's
+  `EVER_JOBS_CRAWL_ROBOTS_TXT=respect` (Spec 1690), which refuses a disallowed path before the
+  request is sent (`RobotsDisallowedError`, reported as a `blocked` diagnostic; a multi-location
+  search then stops asking that source for its remaining locations). **The switch exists on this
+  branch:** `feat/http-politeness` (Specs 1690/1691) was merged into it on 2026-09-26, and the
+  variable is in `.env.example` and [CRAWL_POLICY.md](./CRAWL_POLICY.md). A per-site opt-in is
+  also possible without the global switch, e.g.
+  `EVER_JOBS_CRAWL_POLICIES={"sites":{"linkedin":{"robotsTxt":"respect"}}}`.
+- **B. Disable them by default.** Remove the five from the default site list behind a switch;
+  callers who name them in `siteType` still get them. Nothing is deleted.
+- **C. Remove the five plugins.**
+
+**Default:** **A**, proceeding. Its condition (Spec 1690 merged before or with this branch) is
+met: this branch carries Spec 1690 since the 2026-09-26 merge. The WTTJ board search and the
+app-shaped ZipRecruiter session stay opt-in either way. B is a one-switch change if the owner prefers it; C would contradict the
+no-removal rule and is not planned.
+
+**Sources evaluated and declined (2026-09-24), so nobody re-researches them.** No plugin was
+built for any of these; the probes made at most three requests each, with our honest
+User-Agent, and never requested a disallowed path.
+
+| Domain | Why not |
+|---|---|
+| `hellowork.com` | robots.txt disallows the keyword search for `User-agent: *`; the terms of use restated in every page forbid automated extraction; the firewall answered our User-Agent with 403 on the sitemap robots.txt advertises. |
+| `seek.com.au` / `jobstreet.com` / `jobsdb.com` (one platform) | robots.txt disallows every search and detail endpoint a plugin would need; the one allowed HTML search route answered with a managed challenge (403). The existing `jobstreet` plugin should report that as a diagnostic (follow-up). |
+| `xing.com` | robots.txt disallows the keyword search; the logged-out search redirects to login. A route through the sitemap-listed pages is possible but unverified. |
+| `wanted.co.kr` | the listings are only reachable through the site's internal `/api/`, which robots.txt disallows for every user agent and which is not a documented public API. A sitemap-based route is possible but unbuilt. |
+| `goozali.com` | the listings live on a hosted-spreadsheet service whose robots.txt disallows the shared-view endpoints; goozali.com itself has no crawlable copy of the data. |
+
+**Resolution:** _open — awaiting the owner._
+
+---
+
+## Q-098 — Default pacing numbers: 4 in flight per host, 100 ms apart, builtin bulk-host limits (Spec 1690)
+
+**Context:** Spec 1690 puts every request made through `HttpClient` behind a process-wide
+per-host limiter. Its defaults (preset `polite`) are **4 requests in flight and ≥ 100 ms
+between request starts per host** (at most 10 starts/s), no jitter, adaptive slow-down on
+429/503, bucket = exact hostname. Hosts that serve hundreds of company plugins through one
+CDN-backed API get **builtin** limits instead: `api.greenhouse.io` and
+`boards-api.greenhouse.io` 16 in flight, `api.lever.co`, `api.ashbyhq.com` and
+`api.smartrecruiters.com` 12, all with no gap. Softy's manifest sets its own (1 in flight,
+1 s, whole `softy.pro`).
+
+The constraint is the 120 s search deadline: a default search sends ~800 requests to
+Greenhouse alone. Evidence (offline simulation, 200 ms mocked latency, real timers, verification
+lane 2026-09-25): 800 Greenhouse requests plus a 100-wide fan-out to one ordinary host finished in
+**11.3 s**, 0 failures — Greenhouse in 10.5 s with ≤ 16 in flight, the ordinary host in 11.3 s
+with ≤ 3 in flight. Limiter grants were always ≥ 100 ms apart; the first wire gap of a burst
+measured 86–90 ms (grants are spaced, not wire starts). Before 1690, 23 fan-outs were unbounded
+(up to 300 requests at once to one host) and ~1,090 plugins sent requests back to back.
+
+Two properties worth knowing: the limiter is **per process** (N replicas → up to N × the limit
+per host), and the `strict` preset still applies the builtin bulk-host limits (layer 3 sits
+above the preset; `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false` turns them off).
+
+**Options:**
+
+- **A. 4 / 100 ms + builtin bulk hosts** (current). Bounds every host, keeps a default search
+  around 11 s in simulation; every number is overridable per env, host, site and request.
+- **B. Softer: 2 in flight / 250 ms** (4 starts/s). A 100-request fan-out to one host takes
+  ~25 s; more multi-page sources end near the deadline.
+- **C. The Softy operator's ask, globally: 1 / 1,000 ms** (what `strict` does). A 100-request
+  fan-out to one host takes ≥ 100 s; most multi-page sources would hit the deadline unless
+  given per-host exceptions.
+- **D. No global pacing** (as `legacy`), only plugin manifests. Leaves the 23 unbounded
+  fan-outs unbounded.
+- **E. Adaptive only**: unpaced until the first 429/503, then slow down. Lets the first burst
+  through — the thing site operators notice.
+- Sub-question: should `strict` also switch the builtin bulk-host limits off, and are 16/12
+  the right numbers for those APIs?
+
+**Default (proceeding):** **A** — it is the smallest default that bounds every host while
+keeping the default search well inside its deadline, and it needs no production env change.
+Revisit with production telemetry (`rate_limited` diagnostics and 429 counts per host) and the
+replica count. `strict` keeps the builtin limits for now (documented in `docs/CRAWL_POLICY.md`
+§3), so that preset does not by itself push Greenhouse-backed sources past the deadline.
 
 **Resolution:** _pending review._
 
@@ -184,6 +314,64 @@ request holds the whole raw fan-out in memory before the first NDJSON job line, 
 
 **Default (proceeding): A.** Clamping (with a warning) rather than a 400 keeps every existing
 request valid. `0` disables either bound.
+## Q-097 — Default User-Agent mode (`identify` vs `strict`) and which plugins opt into `plugin` mode (Spec 1690)
+
+**Context:** Spec 1690 sends an honest UA naming the project by default. Three modes decide
+what goes on the wire: `identify` (default — our UA, except for plugins whose manifest opts
+into `userAgentMode: 'plugin'` with a `userAgentReason`), `strict` (our UA always) and
+`plugin` (every plugin's declared UA). Three plugins opt in: two because their API
+*requires* a specific UA — **USAJobs** (the registered e-mail) and **HeadHunter** (an
+application UA; others get `400 bad_user_agent`) — and **SimplyHired** on the live A/B
+evidence below (403 on every page with the honest UA). Before 1690 the client's Chrome/120 UA
+silently replaced every declared UA, so most plugins' own browser strings had never been sent.
+
+Evidence — live A/B, verification lane 2026-09-25: 30 plugins, 166 requests, each run once
+with the honest UA (`strict`) and once with its declared UA (`plugin`), every automatic verdict
+reviewed by hand:
+
+| Verdict | Count | Plugins |
+|---|---|---|
+| works with the honest UA | 18 | linkedin, dice, builtin, avature (bloomberg), catsone, flatchr, prescreen, recruitis, rexx, sagehr, teamdash, greenhouse, lever, ashby, workday, personio, remoteok, weworkremotely |
+| breaks only with the honest UA | 1 | simplyhired |
+| broken either way | 7 | indeed, glassdoor, ziprecruiter, naukri, bayt, careerbuilder, monster |
+| inconclusive | 4 | google, ceipal, smartrecruiters, recruitee |
+
+- **simplyhired** — honest UA: the search page got 403 (the browser fallback still got the
+  list) and 21/21 detail pages 403; declared UA: 22/22 200. The one candidate for an opt-in.
+- **sagehr** — the reverse: its declared Chrome/124 UA gets 403, the honest UA 200 (confirmed
+  with the arms swapped, so not rate limiting). Must **not** be opted in.
+- **careerbuilder, monster** — DataDome captcha with the honest UA; with the declared UA the
+  pages load but the parser finds 0 jobs (broken regardless). Would need the opt-in once fixed.
+- **naukri** — the honest UA hangs until the 60 s timeout (half the search deadline); the
+  declared UA gets a fast 406.
+- **bayt** — 403 with every UA tried (honest, declared = honest, Chrome/120).
+- The four inconclusives do not depend on the UA (stale tenant/slug fixtures returning 404,
+  a 200 with 0 postings, Google paging 404 with both UAs).
+- Caveats: all traffic came from one workstation IP, so some 403s may be about the IP; and
+  `plugin` mode is not pre-1690 behaviour — the `legacy` preset is.
+
+**Options:**
+
+- **A. `identify`, opt-ins only where an API requires a specific UA** (current: USAJobs,
+  HeadHunter).
+- **B. A + opt SimplyHired in now** (`userAgentMode: 'plugin'`, reason "refuses non-browser
+  clients: 403 on every page with the honest UA, live A/B 2026-09-25").
+- **C. `strict` by default.** Most honest; USAJobs and HeadHunter stop working unless an
+  operator opts them back in per site.
+- **D. `plugin` by default.** Every declared (mostly browser) UA goes out — the impersonation
+  the site operator complained about, and still not pre-1690 behaviour.
+- **E. `legacy` identity by default** (Chrome/120 everywhere).
+- Side issue for any option: naukri's 60 s hang with the honest UA costs half the deadline;
+  an opt-in would turn it into a fast failure but not a working source.
+
+**Default (proceeding):** **B** — honest identity everywhere else (what the site operator
+asked for), but SimplyHired worked before Spec 1690 and the owner's standing rule is that no
+functionality is removed; the opt-in is evidence-based and states its reason
+(`SIMPLYHIRED_CRAWL_POLICY`, shown by `/api/sources/simplyhired/crawl-policy`). An operator who
+wants no exceptions sets `EVER_JOBS_CRAWL_USER_AGENT_MODE=strict`; one who wants to undo just
+this opt-in sets `EVER_JOBS_CRAWL_POLICIES={"sites":{"simplyhired":{"userAgentMode":"identify"}}}`.
+Follow-ups: repeat the A/B from the production egress; fix the careerbuilder/monster parsers
+and re-test them; address naukri's hang.
 
 **Resolution:** _pending review._
 

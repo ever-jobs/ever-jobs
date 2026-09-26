@@ -425,8 +425,10 @@ All of them are listed in `.env.example`; the two MCP variables are also in `app
 
 New npm scripts: `test:typed` (`ts-node --project tsconfig.base.json -T scripts/jest-typed.ts`,
 passes extra jest arguments through) and `test:core` (`jest --testPathPatterns
-"(packages/(common|plugin|models|analytics)|apps/api/src|apps/api/__tests__/(jobs|integration)|apps/mcp/__tests__)/"
---testPathIgnorePatterns e2e-spec`).
+"(packages/(common|plugin|models|analytics)|apps/api/src|apps/api/__tests__/(jobs|integration)|apps/(mcp|cli)/__tests__)/"
+--testPathIgnorePatterns e2e-spec`). `apps/cli/__tests__` joined when Specs 1690/1691 were merged
+with this work: they add the first non-e2e CLI spec (`crawl-options.spec.ts`), and the D-22 guard
+in `scripts/__tests__/ci-workflow.spec.ts` requires every such spec to be in the set.
 
 ### 5.3 Per-call options
 

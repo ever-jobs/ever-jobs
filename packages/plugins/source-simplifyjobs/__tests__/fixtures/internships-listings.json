@@ -1,0 +1,215 @@
+[
+    {
+        "source": "Simplify",
+        "category": "Hardware",
+        "company_name": "Globex",
+        "id": "00000000-0000-4000-8000-000000000203",
+        "title": "Hardware Intern",
+        "active": true,
+        "date_updated": 1790275000,
+        "date_posted": 1790275000,
+        "url": "https://globex.wd5.myworkdayjobs.com/en-US/Careers/job/London/Hardware-Intern_R203",
+        "locations": [
+            "London, UK"
+        ],
+        "company_url": "https://simplify.jobs/c/Globex",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": [],
+        "terms": [
+            "Winter 2027",
+            "Spring 2027"
+        ]
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Acme Robotics",
+        "id": "00000000-0000-4000-8000-000000000201",
+        "title": "Software Engineering Intern",
+        "active": true,
+        "date_updated": 1790262470,
+        "date_posted": 1790208000,
+        "url": "https://job-boards.greenhouse.io/acmerobotics/jobs/2001",
+        "locations": [
+            "Toronto, ON, Canada"
+        ],
+        "company_url": "https://simplify.jobs/c/Acme-Robotics",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": [
+            "Bachelor's"
+        ],
+        "terms": [
+            "Summer 2027"
+        ]
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Globex",
+        "id": "00000000-0000-4000-8000-000000000207",
+        "title": "Inactive Intern",
+        "active": false,
+        "date_updated": 1790279500,
+        "date_posted": 1790279500,
+        "url": "https://globex.wd5.myworkdayjobs.com/Careers/job/Inactive_R207",
+        "locations": [
+            "Austin, TX"
+        ],
+        "company_url": "https://simplify.jobs/c/Acme-Robotics",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": [],
+        "terms": [
+            "Summer 2027"
+        ]
+    },
+    {
+        "source": "Simplify",
+        "category": "Quant",
+        "company_name": "Umbrella Capital",
+        "id": "00000000-0000-4000-8000-000000000202",
+        "title": "Quant Trading Intern",
+        "active": true,
+        "date_updated": 1790204400,
+        "date_posted": 1790121600,
+        "url": "https://jobs.ashbyhq.com/umbrella/5a5a5a5a-0000-4000-8000-000000000202",
+        "locations": [
+            "London, ON"
+        ],
+        "company_url": "https://simplify.jobs/c/Umbrella-Capital",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": [],
+        "terms": [
+            "N/A"
+        ]
+    },
+    {
+        "source": "Simplify",
+        "category": "Software",
+        "company_name": "Hooli",
+        "id": "00000000-0000-4000-8000-000000000208",
+        "title": "Software Intern",
+        "active": true,
+        "date_updated": 1790000000,
+        "date_posted": 1790000000,
+        "url": "https://jobs.ashbyhq.com/hooli/aaaa0000-0000-4000-8000-000000000208",
+        "locations": [
+            "NYC"
+        ],
+        "company_url": "https://simplify.jobs/c/Hooli",
+        "is_visible": true,
+        "sponsorship": "Offers Sponsorship",
+        "degrees": [],
+        "terms": [
+            "Summer 2028"
+        ]
+    },
+    {
+        "source": "Simplify",
+        "category": "AI/ML/Data",
+        "company_name": "Cyberdyne",
+        "id": "00000000-0000-4000-8000-000000000204",
+        "title": "Machine Learning Intern",
+        "active": true,
+        "date_updated": 1790265000,
+        "date_posted": 1790265000,
+        "url": "https://cyberdyne.wd5.myworkdayjobs.com/Careers/job/ML_R9",
+        "locations": [
+            "Austin, TX"
+        ],
+        "company_url": "https://simplify.jobs/c/Cyberdyne",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": [],
+        "terms": [
+            "Summer 2027"
+        ]
+    },
+    {
+        "source": "Simplify",
+        "category": "Product",
+        "company_name": "Pied Piper",
+        "id": "00000000-0000-4000-8000-000000000205",
+        "title": "Product Intern",
+        "active": true,
+        "date_updated": 1790200000,
+        "date_posted": 1790200000,
+        "url": "https://piedpiper.wd1.myworkdayjobs.com/en-US/Careers/job/San-Francisco/Product-Intern_R205",
+        "locations": [
+            "SF"
+        ],
+        "company_url": "https://simplify.jobs/c/Pied-Piper",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": [],
+        "terms": [
+            "Summer 2027"
+        ]
+    },
+    {
+        "source": "Simplify",
+        "category": "AI/ML/Data",
+        "company_name": "Initech",
+        "id": "00000000-0000-4000-8000-000000000206",
+        "title": "Data Science Intern",
+        "active": true,
+        "date_updated": 1790100000,
+        "date_posted": 1790100000,
+        "url": "https://jobs.lever.co/initech/ds-intern-206",
+        "locations": [
+            "Remote in USA"
+        ],
+        "company_url": "https://simplify.jobs/c/Initech",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": [],
+        "terms": [
+            "Fall 2026"
+        ]
+    },
+    {
+        "source": "Simplify",
+        "category": "Hardware",
+        "company_name": "Weyland Labs",
+        "id": "00000000-0000-4000-8000-000000000209",
+        "title": "Research Intern",
+        "active": true,
+        "date_updated": 1780000000,
+        "date_posted": 1780000000,
+        "url": "https://weyland.eightfold.ai/careers/job/209",
+        "locations": [
+            "Singapore"
+        ],
+        "company_url": "https://simplify.jobs/c/Weyland-Labs",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": [],
+        "terms": [
+            "Spring 2027"
+        ]
+    },
+    {
+        "source": "Simplify",
+        "category": "Product",
+        "company_name": "Oceanic Air",
+        "id": "00000000-0000-4000-8000-000000000210",
+        "title": "Operations Intern",
+        "active": true,
+        "date_updated": 1790190000,
+        "date_posted": 1790190000,
+        "url": "https://apply.workable.com/oceanic-air/j/210/",
+        "locations": [
+            "Dubai - United Arab Emirates"
+        ],
+        "company_url": "https://simplify.jobs/c/Oceanic-Air",
+        "is_visible": true,
+        "sponsorship": "Other",
+        "degrees": [],
+        "terms": [
+            "Summer 2027"
+        ]
+    }
+]

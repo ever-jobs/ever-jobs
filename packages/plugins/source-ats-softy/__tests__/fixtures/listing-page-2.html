@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<!-- Synthetic fixture shaped like a live Softy listing page (/offers?page=2, the last page). -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Offres d'emploi - ACME</title>
+</head>
+<body>
+  <main>
+    <div class="grid gap-4">
+      <a class="block" href="https://acme.softy.pro/offers/1004">
+        <div data-slot="card" class="rounded-xl border">
+          <div data-slot="card-content" class="p-4">
+            <div class="flex"><h3 data-slot="joboffer-title" class="font-semibold">Data Analyst</h3></div>
+            <div data-slot="joboffer-locations" class="flex"><div class="flex"><div class="flex"><p class="text-sm">Lyon</p></div></div></div>
+            <span data-slot="joboffer-published-at" class="text-xs"><div class="flex">Mise en ligne le 10/09/2026</div></span>
+            <div class="flex"><div class="flex">
+              <span data-slot="badge" class="rounded-xl">CDI</span>
+              <span data-slot="badge" class="rounded-xl">Télétravail</span>
+            </div></div>
+          </div>
+        </div>
+      </a>
+      <a class="block" href="/offers/1005">
+        <div data-slot="card" class="rounded-xl border">
+          <div data-slot="card-content" class="p-4">
+            <div class="flex"><h3 data-slot="joboffer-title" class="font-semibold">Stagiaire Comptabilité</h3></div>
+            <div data-slot="joboffer-locations" class="flex"><div class="flex"><div class="flex"><p class="text-sm">Nantes</p></div></div></div>
+            <span data-slot="joboffer-published-at" class="text-xs"><div class="flex">Mise en ligne le 22/09/2026</div></span>
+            <div class="flex"><div class="flex">
+              <span data-slot="badge" class="rounded-xl">Stage - 6 Mois</span>
+            </div></div>
+          </div>
+        </div>
+      </a>
+    </div>
+    <nav role="navigation" aria-label="pagination" data-slot="pagination">
+      <ul data-slot="pagination-content">
+        <li data-slot="pagination-item"><a data-slot="pagination-link" aria-label="Précédent" aria-disabled="false" href="https://acme.softy.pro/offers?page=1"><span>Précédent</span></a></li>
+        <li data-slot="pagination-item"><a data-slot="pagination-link" data-active="false" href="https://acme.softy.pro/offers?page=1">1</a></li>
+        <li data-slot="pagination-item"><a aria-current="page" data-slot="pagination-link" data-active="true" href="https://acme.softy.pro/offers?page=2">2</a></li>
+        <li data-slot="pagination-item"><a data-slot="pagination-link" aria-label="Suivant" aria-disabled="true" href="https://acme.softy.pro/offers?page=3"><span>Suivant</span></a></li>
+      </ul>
+    </nav>
+  </main>
+</body>
+</html>

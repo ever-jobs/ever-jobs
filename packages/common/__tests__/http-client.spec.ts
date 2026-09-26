@@ -1,19 +1,41 @@
 import 'reflect-metadata';
 
 const mockAxiosRequest = jest.fn();
+/**
+ * A minimal axios instance: `request` runs the registered request interceptors
+ * (the crawl-policy identity interceptor since Spec 1690) over the config, then
+ * hands it to `mockAxiosRequest`.
+ */
 jest.mock('axios', () => ({
   __esModule: true,
   default: {
-    create: jest.fn(() => ({
-      request: mockAxiosRequest,
-      defaults: { headers: { common: {} } },
-    })),
+    create: jest.fn(() => {
+      const requestHandlers: Array<(config: any) => any> = [];
+      return {
+        request: jest.fn(async (config: any) => {
+          let cfg = config;
+          for (const handler of requestHandlers) {
+            cfg = await handler(cfg);
+          }
+          return mockAxiosRequest(cfg);
+        }),
+        defaults: { headers: { common: {} } },
+        interceptors: {
+          request: { use: jest.fn((handler: any) => requestHandlers.push(handler)) },
+          response: { use: jest.fn() },
+        },
+      };
+    }),
   },
 }));
 
 import axios from 'axios';
 import { HttpClient } from '../src/http/http-client';
 import { runWithRequestId } from '../src/context';
+import { CRAWL_ENV, EVER_JOBS_DEFAULT_USER_AGENT, LEGACY_BROWSER_USER_AGENT } from '../src/http/crawl/defaults';
+import { resetCrawlPolicyEnvCache } from '../src/http/crawl/env';
+import { resetHostLimiter } from '../src/http/crawl/host-limiter';
+import { resetEffectiveCrawlPolicyCache } from '../src/http/crawl/scrape-context';
 
 function httpError(status: number, headers: Record<string, string> = {}): Error {
   return Object.assign(new Error(`Request failed with status code ${status}`), {
@@ -21,19 +43,42 @@ function httpError(status: number, headers: Record<string, string> = {}): Error 
   });
 }
 
+/** Fresh crawl-policy state per test: env parse, memo, and the process-wide limiter. */
+function resetCrawlState(): void {
+  resetCrawlPolicyEnvCache();
+  resetEffectiveCrawlPolicyCache();
+  resetHostLimiter();
+}
+
+const savedPreset = process.env[CRAWL_ENV.PRESET];
+
+function restorePreset(): void {
+  if (savedPreset === undefined) delete process.env[CRAWL_ENV.PRESET];
+  else process.env[CRAWL_ENV.PRESET] = savedPreset;
+  resetCrawlState();
+}
+
 /**
  * Spec 5085 — a retry log line that does not name its own request cannot be
  * attributed to anything, and a 429 must honor the pause the server asked for.
+ *
+ * These pin the pre-1690 retry arithmetic (3 linear retries on 429/5xx, no
+ * jitter, Retry-After capped by `retryMaxDelay`), which Spec 1690 keeps
+ * byte-for-byte under `EVER_JOBS_CRAWL_PRESET=legacy`. The polite default's
+ * arithmetic is covered in `http-client-crawl-policy.spec.ts`.
  */
-describe('HttpClient retry attribution and Retry-After — Spec 5085', () => {
+describe('HttpClient retry attribution and Retry-After — Spec 5085 (legacy preset)', () => {
   beforeEach(() => {
     mockAxiosRequest.mockReset();
+    process.env[CRAWL_ENV.PRESET] = 'legacy';
+    resetCrawlState();
     jest.useFakeTimers();
   });
 
   afterEach(() => {
     jest.useRealTimers();
     jest.restoreAllMocks();
+    restorePreset();
   });
 
   /** Drive a request to completion without waiting out the retry sleep. */
@@ -141,6 +186,100 @@ describe('HttpClient retry attribution and Retry-After — Spec 5085', () => {
 
     expect(logger.mock.calls[0][0]).toContain('in 5000ms');
   });
+
+  it('appends the rate-limit bucket to the retry line (Spec 1690)', async () => {
+    const client = new HttpClient({ retries: 1 });
+    const logger = jest.spyOn((client as any).logger, 'warn').mockImplementation(() => undefined);
+    mockAxiosRequest.mockRejectedValueOnce(httpError(502)).mockResolvedValueOnce({ data: 'ok' });
+
+    await run(client.get('https://acme.example.com/api'));
+
+    expect(logger.mock.calls[0][0]).toContain('failed 502, retry 1/1 in 1000ms (host:acme.example.com)');
+  });
+
+  it('sends the pre-1690 Chrome/120 User-Agent, even over a UA declared through setHeaders', async () => {
+    const client = new HttpClient();
+    client.setHeaders({ 'User-Agent': 'Declared/1.0', 'Accept-Language': 'fr-FR' });
+    mockAxiosRequest.mockResolvedValueOnce({ data: 'ok' });
+
+    await run(client.get('https://acme.example.com/api'));
+
+    const sent = mockAxiosRequest.mock.calls[0][0];
+    expect(sent.headers['User-Agent']).toBe(LEGACY_BROWSER_USER_AGENT);
+    expect(client.getAxiosInstance().defaults.headers.common).toEqual({ 'Accept-Language': 'fr-FR' });
+  });
+
+  it('retries 3 times by default, linearly, including on 500', async () => {
+    const client = new HttpClient();
+    const logger = jest.spyOn((client as any).logger, 'warn').mockImplementation(() => undefined);
+    mockAxiosRequest
+      .mockRejectedValueOnce(httpError(500))
+      .mockRejectedValueOnce(httpError(500))
+      .mockRejectedValueOnce(httpError(500))
+      .mockResolvedValueOnce({ data: 'ok' });
+
+    const result = await run(client.get('https://acme.example.com/api'));
+
+    expect(result).toEqual({ data: 'ok' });
+    expect(mockAxiosRequest).toHaveBeenCalledTimes(4);
+    expect(logger.mock.calls.map((c) => /in (\d+)ms/.exec(c[0] as string)?.[1])).toEqual(['1000', '2000', '3000']);
+  });
+});
+
+/** The polite default (Spec 1690) keeps the Spec 5085 guarantees with its own arithmetic. */
+describe('HttpClient retry attribution — Spec 5085 under the polite default', () => {
+  beforeEach(() => {
+    mockAxiosRequest.mockReset();
+    delete process.env[CRAWL_ENV.PRESET];
+    resetCrawlState();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+    restorePreset();
+  });
+
+  async function run<T>(promise: Promise<T>): Promise<T | Error> {
+    const settled = promise.catch((err: Error) => err);
+    await jest.advanceTimersByTimeAsync(60_000);
+    return settled;
+  }
+
+  it('names the request and bucket, and sends the honest Ever Jobs User-Agent', async () => {
+    const client = new HttpClient({ retries: 1 });
+    const logger = jest.spyOn((client as any).logger, 'warn').mockImplementation(() => undefined);
+    mockAxiosRequest.mockRejectedValueOnce(httpError(429)).mockResolvedValueOnce({ data: 'ok' });
+
+    await runWithRequestId('req-xyz', () => run(client.get('https://acme.example.com/api?token=SECRET')));
+
+    expect(logger.mock.calls[0][0]).toContain('[req-xyz] GET https://acme.example.com/api?token=REDACTED failed 429, retry 1/1 in');
+    expect(logger.mock.calls[0][0]).toContain('(host:acme.example.com)');
+    expect(mockAxiosRequest.mock.calls[0][0].headers['User-Agent']).toBe(EVER_JOBS_DEFAULT_USER_AGENT);
+  });
+
+  it('honours Retry-After (never earlier than asked)', async () => {
+    const client = new HttpClient({ retries: 1 });
+    const logger = jest.spyOn((client as any).logger, 'warn').mockImplementation(() => undefined);
+    mockAxiosRequest
+      .mockRejectedValueOnce(httpError(429, { 'retry-after': '5' }))
+      .mockResolvedValueOnce({ data: 'ok' });
+
+    await run(client.get('https://acme.example.com/api'));
+
+    expect(logger.mock.calls[0][0]).toContain('in 5000ms');
+  });
+
+  it('does not retry a 500 (not in the polite retryStatuses)', async () => {
+    const client = new HttpClient();
+    mockAxiosRequest.mockRejectedValueOnce(httpError(500));
+
+    const result = await run(client.get('https://acme.example.com/api'));
+
+    expect((result as Error).message).toContain('status code 500');
+    expect(mockAxiosRequest).toHaveBeenCalledTimes(1);
+  });
 });
 
 /**
@@ -151,12 +290,14 @@ describe('HttpClient retry attribution and Retry-After — Spec 5085', () => {
 describe('HttpClient retry log URL redaction', () => {
   beforeEach(() => {
     mockAxiosRequest.mockReset();
+    resetCrawlState();
     jest.useFakeTimers();
   });
 
   afterEach(() => {
     jest.useRealTimers();
     jest.restoreAllMocks();
+    restorePreset();
   });
 
   /** Retry once against `url` and return the warn line it logged. */
@@ -293,5 +434,32 @@ describe('HttpClientOptions unit contract', () => {
 
     expect((client as any).retryDelay).toBe(1500);
     expect((client as any).retryMaxDelay).toBe(20_000);
+  });
+
+  /** Spec 1690 §4.1 — the same units, carried into the crawl policy's plugin layer. */
+  it('maps the options onto crawl-policy milliseconds', () => {
+    const client = new HttpClient({
+      rateDelayMin: 2,
+      rateDelayMax: 3,
+      retryDelay: 1500,
+      retryMaxDelay: 20_000,
+      retries: 4,
+      retryBackoff: 'exponential',
+    });
+
+    expect((client as any).explicit).toEqual({
+      minIntervalMs: 2000,
+      jitterMs: 1000,
+      retryBaseDelayMs: 1500,
+      retryMaxDelayMs: 20_000,
+      retries: 4,
+      retryBackoff: 'exponential',
+    });
+  });
+
+  it('puts no User-Agent into the instance defaults (the interceptor sets it per request)', () => {
+    new HttpClient({ userAgent: 'Declared/1.0' });
+
+    expect(created().headers).toBeUndefined();
   });
 });
