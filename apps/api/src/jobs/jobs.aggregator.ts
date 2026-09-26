@@ -11,6 +11,16 @@ import {
   JobPostDto,
   ScraperInputDto,
 } from '@ever-jobs/models';
+import {
+  CompiledJobExclusions,
+  ExclusionMatch,
+  JobExclusionMetrics,
+  JobExclusionSpec,
+  MAX_EXCLUSION_SAMPLES,
+  buildExclusionMetrics,
+  compileJobExclusions,
+  matchJobExclusion,
+} from '@ever-jobs/common';
 import { JobsService } from './jobs.service';
 
 /**
@@ -44,6 +54,23 @@ export interface AggregateOptions {
    * "when nothing is bound the aggregator is a pass-through").
    */
   readonly persist?: boolean;
+
+  /**
+   * Post-scrape exclusion filters (Spec 1700). A per-request VIEW filter:
+   * matching jobs are removed from {@link AggregateResult.jobs}, but the
+   * persisted corpus still receives every canonical record and the cache
+   * (which the controller writes before this runs) holds the raw fan-out.
+   *
+   * With dedup, a cluster is dropped when ANY of its members matches — sources
+   * describe the same job differently, and dropping only the matching
+   * observation would leak a job the caller explicitly excluded through a
+   * representative with an empty description.
+   *
+   * Absent → the code path and the result object are exactly the
+   * pre-Spec-1700 ones (no exclusion keys). Present but inactive (empty
+   * lists) → nothing is removed and zeroed metrics are returned.
+   */
+  readonly exclusions?: JobExclusionSpec | CompiledJobExclusions;
 }
 
 /**
@@ -85,7 +112,28 @@ export interface AggregateResult {
    * body.
    */
   readonly persistError?: { readonly code: string; readonly message: string };
+  /**
+   * Populated only when {@link AggregateOptions.exclusions} was supplied and
+   * the filter ran (Spec 1700). `excludedCount` counts removed results (whole
+   * clusters when dedup ran); `excludedRawCount` counts matching raw rows,
+   * including rows the dedup engine rejected. `rawCount` keeps its meaning
+   * (pre-dedup, pre-exclusion); `outputCount` is post-exclusion.
+   */
+  readonly exclusionMetrics?: JobExclusionMetrics;
+  /** Up to {@link MAX_EXCLUSION_SAMPLES} excluded raw rows and why (Spec 1700). */
+  readonly excludedSamples?: ReadonlyArray<{ readonly job: JobPostDto; readonly match: ExclusionMatch }>;
+  /**
+   * Set when the exclusion filter itself failed (Spec 1700). The search then
+   * returns the unfiltered list rather than a 500 — the filter is optional,
+   * the search is not. Same shape as {@link persistError}.
+   */
+  readonly exclusionError?: { readonly code: string; readonly message: string };
 }
+
+/**
+ * Error code surfaced via {@link AggregateResult.exclusionError} (Spec 1700).
+ */
+export const ERR_EXCLUSION_FAILED = 'ERR_EXCLUSION_FAILED';
 
 /**
  * Generic fallback error code surfaced via {@link AggregateResult.persistError}
@@ -111,7 +159,8 @@ export const ERR_STORE_PERSIST_FAILED = 'ERR_STORE_PERSIST_FAILED';
  *      opt out) to collapse near-duplicates across sources;
  *   3. picks the **first** raw `JobPostDto` per canonical cluster as the
  *      "winning" representative — this preserves the input sort order
- *      established by `JobsService` (site asc, then datePosted desc);
+ *      established by `JobsService` (site asc, then posted time desc -
+ *      `datePostedAt` when present, else `datePosted`; Spec 1696);
  *   4. (Spec 004 / T11) persists the post-dedup `CanonicalJob[]` plus
  *      their `SourceObservation[]` via the bound `IJobStore` /
  *      `IJobObservationStore`, **best-effort**: any backend failure is
@@ -168,25 +217,21 @@ export class JobsAggregator {
   ): Promise<AggregateResult> {
     const rawCount = rawJobs.length;
     const wantDedup = options.dedup ?? true;
+    // Spec 1700 — `undefined` when the caller supplied no exclusion input, in
+    // which case every path below returns exactly its pre-Spec-1700 object.
+    const exclusion =
+      options.exclusions === undefined
+        ? undefined
+        : this.evaluateExclusions(rawJobs, options.exclusions);
 
     if (!wantDedup) {
-      return {
-        jobs: rawJobs,
-        rawCount,
-        outputCount: rawCount,
-        deduped: false,
-      };
+      return this.passThrough(rawJobs, exclusion);
     }
     if (!this.dedupEngine) {
       this.logger.debug(
         'No IDedupEngine bound under DEDUP_ENGINE_TOKEN — returning raw list',
       );
-      return {
-        jobs: rawJobs,
-        rawCount,
-        outputCount: rawCount,
-        deduped: false,
-      };
+      return this.passThrough(rawJobs, exclusion);
     }
     if (rawCount === 0) {
       return {
@@ -200,10 +245,20 @@ export class JobsAggregator {
           mergedPairs: 0,
           elapsedMs: 0,
         },
+        ...this.exclusionFields(rawJobs, exclusion, 0),
       };
     }
 
     const result = await this.dedupEngine.dedup(rawJobs);
+
+    // Spec 1700 — a cluster is excluded when ANY of its members matched.
+    const excludedClusters = new Set<string>();
+    if (exclusion?.verdicts) {
+      exclusion.verdicts.forEach((verdict, i) => {
+        const canonId = result.assignments[i];
+        if (verdict && canonId) excludedClusters.add(canonId);
+      });
+    }
 
     // Pick the first raw job per canonical cluster. We iterate the input
     // (which is already sorted by `JobsService`) so the representative
@@ -211,11 +266,16 @@ export class JobsAggregator {
     // the same site/date ordering as a non-deduped response.
     const seen = new Set<string>();
     const deduped: JobPostDto[] = [];
+    let droppedClusters = 0;
     for (let i = 0; i < rawJobs.length; i++) {
       const canonId = result.assignments[i];
       if (!canonId) continue; // rejected by engine
       if (seen.has(canonId)) continue;
       seen.add(canonId);
+      if (excludedClusters.has(canonId)) {
+        droppedClusters++;
+        continue;
+      }
       deduped.push(rawJobs[i]);
     }
 
@@ -223,6 +283,8 @@ export class JobsAggregator {
       `dedup: ${rawCount} → ${deduped.length} (merged ${result.metrics.mergedPairs} pairs in ${result.metrics.elapsedMs}ms)`,
     );
 
+    // Persistence receives the FULL canonical list: exclusion is a
+    // per-request view and must not shrink the corpus.
     const persistOutcome = await this.maybePersist(result.canonical, options);
 
     return {
@@ -232,7 +294,93 @@ export class JobsAggregator {
       deduped: true,
       dedupMetrics: result.metrics,
       ...persistOutcome,
+      ...this.exclusionFields(rawJobs, exclusion, droppedClusters),
     };
+  }
+
+  /** The `dedup=false` / no-engine result, with exclusions applied row by row. */
+  private passThrough(
+    rawJobs: JobPostDto[],
+    exclusion: ExclusionEvaluation | undefined,
+  ): AggregateResult {
+    const rawCount = rawJobs.length;
+    if (!exclusion) {
+      return {
+        jobs: rawJobs,
+        rawCount,
+        outputCount: rawCount,
+        deduped: false,
+      };
+    }
+    const verdicts = exclusion.verdicts;
+    const jobs = verdicts ? rawJobs.filter((_job, i) => !verdicts[i]) : rawJobs;
+    return {
+      jobs,
+      rawCount,
+      outputCount: jobs.length,
+      deduped: false,
+      ...this.exclusionFields(rawJobs, exclusion, rawCount - jobs.length),
+    };
+  }
+
+  /**
+   * Compile the spec and match every raw row once (Spec 1700). Never throws:
+   * a failure is returned as `error` and the caller serves the unfiltered list.
+   */
+  private evaluateExclusions(
+    rawJobs: JobPostDto[],
+    spec: JobExclusionSpec | CompiledJobExclusions,
+  ): ExclusionEvaluation {
+    try {
+      const compiled =
+        spec instanceof CompiledJobExclusions ? spec : compileJobExclusions(spec);
+      if (!compiled.active) return { compiled };
+      return {
+        compiled,
+        verdicts: rawJobs.map((job) => matchJobExclusion(job, compiled)),
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `exclusion filter failed: ${message}. Returning the unfiltered list.`,
+      );
+      return { error: { code: ERR_EXCLUSION_FAILED, message } };
+    }
+  }
+
+  /** The exclusion keys of an {@link AggregateResult}; empty when none were requested. */
+  private exclusionFields(
+    rawJobs: JobPostDto[],
+    exclusion: ExclusionEvaluation | undefined,
+    excludedCount: number,
+  ): Partial<AggregateResult> {
+    if (!exclusion) return {};
+    if (exclusion.error || !exclusion.compiled) {
+      return {
+        exclusionError: exclusion.error ?? {
+          code: ERR_EXCLUSION_FAILED,
+          message: 'exclusion filter did not compile',
+        },
+      };
+    }
+    const samples: { job: JobPostDto; match: ExclusionMatch }[] = [];
+    const matches: ExclusionMatch[] = [];
+    exclusion.verdicts?.forEach((match, i) => {
+      if (!match) return;
+      matches.push(match);
+      if (samples.length < MAX_EXCLUSION_SAMPLES) samples.push({ job: rawJobs[i], match });
+    });
+    const metrics = buildExclusionMetrics(exclusion.compiled, matches, excludedCount);
+    this.logger.log(
+      `exclusions: excluded=${metrics.excludedCount} raw=${metrics.excludedRawCount} ` +
+        `terms=${exclusion.compiled.termCount} ignored=${metrics.ignoredTerms.length}`,
+    );
+    if (metrics.byTerm.length > 0) {
+      this.logger.debug(
+        `exclusions by term: ${metrics.byTerm.map((t) => `${t.source}:${JSON.stringify(t.term)}=${t.count}`).join(', ')}`,
+      );
+    }
+    return { exclusionMetrics: metrics, excludedSamples: samples };
   }
 
   /**
@@ -304,6 +452,14 @@ export class JobsAggregator {
       };
     }
   }
+}
+
+/** Outcome of matching a request's exclusion spec against the raw rows (Spec 1700). */
+interface ExclusionEvaluation {
+  readonly compiled?: CompiledJobExclusions;
+  /** Per raw row; absent when the spec was inactive or the filter failed. */
+  readonly verdicts?: ReadonlyArray<ExclusionMatch | null>;
+  readonly error?: { readonly code: string; readonly message: string };
 }
 
 /**

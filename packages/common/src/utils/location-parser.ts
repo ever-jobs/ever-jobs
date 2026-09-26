@@ -6,6 +6,7 @@ import {
   getIndeedDomain,
 } from '@ever-jobs/models';
 import { regionNameFromCode } from './country-name';
+import { ISO_ALPHA2_TO_ALPHA3, ISO_ALPHA3_TO_ALPHA2 } from './iso3166';
 
 const logger = new Logger('LocationParser');
 
@@ -149,6 +150,11 @@ const US_TERRITORY_DISPLAY_NAMES = new Set(Object.values(US_TERRITORY_NAMES));
  * ISO-3166-1 alpha-3 display names for every country in COUNTRY_CONFIG, plus
  * `UAE` as an alias for `ARE` (boards write "UAE" often). `Intl.DisplayNames`
  * only accepts alpha-2 codes, so alpha-3 needs this explicit map.
+ *
+ * These codes resolve case-insensitively ('gbr'). With `isoCountryNames`
+ * (Spec 1699) their NAME comes from the ISO table + CLDR instead, so 'CZE'
+ * reads as 'Czechia' like the name does; these spellings are the legacy
+ * output (`isoCountryNames: false`).
  */
 const COUNTRY_ALPHA3: Record<string, string> = {
   ARE: 'United Arab Emirates',
@@ -230,6 +236,18 @@ const COUNTRY_ALPHA3: Record<string, string> = {
  * 'Georgia' the country?). Codes stay unambiguous and always resolve.
  */
 const BARE_STATE_NAME_COLLISIONS = new Set(['washington', 'new york', 'georgia']);
+
+/**
+ * Georgian cities and regions (lower-case, diacritics folded) that make a
+ * trailing 'Georgia' the COUNTRY: 'Tbilisi, Georgia', 'Batumi, Adjara,
+ * Georgia'. Without one of them 'Georgia' stays the US state ('Atlanta,
+ * Georgia') or, bare, a city — the name is never read as the country alone.
+ */
+const GEORGIA_COUNTRY_PLACES = new Set([
+  'tbilisi', 'batumi', 'kutaisi', 'rustavi', 'zugdidi', 'gori', 'poti',
+  'telavi', 'adjara', 'ajara', 'imereti', 'kakheti', 'kvemo kartli',
+  'samegrelo-zemo svaneti', 'shida kartli', 'mtskheta-mtianeti',
+]);
 
 /**
  * Subdivisions (lower-case names and codes) that pin an ambiguous tail code —
@@ -329,6 +347,12 @@ export const LOCATION_PARSER_ENV = {
    * ('Remote, CA', 'Hybrid, DE') as the US state. Default false (the country).
    */
   preferUsStateAfterQualifier: 'EVER_JOBS_LOCATION_PREFER_US_STATE_AFTER_QUALIFIER',
+  /**
+   * 'false' restores the configured-countries-only lookup (COUNTRY_CONFIG
+   * names, alpha-2, the legacy alpha-3 list and its spellings). Default true:
+   * every ISO 3166-1 country name and upper-case alpha-3 code (Spec 1699).
+   */
+  isoCountryNames: 'EVER_JOBS_LOCATION_ISO_COUNTRY_NAMES',
 } as const;
 
 interface ResolvedParseLocationOptions {
@@ -336,6 +360,7 @@ interface ResolvedParseLocationOptions {
   readonly emitRemoteCity: boolean;
   readonly preferUsStateCode: boolean;
   readonly preferUsStateAfterQualifier: boolean;
+  readonly isoCountryNames: boolean;
   /** 0 = no cap */
   readonly maxLabelLength: number;
 }
@@ -385,6 +410,7 @@ function envDefaults(): ResolvedParseLocationOptions {
       LOCATION_PARSER_ENV.preferUsStateAfterQualifier,
       false,
     ),
+    isoCountryNames: readBooleanEnv(LOCATION_PARSER_ENV.isoCountryNames, true),
     maxLabelLength: readLengthEnv(
       LOCATION_PARSER_ENV.maxLabelLength,
       DEFAULT_MAX_LOCATION_LABEL_LENGTH,
@@ -416,6 +442,7 @@ function resolveOptions(
     preferUsStateCode: options.preferUsStateCode ?? env.preferUsStateCode,
     preferUsStateAfterQualifier:
       options.preferUsStateAfterQualifier ?? env.preferUsStateAfterQualifier,
+    isoCountryNames: options.isoCountryNames ?? env.isoCountryNames,
     maxLabelLength:
       typeof cap === 'number' && Number.isFinite(cap) && cap >= 0
         ? Math.floor(cap)
@@ -558,6 +585,22 @@ export interface ParseLocationOptions {
    */
   preferUsStateAfterQualifier?: boolean;
   /**
+   * Recognise EVERY ISO 3166-1 country in a country slot, not only the
+   * configured `COUNTRY_CONFIG` markets (Spec 1699): its CLDR name and common
+   * board spellings ('Colombo, Western Province, Sri Lanka', 'Almaty,
+   * Kazakhstan', 'Abidjan, Ivory Coast'), and its alpha-3 code as an
+   * upper-case token ('Colombo, LKA'). A country's name, alpha-2 and alpha-3
+   * then canonicalise to one display name ('CZE' / 'CZ' / 'Czechia' ->
+   * 'Czechia'). Guards keep US readings: a US town named after a country
+   * ('Lebanon, PA', 'Peru, Miami County, IN'), US territories ('San Juan,
+   * Puerto Rico') and the state 'Georgia' ('Tbilisi, Georgia' is the country
+   * only next to a Georgian place). False restores the configured-only
+   * lookup and the legacy alpha-3 spellings ('CZE' -> 'Czech Republic').
+   *
+   * Env default: `EVER_JOBS_LOCATION_ISO_COUNTRY_NAMES` (default true).
+   */
+  isoCountryNames?: boolean;
+  /**
    * A site chunk (one `;`/`|`-separated piece of a label, after whitespace
    * collapsing) longer than this many characters skips every heuristic and is
    * kept verbatim as one entry (`{ text, name }`), which bounds the per-chunk
@@ -612,26 +655,265 @@ function regionNameCached(code: string): string | null {
   return name;
 }
 
+/* ────────────────────────────────────────────────────────────────────── *
+ *  Every ISO 3166-1 country (Spec 1699)
+ * ────────────────────────────────────────────────────────────────────── */
+
+/** 'Côte d’Ivoire' -> "Cote d'Ivoire": strip combining marks, unify apostrophes. */
+function foldCountryKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[\u2018\u2019\u02bc]/g, "'");
+}
+
+/** Any non-ASCII character — only such input needs the diacritic fold. */
+const NON_ASCII_RE = /[\u0080-\uffff]/;
+
 /**
- * Recognize a country token in country-slot context: COUNTRY_CONFIG names and
- * aliases, ISO alpha-2, explicit alpha-3 map, and the pragmatic `'korea'` alias
- * (job boards mean South Korea).
+ * Display names for the few CLDR names that would not survive a re-parse of
+ * an emitted label: ' - ' reads as a site suffix ('Congo - Kinshasa') and
+ * parentheses as a qualifier ('Myanmar (Burma)'). Every other country is
+ * emitted exactly as CLDR spells it.
  */
-export function normalizeCountryOnly(value: string): string | null {
+const ISO_DISPLAY_OVERRIDES: Readonly<Record<string, string>> = {
+  CD: 'DR Congo',
+  CG: 'Republic of the Congo',
+  MM: 'Myanmar',
+};
+
+/**
+ * Spellings boards use that CLDR does not produce (keys lower-case, dots
+ * removed, diacritics folded) -> alpha-2.
+ */
+const ISO_NAME_ALIASES: Readonly<Record<string, string>> = {
+  'ivory coast': 'CI',
+  'democratic republic of the congo': 'CD',
+  'democratic republic of congo': 'CD',
+  'congo-kinshasa': 'CD',
+  'congo kinshasa': 'CD',
+  drc: 'CD',
+  'republic of the congo': 'CG',
+  'republic of congo': 'CG',
+  'congo-brazzaville': 'CG',
+  'congo brazzaville': 'CG',
+  burma: 'MM',
+  macedonia: 'MK',
+  swaziland: 'SZ',
+  'east timor': 'TL',
+  'timor leste': 'TL',
+  'guinea bissau': 'GW',
+  vatican: 'VA',
+  'holy see': 'VA',
+  palestine: 'PS',
+  'state of palestine': 'PS',
+  'russian federation': 'RU',
+  'viet nam': 'VN',
+  'lao pdr': 'LA',
+  macau: 'MO',
+  'macao sar': 'MO',
+  'macau sar': 'MO',
+  'hong kong sar': 'HK',
+  'cabo verde': 'CV',
+  'the bahamas': 'BS',
+  'the gambia': 'GM',
+  'the netherlands': 'NL',
+  'the philippines': 'PH',
+  'brunei darussalam': 'BN',
+  'syrian arab republic': 'SY',
+  'kyrgyz republic': 'KG',
+  'republic of korea': 'KR',
+  'united states of america': 'US',
+  'great britain': 'GB',
+  'saint vincent and the grenadines': 'VC',
+  'st vincent and the grenadines': 'VC',
+  'cocos islands': 'CC',
+  bonaire: 'BQ',
+};
+
+/**
+ * Codes whose NAME never reads as a country: US territories stay US
+ * subdivisions ('San Juan, Puerto Rico'), and 'Georgia' is a US state far
+ * more often than the country (GEORGIA_COUNTRY_PLACES decides). Their codes
+ * still resolve ('Tbilisi, GE').
+ */
+const ISO_NAME_EXCLUDED = new Set(['AS', 'GE', 'GU', 'MP', 'PR', 'UM', 'VI']);
+
+/**
+ * Upper-case alpha-3 codes that are everyday words, abbreviations or airport
+ * codes before they are a country ('AND', 'MAC', 'VAT', 'IOT', 'ETH', 'NAM',
+ * 'MCO', 'ALA'), plus the US territories. Never read as a country outside the
+ * legacy configured list.
+ */
+const ALPHA3_AMBIGUOUS = new Set([
+  'ALA', 'AND', 'ARM', 'ASM', 'ATF', 'BEN', 'BLM', 'BTN', 'CAF', 'CIV', 'COD',
+  'COM', 'DJI', 'DMA', 'DOM', 'ETH', 'GEO', 'GIN', 'GTM', 'GUM', 'GUY', 'IOT',
+  'JAM', 'KEN', 'LCA', 'MAC', 'MCO', 'MNP', 'NAM', 'PNG', 'PRI', 'SDN', 'SEN',
+  'SSD', 'SUR', 'TLS', 'TON', 'TUV', 'UGA', 'UMI', 'VAT', 'VIR',
+]);
+
+/** The emitted display name of an ISO alpha-2 code (CLDR, bar the overrides). */
+function isoDisplay(alpha2: string): string | null {
+  return ISO_DISPLAY_OVERRIDES[alpha2] ?? regionNameCached(alpha2);
+}
+
+/**
+ * Every lookup key one CLDR name yields: '&' <-> 'and', 'St.' -> 'Saint',
+ * 'X (Y)' -> X, Y and 'X Y' (the parser keeps non-qualifier parenthesised
+ * text inline), 'X SAR China' -> X.
+ */
+function isoNameKeys(name: string): string[] {
+  const base = foldCountryKey(name.toLowerCase()).replace(/\./g, '').trim();
+  const keys = new Set<string>([base, base.replace(/ & /g, ' and ')]);
+  for (const key of [...keys]) {
+    if (key.startsWith('st ')) keys.add(`saint ${key.slice(3)}`);
+  }
+  for (const key of [...keys]) {
+    if (key.includes('(')) {
+      keys.add(key.replace(/[()]/g, ''));
+      const paren = /^([^()]+) \(([^()]+)\)$/.exec(key);
+      if (paren) {
+        keys.add(paren[1]);
+        keys.add(paren[2]);
+      }
+    }
+    if (key.endsWith(' sar china')) keys.add(key.slice(0, -' sar china'.length));
+  }
+  return [...keys];
+}
+
+/**
+ * Lower-case, dot-less, diacritic-folded country name -> display name for
+ * every ISO 3166-1 country the runtime's CLDR data knows (~250 countries,
+ * ~300 keys), built once at module load. Consulted AFTER
+ * COUNTRY_NAME_DISPLAY, so configured names keep their display.
+ */
+const ISO_COUNTRY_NAME_DISPLAY: ReadonlyMap<string, string> = (() => {
+  const map = new Map<string, string>();
+  const add = (key: string, display: string) => {
+    if (!map.has(key)) map.set(key, display);
+  };
+  for (const alpha2 of Object.keys(ISO_ALPHA2_TO_ALPHA3)) {
+    if (ISO_NAME_EXCLUDED.has(alpha2)) continue;
+    const cldr = regionNameCached(alpha2);
+    const display = isoDisplay(alpha2);
+    if (!cldr || !display) continue;
+    for (const key of [...isoNameKeys(cldr), ...isoNameKeys(display)]) {
+      add(key, display);
+    }
+  }
+  for (const [alias, alpha2] of Object.entries(ISO_NAME_ALIASES)) {
+    const display = isoDisplay(alpha2);
+    if (display) add(alias, display);
+  }
+  return map;
+})();
+
+/**
+ * Longest country-name lookup key, plus slack for the dots and combining
+ * marks a raw label may still carry — a longer text is never a country name.
+ */
+const MAX_COUNTRY_NAME_LENGTH =
+  Math.max(
+    ...[...ISO_COUNTRY_NAME_DISPLAY.keys(), ...COUNTRY_NAME_DISPLAY.keys()].map(
+      (key) => key.length,
+    ),
+  ) + 16;
+
+/** An ISO country by name ('sri lanka', 'côte d’ivoire'); `key` is lower-case, dot-less. */
+function isoCountryByName(key: string): string | null {
+  return (
+    ISO_COUNTRY_NAME_DISPLAY.get(key) ??
+    (NON_ASCII_RE.test(key)
+      ? ISO_COUNTRY_NAME_DISPLAY.get(foldCountryKey(key))
+      : undefined) ??
+    null
+  );
+}
+
+/**
+ * A country by NAME only — configured names and aliases, then (with `iso`)
+ * every ISO name. Never a code: 'GA - Remote' keeps 'GA' as the state.
+ */
+function countryByNameOnly(value: string, iso: boolean): string | null {
+  const key = value.trim().toLowerCase();
+  const configured = COUNTRY_NAME_DISPLAY.get(key);
+  if (configured !== undefined) return configured;
+  return iso ? isoCountryByName(key.replace(/\./g, '')) : null;
+}
+
+/**
+ * Recognize a country token in country-slot context. `iso` = the
+ * `isoCountryNames` option (Spec 1699); false is the pre-1699 lookup.
+ */
+function normalizeCountryWith(value: string, iso: boolean): string | null {
   const normalized = value.trim().toLowerCase().replace(/\./g, '');
   if (!normalized) return null;
   if (normalized === 'korea') return 'South Korea';
   const display = COUNTRY_NAME_DISPLAY.get(normalized);
   if (display) return display;
+  if (iso) {
+    const byName = isoCountryByName(normalized);
+    if (byName) return byName;
+  }
   if (/^[a-z]{2}$/.test(normalized)) {
-    const name = regionNameCached(normalized.toUpperCase());
+    const upper = normalized.toUpperCase();
+    // the overrides keep 'CD' / 'DR Congo' on one spelling
+    const name = iso ? isoDisplay(upper) : regionNameCached(upper);
     if (name) return name;
   }
   if (/^[a-z]{3}$/.test(normalized)) {
-    const name = COUNTRY_ALPHA3[normalized.toUpperCase()];
-    if (name) return name;
+    const upper = normalized.toUpperCase();
+    const legacy = COUNTRY_ALPHA3[upper];
+    if (!iso) return legacy ?? null;
+    if (legacy) {
+      // legacy codes stay case-insensitive; their NAME now comes from the
+      // same display path as every other form, so 'CZE' and 'Czechia' agree
+      const alpha2 = upper === 'UAE' ? 'AE' : ISO_ALPHA3_TO_ALPHA2[upper];
+      return (alpha2 && isoDisplay(alpha2)) || legacy;
+    }
+    // the rest of ISO alpha-3 only as an upper-case token ('Colombo, LKA'),
+    // never an everyday word ('AND', 'MAC') or a US territory
+    const raw = value.trim().replace(/\./g, '');
+    if (raw === upper && !ALPHA3_AMBIGUOUS.has(upper)) {
+      const alpha2 = ISO_ALPHA3_TO_ALPHA2[upper];
+      if (alpha2) return isoDisplay(alpha2);
+    }
   }
   return null;
+}
+
+/** 'Tbilisi' / 'Kvemo Kartli' — a part naming a Georgian city or region. */
+function isGeorgianPlace(part: string): boolean {
+  const key = part.trim().toLowerCase();
+  return GEORGIA_COUNTRY_PLACES.has(
+    NON_ASCII_RE.test(key) ? foldCountryKey(key) : key,
+  );
+}
+
+/** `normalizeCountryWith` under the resolved per-call options. */
+function countryIn(
+  value: string,
+  opts: ResolvedParseLocationOptions,
+): string | null {
+  return normalizeCountryWith(value, opts.isoCountryNames);
+}
+
+/**
+ * Recognize a country token in country-slot context: COUNTRY_CONFIG names and
+ * aliases, ISO alpha-2, alpha-3, and the pragmatic `'korea'` alias (job
+ * boards mean South Korea). With `isoCountryNames` (the default, see
+ * {@link ParseLocationOptions.isoCountryNames}) also every ISO 3166-1 country
+ * name and upper-case alpha-3 code.
+ */
+export function normalizeCountryOnly(
+  value: string,
+  options?: Pick<ParseLocationOptions, 'isoCountryNames'>,
+): string | null {
+  return normalizeCountryWith(
+    value,
+    options?.isoCountryNames ?? envDefaults().isoCountryNames,
+  );
 }
 
 /**
@@ -643,9 +925,10 @@ export function normalizeCountryOnly(value: string): string | null {
  */
 export function canonicalCountryName(
   value: string | null | undefined,
+  options?: Pick<ParseLocationOptions, 'isoCountryNames'>,
 ): string | null {
   if (!value) return null;
-  const byName = normalizeCountryOnly(value);
+  const byName = normalizeCountryOnly(value, options);
   if (byName) return byName;
   const key = value.trim().toUpperCase();
   if (Object.prototype.hasOwnProperty.call(COUNTRY_CONFIG, key)) {
@@ -676,11 +959,14 @@ const SHORT_REGION_CODE_RE = /^[A-Z]{2,3}$/;
  * since a US label names one state). Names for the US ('USA') and site
  * descriptors ('HQ') are not region codes.
  */
-function isMiddleRegionCode(part: string): boolean {
+function isMiddleRegionCode(
+  part: string,
+  opts: ResolvedParseLocationOptions,
+): boolean {
   const trimmed = part.trim();
   return (
     SHORT_REGION_CODE_RE.test(trimmed) &&
-    normalizeCountryOnly(trimmed) !== US_COUNTRY_DISPLAY &&
+    countryIn(trimmed, opts) !== US_COUNTRY_DISPLAY &&
     !SITE_DESCRIPTOR_RE.test(trimmed)
   );
 }
@@ -699,20 +985,24 @@ function isMiddleRegionCode(part: string): boolean {
  * another country, so it never vetoes on its own: 'Peru, Miami County, IN' and
  * 'Mexico, Audrain County, MO' stay Indiana / Missouri.
  */
-function usStateTailWins(tail: string, others: readonly string[]): boolean {
+function usStateTailWins(
+  tail: string,
+  others: readonly string[],
+  opts: ResolvedParseLocationOptions,
+): boolean {
   const code = tail.trim().toUpperCase();
   const pinned = NON_US_SUBDIVISIONS_BY_TAIL_CODE[code];
-  const tailCountry = normalizeCountryOnly(code);
+  const tailCountry = countryIn(code, opts);
   for (let i = 0; i < others.length; i++) {
     const part = others[i];
     if (pinned?.has(part.trim().toLowerCase())) return false;
-    const named = normalizeCountryOnly(part);
+    const named = countryIn(part, opts);
     if (i === 0) {
       if (named && named === tailCountry) return false;
       continue;
     }
     if (named && named !== US_COUNTRY_DISPLAY) return false;
-    if (isMiddleRegionCode(part)) return false;
+    if (isMiddleRegionCode(part, opts)) return false;
   }
   return true;
 }
@@ -935,7 +1225,7 @@ function remoteQualifiedGeo(
   if (opts.preferUsStateCode && isUsStateCodeToken(trimmed)) {
     return new LocationDto({ state: trimmed.toUpperCase() });
   }
-  const c = normalizeCountryOnly(trimmed);
+  const c = countryIn(trimmed, opts);
   if (c) return new LocationDto({ country: c });
   if (
     opts.preferUsStateCode &&
@@ -980,14 +1270,14 @@ function parseSingleLabel(
         firm: true,
       };
     }
-    const c = normalizeCountryOnly(geo);
+    const c = countryIn(geo, opts);
     if (c) return { location: new LocationDto({ country: c }), firm: true };
     const st = usSubdivision(geo);
     if (st) return { location: new LocationDto({ state: st }), firm: true };
   }
 
   // whole-label country (a bare 2-letter US-state code prefers the state read)
-  const wholeCountry = normalizeCountryOnly(cleaned);
+  const wholeCountry = countryIn(cleaned, opts);
   if (wholeCountry) {
     const bareState = /^[A-Za-z]{2}$/.test(cleaned.trim())
       ? normalizeUsState(cleaned)
@@ -1096,7 +1386,7 @@ function parseCommaParts(
     const qf = /^(?:remote|hybrid|onsite|on-site|offsite)\s+(.+)$/i.exec(
       parts[i],
     );
-    if (qf && (normalizeCountryOnly(qf[1]) || usSubdivision(qf[1]))) {
+    if (qf && (countryIn(qf[1], opts) || usSubdivision(qf[1]))) {
       parts[i] = qf[1].trim();
     }
 
@@ -1118,7 +1408,7 @@ function parseCommaParts(
       if (spaced || /^[A-Z][a-z]/.test(rest)) {
         dashConsumed.push(parts[i]);
         dashPrefixState = dashPrefixState ?? dashPre[1];
-        const restCountry = normalizeCountryOnly(rest);
+        const restCountry = countryIn(rest, opts);
         if (isWorkplaceQualifierOnly(rest, true)) {
           // 'GA - Remote' — qualifier only; flags are read from the label
         } else if (restCountry) {
@@ -1140,16 +1430,18 @@ function parseCommaParts(
     // (same matches; keeps a long run from being rescanned per position)
     const d = /^(.*?)(?<!\s)\s+-\s+(.+)$/.exec(parts[i]);
     if (!d) continue;
-    // config names/aliases only (as countryFromString), never bare codes
-    const prefixCountry =
-      COUNTRY_NAME_DISPLAY.get(d[1].trim().toLowerCase()) ?? null;
+    // CLDR's own 'Congo - Kinshasa' is one country name, not 'X - site'
+    if (opts.isoCountryNames && countryByNameOnly(parts[i], true)) continue;
+    // country NAMES only (config names/aliases as countryFromString, plus
+    // every ISO name with isoCountryNames), never bare codes
+    const prefixCountry = countryByNameOnly(d[1], opts.isoCountryNames);
     if (prefixCountry) {
       country = country ?? prefixCountry;
       parts[i] = d[2].trim();
       i--; // reprocess the rewritten part ('US - GA - Remote' -> 'GA')
       continue;
     }
-    const suffixCountry = normalizeCountryOnly(d[2]);
+    const suffixCountry = countryIn(d[2], opts);
     if (suffixCountry) {
       country = country ?? suffixCountry;
       parts[i] = d[1].trim();
@@ -1187,14 +1479,15 @@ function parseCommaParts(
   // reaches this block instead of the 'City, Country' branch below)
   if (parts.length >= 3 || (parts.length === 2 && dashPrefixState)) {
     const tail = parts[parts.length - 1];
-    let c = country ?? normalizeCountryOnly(tail);
+    let c = country ?? countryIn(tail, opts);
     // a 2-letter tail that is BOTH a US state and an ISO country ('CA','GA','IL')
     if (c && isUsStateCodeToken(tail)) {
       const others = parts.slice(0, -1);
       // US-state-first: a BARE code in a middle part ('Chennai, TN, IN') is a
       // region before a country, not the 'Pueblo, CO Penrose, CO' shape below
       const bareMiddleCode =
-        opts.preferUsStateCode && others.slice(1).some(isMiddleRegionCode);
+        opts.preferUsStateCode &&
+        others.slice(1).some((p) => isMiddleRegionCode(p, opts));
       if (
         !bareMiddleCode &&
         others.some(
@@ -1209,14 +1502,14 @@ function parseCommaParts(
       } else if (
         !country &&
         opts.preferUsStateCode &&
-        usStateTailWins(tail, others)
+        usStateTailWins(tail, others, opts)
       ) {
         // 'Downtown, Los Angeles, CA' / 'Springfield, Sangamon County, IL'
         // -> the US state, not Canada / Israel. A literal US part
         // ('United States, San Diego, CA') is the country, not the city.
         c = null;
         const usIdx = others.findIndex(
-          (p) => normalizeCountryOnly(p) === US_COUNTRY_DISPLAY,
+          (p) => countryIn(p, opts) === US_COUNTRY_DISPLAY,
         );
         if (usIdx >= 0) {
           country = US_COUNTRY_DISPLAY;
@@ -1232,6 +1525,21 @@ function parseCommaParts(
     }
   }
 
+  // 'Tbilisi, Georgia' / 'Batumi, Adjara, Georgia' — a trailing 'Georgia'
+  // next to a Georgian place is the country; everywhere else it stays the
+  // US state ('Atlanta, Georgia') (Spec 1699)
+  if (
+    opts.isoCountryNames &&
+    !country &&
+    !dashPrefixState &&
+    parts.length >= 2 &&
+    parts[parts.length - 1].toLowerCase() === 'georgia' &&
+    parts.slice(0, -1).some(isGeorgianPlace)
+  ) {
+    country = isoDisplay('GE');
+    parts.pop();
+  }
+
   // merged-blob label: consumed 'ST - X' parts lead, then the remaining
   // parts minus the country segment ('Clarksburg, MD, United States' ->
   // 'Clarksburg, MD')
@@ -1239,11 +1547,14 @@ function parseCommaParts(
 
   // trailing US subdivision (state code/name or territory name)
   let state: string | null = dashPrefixState;
+  /** `state` came from the trailing part ('Lebanon, PA'), not a 'ST - X' prefix */
+  let stateFromTail = false;
   {
     const tail = parts[parts.length - 1];
     const st = tail ? usSubdivision(tail) : null;
     if (st && parts.length >= 2) {
       state = st;
+      stateFromTail = true;
       parts.pop();
     }
   }
@@ -1251,7 +1562,7 @@ function parseCommaParts(
   // 'City, Subdivision' — verbatim subdivision when not US/country
   if (parts.length === 2 && !state) {
     const [city, sub] = parts;
-    const subCountry = normalizeCountryOnly(sub);
+    const subCountry = countryIn(sub, opts);
     // once a tail country is read, a short code before it is that country's
     // region, not a second country: 'Munich, BY, DE' is Bavaria (not
     // Belarus), 'Chennai, TN, IN' Tamil Nadu (not Tunisia)
@@ -1386,8 +1697,19 @@ function parseCommaParts(
         blob,
       };
     }
-    const c = normalizeCountryOnly(only);
-    if (c) {
+    const c = countryIn(only, opts);
+    // 'Lebanon, PA' / 'Jamaica, NY' / 'Peru, IN': after a US-state tail the
+    // leftover part is a US town named after a country, not the country —
+    // unless the tail code IS that country's code ('India, IN') (Spec 1699)
+    const usTownNamedLikeCountry =
+      opts.isoCountryNames &&
+      c !== null &&
+      c !== US_COUNTRY_DISPLAY &&
+      stateFromTail &&
+      !country &&
+      state !== null &&
+      countryIn(state, opts) !== c;
+    if (c && !usTownNamedLikeCountry) {
       return {
         location: new LocationDto({
           country: country ?? c,
@@ -1536,6 +1858,7 @@ type LabelParser = (label: string) => SingleParse | null;
 function tryWordSplit(
   cleaned: string,
   parse: LabelParser,
+  opts: ResolvedParseLocationOptions,
 ): string[] | null {
   // 'or'/'and' never split on an ALL-CAPS 2-letter token — 'Portland, OR / X'
   // must keep Oregon, not treat 'OR' as a connector
@@ -1543,10 +1866,17 @@ function tryWordSplit(
   const conns: string[] = [];
   // `(?<!\s)`: a connector match starts at the head of its whitespace run
   const connRe = /(?<!\s)\s+(&|\/|and|or)\s+/gi;
+  let insideCountryName: ((index: number) => boolean) | null = null;
   let m: RegExpExecArray | null;
   let last = 0;
   while ((m = connRe.exec(cleaned))) {
     if (/^[A-Z]{2}$/.test(m[1])) continue; // 'OR' = Oregon, not a connector
+    // 'Sarajevo, Bosnia & Herzegovina' — the connector belongs to a country
+    // name that fills its comma part (Spec 1699)
+    if (opts.isoCountryNames) {
+      insideCountryName ??= countryNamePartChecker(cleaned);
+      if (insideCountryName(m.index)) continue;
+    }
     parts.push(cleaned.slice(last, m.index).trim());
     conns.push(m[1].toLowerCase());
     last = m.index + m[0].length;
@@ -1579,6 +1909,34 @@ function tryWordSplit(
     }
   }
   return !failed && firm ? parts : null;
+}
+
+/**
+ * For `tryWordSplit`: does the comma part of `text` holding `index` name a
+ * country as a whole ('Bosnia & Herzegovina', 'Trinidad and Tobago')? Queries
+ * must come in ascending `index` order. Linear overall: the comma scan only
+ * moves forward, each part is looked up once, and a part too long to be a
+ * country name is never sliced.
+ */
+function countryNamePartChecker(text: string): (index: number) => boolean {
+  let partStart = 0;
+  let partEnd = text.indexOf(',');
+  if (partEnd < 0) partEnd = text.length;
+  let known: boolean | null = null;
+  return (index) => {
+    while (index > partEnd) {
+      partStart = partEnd + 1;
+      const next = text.indexOf(',', partStart);
+      partEnd = next < 0 ? text.length : next;
+      known = null;
+    }
+    if (known === null) {
+      known =
+        partEnd - partStart <= MAX_COUNTRY_NAME_LENGTH &&
+        countryByNameOnly(text.slice(partStart, partEnd), true) !== null;
+    }
+    return known;
+  };
 }
 
 /**
@@ -1715,7 +2073,7 @@ export function parseLocationList(
   const emit = (segment: string) => {
     if (isWorkplaceQualifierOnly(segment, true)) return;
     // word separators first ('Denver, CO & San Francisco, CA' etc.)
-    const wordParts = tryWordSplit(segment, parse) ?? [segment];
+    const wordParts = tryWordSplit(segment, parse, opts) ?? [segment];
     for (const wp of wordParts) {
       if (isWorkplaceQualifierOnly(wp, true)) continue;
       // then comma-packed groups

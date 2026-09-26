@@ -31,7 +31,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { searchJobs, getJobDetails, listSources, searchRemoteJobs, getSalaryInsights, compareSources, JobSearchParams } from './tools';
+import { searchJobs, getJobDetails, listSources, searchRemoteJobs, getSalaryInsights, compareSources, JobSearchParams, CRAWL_POLICY_INPUT_SCHEMA, normalizeMcpCrawl } from './tools';
 
 const SERVER_NAME = 'ever-jobs';
 const SERVER_VERSION = '0.1.0';
@@ -69,6 +69,15 @@ function createServer(): Server {
               type: 'string',
               description: 'Location filter (e.g. "San Francisco", "Remote", "London")',
             },
+            locations: {
+              type: 'array',
+              items: { type: 'string' },
+              maxItems: 10,
+              description:
+                'Several locations searched in one call (e.g. ["New York, NY", "Chicago, IL"]). Each source is ' +
+                'searched once per location and same-source duplicates are removed. Use instead of repeated ' +
+                'search_jobs calls; `location`, when also set, is searched first.',
+            },
             source: {
               type: 'string',
               description:
@@ -89,6 +98,32 @@ function createServer(): Server {
               type: 'boolean',
               description: 'If true, filter to remote-friendly positions only',
             },
+            exclude_title_terms: {
+              type: 'array',
+              items: { type: 'string' },
+              maxItems: 50,
+              description:
+                'Drop jobs whose TITLE contains any of these words or phrases (e.g. ["senior", "lead*", "principal"]). ' +
+                'Literal words, NOT regex: whole-word, case- and accent-insensitive, a trailing * matches a prefix, ' +
+                'and negated mentions ("no clearance required") are ignored.',
+            },
+            exclude_keywords: {
+              type: 'array',
+              items: { type: 'string' },
+              maxItems: 50,
+              description:
+                'Drop jobs whose TITLE or DESCRIPTION contains any of these words or phrases ' +
+                '(e.g. ["security clearance", "ts/sci", "polygraph"]). Literal words, NOT regex; same rules as ' +
+                'exclude_title_terms.',
+            },
+            exclude_presets: {
+              type: 'array',
+              items: { type: 'string', enum: ['security_clearance'] },
+              description:
+                'Curated exclusion lists matched against title + description. security_clearance drops roles ' +
+                'that require (or ask the candidate to obtain) a security clearance or vetting.',
+            },
+            crawl: CRAWL_POLICY_INPUT_SCHEMA,
           },
           required: ['query'],
         },
@@ -202,10 +237,15 @@ function createServer(): Server {
           const params: JobSearchParams = {
             query: (args as any)?.query ?? '',
             location: (args as any)?.location,
+            locations: (args as any)?.locations,
             source: (args as any)?.source,
             company: (args as any)?.company,
             limit: (args as any)?.limit ?? 20,
             remoteOnly: (args as any)?.remote_only ?? false,
+            excludeTitleTerms: (args as any)?.exclude_title_terms,
+            excludeKeywords: (args as any)?.exclude_keywords,
+            excludePresets: (args as any)?.exclude_presets,
+            crawl: normalizeMcpCrawl((args as any)?.crawl),
           };
           const result = await searchJobs(params);
           return {
@@ -335,6 +375,17 @@ Use the search_jobs tool with a query:
 Add a location to narrow results:
   search_jobs(query: "data scientist", location: "San Francisco")
   search_jobs(query: "product manager", location: "Remote")
+
+Search several places in one call (each source runs once per location):
+  search_jobs(query: "backend engineer", locations: ["New York, NY", "Chicago, IL", "Austin, TX"])
+
+## Excluding Jobs
+Drop jobs by title words (literal words, not regex; "lead*" matches a prefix):
+  search_jobs(query: "software engineer", exclude_title_terms: ["senior", "lead*", "principal"])
+Drop jobs that mention something anywhere in the posting:
+  search_jobs(query: "engineer", exclude_keywords: ["polygraph", "ts/sci"])
+Drop roles that require a security clearance:
+  search_jobs(query: "engineer", exclude_presets: ["security_clearance"])
 
 ## Specific Sources
 Search a specific job board:

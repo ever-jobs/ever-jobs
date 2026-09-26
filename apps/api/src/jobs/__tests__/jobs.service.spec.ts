@@ -248,6 +248,7 @@ function makeScraper(jobs: Partial<JobPostDto>[] = []): IScraper {
               description: j.description,
               compensation: j.compensation,
               datePosted: j.datePosted,
+              ...(j.datePostedAt !== undefined ? { datePostedAt: j.datePostedAt } : {}),
               isRemote: j.isRemote ?? false,
             }),
         ),
@@ -1001,6 +1002,22 @@ describe('JobsService', () => {
       expect(result[0].title).toBe('New');
       expect(result[1].title).toBe('Old');
     });
+
+    it('orders same-day jobs by datePostedAt and sorts an unparseable date last (Spec 1696)', async () => {
+      const scraper = makeScraper([
+        { title: 'Junk', datePosted: 'not a date' },
+        { title: 'Morning', datePosted: '2024-06-01', datePostedAt: '2024-06-01T08:00:00Z' },
+        { title: 'DayOnly', datePosted: '2024-06-01' },
+        { title: 'Evening', datePosted: '2024-06-01', datePostedAt: '2024-06-01T20:30:00Z' },
+        { title: 'Older', datePosted: '2024-05-31', datePostedAt: '2024-05-31T23:59:00Z' },
+      ]);
+      const service = createService([[Site.LINKEDIN, scraper]]);
+
+      const input = new ScraperInputDto({ searchTerm: 'node', siteType: [Site.LINKEDIN] });
+      const result = await service.searchJobs(input);
+
+      expect(result.map((j) => j.title)).toEqual(['Evening', 'Morning', 'DayOnly', 'Older', 'Junk']);
+    });
   });
 
   describe('postProcessSalary', () => {
@@ -1078,6 +1095,90 @@ describe('JobsService', () => {
       );
 
       expect(job.salarySource).toBeUndefined();
+    });
+
+    describe('Spec 1695 — postProcessCompensation wiring', () => {
+      const GRAMMAR_ENV = 'EVER_JOBS_SALARY_GRAMMAR';
+      const original = process.env[GRAMMAR_ENV];
+      afterEach(() => {
+        if (original === undefined) delete process.env[GRAMMAR_ENV];
+        else process.env[GRAMMAR_ENV] = original;
+      });
+
+      function jobWith(fields: Partial<JobPostDto>): JobPostDto {
+        return new JobPostDto({
+          id: '1', title: 'SWE', companyName: 'Co', jobUrl: 'https://example.com', ...fields,
+        });
+      }
+
+      it('keeps a max-only direct salary as direct data', () => {
+        const job = jobWith({
+          compensation: new CompensationDto({
+            interval: CompensationInterval.YEARLY, maxAmount: 90000, currency: 'USD',
+          }),
+        });
+        (service as any).postProcessSalary(job, new ScraperInputDto({ searchTerm: 'node' }));
+        expect(job.salarySource).toBe(SalarySource.DIRECT_DATA);
+        expect(job.compensation!.maxAmount).toBe(90000);
+      });
+
+      it('annualises a min-only hourly direct salary without mutating the scraper object', () => {
+        const direct = new CompensationDto({
+          interval: CompensationInterval.HOURLY, minAmount: 25, currency: 'USD',
+        });
+        const job = jobWith({ compensation: direct });
+        (service as any).postProcessSalary(
+          job, new ScraperInputDto({ searchTerm: 'node', enforceAnnualSalary: true }),
+        );
+        expect(job.compensation).toMatchObject({ interval: 'yearly', minAmount: 52000 });
+        expect(direct).toMatchObject({ interval: 'hourly', minAmount: 25 });
+        expect(job.salarySource).toBe(SalarySource.DIRECT_DATA);
+      });
+
+      it('lets the description replace a compensation that carries no amount', () => {
+        const job = jobWith({
+          compensation: new CompensationDto({ currency: 'USD' }),
+          description: 'Base: $53,000.00/yr - $65,000.00/yr',
+        });
+        (service as any).postProcessSalary(
+          job, new ScraperInputDto({ searchTerm: 'node', country: Country.USA }),
+        );
+        expect(job.salarySource).toBe(SalarySource.DESCRIPTION);
+        expect(job.compensation).toMatchObject({ interval: 'yearly', minAmount: 53000, maxAmount: 65000 });
+      });
+
+      it('reads an upper-only description figure', () => {
+        const job = jobWith({ description: 'Compensation: up to $90,000 annually' });
+        (service as any).postProcessSalary(job, new ScraperInputDto({ searchTerm: 'node' }));
+        expect(job.salarySource).toBe(SalarySource.DESCRIPTION);
+        expect(job.compensation).toMatchObject({ interval: 'yearly', maxAmount: 90000 });
+      });
+
+      it('EVER_JOBS_SALARY_GRAMMAR=legacy restores the earlier rules', () => {
+        process.env[GRAMMAR_ENV] = 'legacy';
+        const monthly = jobWith({
+          compensation: new CompensationDto({
+            interval: CompensationInterval.MONTHLY, maxAmount: 4000, currency: 'USD',
+          }),
+        });
+        (service as any).postProcessSalary(
+          monthly, new ScraperInputDto({ searchTerm: 'node', enforceAnnualSalary: true }),
+        );
+        // Legacy: a single bound is not annualised and a max-only source is cleared.
+        expect(monthly.compensation).toMatchObject({ interval: 'monthly', maxAmount: 4000 });
+        expect(monthly.salarySource).toBeUndefined();
+
+        const currencyOnly = jobWith({
+          compensation: new CompensationDto({ currency: 'USD' }),
+          description: 'Salary range: $120,000 - $180,000 per year',
+        });
+        (service as any).postProcessSalary(
+          currencyOnly, new ScraperInputDto({ searchTerm: 'node', country: Country.USA }),
+        );
+        // Legacy: any compensation object blocks the description fallback.
+        expect(currencyOnly.compensation!.minAmount).toBeUndefined();
+        expect(currencyOnly.salarySource).toBeUndefined();
+      });
     });
   });
 

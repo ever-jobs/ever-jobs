@@ -172,6 +172,23 @@ describe('buildSearchRequestBody', () => {
     expect(body).toMatchObject({ searchTerm: 'rust engineer', search_term: 'rust engineer' });
     expect(body).toMatchObject({ resultsWanted: 100, results_wanted: 100 });
   });
+
+  it('adds the Spec 1690 crawl object under the same key in every style', () => {
+    const crawl = { maxConcurrentPerHost: 1, discovery: 'sitemap' };
+    for (const style of ['camel', 'snake', 'both'] as const) {
+      expect(buildSearchRequestBody({ ...params, crawl }, style).crawl).toEqual(crawl);
+      expect(buildSearchRequestBody(params, style)).not.toHaveProperty('crawl');
+    }
+  });
+
+  it('omits an absent source and company in every style instead of sending undefined keys', () => {
+    expect(Object.keys(buildSearchRequestBody({ query: 'x' }, 'camel')).sort()).toEqual(
+      ['location', 'resultsWanted', 'searchTerm'],
+    );
+    expect(Object.keys(buildSearchRequestBody({ query: 'x' }, 'snake')).sort()).toEqual(
+      ['location', 'results_wanted', 'search_term'],
+    );
+  });
 });
 
 describe('searchJobs — wire contract', () => {

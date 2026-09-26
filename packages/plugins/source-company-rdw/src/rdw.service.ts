@@ -238,7 +238,7 @@ export class RdwService implements IScraper, OnModuleDestroy {
     const timeout = timeoutMs ?? RDW_DEFAULT_TIMEOUT_SECONDS * 1000;
 
     if (page) {
-      await page.goto(url, {
+      await BrowserPool.navigate(page, url, {
         waitUntil: 'domcontentloaded',
         timeout,
       });
@@ -247,7 +247,7 @@ export class RdwService implements IScraper, OnModuleDestroy {
 
     const p = await BrowserPool.getPage({ stealth: true, headful: true });
     try {
-      await p.goto(url, {
+      await BrowserPool.navigate(p, url, {
         waitUntil: 'domcontentloaded',
         timeout,
       });

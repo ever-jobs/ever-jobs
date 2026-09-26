@@ -1,0 +1,17 @@
+{
+  "_note": "SYNTHETIC fixture (last page: no continue token).",
+  "jobs": [
+    {
+      "listing_key": "Qwerty5555555555aaa",
+      "name": "Contract QA Analyst",
+      "job_description": "Remote-friendly contract.",
+      "buyer_type": "organic",
+      "hiring_company": { "name": "Beta Example LLC" },
+      "job_city": "Remote",
+      "job_state": null,
+      "job_country": "US",
+      "employment_type": "contractor",
+      "posted_time": "2026-09-24T10:00:00Z"
+    }
+  ]
+}

@@ -179,6 +179,10 @@ export class HlaboratoriesService implements IScraper {
         return 'Summer';
       case JobType.VOLUNTEER:
         return 'Volunteer';
+      case JobType.PERMANENT:
+        return 'Permanent';
+      case JobType.APPRENTICESHIP:
+        return 'Apprenticeship';
       default:
         return 'Full time';
     }

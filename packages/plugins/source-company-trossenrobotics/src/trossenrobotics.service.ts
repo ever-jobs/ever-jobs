@@ -203,7 +203,7 @@ export class TrossenroboticsService
     const timeout = timeoutMs ?? TROSSENROBOTICS_DEFAULT_TIMEOUT_SECONDS * 1000;
 
     if (page) {
-      await page.goto(url, {
+      await BrowserPool.navigate(page, url, {
         waitUntil: 'domcontentloaded',
         timeout,
       });
@@ -218,7 +218,7 @@ export class TrossenroboticsService
 
     const p = await BrowserPool.getPage({ stealth: true, headful: true });
     try {
-      await p.goto(url, {
+      await BrowserPool.navigate(p, url, {
         waitUntil: 'domcontentloaded',
         timeout,
       });

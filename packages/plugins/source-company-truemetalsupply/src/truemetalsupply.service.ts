@@ -91,7 +91,7 @@ export class TrueMetalSupplyService implements IScraper, OnModuleDestroy {
 
     const page = await BrowserPool.getPage({ proxy, stealth: true, headful: true });
     try {
-      await page.goto(TRUEMETALSUPPLY_CAREERS_URL, {
+      await BrowserPool.navigate(page, TRUEMETALSUPPLY_CAREERS_URL, {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });

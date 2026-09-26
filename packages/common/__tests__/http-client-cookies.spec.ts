@@ -57,6 +57,10 @@ jest.mock('axios', () => ({
 }));
 
 import { HttpClient, createHttpClient } from '../src/http/http-client';
+import { EVER_JOBS_DEFAULT_USER_AGENT } from '../src/http/crawl/defaults';
+import { resetCrawlPolicyEnvCache } from '../src/http/crawl/env';
+import { resetHostLimiter } from '../src/http/crawl/host-limiter';
+import { resetEffectiveCrawlPolicyCache } from '../src/http/crawl/scrape-context';
 
 function getCookieHeader(headers: any): string | undefined {
   if (headers && typeof headers.get === 'function') {
@@ -68,6 +72,10 @@ function getCookieHeader(headers: any): string | undefined {
 describe('HttpClient cookie jar', () => {
   beforeEach(() => {
     mockAxiosRequest.mockReset();
+    // Spec 1690: fresh crawl-policy state, so pacing from one test never delays the next.
+    resetCrawlPolicyEnvCache();
+    resetEffectiveCrawlPolicyCache();
+    resetHostLimiter();
   });
 
   it('stores Set-Cookie from a response and replays it on the next request', async () => {
@@ -169,6 +177,33 @@ describe('HttpClient cookie jar', () => {
 
     await expect(client.get('https://example.com/api')).rejects.toThrow('Forbidden');
     expect(jar.getCookieStringSync('https://example.com/api')).toBe('csrf=token');
+  });
+
+  it('coexists with the crawl-policy identity interceptor (Spec 1690)', async () => {
+    const client = new HttpClient({ cookies: true });
+    client.setHeaders({ 'User-Agent': 'Declared/1.0' });
+    mockAxiosRequest
+      .mockResolvedValueOnce({ data: 'first', headers: { 'set-cookie': ['session=abc; Path=/'] } })
+      .mockResolvedValueOnce({ data: 'second' });
+
+    await client.get('https://example.com/api');
+    await client.get('https://example.com/api');
+
+    const sent = mockAxiosRequest.mock.calls[1][0].headers;
+    expect(getCookieHeader(sent)).toBe('session=abc');
+    expect(sent['User-Agent']).toBe(EVER_JOBS_DEFAULT_USER_AGENT);
+  });
+
+  it('forwards the cookies option through createHttpClient even when proxies are set', async () => {
+    const client = createHttpClient({ proxies: ['localhost'], timeout: 5, cookies: true });
+    mockAxiosRequest
+      .mockResolvedValueOnce({ data: 'first', headers: { 'set-cookie': ['session=p; Path=/'] } })
+      .mockResolvedValueOnce({ data: 'second' });
+
+    await client.get('https://example.com/api');
+    await client.get('https://example.com/api');
+
+    expect(getCookieHeader(mockAxiosRequest.mock.calls[1][0].headers)).toBe('session=p');
   });
 
   it('forwards the cookies option through createHttpClient', async () => {

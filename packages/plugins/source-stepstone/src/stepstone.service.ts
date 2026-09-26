@@ -50,7 +50,7 @@ export class StepStoneService implements IScraper, OnModuleDestroy {
       const searchUrl = `https://${domain}/jobs/${encodeURIComponent(searchTerm)}`;
 
       this.logger.log(`StepStone: navigating to ${searchUrl}`);
-      await page.goto(searchUrl, {
+      await BrowserPool.navigate(page, searchUrl, {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs,
       });

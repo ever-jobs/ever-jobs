@@ -1,3 +1,6 @@
+import { readCrawlPolicyEnv, resolveCrawlPolicy } from '@ever-jobs/common';
+import { CircuitBreakerService } from '@ever-jobs/plugin';
+
 /**
  * Central configuration factory.
  * Maps every environment variable to a typed config object.
@@ -107,6 +110,35 @@ export default () => {
           return {};
         }
       })(),
+    },
+
+    // Crawl policy (Spec 1690) — a READ-ONLY mirror, snapshotted at boot, so the
+    // effective settings are visible next to the rest of the config. The
+    // authority is `readCrawlPolicyEnv()` in @ever-jobs/common, which
+    // HttpClient / BrowserPool / JobsService read directly (plugins build their
+    // HTTP clients without DI, so they cannot use ConfigService). Changing a
+    // value here changes nothing; set the EVER_JOBS_CRAWL_* variables.
+    crawl: (() => {
+      const env = readCrawlPolicyEnv();
+      return {
+        preset: env.preset,
+        callerOverrides: env.callerOverrides,
+        abortOnDeadline: env.abortOnDeadline,
+        /** EVER_JOBS_CRAWL_* (and explicitly set RETRY_DEFAULT_*) overrides. */
+        global: env.global,
+        /** Operator per-site / per-host policies (EVER_JOBS_CRAWL_POLICIES / _POLICY_FILE / RETRY_PER_SOURCE). */
+        policies: env.policies,
+        /** Count only — proxy URLs may carry credentials. */
+        proxyCount: env.proxies.length,
+        warnings: env.warnings,
+        /** The policy a request gets before plugin, host and caller layers apply. */
+        effective: resolveCrawlPolicy({}, env),
+      };
+    })(),
+
+    // Circuit breaker (Spec 005; cap configurable since Spec 1690) — mirror.
+    circuit: {
+      maxSites: CircuitBreakerService.readMaxSites(process.env),
     },
 
     // GraphQL

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Header,
@@ -15,6 +16,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiResponse,
   ApiSecurity,
@@ -27,14 +29,69 @@ import {
   Site,
   SourceHealth,
 } from '@ever-jobs/models';
+import {
+  CrawlPolicyOverride,
+  PluginCrawlPolicy,
+  ResolvedCrawlPolicy,
+  explainCrawlPolicy,
+  normalizeCrawlHostName,
+  readCrawlPolicyEnv,
+} from '@ever-jobs/common';
 import { PluginRegistry } from '@ever-jobs/plugin';
 import { AdminAuth } from '../auth/admin-auth.decorator';
+import { CRAWL_PSEUDO_SITES } from './crawl-policy.mapping';
+
+/**
+ * Response of `GET /api/sources/:site/crawl-policy` (Spec 1690 §5.4): the
+ * resolved `CrawlPolicy` for that site (and host, when given) at the top level,
+ * its `provenance` (which layer set each field), and how it came about.
+ */
+export type SourceCrawlPolicyResponse = ResolvedCrawlPolicy & {
+  site: string;
+  /** The normalised host the policy was resolved for, or `null` (site level). */
+  host: string | null;
+  /** The plugin's `userAgentReason`, when its `userAgentMode: 'plugin'` opt-in is in effect. */
+  userAgentReason?: string;
+  meta: {
+    preset: string;
+    callerOverrides: string;
+    abortOnDeadline: boolean;
+    /** How many proxies the env supplies (the list itself may carry credentials). */
+    envProxyCount: number;
+    /** The plugin's raw `@SourcePlugin({ crawl })` declaration, or `null`. */
+    plugin: PluginCrawlPolicy | null;
+    builtinHost?: string;
+    operatorSite?: string;
+    operatorHostPatterns: string[];
+    /** Present when `?crawl=` previewed a caller override. */
+    caller?: { rejected: string[] };
+  };
+  /** Env parse warnings and resolution notes (credentials redacted). */
+  warnings: string[];
+};
+
+/**
+ * Hide `user:password@` in anything echoed back (e.g. proxy URLs in warnings).
+ * Text without an `@` cannot carry credentials and is returned untouched. The
+ * user and password runs are bounded (256 / 512 characters — far beyond any real
+ * proxy credential): unbounded, the second pattern rescans the rest of a long
+ * `=x:=x:…` run from every `=` (quadratic; ~1.8 s for 60 KB), bounded it costs at
+ * most a constant per character. Caller-controlled keys in notes are also cut to
+ * 80 characters by `normalizeCrawlOverride`.
+ */
+export function redactCredentials(text: string): string {
+  if (text.indexOf('@') === -1) return text;
+  return text
+    .replace(/(\/\/)[^/@\s]{1,512}@/g, '$1***@')
+    .replace(/(^|[\s"'(,=])[^\s"'(,=/@:]{1,256}:[^\s"'@/]{1,512}@/g, '$1***@');
+}
 
 /**
  * Source-health controller — Spec 005 / FR-5 / FR-7 / T05 + T07.
  *
  * Exposes:
  *   - `GET  /api/sources/health`               — per-`Site` snapshots (T05)
+ *   - `GET  /api/sources/:site/crawl-policy`   — resolved crawl policy (Spec 1690)
  *   - `POST /api/sources/:site/circuit/open`   — force-open a breaker (T07)
  *   - `POST /api/sources/:site/circuit/reset`  — force-reset a breaker (T07)
  *
@@ -234,6 +291,129 @@ export class SourcesHealthController {
     breaker.forceReset(site);
     this.logger.log(`Admin force-reset: ${site}`);
     return { ok: true, site, health: breaker.health(site) };
+  }
+
+  /**
+   * `GET /api/sources/:site/crawl-policy?host=<host>` — the crawl policy this
+   * source runs under (Spec 1690 §5.4), resolved exactly as a request would be:
+   * preset → env → builtin host → plugin manifest → operator site/host →
+   * (optional preview) caller. Read-only; same auth as the other
+   * `/api/sources` reads (the global `ApiKeyGuard`).
+   *
+   * - `host` (optional): a hostname or URL; selects the builtin-host and
+   *   operator-host layers. Without it the site-level policy is returned.
+   * - `crawl` (optional): a JSON caller override to preview, e.g.
+   *   `{"maxConcurrentPerHost":1}`; fields refused by
+   *   `EVER_JOBS_CRAWL_CALLER_OVERRIDES` are listed in `meta.caller.rejected`.
+   *
+   * 404 for a site that is neither a known `Site`, a registered plugin, nor a
+   * crawl pseudo-site (`liveness-http`, or a `sites` key of the operator policy);
+   * 400 for an unparseable `host` or `crawl`.
+   */
+  @Get(':site/crawl-policy')
+  @ApiOperation({
+    summary: 'Show the resolved crawl policy of a source',
+    description:
+      'Returns the effective crawl policy (identity, pacing, proxy rotation, retries, robots.txt, ' +
+      'egress guard, discovery) for the source, and optionally one host, with the layer that set ' +
+      "each field (`provenance`), the plugin's UA reason, and configuration warnings (Spec 1690).",
+  })
+  @ApiParam({ name: 'site', description: 'Source key, e.g. "softy"' })
+  @ApiQuery({
+    name: 'host',
+    required: false,
+    description: 'Target hostname or URL (selects host-specific layers), e.g. "acme.softy.pro".',
+  })
+  @ApiQuery({
+    name: 'crawl',
+    required: false,
+    description: 'JSON caller override to preview, e.g. {"maxConcurrentPerHost":1}.',
+  })
+  @ApiResponse({ status: 200, description: 'Resolved policy with provenance.' })
+  @ApiResponse({ status: 400, description: 'Unparseable host or crawl parameter.' })
+  @ApiResponse({ status: 404, description: 'Unknown :site path parameter.' })
+  crawlPolicy(
+    @Param('site') siteParam: string,
+    @Query('host') hostRaw?: string,
+    @Query('crawl') crawlRaw?: string,
+  ): SourceCrawlPolicyResponse {
+    const meta = this.registry?.getMetadata(siteParam as Site);
+    if (
+      !meta &&
+      !this.validSites.has(siteParam) &&
+      !this.registry?.has(siteParam as Site) &&
+      !this.isCrawlPseudoSite(siteParam)
+    ) {
+      throw new NotFoundException(`Unknown source: ${siteParam}`);
+    }
+
+    let host: string | undefined;
+    if (hostRaw !== undefined && hostRaw.trim() !== '') {
+      // Accept a bare host, host/path or a full URL; judge only the hostname.
+      const trimmed = hostRaw.trim();
+      host = normalizeCrawlHostName(trimmed.includes('://') ? trimmed : `http://${trimmed}`);
+      if (!host || /[\s/?#@\\]/.test(host)) {
+        throw new BadRequestException(`Invalid host: ${hostRaw}`);
+      }
+    }
+
+    let caller: Record<string, unknown> | undefined;
+    if (crawlRaw !== undefined && crawlRaw.trim() !== '') {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(crawlRaw);
+      } catch {
+        throw new BadRequestException('crawl must be a JSON object');
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new BadRequestException('crawl must be a JSON object');
+      }
+      caller = parsed as Record<string, unknown>;
+    }
+
+    const env = readCrawlPolicyEnv();
+    const plugin = meta?.crawl;
+    // The caller preview is untrusted: explainCrawlPolicy validates it like any
+    // request body (normalizeCrawlOverride) before filtering it.
+    const explanation = explainCrawlPolicy(
+      { site: siteParam, host, plugin, caller: caller as CrawlPolicyOverride | undefined },
+      env,
+    );
+
+    const response: SourceCrawlPolicyResponse = {
+      site: siteParam,
+      host: host ?? null,
+      ...explanation.policy,
+      meta: {
+        preset: explanation.preset,
+        callerOverrides: explanation.callerOverrides,
+        abortOnDeadline: env.abortOnDeadline,
+        envProxyCount: env.proxies.length,
+        plugin: plugin ?? null,
+        operatorHostPatterns: explanation.operatorHostPatterns,
+        ...(explanation.builtinHost !== undefined ? { builtinHost: explanation.builtinHost } : {}),
+        ...(explanation.operatorSite !== undefined ? { operatorSite: explanation.operatorSite } : {}),
+        ...(caller !== undefined ? { caller: { rejected: explanation.callerRejected } } : {}),
+      },
+      warnings: [...env.warnings, ...explanation.notes].map(redactCredentials),
+    };
+    if (explanation.userAgentReason !== undefined) {
+      response.userAgentReason = explanation.userAgentReason;
+    }
+    return response;
+  }
+
+  /**
+   * A crawl-policy site key that is not a `Site`: one the API itself crawls under
+   * (`CRAWL_PSEUDO_SITES`, e.g. `liveness-http`) or one the operator configured in
+   * `EVER_JOBS_CRAWL_POLICIES` / `_POLICY_FILE` `sites` (case-insensitive).
+   */
+  private isCrawlPseudoSite(siteParam: string): boolean {
+    const wanted = siteParam.trim().toLowerCase();
+    if (!wanted) return false;
+    if (CRAWL_PSEUDO_SITES.includes(wanted)) return true;
+    const sites = readCrawlPolicyEnv().policies?.sites ?? {};
+    return Object.keys(sites).some((key) => key.trim().toLowerCase() === wanted);
   }
 
   private assertSite(siteParam: string): Site {

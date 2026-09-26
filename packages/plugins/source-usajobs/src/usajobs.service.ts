@@ -23,6 +23,7 @@ import {
 } from '@ever-jobs/common';
 import {
   USAJOBS_API_URL,
+  USAJOBS_CRAWL_POLICY,
   USAJOBS_HEADERS,
   USAJOBS_MAX_PAGE_SIZE,
   USAJOBS_DEFAULT_RESULTS,
@@ -44,6 +45,8 @@ const RATE_INTERVAL_MAP: Record<string, CompensationInterval> = {
   site: Site.USAJOBS,
   name: 'USAJobs',
   category: 'government',
+  // The API requires the registered e-mail as User-Agent (declared via setHeaders below).
+  crawl: USAJOBS_CRAWL_POLICY,
 })
 @Injectable()
 export class UsajobsService implements IScraper {
@@ -79,7 +82,12 @@ export class UsajobsService implements IScraper {
       proxies: input.proxies,
       caCert: input.caCert,
       timeout: input.requestTimeout,
+      // Also the explicit plugin layer, so the UA opt-in holds when scrape() is
+      // called outside JobsService's scrape context (CLI, library, e2e tests).
+      crawl: USAJOBS_CRAWL_POLICY,
     });
+    // `User-Agent` = the registered e-mail is the declared UA; it reaches the wire
+    // through the `userAgentMode: 'plugin'` opt-in in USAJOBS_CRAWL_POLICY.
     client.setHeaders({
       ...USAJOBS_HEADERS,
       'Authorization-Key': apiKey,

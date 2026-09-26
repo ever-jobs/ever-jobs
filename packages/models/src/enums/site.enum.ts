@@ -3593,6 +3593,15 @@ export enum Site {
 
   // Phase 1706: Spec 5152 — Source Company Plugin: Soundryx (soundryx.com) — static Astro careers index + detail pages
   SOUNDRYX = 'soundryx',
+
+  // Phase 1692: Spec 1692 — Source ATS Plugin: InHire (inhire.app) — public job-posts JSON API keyed by X-Tenant header
+  INHIRE = 'inhire',
+
+  // Phase 1693: Spec 1693 — Source Plugin: Level (jobsbylevel.com) — AI-rated job board via the public MCP server, RSS feed fallback
+  JOBSBYLEVEL = 'jobsbylevel',
+
+  // Phase 1694: Spec 1694 — Source Plugin: Simplify (new grad & internships) — public listings files, ETag-cached
+  SIMPLIFYJOBS = 'simplifyjobs',
 }
 
 /**

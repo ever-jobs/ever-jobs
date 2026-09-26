@@ -8,6 +8,7 @@ import {
   Country,
   getJobTypeFromString,
   IScraper,
+  jobTypeScanOptions,
   JobPostDto,
   JobResponseDto,
   JobType,
@@ -346,10 +347,13 @@ export class AtlasspaceService implements IScraper {
     const tokens = text.split(/[^a-z0-9]+/).filter(Boolean);
     const jobTypes: JobType[] = [];
     const labels: string[] = [];
+    // Words scanned out of prose: prose-ambiguous aliases ("permanent residency",
+    // "and other duties") are ignored unless EVER_JOBS_JOB_TYPE_SCAN_MODE=label.
+    const scanOptions = jobTypeScanOptions(process.env);
 
     for (let i = 0; i < tokens.length; i++) {
       const unigram = tokens[i];
-      const fromUni = getJobTypeFromString(unigram);
+      const fromUni = getJobTypeFromString(unigram, scanOptions);
       this.addJobType(jobTypes, labels, fromUni);
 
       if (unigram === 'intern') {
@@ -358,7 +362,7 @@ export class AtlasspaceService implements IScraper {
 
       if (i + 1 < tokens.length) {
         const bigram = `${tokens[i]} ${tokens[i + 1]}`;
-        const fromBi = getJobTypeFromString(bigram);
+        const fromBi = getJobTypeFromString(bigram, scanOptions);
         this.addJobType(jobTypes, labels, fromBi);
       }
     }
@@ -397,6 +401,8 @@ export class AtlasspaceService implements IScraper {
       [JobType.OTHER]: 'Other',
       [JobType.SUMMER]: 'Summer',
       [JobType.VOLUNTEER]: 'Volunteer',
+      [JobType.PERMANENT]: 'Permanent',
+      [JobType.APPRENTICESHIP]: 'Apprenticeship',
     };
     return labels[type] ?? 'Other';
   }

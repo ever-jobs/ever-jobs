@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<!-- Synthetic LinkedIn public company page for Spec 1701. A JSON-LD @graph with a SocialMediaPosting BEFORE the Organization node, plus the "About us" list with a redirect-wrapped website. Fictional company. -->
+<html lang="en"><head><title>Acme Robotics | LinkedIn</title>
+<script type="application/ld+json">{"@context":"http://schema.org","@graph":[{"@context":"http://schema.org","@type":"SocialMediaPosting","author":{"@type":"Organization","name":"Acme Robotics","url":"https://www.linkedin.com/company/acme-robotics","sameAs":"http://wrong.example"},"datePublished":"2026-09-21T14:04:00.858Z","text":"We are hiring."},{"@context":"http://schema.org","@type":"Organization","name":"Acme Robotics","url":"https://www.linkedin.com/company/acme-robotics","address":{"type":"PostalAddress","streetAddress":"100 Example Way","addressLocality":"Seattle","addressRegion":"WA","postalCode":"98101","addressCountry":"US"},"description":"Acme Robotics builds warehouse robots.","numberOfEmployees":{"value":1234,"@type":"QuantitativeValue"},"logo":{"contentUrl":"https://media.licdn.com/dms/image/v2/FAKEORG1/company-logo_200_200/0/1/acme_robotics_logo?e=2147483647&v=beta&t=org1","description":"Acme Robotics","@type":"ImageObject"},"slogan":"Robots that help.","sameAs":"http://acme.example"}]}</script>
+</head><body>
+<section class="about-us">
+  <div class="core-section-container__content break-words">
+    <p class="break-words text-color-text" data-test-id="about-us__description">
+      Acme Robotics (DOM copy) builds warehouse robots.
+    </p>
+    <dl class="mt-6">
+      <div class="mb-2 flex" data-test-id="about-us__website">
+        <dt class="font-sans text-md font-bold">
+          Website
+        </dt>
+        <dd class="font-sans text-md">
+          <a class="link-no-visited-state" data-tracking-control-name="about_website" href="https://www.linkedin.com/redir/redirect?url=http%3A%2F%2Facme%2Eexample&amp;urlhash=AbCd&amp;trk=about_website" target="_blank" rel="noopener">
+            http://acme.example
+          </a>
+        </dd>
+      </div>
+      <div class="mb-2 flex" data-test-id="about-us__industry">
+        <dt class="font-sans text-md font-bold">
+          Industry
+        </dt>
+        <dd class="font-sans text-md">
+          Robotics Engineering
+        </dd>
+      </div>
+      <div class="mb-2 flex" data-test-id="about-us__size">
+        <dt class="font-sans text-md font-bold">
+          Company size
+        </dt>
+        <dd class="font-sans text-md">
+          1,001-5,000 employees
+        </dd>
+      </div>
+      <div class="mb-2 flex" data-test-id="about-us__headquarters">
+        <dt class="font-sans text-md font-bold">
+          Headquarters
+        </dt>
+        <dd class="font-sans text-md">
+          Seattle, WA
+        </dd>
+      </div>
+      <div class="mb-2 flex" data-test-id="about-us__organizationType">
+        <dt class="font-sans text-md font-bold">
+          Type
+        </dt>
+        <dd class="font-sans text-md">
+          Privately Held
+        </dd>
+      </div>
+    </dl>
+  </div>
+</section>
+</body></html>
