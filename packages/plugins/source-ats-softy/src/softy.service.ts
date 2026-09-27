@@ -15,6 +15,8 @@ import {
 } from '@ever-jobs/models';
 import {
   BoundedTtlCache,
+  CallerOverridePolicy,
+  CallerOverridesSource,
   CRAWL_ENV,
   CrawlPolicyLayer,
   CrawlPolicyOverride,
@@ -26,9 +28,11 @@ import {
   getScrapeContext,
   htmlToPlainText,
   isCrawlPolicyError,
+  isServerStruggling,
   markdownConverter,
   extractEmails,
   parseLocationText,
+  resolveCallerOverrides,
   resolveCrawlPolicy,
   runWithScrapeContext,
   ScrapeContext,
@@ -111,6 +115,18 @@ interface SoftyRun {
   discovery: DiscoveryMode;
   /** `discovery` came from an operator layer (env, operator site / host). */
   operatorDiscovery: boolean;
+  /**
+   * The effective caller-override mode of this scrape and the layer that set it
+   * (Spec 1714 `resolveCallerOverrides`): `stricter` / `none` = callers may not
+   * loosen the Softy policy (the site owner's lock by default).
+   */
+  callerLock: { mode: CallerOverridePolicy; source: CallerOverridesSource };
+  /**
+   * `auto` stayed on the sitemap although the detail budget is short of
+   * `resultsWanted`, because the caller drove the shortfall under a lock (round 2,
+   * A1): the `partial` note says so.
+   */
+  budgetKeptOnSitemap: boolean;
   depth?: SoftyDescriptionDepth;
   offset: number;
   wanted: number;
@@ -144,8 +160,15 @@ type FetchOutcome =
   | { kind: 'failed'; error: unknown }
   | { kind: 'stop' };
 
-/** Result of the sitemap stage (Spec 1715 §7.3). `fallback`: `auto` may read list pages. */
-type SitemapStage = { kind: 'entries'; entries: SitemapEntry[] } | { kind: 'fallback' } | { kind: 'stop' };
+/**
+ * Result of the sitemap stage (Spec 1715 §7.3). `fallback`: `auto` may read list
+ * pages. `listedAt`: when the sitemap that listed the entries was fetched from the
+ * network (ISO-8601 UTC), also for entries served from the sitemap cache.
+ */
+type SitemapStage =
+  | { kind: 'entries'; entries: SitemapEntry[]; listedAt: string }
+  | { kind: 'fallback' }
+  | { kind: 'stop' };
 
 /** A detail page's fields, and when the network answered it (unset for a cache hit). */
 interface DetailResult {
@@ -153,10 +176,15 @@ interface DetailResult {
   fetchedAt?: string;
 }
 
-/** A sitemap-cache entry: the offer entries of one tenant and when they were read. */
+/**
+ * A sitemap-cache entry: the offer entries of one tenant, when they were cached
+ * (`at`, the TTL clock) and when the network answered the sitemap (`listedAt`,
+ * ISO-8601 UTC — what `jobUrlListedAt` carries on a cache hit).
+ */
 interface CachedSitemap {
   entries: SitemapEntry[];
   at: number;
+  listedAt: string;
 }
 
 /** Thrown by the sitemap adapter once the scrape has stopped: nothing is sent. */
@@ -205,18 +233,24 @@ class SoftySitemapDecodeError extends Error {
  * - `listing`: GET `/offers?page=1..N` (stopping at `resultsWanted`, a page with no new
  *   cards, the last linked page, or `SOFTY_MAX_LIST_PAGES`; `0` disables list pages)
  *   and parse the cards; the legacy `/offre/{ID}-{slug}` parser is kept as a fallback
- *   for tenants still on the old markup (index read at `/offers`). Detail pages then
- *   follow `descriptionDepth`.
+ *   for tenants still on the old markup (index read at `/offers`, detail pages at
+ *   `/offers/{ID}`). Detail pages then follow `descriptionDepth`.
  * - `auto` (default): `sitemap`, falling back to `listing` only as
  *   `SOFTY_SITEMAP_FALLBACK` allows (default `empty`: the sitemap answered but held no
  *   offer, or could not be parsed); `listing` straight away for `descriptionDepth:
- *   'board'` (unless the operator chose `sitemap`) and whenever the detail budget is
- *   smaller than `resultsWanted`. Explicit `sitemap` never falls back.
+ *   'board'` (unless the operator chose `sitemap`; D5 — fewer requests than the
+ *   sitemap plus a detail page per offer). A detail budget smaller than
+ *   `resultsWanted` reads list pages only when the operator allows it (an operator
+ *   `auto`, the lock lifted, `SOFTY_MAX_DETAIL_FETCHES=0`, or
+ *   `SOFTY_LEGACY=caller-listing`); under the caller lock it stays on the sitemap
+ *   and returns what the budget allows with a `partial` note (round 2, A1).
+ *   Explicit `sitemap` never falls back.
  *
  * **Push-back stops the scrape** (Spec 1715 §7.3 / §7.4): 401/403/407 or a challenge
  * page → `blocked`; 429 / 503 → `rate_limited`; a 5xx / timeout → a diagnostic (on
- * detail pages after `SOFTY_MAX_CONSECUTIVE_DETAIL_FAILURES`, default 1); an unknown
- * tenant (`ENOTFOUND` on the first request) → `bad_input`, remembered for
+ * detail pages after `SOFTY_MAX_CONSECUTIVE_DETAIL_FAILURES`, default 1; on a nested
+ * sitemap too, unless `SOFTY_LEGACY=nested-skip` or `SOFTY_SITEMAP_FALLBACK=any-error`
+ * skips it); an unknown tenant (`ENOTFOUND` on the first request) → `bad_input`, remembered for
  * `SOFTY_UNKNOWN_TENANT_TTL_MS`. Nothing more is sent to Softy in that scrape; what
  * was collected is returned with the diagnostic. Detail GETs are capped at
  * `resultsWanted + SOFTY_DETAIL_ATTEMPT_SLACK`.
@@ -226,7 +260,9 @@ class SoftySitemapDecodeError extends Error {
  * sequential. Extracted fields are cached (`SOFTY_DETAIL_CACHE_MAX` entries) keyed by
  * `url|lastmod` (sitemap; no expiry by default) or `url` (listing; 6 h), so a repeat
  * search only re-reads offers whose `lastmod` changed. A post whose page this scrape
- * fetched carries `jobUrlFetchedAt`, so `?liveness=true` need not fetch it again.
+ * fetched carries `jobUrlFetchedAt`, and every post taken from a sitemap carries
+ * `jobUrlListedAt` (when that sitemap was fetched from the network, also on a
+ * sitemap-cache hit), so `?liveness=true` need not fetch it again.
  *
  * **Pacing and identity** belong to `HttpClient` and the crawl policy (the manifest
  * `SOFTY_CRAWL_POLICY`, and the `*.softy.pro` builtin host policy for every other
@@ -323,6 +359,7 @@ export class SoftyService implements IScraper {
     }
 
     const { mode: discovery, operator: operatorDiscovery } = this.resolveDiscovery(input, host);
+    const callerLock = this.resolveCallerLock(host);
     const client = createHttpClient({
       proxies: input.proxies,
       caCert: input.caCert,
@@ -347,6 +384,8 @@ export class SoftyService implements IScraper {
       config,
       discovery,
       operatorDiscovery,
+      callerLock,
+      budgetKeptOnSitemap: false,
       depth,
       offset: Math.max(0, Math.floor(Number(input.offset) || 0)),
       wanted,
@@ -452,6 +491,27 @@ export class SoftyService implements IScraper {
     return { mode: 'auto', operator: false };
   }
 
+  /**
+   * The effective caller-override mode of this scrape and its source (Spec 1714
+   * `resolveCallerOverrides`): the same computation that filters the caller's `crawl`
+   * — inside a scrape context from the context's site and plugin layer, outside it
+   * from the Softy manifest — plus the builtin `*.softy.pro` host policy and any
+   * operator `sites.softy` / `hosts[…]` value. If the resolver is unavailable, the
+   * manifest's own lock applies (fail safe).
+   */
+  private resolveCallerLock(host: string): SoftyRun['callerLock'] {
+    const ctx = this.scrapeContext();
+    try {
+      const resolved = resolveCallerOverrides(
+        ctx ? { site: ctx.site, host, plugin: ctx.plugin } : { site: Site.SOFTY, host, plugin: SOFTY_CRAWL_POLICY },
+      );
+      return { mode: resolved.mode, source: resolved.source };
+    } catch (err: any) {
+      this.logger.debug(`Softy: caller-override mode unavailable (${err?.message ?? err}); assuming the manifest's lock`);
+      return { mode: SOFTY_CRAWL_POLICY.callerOverrides ?? 'stricter', source: 'plugin' };
+    }
+  }
+
   /** The search request's `crawl` object (Spec 1690 §5.2), when it carries one. */
   private callerCrawl(input: ScraperInputDto): CrawlPolicyOverride | undefined {
     const crawl = (input as ScraperInputDto & { crawl?: unknown }).crawl;
@@ -507,21 +567,37 @@ export class SoftyService implements IScraper {
     // `resultsWanted` counts. SOFTY_LEGACY=offset-budget restores `offset + resultsWanted`.
     const detailsNeeded = legacy.has('offset-budget') ? run.offset + run.wanted : run.wanted;
     // `board` wants no detail pages, and sitemap entries carry nothing but a URL, so
-    // the listing is the only source of card data (1 request per 21 offers). The
-    // same holds in `auto` whenever the detail budget cannot cover every wanted
-    // offer (`detail-25` with resultsWanted 30, or more than SOFTY_MAX_DETAIL_FETCHES):
-    // a sitemap offer without its detail page yields no post, while the listing
-    // still returns it board-only — the requested depth never shrinks the result.
+    // the listing is the only source of card data — and the cheaper one (1 request
+    // per 21 offers, against the sitemap plus 1 request per offer): D5, kept on
+    // purpose, whoever asked for `board`.
+    //
+    // In `auto`, a detail budget that cannot cover every wanted offer (`detail-25`
+    // with resultsWanted 30, or more than SOFTY_MAX_DETAIL_FETCHES) used to read list
+    // pages too, so the listing returned the rest board-only. `resultsWanted` and
+    // `descriptionDepth` are CALLER parameters, so under a caller lock (`stricter` /
+    // `none`: the Softy default) that trigger no longer applies (round 2, A1, audit
+    // G22): the sitemap path returns what the budget allows, with a `partial` note.
+    // The listing stays the operator's to choose: an operator `auto` (env, sites /
+    // hosts), a lifted lock (`callerOverrides: 'any'`), SOFTY_MAX_DETAIL_FETCHES=0
+    // (detail pages off), or SOFTY_LEGACY=caller-listing (the pre-round-2 selection).
+    const budgetShort = run.discovery === 'auto' && run.detailBudget < detailsNeeded;
+    const keepSitemap =
+      budgetShort &&
+      run.callerLock.mode !== 'any' &&
+      !run.operatorDiscovery &&
+      run.config.maxDetailFetches > 0 &&
+      !legacy.has('caller-listing');
     const useListing =
       !listPagesOff &&
       (run.discovery === 'listing' ||
         (run.depth === 'board' && !operatorSitemap) ||
-        (run.discovery === 'auto' && run.detailBudget < detailsNeeded));
+        (budgetShort && !keepSitemap));
+    run.budgetKeptOnSitemap = keepSitemap && !useListing && !listPagesOff;
 
     if (!useListing) {
       const stage = await this.discoverFromSitemap(run);
       if (stage.kind === 'entries') {
-        await this.collectFromSitemap(run, stage.entries, posts);
+        await this.collectFromSitemap(run, stage.entries, posts, stage.listedAt);
         return;
       }
       if (stage.kind === 'stop' || run.stopped) return;
@@ -554,13 +630,17 @@ export class SoftyService implements IScraper {
     const cacheKey = `${run.origin}|${dedupe ? 'by-id' : 'all'}`;
     const cached = this.cachedSitemap(run.config, cacheKey);
     if (cached) {
-      this.logger.debug(`Softy: sitemap of ${run.tenant} served from the cache (${cached.length} offer(s))`);
-      return { kind: 'entries', entries: cached };
+      this.logger.debug(`Softy: sitemap of ${run.tenant} served from the cache (${cached.entries.length} offer(s))`);
+      return { kind: 'entries', entries: cached.entries, listedAt: cached.listedAt };
     }
     if (run.stopped || this.isAborted(run)) return { kind: 'stop' };
 
     const url = `${run.origin}${SOFTY_SITEMAP_PATH}`;
     let lastUrl = url;
+    // When the ROOT sitemap answered (round 2, A3): what `jobUrlListedAt` carries.
+    // The children of a sitemap index answer later, so it never overstates how
+    // recently an offer was listed.
+    let listedAt: string | undefined;
     // Pacing, identity and retries stay in HttpClient; the adapter only lets the plugin
     // see the body (to tell a bot wall from a soft-404, D1) and refuses to send
     // anything once the scrape has stopped.
@@ -570,6 +650,7 @@ export class SoftyService implements IScraper {
         lastUrl = target;
         run.requests++;
         const response = await run.client.get(target, requestConfig);
+        if (listedAt === undefined) listedAt = new Date().toISOString();
         let text: string;
         try {
           const maxBytes = Number(requestConfig?.maxContentLength);
@@ -584,12 +665,15 @@ export class SoftyService implements IScraper {
 
     let entries: SitemapEntry[];
     try {
-      // Nested sitemaps: fetchSitemap's default `nestedErrors: 'stop-on-throttle'`
-      // (Spec 1714 FR-13) rethrows a 429 / 503 / crawl-policy refusal — a scrape stop.
+      // Nested sitemaps: `stop-on-throttle` (fetchSitemap's default, Spec 1714 FR-13)
+      // rethrows a 429 / 503 / crawl-policy refusal — a scrape stop; other failures
+      // reach onNestedSitemapError. `skip` (SOFTY_SITEMAP_FALLBACK=any-error, or
+      // SOFTY_LEGACY=nested-skip; round 2, F4) skips every nested failure (pre-1715).
       entries = await fetchSitemap(adapter, url, {
         sortByLastmod: true,
         filter: (loc) => softyOfferIdFromUrl(loc, run.host) !== null,
         onError: (nested, err) => this.onNestedSitemapError(run, nested, err),
+        nestedErrors: this.skipsNestedErrors(run) ? 'skip' : 'stop-on-throttle',
       });
     } catch (err) {
       return lastUrl === url ? this.sitemapFailure(run, url, err) : this.nestedSitemapStop(run, lastUrl, err);
@@ -603,8 +687,19 @@ export class SoftyService implements IScraper {
       this.logger.log(`Softy sitemap of ${run.tenant} holds no offer (or could not be parsed)`);
       return { kind: 'fallback' };
     }
-    this.cacheSitemap(run.config, cacheKey, offers);
-    return { kind: 'entries', entries: offers };
+    const listed = listedAt ?? new Date().toISOString();
+    this.cacheSitemap(run.config, cacheKey, offers, listed);
+    return { kind: 'entries', entries: offers, listedAt: listed };
+  }
+
+  /**
+   * Whether a nested-sitemap failure is skipped and the walk goes on (the pre-1715
+   * behaviour): under `SOFTY_SITEMAP_FALLBACK=any-error` or `SOFTY_LEGACY=nested-skip`
+   * (round 2, F4). Otherwise push-back, a refusal and a struggling server stop the
+   * scrape (Spec 1715 FR-16; round 2, A5).
+   */
+  private skipsNestedErrors(run: SoftyRun): boolean {
+    return run.config.sitemapFallback === 'any-error' || run.config.legacy.has('nested-skip');
   }
 
   /**
@@ -689,7 +784,8 @@ export class SoftyService implements IScraper {
 
   /**
    * A nested sitemap's push-back, rethrown by `fetchSitemap` (429 / 503 / a crawl-policy
-   * refusal; Spec 1714 FR-13): a scrape stop in every mode (Spec 1715 FR-16).
+   * refusal; Spec 1714 FR-13): a scrape stop (Spec 1715 FR-16) — unless nested errors
+   * are skipped (`skipsNestedErrors`), when `fetchSitemap` never rethrows them.
    */
   private nestedSitemapStop(run: SoftyRun, url: string, err: unknown): SitemapStage {
     if (err instanceof SoftyStoppedError || run.stopped) return { kind: 'stop' };
@@ -706,17 +802,33 @@ export class SoftyService implements IScraper {
   }
 
   /**
-   * A nested sitemap that failed without stopping the walk: skipped — unless it
-   * refused us (401/403/407, a challenge page), which stops the scrape as `blocked`
-   * (not under `SOFTY_SITEMAP_FALLBACK=any-error`, where it is skipped as before).
+   * A nested sitemap that failed without `fetchSitemap` stopping the walk. The scrape
+   * stops when it
+   *
+   * - refused us (401/403/407, a challenge page): `blocked` (Spec 1715 FR-6);
+   * - found the server struggling (500/502/504, a timeout, a connection reset — the
+   *   `isServerStruggling` classifier behind the crawl policy's server-error
+   *   cool-down): the error's diagnostic (`fetch_error` / `timeout`), as on the root
+   *   sitemap (round 2, A5 — ask D: back off when the server struggles).
+   *
+   * `run.stopped` makes the adapter refuse the rest of the walk. Anything else (a
+   * 404/410, a size cap, bad gzip, a scope refusal) is skipped and the walk goes on.
+   * Under `skipsNestedErrors` (`SOFTY_SITEMAP_FALLBACK=any-error`,
+   * `SOFTY_LEGACY=nested-skip`) every nested failure is skipped, as before Spec 1715.
    */
   private onNestedSitemapError(run: SoftyRun, nested: string, err: any): void {
     if (err instanceof SoftyStoppedError) return;
-    const status = this.httpStatus(err);
-    const refused = err instanceof SoftyChallengeError || (status !== undefined && BLOCK_STATUSES.has(status));
-    if (refused && run.config.sitemapFallback !== 'any-error') {
-      this.stopScrape(run, err, 'blocked', `nested sitemap ${nested}`);
-      return;
+    if (!this.skipsNestedErrors(run)) {
+      const status = this.httpStatus(err);
+      const refused = err instanceof SoftyChallengeError || (status !== undefined && BLOCK_STATUSES.has(status));
+      if (refused) {
+        this.stopScrape(run, err, 'blocked', `nested sitemap ${nested}`);
+        return;
+      }
+      if (isServerStruggling(status, err)) {
+        this.stopScrape(run, err, undefined, `nested sitemap ${nested}`);
+        return;
+      }
     }
     this.logger.debug(`Softy nested sitemap ${nested} skipped: ${err?.message ?? err}`);
   }
@@ -738,9 +850,15 @@ export class SoftyService implements IScraper {
    * Sitemap discovery: detail pages in `lastmod` order until `wanted` roles are built.
    * An offer whose detail page the budget (or the attempt cap) no longer covers — and
    * is not cached — yields no post; when that shortens the result, a `partial`
-   * diagnostic says so.
+   * diagnostic says so. Every post carries `jobUrlListedAt = listedAt` (round 2, A3):
+   * the offer is listed in a sitemap the network answered at that instant.
    */
-  private async collectFromSitemap(run: SoftyRun, entries: SitemapEntry[], posts: JobPostDto[]): Promise<void> {
+  private async collectFromSitemap(
+    run: SoftyRun,
+    entries: SitemapEntry[],
+    posts: JobPostDto[],
+    listedAt: string,
+  ): Promise<void> {
     let produced = 0;
     let overBudget = 0;
     let overCap = 0;
@@ -764,7 +882,13 @@ export class SoftyService implements IScraper {
       const { detail, fetchedAt } = await this.getDetail(run, url, key, 'sitemap');
       if (!detail) continue;
       try {
-        const post = this.buildPost({ id, url, lastmod: entry.lastmod ?? null }, run, detail, { url, at: fetchedAt });
+        const post = this.buildPost(
+          { id, url, lastmod: entry.lastmod ?? null },
+          run,
+          detail,
+          { url, at: fetchedAt },
+          listedAt,
+        );
         if (post) {
           posts.push(post);
           produced++;
@@ -780,6 +904,13 @@ export class SoftyService implements IScraper {
         `descriptionDepth 'board' fetches no detail page and discovery 'sitemap' reads no list page: ` +
         `${overBudget} sitemap offer(s) not returned (only cached offers are); use descriptionDepth ` +
         `detail-25 / detail-all${run.config.maxListPages === 0 ? '' : ', or SOFTY_LEGACY=board-over-sitemap'}`;
+    } else if (overBudget > 0 && run.budgetKeptOnSitemap) {
+      detail =
+        `detail-page budget (${run.detailBudget}) exhausted: ${overBudget} sitemap offer(s) not returned. ` +
+        `Caller overrides are '${run.callerLock.mode}' (set by ${run.callerLock.source}), so no list page is read ` +
+        'for a larger resultsWanted (Softy asked for sitemap discovery); ask for fewer results or a larger ' +
+        `descriptionDepth (up to ${SOFTY_ENV.MAX_DETAIL_FETCHES}=${run.config.maxDetailFetches}), or the operator ` +
+        `sets discovery 'auto' / 'listing' (${CRAWL_ENV.DISCOVERY}, sites.softy) or ${SOFTY_ENV.LEGACY}=caller-listing`;
     } else if (overBudget > 0) {
       detail =
         `detail-page budget (${run.detailBudget}) exhausted: ${overBudget} sitemap offer(s) not returned; ` +
@@ -877,7 +1008,7 @@ export class SoftyService implements IScraper {
     seen: Set<string>,
     needed: number,
   ): void {
-    for (const card of this.parseIndex(html, run.origin)) {
+    for (const card of this.parseIndex(html, run.origin, run.config.legacy.has('legacy-detail-url'))) {
       if (cards.length >= needed) break;
       const id = this.cleanText(card.id);
       if (!id || seen.has(id)) continue;
@@ -975,8 +1106,8 @@ export class SoftyService implements IScraper {
 
   // ── Caches (Spec 1715 FR-5, FR-12) ──────────────────────────────────────────
 
-  /** The cached offer entries of a tenant's sitemap younger than `SOFTY_SITEMAP_CACHE_TTL_MS`. */
-  private cachedSitemap(config: SoftyConfig, key: string): SitemapEntry[] | undefined {
+  /** A tenant's cached sitemap (offer entries + when the network answered it), younger than `SOFTY_SITEMAP_CACHE_TTL_MS`. */
+  private cachedSitemap(config: SoftyConfig, key: string): CachedSitemap | undefined {
     if (config.sitemapCacheTtlMs <= 0 || !this.sitemapCache) return undefined;
     const hit = this.sitemapCache.get(key);
     if (!hit) return undefined;
@@ -984,15 +1115,15 @@ export class SoftyService implements IScraper {
       this.sitemapCache.delete(key);
       return undefined;
     }
-    return hit.entries;
+    return hit;
   }
 
-  private cacheSitemap(config: SoftyConfig, key: string, entries: SitemapEntry[]): void {
+  private cacheSitemap(config: SoftyConfig, key: string, entries: SitemapEntry[], listedAt: string): void {
     if (config.sitemapCacheTtlMs <= 0) return;
     if (!this.sitemapCache) {
       this.sitemapCache = new BoundedTtlCache<CachedSitemap>(SOFTY_SITEMAP_CACHE_MAX, 0, () => Date.now());
     }
-    this.sitemapCache.set(key, { entries, at: Date.now() }, config.sitemapCacheTtlMs);
+    this.sitemapCache.set(key, { entries, at: Date.now(), listedAt }, config.sitemapCacheTtlMs);
   }
 
   /** A tenant whose host did not resolve within `SOFTY_UNKNOWN_TENANT_TTL_MS` (not in `any-error` mode). */
@@ -1172,25 +1303,31 @@ export class SoftyService implements IScraper {
    * A post from a card and its detail fields. `fetched` names the URL whose detail
    * page this scrape fetched from the network and when; `jobUrlFetchedAt` is set only
    * when that URL is the post's `jobUrl` (Spec 1715 FR-15) — never for a cache hit.
+   * `listedAt` (sitemap path only): when the sitemap listing this offer was fetched
+   * from the network — `jobUrlListedAt` (round 2, A3).
    */
   private buildPost(
     card: SoftyCardJob,
     run: SoftyRun,
     detail: SoftyDetail | null,
     fetched?: { url: string; at?: string },
+    listedAt?: string,
   ): JobPostDto | null {
     const job = this.normaliseJob(card, run.origin, run.tenant, detail, run.config);
     const fetchedAt = detail && fetched?.at && fetched.url === job.url ? fetched.at : undefined;
-    return this.processJob(job, run.tenant, run.format, fetchedAt);
+    return this.processJob(job, run.tenant, run.format, fetchedAt, listedAt);
   }
 
   /**
    * Parse the server-rendered index HTML into role fragments. Rather than depend on
    * volatile CSS class names, we anchor on the canonical detail links
    * (`/offre/{ID}-{title-slug}`) and read the labelled card text immediately around
-   * each link (location, contract type, "Mise en ligne le …").
+   * each link (location, contract type, "Mise en ligne le …"). The card's URL is the
+   * target of that link's 301, `/offers/{ID}` (round 2, A0: every detail GET is one
+   * paced request); `legacyDetailUrl` (`SOFTY_LEGACY=legacy-detail-url`) keeps the
+   * `/offre/{ID}-{slug}` link itself (pre-1715).
    */
-  private parseIndex(html: string, origin: string): SoftyCardJob[] {
+  private parseIndex(html: string, origin: string, legacyDetailUrl = false): SoftyCardJob[] {
     const out: SoftyCardJob[] = [];
     const byId = new Map<string, SoftyCardJob>();
 
@@ -1202,7 +1339,9 @@ export class SoftyService implements IScraper {
       if (!jobId || byId.has(jobId)) continue;
 
       const cleanSlug = this.deslugTitleSlug(slug);
-      const url = `${origin}${SOFTY_OFFER_PATH}${jobId}-${this.cleanText(slug) ?? ''}`;
+      const url = legacyDetailUrl
+        ? `${origin}${SOFTY_OFFER_PATH}${jobId}-${this.cleanText(slug) ?? ''}`
+        : softyOfferUrlFrom(origin, jobId);
 
       const windowText = this.cardWindow(html, match.index);
 
@@ -1312,7 +1451,7 @@ export class SoftyService implements IScraper {
 
     return {
       jobId,
-      url: this.cleanText(card.url) ?? this.buildJobUrl(origin, card),
+      url: this.cleanText(card.url) ?? this.buildJobUrl(origin, card, config?.legacy.has('legacy-detail-url') ?? false),
       title,
       companyName: this.deriveCompanyName(tenant),
       city,
@@ -1331,12 +1470,16 @@ export class SoftyService implements IScraper {
   /**
    * Map a normalised SoftyJob → JobPostDto. `jobUrlFetchedAt` (Spec 1715 FR-15): when
    * this scrape fetched the post's `jobUrl` from the network (2xx, parsed) and when.
+   * `jobUrlListedAt` (round 2, A3): when the sitemap that listed the offer was fetched
+   * from the network — evidence the offer is live that `?liveness=true` trusts within
+   * `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS`, also on a cache hit.
    */
   private processJob(
     job: SoftyJob,
     tenant: string,
     format?: DescriptionFormat,
     jobUrlFetchedAt?: string,
+    jobUrlListedAt?: string,
   ): JobPostDto | null {
     const title = job.title;
     if (!title) return null;
@@ -1375,6 +1518,7 @@ export class SoftyService implements IScraper {
       employmentType: this.cleanText(job.employmentType),
       applyUrl: jobUrl,
       ...(jobUrlFetchedAt ? { jobUrlFetchedAt } : {}),
+      ...(jobUrlListedAt ? { jobUrlListedAt } : {}),
     });
   }
 
@@ -1457,14 +1601,16 @@ export class SoftyService implements IScraper {
   }
 
   /**
-   * Build the public detail / apply URL for a role from its parts: the legacy
-   * `/offre/{ID}-{slug}` form for legacy cards (or any card with a slug), otherwise the
-   * canonical `/offers/{ID}`.
+   * Build the public detail / apply URL for a role from its parts: the canonical
+   * `/offers/{ID}` — also for legacy cards, whose `/offre/{ID}-{slug}` link
+   * 301-redirects there (round 2, A0). `legacyDetailUrl`
+   * (`SOFTY_LEGACY=legacy-detail-url`) restores the `/offre/{ID}-{slug}` form for
+   * legacy cards (or any card with a slug), as before.
    */
-  private buildJobUrl(origin: string, card: SoftyCardJob): string {
+  private buildJobUrl(origin: string, card: SoftyCardJob, legacyDetailUrl = false): string {
     const id = this.cleanText(card.id) ?? '';
     const slug = this.cleanText(card.slug);
-    if (!card.legacy && !slug) return softyOfferUrlFrom(origin, id);
+    if (!legacyDetailUrl || (!card.legacy && !slug)) return softyOfferUrlFrom(origin, id);
     return `${origin}${SOFTY_OFFER_PATH}${id}-${slug ?? ''}`;
   }
 

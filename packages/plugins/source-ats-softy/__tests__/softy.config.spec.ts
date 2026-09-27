@@ -67,6 +67,9 @@ describe('Softy configuration (Spec 1715)', () => {
       '503-as-failure',
       'listing-failure-details',
       'no-interval-floor',
+      'caller-listing',
+      'nested-skip',
+      'legacy-detail-url',
     ]);
     expect(SOFTY_ENV).toMatchObject({
       SITEMAP_FALLBACK: 'SOFTY_SITEMAP_FALLBACK',
@@ -198,6 +201,18 @@ describe('Softy configuration (Spec 1715)', () => {
       const unknown = warnings().filter((w) => w.includes('bogus-token'));
       expect(unknown).toHaveLength(1);
       expect(unknown[0]).toContain('SOFTY_LEGACY');
+    });
+
+    it('knows the round-2 tokens: read one by one, part of `all`, named by the unknown-token warning', () => {
+      const round2 = ['caller-listing', 'nested-skip', 'legacy-detail-url'];
+      expect([...readSoftyLegacy({ SOFTY_LEGACY: 'Caller-Listing,nested-skip legacy-detail-url' })]).toEqual(round2);
+      const all = readSoftyLegacy({ SOFTY_LEGACY: 'all' });
+      for (const token of round2) expect(all.has(token as never)).toBe(true);
+      readSoftyLegacy({ SOFTY_LEGACY: 'no-such-token-r2' });
+      const unknown = warnings().filter((w) => w.includes('no-such-token-r2'));
+      expect(unknown).toHaveLength(1);
+      for (const token of round2) expect(unknown[0]).toContain(token);
+      expect(warnings().filter((w) => round2.some((t) => w.includes(`token "${t}"`)))).toEqual([]);
     });
 
     it('no-interval-floor drops the client floor (derived minIntervalFloorMs)', () => {

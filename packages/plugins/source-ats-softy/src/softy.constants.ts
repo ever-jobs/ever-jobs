@@ -27,7 +27,9 @@ import type { PluginCrawlPolicy } from '@ever-jobs/common';
  *   https://{tenant}.softy.pro/offre/{ID}-{title-slug} (detail / apply)
  *
  * Since 2026-09 `/offres` 301-redirects to `/offers`, so the legacy index is now
- * requested at `/offers` directly (Spec 1715 FR-14): no unpaced redirect hop.
+ * requested at `/offers` directly (Spec 1715 FR-14): no unpaced redirect hop. For
+ * the same reason a legacy card's detail / apply URL is built as its redirect target
+ * `/offers/{ID}` (`SOFTY_LEGACY=legacy-detail-url` keeps `/offre/{ID}-{slug}`).
  *
  * The caller addresses a tenant by `companySlug` (the sub-domain label, e.g.
  * `groupecls`) or by `companyUrl` (a board URL on a `softy.pro` host, from which the
@@ -65,7 +67,12 @@ export const SOFTY_OFFERS_PATH = '/offres';
  */
 export const SOFTY_LEGACY_INDEX_PATH = '/offers';
 
-/** Legacy per-role detail / apply path segment: `/offre/{ID}-{title-slug}`. */
+/**
+ * Legacy per-role detail / apply path segment: `/offre/{ID}-{title-slug}`. It
+ * 301-redirects to `/offers/{ID}`, which axios would follow inside the same paced
+ * slot, so legacy cards link the target instead (Spec 1715 round 2, A0); only
+ * `SOFTY_LEGACY=legacy-detail-url` builds URLs on this path.
+ */
 export const SOFTY_OFFER_PATH = '/offre/';
 
 /** Current paginated open-roles index path: `/offers?page=N` (Spec 1691). */
@@ -166,9 +173,15 @@ export const SOFTY_DETAIL_ATTEMPT_SLACK = 5;
  *   could not be parsed. Push-back (401/403/407, a challenge page, 429, 503), a
  *   struggling server (5xx, timeout, reset) or a 404/410 stop the scrape.
  * - `missing`: also on 404/410 (the Spec 1691 wording) and a robots.txt refusal.
- * - `any-error`: the shipped (pre-1715) sitemap stage exactly — every failure except a
- *   429 or a crawl-policy refusal falls back, and an unknown tenant (`ENOTFOUND`) is
- *   not negatively cached.
+ * - `any-error`: the pre-1715 DECISIONS of the sitemap stage — every root-sitemap
+ *   failure except a 429 or a crawl-policy refusal falls back, an unknown tenant
+ *   (`ENOTFOUND`) is not negatively cached, and every nested-sitemap failure is
+ *   skipped (as `SOFTY_LEGACY=nested-skip`). It is NOT the whole pre-1715 stage: the
+ *   manifest's crawl policy still applies (one retry on 429/503 only, the 30 s
+ *   server-error cool-down that holds a fallback list page back after a 5xx, the 1 s
+ *   client floor), and so do the other Spec 1715 plugin changes (sitemap cache,
+ *   offer-id dedupe…). The pre-1715 crawl policy is an operator recipe
+ *   (`docs/CRAWL_POLICY.md` §21.4); the other plugin changes are `SOFTY_LEGACY` tokens.
  */
 export type SoftySitemapFallback = 'empty' | 'missing' | 'any-error';
 
@@ -230,6 +243,9 @@ export const SOFTY_MIN_INTERVAL_FLOOR_MS = 1000;
  * | `503-as-failure` | a 503 on list/detail pages is a plain failure, not a stop | G13 |
  * | `listing-failure-details` | a failed listing page still lets the collected cards' detail pages be fetched | G13 |
  * | `no-interval-floor` | no `minIntervalFloorMs` on the Softy client | G3 |
+ * | `caller-listing` | under a caller lock, a caller-driven detail budget shorter than `resultsWanted` still reads list pages in `auto` | G22 (round 2, A1) |
+ * | `nested-skip` | every nested-sitemap failure is skipped and the walk goes on (429/503, a crawl-policy refusal, 5xx/timeouts, 401/403/407, a challenge page) | G16 (round 2, A5/F4) |
+ * | `legacy-detail-url` | legacy cards link `/offre/{ID}-{slug}` (a 301 hop) instead of its target `/offers/{ID}` | G6 (round 2, A0) |
  */
 export const SOFTY_LEGACY_TOKENS = [
   'offset-budget',
@@ -240,6 +256,9 @@ export const SOFTY_LEGACY_TOKENS = [
   '503-as-failure',
   'listing-failure-details',
   'no-interval-floor',
+  'caller-listing',
+  'nested-skip',
+  'legacy-detail-url',
 ] as const;
 
 export type SoftyLegacyToken = (typeof SOFTY_LEGACY_TOKENS)[number];

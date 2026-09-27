@@ -135,6 +135,15 @@ export function readSoftyLegacy(env: NodeJS.ProcessEnv = process.env): ReadonlyS
  *
  * Derived: `listingDetailCacheTtlMs` (FR-13) and `minIntervalFloorMs` (1000, or 0
  * with `SOFTY_LEGACY=no-interval-floor`; FR-2).
+ *
+ * Which path `auto` discovery takes (Spec 1715 FR-11, D5; round 2, A1):
+ *
+ * | Request | Path | Why |
+ * |---|---|---|
+ * | `descriptionDepth: 'board'` | list pages (unless an OPERATOR chose `sitemap`) | Kept on purpose (D5): a board-only result needs no detail page, and one list page carries 21 offers, so `/offers?page=1..N` is FEWER requests than `/sitemap.xml` plus one detail page per offer — the sitemap entries carry nothing but a URL. |
+ * | detail budget (`detail-25`, `SOFTY_MAX_DETAIL_FETCHES`) < `resultsWanted`, under a caller lock (`callerOverrides` `stricter` / `none`, the Softy default) | sitemap, up to the budget, with a `partial` note | Softy asked for sitemap discovery; `resultsWanted` / `descriptionDepth` are caller parameters, so a caller must not be able to steer the scrape to list pages with them. `SOFTY_LEGACY=caller-listing` restores the listing. |
+ * | the same, but the `auto` itself came from an operator layer (`EVER_JOBS_CRAWL_DISCOVERY=auto`, `sites.softy` / `hosts[…]` `discovery: 'auto'`), the lock is lifted (`callerOverrides: 'any'`), or `SOFTY_MAX_DETAIL_FETCHES=0` (the operator turned detail pages off) | list pages, board-only beyond the budget (as before round 2) | The operator's choice. |
+ * | anything else | sitemap | — |
  */
 export function readSoftyConfig(env: NodeJS.ProcessEnv = process.env): SoftyConfig {
   const legacy = readSoftyLegacy(env);

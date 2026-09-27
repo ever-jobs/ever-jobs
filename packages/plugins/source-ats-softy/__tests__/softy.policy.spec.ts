@@ -179,6 +179,65 @@ describe('SoftyService discovery through the real crawl policy (Specs 1690, 1691
     expect(calls).toEqual([PAGE1]);
   });
 
+  // ── round 2, A1: a caller-driven detail budget does not buy list pages under a lock ──
+
+  describe('a detail budget shorter than resultsWanted (round 2, A1)', () => {
+    const shortBudget = { resultsWanted: 30, descriptionDepth: 'detail-25' };
+    const listPages = () => calls.filter((u) => u.includes('?page='));
+
+    it('under the Softy lock: sitemap first, no list page (called directly)', async () => {
+      // (The 5-offer fixture fits the budget, so no `partial` note here; softy.service.spec.ts covers it.)
+      await scrape(shortBudget);
+      expect(calls[0]).toBe(SITEMAP);
+      expect(listPages()).toEqual([]);
+    });
+
+    it("inside JobsService's scrape context (site + manifest): sitemap first, no list page", async () => {
+      const ctx = { site: Site.SOFTY, plugin: SOFTY_CRAWL_POLICY, caller: {} };
+      await runWithScrapeContext(ctx, () => scrape(shortBudget));
+      expect(calls[0]).toBe(SITEMAP);
+      expect(listPages()).toEqual([]);
+    });
+
+    it('the builtin *.softy.pro host policy alone keeps the lock (EVER_JOBS_CRAWL_PLUGIN_MANIFESTS=false)', async () => {
+      setEnv('EVER_JOBS_CRAWL_PLUGIN_MANIFESTS', 'false');
+      await scrape(shortBudget);
+      expect(calls[0]).toBe(SITEMAP);
+    });
+
+    it('a global EVER_JOBS_CRAWL_CALLER_OVERRIDES=none is a lock too', async () => {
+      setEnv('EVER_JOBS_CRAWL_CALLER_OVERRIDES', 'none');
+      await scrape(shortBudget);
+      expect(calls[0]).toBe(SITEMAP);
+    });
+
+    it("the operator's choices read the listing: an operator 'auto', a lifted lock, or no lock layer at all", async () => {
+      const operatorChoices: Array<[string, string][]> = [
+        [['EVER_JOBS_CRAWL_DISCOVERY', 'auto']],
+        [['EVER_JOBS_CRAWL_POLICIES', JSON.stringify({ sites: { softy: { discovery: 'auto' } } })]],
+        [['EVER_JOBS_CRAWL_POLICIES', LIFT_LOCK]],
+        [
+          ['EVER_JOBS_CRAWL_PLUGIN_MANIFESTS', 'false'],
+          ['EVER_JOBS_CRAWL_BUILTIN_HOSTS', 'false'],
+        ],
+      ];
+      for (const vars of operatorChoices) {
+        for (const key of ENV_KEYS) delete process.env[key];
+        for (const [key, value] of vars) setEnv(key, value);
+        resetEffectiveCrawlPolicyCache();
+        calls = [];
+        await scrape(shortBudget);
+        expect({ vars, first: calls[0] }).toEqual({ vars, first: PAGE1 });
+      }
+    });
+
+    it('SOFTY_LEGACY=caller-listing reads the listing under the lock (red control)', async () => {
+      process.env.SOFTY_LEGACY = 'caller-listing';
+      await scrape(shortBudget);
+      expect(calls[0]).toBe(PAGE1);
+    });
+  });
+
   it('runs its requests inside a scrape context carrying the plugin policy when called directly', async () => {
     await scrape({ crawl: { discovery: 'listing' } });
     expect(contextsSeen[0]).toMatchObject({ site: Site.SOFTY, plugin: SOFTY_CRAWL_POLICY, caller: { discovery: 'listing' } });

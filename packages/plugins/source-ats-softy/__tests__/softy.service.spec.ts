@@ -21,7 +21,7 @@ jest.mock('@ever-jobs/common', () => {
   };
 });
 
-import { HostCoolingDownError, RobotsDisallowedError } from '@ever-jobs/common';
+import { HostCoolingDownError, resetCrawlPolicyEnvCache, RobotsDisallowedError } from '@ever-jobs/common';
 import { SOURCE_PLUGIN_METADATA } from '@ever-jobs/plugin';
 import { SoftyService } from '../src/softy.service';
 import {
@@ -37,8 +37,11 @@ import {
  * pagination, legacy markup, caching and the failure tables of Spec 1715 §7.3 /
  * §7.4. The crawl-policy resolver is mocked here (it honours the caller's
  * `crawl.discovery`, like EVER_JOBS_CRAWL_CALLER_OVERRIDES=any); the real resolver —
- * and the Softy lock — is exercised by `softy.policy.spec.ts`, the real `HttpClient`
- * and limiter by `softy.integration.spec.ts`. No network.
+ * and the Softy lock on `crawl.discovery` — is exercised by `softy.policy.spec.ts`,
+ * the real `HttpClient` and limiter by `softy.integration.spec.ts`. The caller-lock
+ * MODE the plugin reads for its own decisions (round 2, A1) comes from the real
+ * `resolveCallerOverrides` (the Softy manifest + the builtin `*.softy.pro` host
+ * policy → `stricter` on a clean env). No network.
  *
  * Every test of a behaviour Spec 1715 changed has a twin that asserts the pre-1715
  * behaviour under the switch that restores it (`SOFTY_LEGACY`, `SOFTY_SITEMAP_FALLBACK`,
@@ -168,7 +171,21 @@ function input(overrides: Record<string, any> = {}): ScraperInputDto {
   } as Partial<ScraperInputDto>);
 }
 
-const ENV_KEYS = [...Object.values(SOFTY_ENV), 'EVER_JOBS_CRAWL_DISCOVERY'];
+/**
+ * Env the tests read or set. The crawl-policy keys matter because the caller lock
+ * (round 2, A1) is resolved by the REAL `resolveCallerOverrides` from the env.
+ */
+const ENV_KEYS = [
+  ...Object.values(SOFTY_ENV),
+  'EVER_JOBS_CRAWL_DISCOVERY',
+  'EVER_JOBS_CRAWL_POLICIES',
+  'EVER_JOBS_CRAWL_POLICY_FILE',
+  'EVER_JOBS_CRAWL_CALLER_OVERRIDES',
+  'EVER_JOBS_CRAWL_PRESET',
+  'EVER_JOBS_CRAWL_PLUGIN_MANIFESTS',
+  'EVER_JOBS_CRAWL_BUILTIN_HOSTS',
+  'EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE',
+];
 const MODES = ['auto', 'sitemap', 'listing'];
 
 /** The mocked resolver: the caller's `crawl.discovery` wins (as under callerOverrides `any`), else `auto`. */
@@ -187,6 +204,7 @@ describe('SoftyService (Specs 1691, 1715)', () => {
       savedEnv[key] = process.env[key];
       delete process.env[key];
     }
+    resetCrawlPolicyEnvCache();
     fake = FakeSofty.acme();
     service = new SoftyService();
     mockCreateHttpClient.mockReset().mockImplementation(() => fake);
@@ -201,6 +219,7 @@ describe('SoftyService (Specs 1691, 1715)', () => {
       if (savedEnv[key] === undefined) delete process.env[key];
       else process.env[key] = savedEnv[key];
     }
+    resetCrawlPolicyEnvCache();
     jest.restoreAllMocks();
   });
 
@@ -556,6 +575,63 @@ describe('SoftyService (Specs 1691, 1715)', () => {
       expect(fake.calls).toEqual([SITEMAP, `${BASE}/s1.xml`, `${BASE}/s2.xml`, OFFER(1005)]);
       expect(res.jobs.map((j) => j.atsId)).toEqual(['1005']);
     });
+
+    // ── nested sitemaps, round 2 (A5: a struggling server stops; F4: the pre-1715 skip is a switch) ──
+
+    const S1 = `${BASE}/s1.xml`;
+    const S2 = `${BASE}/s2.xml`;
+    const NESTED_INDEX = `<sitemapindex><sitemap><loc>${S1}</loc></sitemap><sitemap><loc>${S2}</loc></sitemap></sitemapindex>`;
+    const nestedTenant = (first: Route): FakeSofty =>
+      useClient(FakeSofty.acme().set(SITEMAP, NESTED_INDEX).set(S1, first).set(S2, fixture('sitemap.xml')));
+
+    it.each([
+      ['500', 'fetch_error', { status: 500 } as Route],
+      ['502', 'fetch_error', { status: 502 } as Route],
+      ['504', 'fetch_error', { status: 504 } as Route],
+      ['a timeout', 'timeout', networkError('ECONNABORTED', 'timeout of 60000ms exceeded')],
+      ['a connection reset', 'fetch_error', networkError('ECONNRESET', 'socket hang up')],
+    ])('a nested sitemap answering %s stops the scrape → %s: no further document, no detail page (A5)', async (_label, reason, route) => {
+      const tenant = nestedTenant(route);
+      const res = await service.scrape(input({ resultsWanted: 2 }));
+      expect(tenant.calls).toEqual([SITEMAP, S1]);
+      expect(res.jobs).toEqual([]);
+      expect(res.diagnostics?.reason).toBe(reason);
+    });
+
+    it('a nested sitemap that is gone (410) is still skipped: not a struggling server (A5 leaves it alone)', async () => {
+      const tenant = nestedTenant({ status: 410 });
+      const res = await service.scrape(input({ resultsWanted: 1 }));
+      expect(tenant.calls).toEqual([SITEMAP, S1, S2, OFFER(1005)]);
+      expect(res.diagnostics).toBeUndefined();
+    });
+
+    it.each([
+      ['502', { status: 502 } as Route],
+      ['a timeout', networkError('ECONNABORTED', 'timeout of 60000ms exceeded')],
+      ['429', { status: 429 } as Route],
+      ['503', { status: 503 } as Route],
+      ['403', { status: 403 } as Route],
+      ['a crawl-policy cool-down', new HostCoolingDownError('domain:softy.pro', 30000, 502)],
+    ])('SOFTY_LEGACY=nested-skip: a nested %s is skipped and the walk goes on (pre-1715; red control of A5 / FR-16)', async (_label, route) => {
+      process.env.SOFTY_LEGACY = 'nested-skip';
+      const tenant = nestedTenant(route);
+      const res = await service.scrape(input({ resultsWanted: 2 }));
+      expect(tenant.calls).toEqual([SITEMAP, S1, S2, OFFER(1005), OFFER(1001)]);
+      expect(res.jobs.map((j) => j.atsId)).toEqual(['1005', '1001']);
+      expect(res.diagnostics).toBeUndefined();
+    });
+
+    it.each([
+      ['502', { status: 502 } as Route],
+      ['429', { status: 429 } as Route],
+      ['403', { status: 403 } as Route],
+    ])('SOFTY_SITEMAP_FALLBACK=any-error: a nested %s is skipped as before 1715 (F4)', async (_label, route) => {
+      process.env.SOFTY_SITEMAP_FALLBACK = 'any-error';
+      const tenant = nestedTenant(route);
+      const res = await service.scrape(input({ resultsWanted: 2 }));
+      expect(tenant.calls).toEqual([SITEMAP, S1, S2, OFFER(1005), OFFER(1001)]);
+      expect(res.diagnostics).toBeUndefined();
+    });
   });
 
   // ── unknown tenants (Spec 1715 FR-5) ────────────────────────────────────────
@@ -846,20 +922,86 @@ describe('SoftyService (Specs 1691, 1715)', () => {
       expect(res.jobs).toHaveLength(2);
     });
 
-    it('uses the listing when the detail budget cannot cover every wanted offer (detail-25, resultsWanted 60)', async () => {
-      // A 65-offer tenant: the sitemap path would stop at 25 posts; the listing returns 60, 25 of them detailed.
+    /** A 65-offer tenant with a sitemap, 4 list pages and every detail page. */
+    function bigTenant(): number[] {
       const ids = Array.from({ length: 65 }, (_, i) => 4000 + i);
       const pages = [ids.slice(0, 21), ids.slice(21, 42), ids.slice(42, 63), ids.slice(63)];
       fake.set(SITEMAP, generatedSitemap(ids));
       pages.forEach((pageIds, i) => fake.set(PAGE(i + 1), generatedPage(pageIds, i + 1, pages.length)));
       ids.forEach((id) => fake.set(OFFER(id), detailPage(String(id))));
+      return ids;
+    }
 
+    const listPageCalls = () => fake.calls.filter((u) => u.includes('?page='));
+
+    it("under the Softy lock a caller's short detail budget stays on the sitemap: 25 posts + partial, no list page (round 2, A1)", async () => {
+      // detail-25 with resultsWanted 60 used to read /offers?page=1..3 — a caller could
+      // steer the scrape to list pages with ordinary search parameters (audit G22).
+      bigTenant();
+      const res = await service.scrape(input({ resultsWanted: 60, descriptionDepth: 'detail-25' }));
+
+      expect(fake.calls[0]).toBe(SITEMAP);
+      expect(listPageCalls()).toEqual([]);
+      expect(fake.detailCalls()).toHaveLength(25);
+      expect(res.jobs).toHaveLength(25);
+      expect(res.diagnostics?.reason).toBe('partial');
+      expect(res.diagnostics?.detail).toContain('detail-page budget (25) exhausted');
+      expect(res.diagnostics?.detail).toContain("Caller overrides are 'stricter'");
+      expect(res.diagnostics?.detail).toContain('SOFTY_LEGACY=caller-listing');
+    });
+
+    it('under the lock a resultsWanted above SOFTY_MAX_DETAIL_FETCHES stays on the sitemap too (A1)', async () => {
+      process.env.SOFTY_MAX_DETAIL_FETCHES = '3';
+      const res = await service.scrape(input({ resultsWanted: 5, descriptionDepth: 'detail-all' }));
+      expect(fake.calls).toEqual([SITEMAP, OFFER(1005), OFFER(1001), OFFER(1002)]);
+      expect(res.jobs.map((j) => j.atsId)).toEqual(['1005', '1001', '1002']);
+      expect(res.diagnostics?.reason).toBe('partial');
+    });
+
+    it('SOFTY_LEGACY=caller-listing: the budget trigger reads the listing again (the pre-round-2 selection; red control of A1)', async () => {
+      // A 65-offer tenant: the sitemap path would stop at 25 posts; the listing returns 60, 25 of them detailed.
+      process.env.SOFTY_LEGACY = 'caller-listing';
+      bigTenant();
       const res = await service.scrape(input({ resultsWanted: 60, descriptionDepth: 'detail-25' }));
 
       expect(fake.calls).not.toContain(SITEMAP);
+      expect(listPageCalls()).toEqual([PAGE(1), PAGE(2), PAGE(3)]);
       expect(res.jobs).toHaveLength(60);
       expect(fake.detailCalls()).toHaveLength(25);
       expect(res.diagnostics).toBeUndefined();
+    });
+
+    it("an OPERATOR's 'auto' keeps the listing for a short budget (EVER_JOBS_CRAWL_DISCOVERY / sites.softy)", async () => {
+      bigTenant();
+      for (const layer of ['env-global', 'operator-site', 'operator-host']) {
+        mockResolveCrawlPolicy.mockReturnValue({ discovery: 'auto', provenance: { discovery: layer } });
+        fake.calls.length = 0;
+        service.clearCaches();
+        const res = await service.scrape(input({ resultsWanted: 30, descriptionDepth: 'detail-25' }));
+        expect(fake.calls).not.toContain(SITEMAP);
+        expect(listPageCalls()).toEqual([PAGE(1), PAGE(2)]);
+        expect(res.jobs).toHaveLength(30);
+      }
+    });
+
+    it("with the lock lifted by the operator (sites.softy.callerOverrides 'any') a short budget reads the listing", async () => {
+      process.env.EVER_JOBS_CRAWL_POLICIES = JSON.stringify({ sites: { softy: { callerOverrides: 'any' } } });
+      resetCrawlPolicyEnvCache();
+      bigTenant();
+      const res = await service.scrape(input({ resultsWanted: 30, descriptionDepth: 'detail-25' }));
+      expect(fake.calls).not.toContain(SITEMAP);
+      expect(listPageCalls()).toEqual([PAGE(1), PAGE(2)]);
+      expect(res.jobs).toHaveLength(30);
+    });
+
+    it('the lock is resolved from the scrape context (site + plugin layer) and the Softy host', async () => {
+      // The builtin *.softy.pro host policy locks even a context without a plugin layer.
+      mockGetScrapeContext.mockReturnValue({ site: Site.SOFTY });
+      bigTenant();
+      const res = await service.scrape(input({ resultsWanted: 30, descriptionDepth: 'detail-25' }));
+      expect(fake.calls[0]).toBe(SITEMAP);
+      expect(listPageCalls()).toEqual([]);
+      expect(res.diagnostics?.detail).toContain('set by builtin-host');
     });
 
     it('offset does not count against the budget (offset 20 + 10 wanted, budget 25 → sitemap; FR-9)', async () => {
@@ -868,12 +1010,19 @@ describe('SoftyService (Specs 1691, 1715)', () => {
       expect(fake.calls[0]).toBe(SITEMAP);
     });
 
-    it('SOFTY_LEGACY=offset-budget: offset counts against the budget too (→ listing, pre-1715)', async () => {
+    it('SOFTY_LEGACY=offset-budget,caller-listing: offset counts against the budget too (→ listing, pre-1715)', async () => {
+      // offset-budget only changes the arithmetic; under the lock the budget trigger
+      // itself needs caller-listing (round 2, A1) — both are part of SOFTY_LEGACY=all.
       process.env.SOFTY_MAX_DETAIL_FETCHES = '25';
-      process.env.SOFTY_LEGACY = 'offset-budget';
+      process.env.SOFTY_LEGACY = 'offset-budget,caller-listing';
       const res = await service.scrape(input({ offset: 20, resultsWanted: 10, descriptionDepth: 'detail-all' }));
       expect(fake.calls[0]).toBe(PAGE(1));
       expect(res.diagnostics).toBeUndefined();
+
+      process.env.SOFTY_LEGACY = 'offset-budget';
+      fake.calls.length = 0;
+      await service.scrape(input({ offset: 20, resultsWanted: 10, descriptionDepth: 'detail-all' }));
+      expect(fake.calls[0]).toBe(SITEMAP);
     });
 
     it('keeps the sitemap when the budget covers resultsWanted', async () => {
@@ -1312,12 +1461,70 @@ describe('SoftyService (Specs 1691, 1715)', () => {
       useClient(
         new FakeSofty()
           .set(`${LEGACY}/offers`, fixture('legacy-offres.html'))
-          .set(`${LEGACY}/offre/208303-manager-it-workplace-h-f`, fixture('legacy-detail.html')),
+          .set(`${LEGACY}/offers/208303`, fixture('legacy-detail.html')),
       );
       const res = await service.scrape(input({ companySlug: 'legacy', crawl: { discovery: 'listing' }, resultsWanted: 2 }));
-      expect(res.jobs[0].jobUrl).toBe(`${LEGACY}/offre/208303-manager-it-workplace-h-f`);
+      expect(res.jobs[0].jobUrl).toBe(`${LEGACY}/offers/208303`);
       expect(res.jobs[0].jobUrlFetchedAt).toMatch(ISO);
       expect(res.jobs[1].jobUrlFetchedAt).toBeUndefined(); // its page answered 404
+    });
+  });
+
+  // ── listed-in-a-sitemap signal (round 2, A3) ─────────────────────────────────
+
+  describe('jobUrlListedAt (round 2, A3)', () => {
+    const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+    const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    it('is set on every post taken from a sitemap: when the sitemap answered, before any detail page', async () => {
+      const res = await service.scrape(input({ crawl: { discovery: 'sitemap' }, resultsWanted: 3 }));
+      expect(res.jobs).toHaveLength(3);
+      const listedAt = res.jobs[0].jobUrlListedAt as string;
+      expect(listedAt).toMatch(ISO);
+      for (const job of res.jobs) {
+        expect(job.jobUrlListedAt).toBe(listedAt); // one sitemap listed them all
+        expect(Date.parse(job.jobUrlFetchedAt as string)).toBeGreaterThanOrEqual(Date.parse(listedAt));
+      }
+    });
+
+    it('keeps the network time of the sitemap on a sitemap-cache hit (not the time of the hit)', async () => {
+      const first = await service.scrape(input({ resultsWanted: 2 }));
+      const listedAt = first.jobs[0].jobUrlListedAt as string;
+      expect(listedAt).toMatch(ISO);
+      await pause(25);
+      fake.calls.length = 0;
+      const again = await service.scrape(input({ resultsWanted: 2 }));
+      expect(fake.calls).toEqual([]); // sitemap and details both from the caches
+      expect(again.jobs.map((j) => j.jobUrlListedAt)).toEqual([listedAt, listedAt]);
+      expect(again.jobs.map((j) => j.jobUrlFetchedAt)).toEqual([undefined, undefined]);
+    });
+
+    it('SOFTY_SITEMAP_CACHE_TTL_MS=0: every scrape re-reads the sitemap, so it carries the new time', async () => {
+      process.env.SOFTY_SITEMAP_CACHE_TTL_MS = '0';
+      const first = await service.scrape(input({ resultsWanted: 1 }));
+      await pause(25);
+      const again = await service.scrape(input({ resultsWanted: 1 }));
+      expect(Date.parse(again.jobs[0].jobUrlListedAt as string)).toBeGreaterThan(
+        Date.parse(first.jobs[0].jobUrlListedAt as string),
+      );
+    });
+
+    it('is the time the ROOT sitemap answered for a sitemap index (the children answer later)', async () => {
+      const requestedAt: Record<string, number> = {};
+      fake.set(SITEMAP, fixture('sitemap-index.xml')).set(`${BASE}/sitemap-offers.xml`, fixture('sitemap.xml'));
+      fake.onRequest = (url) => {
+        requestedAt[url] = Date.now();
+      };
+      const res = await service.scrape(input({ crawl: { discovery: 'sitemap' }, resultsWanted: 1 }));
+      const listed = Date.parse(res.jobs[0].jobUrlListedAt as string);
+      expect(listed).toBeGreaterThanOrEqual(requestedAt[SITEMAP]);
+      expect(listed).toBeLessThanOrEqual(requestedAt[`${BASE}/sitemap-offers.xml`]);
+    });
+
+    it('is not set on the listing path (no sitemap listed the offer)', async () => {
+      const res = await service.scrape(input({ crawl: { discovery: 'listing' }, resultsWanted: 2 }));
+      expect(res.jobs).toHaveLength(2);
+      for (const job of res.jobs) expect(job.jobUrlListedAt).toBeUndefined();
     });
   });
 
@@ -1326,29 +1533,35 @@ describe('SoftyService (Specs 1691, 1715)', () => {
   describe('legacy markup fallback', () => {
     const LEGACY = 'https://legacy.softy.pro';
 
+    /** The legacy tenant; its detail pages answer on the `/offre/{ID}-{slug}` link and on its 301 target `/offers/{ID}`. */
     function legacyTenant(): FakeSofty {
       return new FakeSofty()
         .set(`${LEGACY}/offers`, fixture('legacy-offres.html'))
         .set(`${LEGACY}/offres`, fixture('legacy-offres.html'))
-        .set(`${LEGACY}/offre/208303-manager-it-workplace-h-f`, fixture('legacy-detail.html'));
+        .set(`${LEGACY}/offre/208303-manager-it-workplace-h-f`, fixture('legacy-detail.html'))
+        .set(`${LEGACY}/offers/208303`, fixture('legacy-detail.html'));
     }
 
-    it('reads the legacy index at /offers when /offers?page=1 is missing (FR-14)', async () => {
+    it('reads the legacy index at /offers when /offers?page=1 is missing, detail pages at /offers/{ID} (FR-14, A0)', async () => {
       process.env.SOFTY_SITEMAP_FALLBACK = 'missing';
       const legacy = useClient(legacyTenant());
       const res = await service.scrape(input({ companySlug: 'legacy', descriptionFormat: DescriptionFormat.PLAIN }));
+      // The /offre/{ID}-{slug} links 301 to /offers/{ID}; requesting the target keeps
+      // every detail GET one paced request (no hop inside the same limiter slot).
       expect(legacy.calls).toEqual([
         `${LEGACY}/sitemap.xml`,
         `${LEGACY}/offers?page=1`,
         `${LEGACY}/offers`,
-        `${LEGACY}/offre/208303-manager-it-workplace-h-f`,
-        `${LEGACY}/offre/208304-charge-e-marketing-digital`,
+        `${LEGACY}/offers/208303`,
+        `${LEGACY}/offers/208304`,
       ]);
+      expect(legacy.calls.some((u) => u.includes('/offre/'))).toBe(false);
       expect(res.diagnostics).toBeUndefined();
       expect(res.jobs.map((j) => j.id)).toEqual(['softy-208303', 'softy-208304']);
       expect(res.jobs[0]).toMatchObject({
         title: 'Manager It Workplace H/F',
-        jobUrl: `${LEGACY}/offre/208303-manager-it-workplace-h-f`,
+        jobUrl: `${LEGACY}/offers/208303`,
+        applyUrl: `${LEGACY}/offers/208303`,
         employmentType: 'CDI',
         datePosted: '2026-06-03',
         emails: ['rh@legacy.example'],
@@ -1356,15 +1569,30 @@ describe('SoftyService (Specs 1691, 1715)', () => {
       expect(res.jobs[0].description).toContain('piloter le poste de travail');
       expect(res.jobs[0].description).not.toContain('do not keep');
       expect(res.jobs[1]).toMatchObject({
-        jobUrl: `${LEGACY}/offre/208304-charge-e-marketing-digital`,
+        jobUrl: `${LEGACY}/offers/208304`,
         employmentType: 'Stage - 6 Mois',
         datePosted: '2026-06-01',
       });
     });
 
-    it('SOFTY_SITEMAP_FALLBACK=any-error + SOFTY_LEGACY=offres: the pre-1715 sequence via /offres', async () => {
+    it('SOFTY_LEGACY=legacy-detail-url: legacy cards link /offre/{ID}-{slug} again (pre-1715; red control of A0)', async () => {
+      process.env.SOFTY_SITEMAP_FALLBACK = 'missing';
+      process.env.SOFTY_LEGACY = 'legacy-detail-url';
+      const legacy = useClient(legacyTenant());
+      const res = await service.scrape(input({ companySlug: 'legacy', descriptionFormat: DescriptionFormat.PLAIN }));
+      expect(legacy.calls.slice(3)).toEqual([
+        `${LEGACY}/offre/208303-manager-it-workplace-h-f`,
+        `${LEGACY}/offre/208304-charge-e-marketing-digital`,
+      ]);
+      expect(res.jobs.map((j) => j.jobUrl)).toEqual([
+        `${LEGACY}/offre/208303-manager-it-workplace-h-f`,
+        `${LEGACY}/offre/208304-charge-e-marketing-digital`,
+      ]);
+    });
+
+    it('SOFTY_SITEMAP_FALLBACK=any-error + SOFTY_LEGACY=offres,legacy-detail-url: the pre-1715 sequence via /offres', async () => {
       process.env.SOFTY_SITEMAP_FALLBACK = 'any-error';
-      process.env.SOFTY_LEGACY = 'offres';
+      process.env.SOFTY_LEGACY = 'offres,legacy-detail-url';
       const legacy = useClient(legacyTenant());
       const res = await service.scrape(input({ companySlug: 'legacy', descriptionFormat: DescriptionFormat.PLAIN }));
       expect(legacy.calls).toEqual([
