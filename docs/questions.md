@@ -10,6 +10,240 @@
 
 ---
 
+## Q-128 — Softy's retry and back-off numbers (Specs 1714/1715)
+
+**Context:** Softy's operator asked us to back off on `429` / `Retry-After`, never to retry
+faster, and to back off when the server struggles; they gave no numbers. The brief chose
+them, and they now ship as the Softy manifest and the builtin `*.softy.pro` host policy:
+one request in flight for all of `softy.pro`, at least 1 s between starts (plus a 1 s
+client floor) and 0.5 s of idle time after each answer; **1 retry, on `429` and `503`
+only**, waiting at least **10 s** (`throttleRetryDelayMs`; the bucket cools that long too);
+`Retry-After` up to 60 s honoured, longer → give up and cool the bucket for the full time
+(at most 1 h per process); a **30 s** whole-bucket cool-down after a `500`/`502`/`504`, a
+timeout or a reset (`serverErrorCooldownMs`). The plugin then stops the scrape at the first
+push-back (`SOFTY_MAX_CONSECUTIVE_DETAIL_FAILURES=1`), caps detail attempts at
+`resultsWanted + 5` (`SOFTY_DETAIL_ATTEMPT_SLACK`), caches a tenant's sitemap for 10 min
+and an unknown tenant for 1 h. For comparison, the `strict` preset waits 30 s after a
+throttle (Q-121).
+
+**Options:**
+
+- **A. Keep these numbers.** A `429` or `503` costs Softy at most one more request, 10 s
+  later, before the scrape stops with `rate_limited`.
+- **B. No retry at all** (`retries: 0`): the first `429`/`503` ends the scrape; the bucket
+  still cools 10 s.
+- **C. Longer waits**: a 30 s throttle floor (as `strict`) and a 60 s server-error cool-down.
+- **D. Ask Softy's operator** which numbers they prefer, and ship those.
+
+Any installation can already set other values without a code change:
+`EVER_JOBS_CRAWL_POLICIES={"hosts":{"*.softy.pro":{…},"softy.pro":{…}}}` (operator host
+entries beat the builtin one) and the `SOFTY_*` variables
+([CRAWL_POLICY.md](./CRAWL_POLICY.md) §6.4, §21). Changing the shipped values means
+changing `BUILTIN_SOFTY_HOST_POLICY` and `SOFTY_CRAWL_POLICY` together (a parity test
+keeps them equal).
+
+**Default:** **A**, proceeding.
+
+**Resolution:** _open — awaiting the owner._
+
+---
+
+## Q-127 — Our own deployments: `EVER_JOBS_CRAWL_FLEET_SIZE` and a crawler contact (Specs 1714/1715)
+
+**Context:** Two new or newly relevant settings are for the operator of each installation,
+including ours (Q-124 asks whether this branch touches the deployment; this question asks
+which values we want). (1) `EVER_JOBS_CRAWL_FLEET_SIZE` (default 1): the host limiter is
+per process, and the audit counted 3 production replicas plus stage and dev behind one
+egress IP (G15, G27). Setting it to N multiplies each process's start spacing and idle gap
+by N **for every host with a non-zero interval** (the polite default 100 ms becomes
+N × 100 ms; Softy 1 s becomes N s), not only Softy; the bulk-API builtins (interval 0) are
+unaffected, and cool-downs stay per process (Q-122). The brief's decision is not to set it
+in production, which never scrapes Softy. (2) `EVER_JOBS_CRAWL_CONTACT` /
+`EVER_JOBS_CRAWL_FROM` (G1): unset in our deployments, so our requests carry the same UA
+bytes as every self-hosted copy and no address; the README's "For website operators"
+section now explains the UA, but only a contact identifies the installation.
+
+**Options:**
+
+- **A. Leave both unset** (today).
+- **B. Set a contact only**: `EVER_JOBS_CRAWL_CONTACT` (a URL, or a crawler-ops mailbox
+  the owner chooses) and `EVER_JOBS_CRAWL_FROM` (that mailbox) in production, stage and
+  dev; fleet size stays 1.
+- **C. B, plus `EVER_JOBS_CRAWL_FLEET_SIZE`** per environment: the replica count in
+  production (3), or the number of processes behind the shared egress IP (about 5 with
+  stage and dev), accepting slower searches on every paced host.
+
+**Default:** **A**, proceeding (no deployment change from this branch, Q-124). B costs
+nothing in speed and is recommended once a mailbox is chosen.
+
+**Resolution:** _open — awaiting the owner._
+
+---
+
+## Q-126 — Caller-override default for every other source (Spec 1714)
+
+**Context:** `EVER_JOBS_CRAWL_CALLER_OVERRIDES` keeps its global default `any` (brief), and
+only sources whose site owner asked are locked (Softy's manifest and the builtin
+`*.softy.pro` / `softy.pro` entries: `stricter`). On a default install API-key auth is off,
+so for every **other** source an anonymous search caller can still do what the audit
+showed for Softy (G0, G3, G9, G12, G29): send a browser UA or a `From:` header, drop the
+interval and the concurrency cap, rotate its own proxies per request, switch off
+`Retry-After` respect and the throttle floor.
+
+**Options:**
+
+- **A. Keep `any` globally; lock per site on request** (the Softy model). No change for
+  existing callers; other sites are protected only once their owner asks.
+- **B. Default the global mode to `stricter`**, keeping `any` as an explicit operator
+  choice. Callers could only make any source more polite, and caller `proxies` would
+  default to refused (`EVER_JOBS_CRAWL_CALLER_PROXIES` follows the mode). Breaks callers
+  that rely on their own proxies or on a browser UA for sites that refuse ours (Q-097);
+  operators restore them per site.
+- **C. Lock only identity and back-off fields for every source** (`userAgent`,
+  `userAgentMode`, `from`, `respectRetryAfter`, `retryAfterOverMax`,
+  `throttleRetryDelayMs`), leaving pacing and proxies to `any`. Needs a new field-class
+  switch.
+
+**Default:** **A**, proceeding (brief: global defaults of other sources do not change).
+
+**Resolution:** _open — awaiting the owner._
+
+---
+
+## Q-125 — `jobUrlFetchedAt`: a new public job field for the liveness skip (Spec 1714)
+
+**Context:** `?liveness=true` probed every returned job URL with a second GET, even the Softy
+offer pages the plugin had fetched moments earlier in the same request (audit G4, G28). To skip
+those, the API needs to know which pages the plugin itself fetched during this request. The
+existing `liveness` field does not fit: it is request-scoped and opt-in, and a value set by the
+plugin would be written into the search cache and the stored corpus.
+
+**Options:**
+
+- **A. New optional job field `jobUrlFetchedAt`** (ISO-8601 UTC): the instant the plugin fetched
+  `jobUrl` and parsed a 2xx page during the scrape that produced the record. The controller trusts
+  it only when it is not older than the request start and the result is not a search-cache hit.
+  Public (REST JSON, `tool_manifest.json`), optional, additive.
+- **B. An internal side channel** (a per-request set of fetched URLs in the scrape context), not
+  visible in the job JSON. Less surface, but a second contract every plugin must learn, and not
+  visible to API clients that want the same information.
+- **C. No skip**: keep probing every URL (the operator can already choose this with
+  `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false`).
+
+**Default:** **A**, proceeding (`EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=true`). Softy sets the field
+(Spec 1715); other plugins may adopt it.
+
+**Resolution:** _open — awaiting the owner._
+
+---
+
+## Q-124 — Deployment items outside this repository (Specs 1714/1715)
+
+**Context:** The audit found items that live in the deployment (`k8s-gitops`), not in code: our
+production User-Agent carries no contact and no `From` header (G1); API-key auth is off and caller
+proxies are accepted (G29). The code locks from Spec 1714 cover Softy regardless of these settings.
+
+**Options:**
+
+- **A. Leave the deployment unchanged in this branch**; the owner or infra decides separately
+  whether to set `EVER_JOBS_CRAWL_CONTACT`, `EVER_JOBS_CRAWL_FROM`, `ENABLE_API_KEY_AUTH=true` and
+  `EVER_JOBS_CRAWL_CALLER_PROXIES=none` in the prod, stage and dev Deployments.
+- **B. Change the Deployments together with this branch** (a `k8s-gitops` commit, which auto-syncs
+  and is itself a live change).
+
+**Default:** **A**, proceeding. Our production never scrapes Softy today; the lock in code protects
+Softy on every install, including third-party ones. Which values we would set (a contact, a
+`From` mailbox, `EVER_JOBS_CRAWL_FLEET_SIZE`) is Q-127.
+
+**Resolution:** _open — awaiting the owner._
+
+---
+
+## Q-123 — When the live Softy e2e runs in CI (Spec 1715)
+
+**Context:** The live Softy e2e sent requests to a real tenant on every push and PR (audit G30),
+from the same egress as production. Note (docs pass): `schedule` and `workflow_dispatch` are
+triggers of the whole CI workflow, so the weekly run also repeats every other job once a week
+(build, unit suites, Docker build, and the other sources' live e2e specs); only the Softy e2e
+is gated on the event.
+
+**Options:**
+
+- **A. Weekly `schedule` of the CI workflow plus `workflow_dispatch`**, and locally only with
+  `EVER_JOBS_LIVE_SOFTY=1`; on push and PR the job is skipped with a visible reason (the spec stays
+  in the repository). Recorded fixtures and a loopback integration test cover push/PR.
+- **B. Manual dispatch only.**
+- **C. Keep it on every push/PR** (the pre-1715 behaviour).
+
+**Default:** **A**, proceeding — weekly, Monday 04:23 UTC.
+
+**Resolution:** _open — awaiting the owner._
+
+---
+
+## Q-122 — Fleet-wide pacing, cool-downs and caches (Specs 1714/1715)
+
+**Context:** The host limiter, its cool-downs and the Softy caches are per process (audit G15,
+G24, G27). Three replicas behind one egress IP send three times the per-process budget, and a
+`Retry-After` seen by one replica does not hold the others.
+
+**Options:**
+
+- **A. Configuration only for now**: `EVER_JOBS_CRAWL_FLEET_SIZE` (default 1) multiplies each
+  process's start spacing and idle gap, so N processes together stay within one policy. Shared
+  state is a follow-up spec.
+- **B. Shared state now**: a Valkey-backed token bucket and `Retry-After` key per bucket, and a
+  shared Softy detail/sitemap cache.
+- **C. Route Softy scrapes to one replica** (a leader), keeping state per process.
+
+**Default:** **A**, proceeding. B is the long-term answer and needs its own spec.
+
+**Resolution:** _open — awaiting the owner._
+
+---
+
+## Q-121 — Precedence of the builtin host policies (Spec 1714)
+
+**Context:** The builtin-host layer (now with `*.softy.pro` / `softy.pro`) sits above the preset
+and the global env layer, as it did for the bulk-API builtins of Spec 1690. Consequences: under
+`EVER_JOBS_CRAWL_PRESET=strict` the Softy entry lowers the throttle floor from 30 s to 10 s, and a
+global `EVER_JOBS_CRAWL_MIN_INTERVAL_MS=2000` does not reach `*.softy.pro` (the entry's 1000 wins).
+
+**Options:**
+
+- **A. Keep the precedence**; an operator who wants other values for Softy sets
+  `EVER_JOBS_CRAWL_POLICIES={"hosts":{"*.softy.pro":{...}}}` (operator hosts beat builtin hosts).
+- **B. Builtin host entries may only tighten** the layers below them ("never looser than the
+  preset / env").
+
+**Default:** **A**, proceeding.
+
+**Resolution:** _open — awaiting the owner._
+
+---
+
+## Q-120 — Compatibility switches added beyond the brief (Specs 1714/1715)
+
+**Context:** The owner's no-removal rule asks for every changed default to stay reachable. The
+design added switches the brief did not name: `EVER_JOBS_CRAWL_STRICTER_RULES` (`1690` restores
+the old `stricter` comparators), `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE` (`bucket`),
+`EVER_JOBS_CRAWL_ROBOTS_BACKOFF` (`false`), `EVER_JOBS_SEARCH_STOP_ON_503` (`false`), and the
+`SOFTY_LEGACY` tokens of Spec 1715 (`offset-budget`, `duplicate-ids`, `board-over-sitemap`,
+`offres`, `block-as-missing`, `503-as-failure`, `listing-failure-details`, `no-interval-floor`,
+`all`).
+
+**Options:**
+
+- **A. Keep them all** (maximum operator flexibility; each is documented in `.env.example`,
+  [CRAWL_POLICY.md](./CRAWL_POLICY.md) and the API changelog).
+- **B. Fold them into fewer switches** (e.g. one `EVER_JOBS_CRAWL_LEGACY=1714` token list).
+
+**Default:** **A**, proceeding.
+
+**Resolution:** _open — awaiting the owner._
+
+---
+
 ## Q-099 — Boards whose robots.txt disallows generic crawlers (Specs 1692-1713)
 
 **Context:** The board fixes in Specs 1701-1713 made each plugin honest about what it fetches:

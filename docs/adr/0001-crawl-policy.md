@@ -4,7 +4,7 @@
 |---|---|
 | Status | Proposed — proceeding (AGENTS.md §9); owner review pending with Q-097 / Q-098 |
 | Date | 2026-09-25 |
-| Specs | [1690](../../.specify/specs/1690-crawl-policy/spec.md), [1691](../../.specify/specs/1691-softy-sitemap-discovery/spec.md) |
+| Specs | [1690](../../.specify/specs/1690-crawl-policy/spec.md), [1691](../../.specify/specs/1691-softy-sitemap-discovery/spec.md); amended by [1714](../../.specify/specs/1714-crawl-caller-lock-and-host-policies/spec.md), [1715](../../.specify/specs/1715-softy-audit-hardening/spec.md) (see the end) |
 | Amends | [constitution](../../.specify/memory/constitution.md) Art. 5.4, 6.1, 6.2, 11.2 (additions; no text removed) |
 | Operator guide | [docs/CRAWL_POLICY.md](../CRAWL_POLICY.md) |
 
@@ -62,3 +62,31 @@ we may hit one host.
   no-removal rule; `legacy` keeps it one setting away.
 - **robots.txt on by default.** Rejected for now (load of ~1,800 fetches per search,
   deadline impact); opt-in per site/host/request or via the `strict` preset.
+
+## Amendment — Specs 1714 and 1715 (2026-09-26)
+
+A follow-up audit found that point 4 left the site owner's request at the mercy of the
+search caller: on a default install (`EVER_JOBS_CRAWL_CALLER_OVERRIDES=any`, API-key auth
+off) an anonymous caller could undo Softy's pace, identity and back-off, and code paths
+other than the Softy plugin (liveness probes, JSON-LD) reached `*.softy.pro` under the
+generic defaults. Additions, nothing removed:
+
+- **A site owner's lock.** A plugin manifest or a builtin host policy may carry
+  `callerOverrides`; the caller layer is filtered with the most restrictive of the global
+  mode and those locks. The operator still has the final say: an operator per-site or
+  per-host `callerOverrides` replaces the result, looser or tighter. A caller can never
+  send a lock. Other sources keep the global `any` ([Q-126](../questions.md)).
+- **Host-owned policies.** Builtin host policies accept `*.suffix` patterns and apply to
+  every request to the host, whichever plugin makes it (`*.softy.pro`).
+- **`stricter` really is stricter** (no parallel rate-limit bucket, an ordered proxy
+  rotation, 429/503 kept in `retryStatuses`, `discovery` only towards the sitemap); the
+  Spec 1690 comparators stay reachable (`EVER_JOBS_CRAWL_STRICTER_RULES=1690`).
+- **Gentler pacing knobs**: an idle gap after each answer (`minGapMs`), a whole-bucket
+  cool-down after server errors (`serverErrorCooldownMs`), both off by default, and
+  `EVER_JOBS_CRAWL_FLEET_SIZE` for several processes behind one egress IP. Per-process
+  limits and cool-downs remain a known limit ([Q-122](../questions.md)).
+
+Design: [Spec 1714](../../.specify/specs/1714-crawl-caller-lock-and-host-policies/spec.md)
+(shared layer and API) and [Spec 1715](../../.specify/specs/1715-softy-audit-hardening/spec.md)
+(the Softy plugin); operator guide §6.4, §7.2 and §21 of
+[CRAWL_POLICY.md](../CRAWL_POLICY.md).
