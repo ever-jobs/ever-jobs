@@ -63,6 +63,18 @@ export interface IPluginMetadata {
   minRequestIntervalMs?: number;
 
   /**
+   * The `minIntervalFloorMs` (milliseconds) the plugin passes to
+   * `createHttpClient` (Spec 1715, audit F5): a spacing between request starts in
+   * its rate-limit bucket that no crawl-policy layer shortens — not a caller, not
+   * an operator `sites` / `hosts` entry. Declared here only so the crawl-policy API
+   * (`GET /api/sources/:site/crawl-policy`, `meta.clientMinIntervalFloorMs`) can
+   * show it; the plugin's own client option is what enforces it, and the plugin's
+   * own switch turns it off (Softy: `SOFTY_LEGACY=no-interval-floor`).
+   * Unset = the plugin sets no floor.
+   */
+  clientMinIntervalFloorMs?: number;
+
+  /**
    * Optional description of the plugin's capabilities or limitations.
    */
   description?: string;

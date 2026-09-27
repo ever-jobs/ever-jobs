@@ -10,6 +10,7 @@ import {
   SourceHealth,
   SourceHealthError,
 } from '@ever-jobs/models';
+import { readCrawlPolicyEnv } from '@ever-jobs/common';
 
 /**
  * Per-site state held by {@link CircuitBreakerService}. One record is created
@@ -134,9 +135,11 @@ export function markCircuitNeutral(err: unknown): unknown {
  * Softy does, so one refused tenant never throws) used to be recorded as a
  * success, so its breaker could never open however often the host said stop.
  *
- * Default `true`. **`false` restores the pre-1714 behaviour** (every resolved
- * call is a success). Read once at construction, like
- * {@link CIRCUIT_MAX_SITES_ENV_VAR}; `setCountRefusals()` changes it at runtime.
+ * Default `true`; `false` under `EVER_JOBS_CRAWL_PRESET=legacy` (which restores
+ * the pre-1714 defaults of the Spec 1714 switches; an explicit value wins).
+ * **`false` restores the pre-1714 behaviour** (every resolved call is a success).
+ * Read once at construction, like {@link CIRCUIT_MAX_SITES_ENV_VAR};
+ * `setCountRefusals()` changes it at runtime.
  */
 export const BREAKER_COUNT_REFUSALS_ENV = 'EVER_JOBS_BREAKER_COUNT_REFUSALS';
 
@@ -149,19 +152,22 @@ export const ERR_SOURCE_REFUSED = 'ERR_SOURCE_REFUSED';
 /**
  * Parse {@link BREAKER_COUNT_REFUSALS_ENV}: `true` / `1` / `yes` / `on` → true,
  * `false` / `0` / `no` / `off` → false (case-insensitive). Unset or empty → the
- * default `true`; anything else → `true`, reported through `onInvalid` (never thrown).
+ * default: `true`, or `false` when `EVER_JOBS_CRAWL_PRESET` resolves to `legacy`
+ * (read through `readCrawlPolicyEnv`, so it agrees with the crawl layer). Anything
+ * else → that default, reported through `onInvalid(raw, used)` (never thrown).
  */
 export function readBreakerCountRefusals(
   env: NodeJS.ProcessEnv = process.env,
-  onInvalid?: (raw: string) => void,
+  onInvalid?: (raw: string, used: boolean) => void,
 ): boolean {
+  const fallback = readCrawlPolicyEnv(env).preset !== 'legacy';
   const raw = env[BREAKER_COUNT_REFUSALS_ENV];
-  if (raw === undefined || raw.trim() === '') return true;
+  if (raw === undefined || raw.trim() === '') return fallback;
   const value = raw.trim().toLowerCase();
   if (['true', '1', 'yes', 'on'].includes(value)) return true;
   if (['false', '0', 'no', 'off'].includes(value)) return false;
-  onInvalid?.(raw);
-  return true;
+  onInvalid?.(raw, fallback);
+  return fallback;
 }
 
 /**
@@ -258,7 +264,8 @@ export class CircuitBreakerService implements ICircuitBreakerService {
   /**
    * Whether a resolved result with 0 jobs and a `rate_limited` / `blocked`
    * diagnostic counts as a failure (Spec 1714 FR-15). Read once from
-   * {@link BREAKER_COUNT_REFUSALS_ENV} at construction; `false` = pre-1714.
+   * {@link BREAKER_COUNT_REFUSALS_ENV} at construction (default `false` under the
+   * `legacy` crawl preset); `false` = pre-1714.
    */
   private countRefusals: boolean;
 
@@ -268,9 +275,10 @@ export class CircuitBreakerService implements ICircuitBreakerService {
         `${CIRCUIT_MAX_SITES_ENV_VAR}=${JSON.stringify(raw)} is not a non-negative integer; using ${DEFAULT_CIRCUIT_MAX_SITES}`,
       ),
     );
-    this.countRefusals = readBreakerCountRefusals(process.env, (raw) =>
+    this.countRefusals = readBreakerCountRefusals(process.env, (raw, used) =>
       this.logger.warn(
-        `${BREAKER_COUNT_REFUSALS_ENV}=${JSON.stringify(raw)} is not a boolean; using true (count refused empty results)`,
+        `${BREAKER_COUNT_REFUSALS_ENV}=${JSON.stringify(raw)} is not a boolean; using ${used} ` +
+          `(${used ? 'count' : 'do not count'} refused empty results)`,
       ),
     );
   }

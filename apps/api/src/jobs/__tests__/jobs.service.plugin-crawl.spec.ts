@@ -5,8 +5,10 @@ import {
   CRAWL_ENV,
   CRAWL_EXTRA_ENV,
   EVER_JOBS_DEFAULT_USER_AGENT,
+  HostLimiter,
   PluginCrawlPolicy,
   getScrapeContext,
+  hostLimiterOptionsFromEnv,
   resetCrawlPolicyEnvCache,
   resetEffectiveCrawlPolicyCache,
   resetHostLimiter,
@@ -32,6 +34,9 @@ import { JobsService } from '../jobs.service';
  *   `WTTJ_USER_AGENT_MODE=browser` only DECLARE a UA; under the default `identify`
  *   mode it reaches the wire only with the plugin-layer `userAgentMode: 'plugin'`
  *   opt-in the switches add. An operator `strict` still wins.
+ *
+ * The floors are measured where the limiter enforces them: the instant it GRANTS
+ * each slot (see {@link recordingLimiter}), not the instant the mocked adapter runs.
  */
 
 interface WireRequest {
@@ -39,6 +44,7 @@ interface WireRequest {
   method: string;
   params: Record<string, unknown> | undefined;
   userAgent: string | undefined;
+  /** When the adapter ran — NOT a pacing measure (see {@link recordingLimiter}). */
   at: number;
   callerMinIntervalMs: number | undefined;
 }
@@ -82,16 +88,51 @@ function createService(site: Site, scraper: IScraper, pluginCrawl?: PluginCrawlP
   return service as JobsService;
 }
 
-/**
- * The adapter stamps a request a moment after the limiter granted its slot, and a
- * Node timer can fire up to a millisecond before `Date.now()` reaches its due
- * time, so a measured gap may read a millisecond or two under the floor. Without
- * the floor the gap here is ~50 ms, so the slack does not blur the verdict.
- */
-const CLOCK_SLACK_MS = 5;
+/** One slot the limiter granted: its bucket and the limiter-clock instant of the grant. */
+interface Grant {
+  key: string;
+  at: number;
+}
 
-function gaps(requests: WireRequest[]): number[] {
-  return requests.slice(1).map((r, i) => r.at - requests[i].at);
+const grants: Grant[] = [];
+
+/**
+ * The real process-wide `HostLimiter`, with the instant of every grant recorded:
+ * the `now` its pump compared with the bucket's `nextStartAt` and from which it
+ * scheduled the next slot (`nextStartAt = now + minIntervalMs…`). A floor is a
+ * promise about exactly these instants, in the limiter's own `Date.now()` clock,
+ * so a gap between two grants is never below the floor, and the assertions take
+ * no slack.
+ *
+ * Why not the adapter's `Date.now()`: between the grant and the mocked adapter
+ * sit the `acquire` continuation and axios's async interceptor chain. For the
+ * first (cold) request of the file that path took 3-16 ms, for the next (warm)
+ * one 1-3 ms, so the adapter gap read up to 13 ms under the grant gap: 987, 988
+ * and 994 ms for the 1000 ms floor on loaded Linux CI runners (main run
+ * 36238701455; PR #101 runs 36245459464 and 36249571368, attempt 1), while the
+ * grants themselves were never less than 1000 ms apart. (Under a 16-core CPU
+ * burner on Windows the adapter gap read up to 52 ms under the grant gap; Windows
+ * timers wake late, which is what hid it there.)
+ *
+ * `grant` is private; the wrapper is checked to be installed, and every test
+ * asserts one grant per wire request, so a rename cannot make it pass vacuously.
+ */
+function recordingLimiter(): HostLimiter {
+  const limiter = new HostLimiter(hostLimiterOptionsFromEnv());
+  type GrantFn = (bucket: { key: string }, waiter: unknown, now: number) => void;
+  const internals = limiter as unknown as { grant?: GrantFn };
+  const grant = internals.grant;
+  if (typeof grant !== 'function') throw new Error('HostLimiter.grant(bucket, waiter, now) not found: update recordingLimiter()');
+  internals.grant = (bucket, waiter, now) => {
+    grants.push({ key: bucket.key, at: now });
+    grant.call(limiter, bucket, waiter, now);
+  };
+  return limiter;
+}
+
+/** Gaps between consecutive grants, in the limiter's clock (ms). */
+function grantGaps(): number[] {
+  return grants.slice(1).map((g, i) => g.at - grants[i].at);
 }
 
 const ENV_KEYS = [
@@ -115,8 +156,9 @@ beforeEach(() => {
   for (const k of ENV_KEYS) delete process.env[k];
   resetCrawlPolicyEnvCache();
   resetEffectiveCrawlPolicyCache();
-  resetHostLimiter();
+  resetHostLimiter(recordingLimiter());
   wire.length = 0;
+  grants.length = 0;
   reply = () => ({ data: '' });
   jest.spyOn(axios, 'create').mockImplementation((config?: CreateAxiosDefaults) => {
     const instance = realCreate(config);
@@ -169,8 +211,10 @@ describe('RemoteOK through JobsService (Spec 1707 × Spec 1690)', () => {
     expect(wire.map((r) => r.params?.tag ?? null)).toEqual(['python', null]);
     // The caller override really is in effect (the control) …
     expect(wire.every((r) => r.callerMinIntervalMs === 50)).toBe(true);
+    // … every request went through a limiter slot (the instrument is live) …
+    expect(grants).toHaveLength(wire.length);
     // … and the floor still holds.
-    expect(gaps(wire)[0]).toBeGreaterThanOrEqual(1000 - CLOCK_SLACK_MS);
+    expect(grantGaps()[0]).toBeGreaterThanOrEqual(1000);
   });
 
   it('sends the configured honest UA by default (control)', async () => {
@@ -235,7 +279,8 @@ describe('Welcome to the Jungle through JobsService (Spec 1705 × Spec 1690)', (
 
     expect(wire).toHaveLength(2);
     expect(wire.every((r) => r.callerMinIntervalMs === 50)).toBe(true);
-    expect(gaps(wire)[0]).toBeGreaterThanOrEqual(500 - CLOCK_SLACK_MS);
+    expect(grants).toHaveLength(wire.length);
+    expect(grantGaps()[0]).toBeGreaterThanOrEqual(500);
   });
 
   it('sends the configured honest UA by default (control)', async () => {
@@ -284,6 +329,7 @@ describe('Simplify through JobsService (Spec 1694 × Spec 1690)', () => {
 
     expect(wire.length).toBeGreaterThanOrEqual(2);
     expect(wire.every((r) => r.callerMinIntervalMs === 50)).toBe(true);
-    expect(Math.min(...gaps(wire))).toBeGreaterThanOrEqual(2000 - CLOCK_SLACK_MS);
+    expect(grants).toHaveLength(wire.length);
+    expect(Math.min(...grantGaps())).toBeGreaterThanOrEqual(2000);
   });
 });

@@ -12,7 +12,7 @@ import {
 } from '@ever-jobs/common';
 import { PluginRegistry } from '@ever-jobs/plugin';
 import { LIVENESS_CRAWL_SITE } from '../crawl-policy.mapping';
-import { SourcesHealthController, redactCredentials } from '../health.controller';
+import { SourcesHealthController, clientMinIntervalFloorMs, redactCredentials } from '../health.controller';
 
 /**
  * Spec 1690 §5.4 — `GET /api/sources/:site/crawl-policy?host=`: the resolved
@@ -55,6 +55,8 @@ const ENV_KEYS = [
   // Spec 1714
   CRAWL_EXTRA_ENV.FLEET_SIZE,
   CRAWL_EXTRA_ENV.BUILTIN_HOSTS,
+  // Spec 1715
+  CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE,
 ];
 let saved: Record<string, string | undefined>;
 beforeEach(() => {
@@ -335,6 +337,70 @@ describe('SourcesHealthController.crawlPolicy — caller lock and fleet size (Sp
     const res = new SourcesHealthController().crawlPolicy(LIVENESS_CRAWL_SITE, 'acme.softy.pro');
     expect(res.meta).toMatchObject({ callerOverrides: 'any', callerOverridesProvenance: 'default', builtinHostPatterns: [] });
     expect(res.maxConcurrentPerHost).toBe(POLITE_CRAWL_POLICY.maxConcurrentPerHost);
+  });
+});
+
+describe('SourcesHealthController.crawlPolicy — disabled builtin hosts and the client floor (Spec 1715)', () => {
+  function softyController(declared?: number): SourcesHealthController {
+    const registry = new PluginRegistry();
+    registry.register(
+      {
+        site: Site.SOFTY,
+        name: 'Softy',
+        category: 'ats',
+        isAts: true,
+        crawl: { rateLimitScope: 'domain', maxConcurrentPerHost: 1, minIntervalMs: 1000, callerOverrides: 'stricter' },
+        ...(declared !== undefined ? { clientMinIntervalFloorMs: declared } : {}),
+      },
+      scraper,
+    );
+    return new SourcesHealthController(undefined, registry);
+  }
+
+  it(`meta.builtinHostsDisabled is [] by default`, () => {
+    const res = new SourcesHealthController().crawlPolicy(LIVENESS_CRAWL_SITE, 'acme.softy.pro');
+    expect(res.meta.builtinHostsDisabled).toEqual([]);
+    expect(res.meta.builtinHostPatterns).toEqual(['*.softy.pro']);
+  });
+
+  it(`${CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE} lists the patterns switched off; only those stop applying`, () => {
+    process.env[CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE] = '*.softy.pro, softy.pro';
+    resetCrawlPolicyEnvCache();
+
+    const softy = new SourcesHealthController().crawlPolicy(LIVENESS_CRAWL_SITE, 'acme.softy.pro');
+    expect(softy.meta).toMatchObject({
+      builtinHostsDisabled: ['*.softy.pro', 'softy.pro'],
+      builtinHostPatterns: [],
+      callerOverrides: 'any',
+      callerOverridesProvenance: 'default',
+    });
+    expect(softy.maxConcurrentPerHost).toBe(POLITE_CRAWL_POLICY.maxConcurrentPerHost);
+
+    // The other builtin entries keep applying (unlike EVER_JOBS_CRAWL_BUILTIN_HOSTS=false).
+    const bulk = new SourcesHealthController().crawlPolicy(Site.GREENHOUSE, 'boards-api.greenhouse.io');
+    expect(bulk.meta.builtinHostsDisabled).toEqual(['*.softy.pro', 'softy.pro']);
+    expect(bulk.meta.builtinHost).toBe('boards-api.greenhouse.io');
+    expect(bulk.provenance.maxConcurrentPerHost).toBe('builtin-host');
+  });
+
+  it("meta.clientMinIntervalFloorMs reports the plugin's declared client floor", () => {
+    const res = softyController(1000).crawlPolicy(Site.SOFTY);
+    expect(res.meta.clientMinIntervalFloorMs).toBe(1000);
+  });
+
+  it('meta.clientMinIntervalFloorMs is null when the plugin declares none (or no plugin is registered)', () => {
+    expect(softyController().crawlPolicy(Site.SOFTY).meta.clientMinIntervalFloorMs).toBeNull();
+    expect(softyController(0).crawlPolicy(Site.SOFTY).meta.clientMinIntervalFloorMs).toBeNull();
+    expect(new SourcesHealthController().crawlPolicy(Site.LINKEDIN).meta.clientMinIntervalFloorMs).toBeNull();
+    expect(new SourcesHealthController().crawlPolicy(LIVENESS_CRAWL_SITE).meta.clientMinIntervalFloorMs).toBeNull();
+  });
+
+  it('clientMinIntervalFloorMs() accepts only a finite, positive number', () => {
+    expect(clientMinIntervalFloorMs(1000)).toBe(1000);
+    expect(clientMinIntervalFloorMs(0.5)).toBe(0.5);
+    for (const junk of [undefined, null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, '1000']) {
+      expect(clientMinIntervalFloorMs(junk)).toBeNull();
+    }
   });
 });
 

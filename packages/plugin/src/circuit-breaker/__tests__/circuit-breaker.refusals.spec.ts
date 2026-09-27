@@ -1,4 +1,5 @@
 import { DEFAULT_CIRCUIT_POLICY, ERR_SOURCE_CIRCUIT_OPEN, Site } from '@ever-jobs/models';
+import { CRAWL_ENV, resetCrawlPolicyEnvCache } from '@ever-jobs/common';
 import {
   BREAKER_COUNT_REFUSALS_ENV,
   BREAKER_REFUSAL_REASONS,
@@ -66,7 +67,30 @@ describe('CircuitBreakerService — refused empty results (Spec 1714 FR-15)', ()
     it('warns on an invalid value and keeps the default', () => {
       const onInvalid = jest.fn();
       expect(readBreakerCountRefusals({ [BREAKER_COUNT_REFUSALS_ENV]: 'maybe' }, onInvalid)).toBe(true);
-      expect(onInvalid).toHaveBeenCalledWith('maybe');
+      expect(onInvalid).toHaveBeenCalledWith('maybe', true);
+    });
+
+    // Spec 1715 review F7: the `legacy` crawl preset restores the pre-1714 default.
+    it('defaults to false under EVER_JOBS_CRAWL_PRESET=legacy (any spelling the crawl layer accepts)', () => {
+      expect(readBreakerCountRefusals({ [CRAWL_ENV.PRESET]: 'legacy' })).toBe(false);
+      expect(readBreakerCountRefusals({ [CRAWL_ENV.PRESET]: ' LEGACY ' })).toBe(false);
+      expect(readBreakerCountRefusals({ [CRAWL_ENV.PRESET]: 'polite' })).toBe(true);
+      expect(readBreakerCountRefusals({ [CRAWL_ENV.PRESET]: 'strict' })).toBe(true);
+      // An invalid preset is `polite` for the crawl layer, so it is not legacy here either.
+      expect(readBreakerCountRefusals({ [CRAWL_ENV.PRESET]: 'legacyish' })).toBe(true);
+    });
+
+    it('an explicit value wins over the legacy preset', () => {
+      expect(readBreakerCountRefusals({ [CRAWL_ENV.PRESET]: 'legacy', [BREAKER_COUNT_REFUSALS_ENV]: 'true' })).toBe(true);
+      expect(readBreakerCountRefusals({ [CRAWL_ENV.PRESET]: 'legacy', [BREAKER_COUNT_REFUSALS_ENV]: 'off' })).toBe(false);
+    });
+
+    it('an invalid value under the legacy preset keeps the legacy default and says so', () => {
+      const onInvalid = jest.fn();
+      expect(
+        readBreakerCountRefusals({ [CRAWL_ENV.PRESET]: 'legacy', [BREAKER_COUNT_REFUSALS_ENV]: 'maybe' }, onInvalid),
+      ).toBe(false);
+      expect(onInvalid).toHaveBeenCalledWith('maybe', false);
     });
 
     it('is mirrored on the class (the package index exports only the class)', () => {
@@ -178,6 +202,42 @@ describe('CircuitBreakerService — refused empty results (Spec 1714 FR-15)', ()
     expect(service.state(SITE)).toBe('closed');
     expect(fn).toHaveBeenCalledTimes(DEFAULT_CIRCUIT_POLICY.failureThreshold + 1);
     expect(service.health(SITE).successRate).toBe(1);
+  });
+
+  describe('under EVER_JOBS_CRAWL_PRESET=legacy (Spec 1715 review F7)', () => {
+    const savedPreset = process.env[CRAWL_ENV.PRESET];
+
+    afterEach(() => {
+      if (savedPreset === undefined) delete process.env[CRAWL_ENV.PRESET];
+      else process.env[CRAWL_ENV.PRESET] = savedPreset;
+      resetCrawlPolicyEnvCache();
+    });
+
+    function legacyBreaker(envValue: string | undefined): CircuitBreakerService {
+      process.env[CRAWL_ENV.PRESET] = 'legacy';
+      resetCrawlPolicyEnvCache();
+      return breaker(envValue);
+    }
+
+    it('a breaker built without the switch keeps the pre-1714 behaviour: refused results are successes', async () => {
+      const service = legacyBreaker(undefined);
+      expect(service.getCountRefusals()).toBe(false);
+      const fn = jest.fn(async () => response([], 'rate_limited'));
+      for (let i = 0; i < DEFAULT_CIRCUIT_POLICY.failureThreshold + 1; i++) {
+        await service.exec(SITE, fn);
+      }
+      expect(service.state(SITE)).toBe('closed');
+      expect(fn).toHaveBeenCalledTimes(DEFAULT_CIRCUIT_POLICY.failureThreshold + 1);
+    });
+
+    it('EVER_JOBS_BREAKER_COUNT_REFUSALS=true still counts them under the legacy preset', async () => {
+      const service = legacyBreaker('true');
+      expect(service.getCountRefusals()).toBe(true);
+      for (let i = 0; i < DEFAULT_CIRCUIT_POLICY.failureThreshold; i++) {
+        await service.exec(SITE, async () => response([], 'blocked'));
+      }
+      expect(service.state(SITE)).toBe('open');
+    });
   });
 
   it('setCountRefusals switches it at runtime', async () => {

@@ -10,6 +10,7 @@ import {
   normalizeCrawlOverride,
   readCrawlPolicyEnv,
 } from '@ever-jobs/common';
+import { Logger } from '@nestjs/common';
 import { CrawlPolicyDto, ScraperInputDto } from '@ever-jobs/models';
 
 // ── Compile-time contract checks (Spec 1690 §5.2) ─────────────────────────
@@ -215,18 +216,63 @@ export function livenessDeadlineMs(env: NodeJS.ProcessEnv = process.env): number
 }
 
 // ── Spec 1714 API switches ──────────────────────────────────────────────────
+//
+// Each switch below defaults to its NEW behaviour, except under
+// `EVER_JOBS_CRAWL_PRESET=legacy`, where it defaults to its pre-1714 value, like
+// the crawl switches of `CRAWL_EXTRA_ENV` (Spec 1715 review F7). An explicit value
+// always wins over the preset. An unrecognised value keeps the default and is
+// logged once per variable and value (review F8).
+
+const switchLogger = new Logger('SearchSwitches');
+
+/** `name=raw` pairs already reported as invalid, so each is logged once per process. */
+const reportedInvalidSwitches = new Set<string>();
+
+/** Forget which invalid switch values were reported (tests). */
+export function resetSwitchWarnings(): void {
+  reportedInvalidSwitches.clear();
+}
+
+/**
+ * Log `name=raw` as invalid once per process (per variable and value), naming the
+ * value used instead. Returns whether this call logged it.
+ */
+export function warnInvalidSwitchOnce(name: string, raw: string, expected: string, used: string): boolean {
+  const key = `${name}=${raw}`;
+  if (reportedInvalidSwitches.has(key)) return false;
+  reportedInvalidSwitches.add(key);
+  switchLogger.warn(`${name}=${JSON.stringify(raw)} is not ${expected}; using ${used}`);
+  return true;
+}
+
+/**
+ * Whether `EVER_JOBS_CRAWL_PRESET` resolves to `legacy` — read through the crawl
+ * policy env parse, so a spelling the crawl layer accepts (`LEGACY`, ` legacy `)
+ * counts here too, and an invalid preset (which the crawl layer replaces with
+ * `polite`, with a warning) does not. `process.env` is parsed once per process
+ * (`resetCrawlPolicyEnvCache()` after changing it); an explicit `env` is parsed fresh.
+ */
+export function crawlPresetIsLegacy(env: NodeJS.ProcessEnv = process.env): boolean {
+  return readCrawlPolicyEnv(env).preset === 'legacy';
+}
+
+const TRUE_SWITCH_WORDS: readonly string[] = ['true', '1', 'yes', 'on'];
+const FALSE_SWITCH_WORDS: readonly string[] = ['false', '0', 'no', 'off'];
 
 /**
  * A boolean switch: `true` / `1` / `yes` / `on` → true, `false` / `0` / `no` /
- * `off` → false (case-insensitive); unset, empty or anything else → `fallback`
- * (never throws, like every crawl env value).
+ * `off` → false (case-insensitive); unset or empty → `fallback`; anything else →
+ * `fallback`, logged once ({@link warnInvalidSwitchOnce}). Never throws, like every
+ * crawl env value.
  */
 function boolEnv(env: NodeJS.ProcessEnv, name: string, fallback: boolean): boolean {
   const raw = env[name];
   if (raw === undefined) return fallback;
   const value = raw.trim().toLowerCase();
-  if (['true', '1', 'yes', 'on'].includes(value)) return true;
-  if (['false', '0', 'no', 'off'].includes(value)) return false;
+  if (value === '') return fallback;
+  if (TRUE_SWITCH_WORDS.includes(value)) return true;
+  if (FALSE_SWITCH_WORDS.includes(value)) return false;
+  warnInvalidSwitchOnce(name, raw, 'a boolean (true/false/1/0/yes/no/on/off)', String(fallback));
   return fallback;
 }
 
@@ -234,15 +280,16 @@ function boolEnv(env: NodeJS.ProcessEnv, name: string, fallback: boolean): boole
  * Environment variable: in a multi-location search, a source answering 503
  * (thrown, or a resolved `fetch_error` diagnostic whose detail names 503 /
  * "Service Unavailable") is a refusal, so its remaining locations are not
- * attempted (Spec 1714 FR-14, audit G17). Default `true`. **`false` restores the
- * pre-1714 behaviour** (only 429, `rate_limited`, `blocked` and an open circuit
- * stop the loop; a 503 source is asked again for every location).
+ * attempted (Spec 1714 FR-14, audit G17). Default `true` (`false` under
+ * `EVER_JOBS_CRAWL_PRESET=legacy`). **`false` restores the pre-1714 behaviour**
+ * (only 429, `rate_limited`, `blocked` and an open circuit stop the loop; a 503
+ * source is asked again for every location).
  */
 export const SEARCH_STOP_ON_503_ENV = 'EVER_JOBS_SEARCH_STOP_ON_503';
 
-/** `EVER_JOBS_SEARCH_STOP_ON_503` (default `true`; `false` = pre-1714). */
+/** `EVER_JOBS_SEARCH_STOP_ON_503` (default `true`, `false` under the `legacy` preset; `false` = pre-1714). */
 export function searchStopOn503(env: NodeJS.ProcessEnv = process.env): boolean {
-  return boolEnv(env, SEARCH_STOP_ON_503_ENV, true);
+  return boolEnv(env, SEARCH_STOP_ON_503_ENV, !crawlPresetIsLegacy(env));
 }
 
 /**
@@ -252,13 +299,52 @@ export function searchStopOn503(env: NodeJS.ProcessEnv = process.env): boolean {
  * very search — is marked `liveness: { state: 'active', reason: 'fresh-fetch' }`
  * instead of being probed again (a second GET of the same page moments later,
  * outside the source's own pacing). A search-cache hit never counts as fresh.
- * Default `true`. **`false` restores the pre-1714 behaviour** (every URL probed).
+ * Default `true` (`false` under `EVER_JOBS_CRAWL_PRESET=legacy`). **`false`
+ * restores the pre-1714 behaviour** for this evidence; a job whose listing is
+ * trusted instead ({@link LIVENESS_TRUST_LISTED_MAX_AGE_ENV}) is still not probed,
+ * so every URL is probed only with that switch at `0` too.
  */
 export const LIVENESS_TRUST_FRESH_FETCH_ENV = 'EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH';
 
-/** `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH` (default `true`; `false` = pre-1714). */
+/** `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH` (default `true`, `false` under the `legacy` preset; `false` = pre-1714). */
 export function livenessTrustFreshFetch(env: NodeJS.ProcessEnv = process.env): boolean {
-  return boolEnv(env, LIVENESS_TRUST_FRESH_FETCH_ENV, true);
+  return boolEnv(env, LIVENESS_TRUST_FRESH_FETCH_ENV, !crawlPresetIsLegacy(env));
+}
+
+/**
+ * Environment variable: how old, at most, a job's `jobUrlListedAt` may be for
+ * `?liveness=true` to trust it instead of probing `jobUrl`, ms (Spec 1715 review
+ * A3). `jobUrlListedAt` is the instant the source's own index (Softy: the tenant's
+ * `/sitemap.xml`) that lists the offer was fetched from the network, whether this
+ * request fetched it or read it from the plugin's sitemap cache. The age is
+ * measured against NOW, not against the request start, so a search-cache hit is
+ * trusted too while the listing is young enough. A trusted job is marked
+ * `liveness: { state: 'active', checkedAt: jobUrlListedAt, reason: 'listed' }`.
+ *
+ * Default {@link DEFAULT_LIVENESS_TRUST_LISTED_MAX_AGE_MS} (10 min, the Softy
+ * sitemap cache TTL); `0` under `EVER_JOBS_CRAWL_PRESET=legacy`. **`0` turns it
+ * off** (the pre-fix behaviour: only a fresh fetch is trusted). A non-negative
+ * integer; anything else keeps the default and is logged once.
+ */
+export const LIVENESS_TRUST_LISTED_MAX_AGE_ENV = 'EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS';
+
+/** Default of {@link LIVENESS_TRUST_LISTED_MAX_AGE_ENV}, ms (10 min). */
+export const DEFAULT_LIVENESS_TRUST_LISTED_MAX_AGE_MS = 600_000;
+
+/**
+ * `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS`: unset or empty → 600 000 (`0`
+ * under the `legacy` preset); a non-negative integer → that value (`0` = off);
+ * anything else → the default, logged once.
+ */
+export function livenessTrustListedMaxAgeMs(env: NodeJS.ProcessEnv = process.env): number {
+  const fallback = crawlPresetIsLegacy(env) ? 0 : DEFAULT_LIVENESS_TRUST_LISTED_MAX_AGE_MS;
+  const raw = env[LIVENESS_TRUST_LISTED_MAX_AGE_ENV];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const trimmed = raw.trim();
+  const value = Number(trimmed);
+  if (/^\d+$/.test(trimmed) && Number.isSafeInteger(value)) return value;
+  warnInvalidSwitchOnce(LIVENESS_TRUST_LISTED_MAX_AGE_ENV, raw, 'a non-negative integer (ms; 0 = off)', String(fallback));
+  return fallback;
 }
 
 /**

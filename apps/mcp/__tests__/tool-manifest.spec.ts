@@ -59,5 +59,10 @@ describe('tool_manifest.json', () => {
       const job = manifest.output_schema.properties.jobs.items.properties;
       expect(job.jobUrlFetchedAt).toMatchObject({ type: 'string', format: 'date-time' });
     });
+
+    it('advertises the optional jobUrlListedAt output field (Spec 1715 review A3)', () => {
+      const job = manifest.output_schema.properties.jobs.items.properties;
+      expect(job.jobUrlListedAt).toMatchObject({ type: 'string', format: 'date-time' });
+    });
   });
 });

@@ -30,6 +30,7 @@ import {
   type ILegitimacyChecker,
   type LegitimacyInput,
   JOB_LIVENESS_REASON_FRESH_FETCH,
+  JOB_LIVENESS_REASON_LISTED,
 } from '@ever-jobs/models';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -38,7 +39,12 @@ import {
   hasExclusionInput,
   runWithScrapeContext,
 } from '@ever-jobs/common';
-import { LIVENESS_CRAWL_SITE, livenessDeadlineMs, livenessTrustFreshFetch } from './crawl-policy.mapping';
+import {
+  LIVENESS_CRAWL_SITE,
+  livenessDeadlineMs,
+  livenessTrustFreshFetch,
+  livenessTrustListedMaxAgeMs,
+} from './crawl-policy.mapping';
 import { JobsService, readMaxSearchLocations } from './jobs.service';
 import { AggregateResult, JobsAggregator } from './jobs.aggregator';
 import {
@@ -216,7 +222,10 @@ export class JobsController {
     description:
       'Probe each returned posting URL (liveness-http) and attach liveness {state, checkedAt}. Off unless requested. ' +
       'The server can refuse it (EVER_JOBS_LIVENESS_ENABLED=false → no liveness field) and caps probes per request ' +
-      '(EVER_JOBS_LIVENESS_MAX_URLS, default 100; jobs past the cap carry no liveness).',
+      '(EVER_JOBS_LIVENESS_MAX_URLS, default 100; jobs past the cap carry no liveness). A posting its source ' +
+      'fetched during this request (jobUrlFetchedAt) or listed in an index fetched within ' +
+      'EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS (jobUrlListedAt, default 10 min) is not probed: it gets ' +
+      "liveness {state: 'active', checkedAt, reason: 'fresh-fetch' | 'listed'}.",
   })
   @ApiQuery({
     name: 'legitimacy',
@@ -825,16 +834,20 @@ export class JobsController {
    * `trustSince` (Spec 1714 FR-16; the request start, `undefined` on a search-cache hit): a job
    * whose `jobUrlFetchedAt` is not older than it — its plugin fetched and parsed `jobUrl` during
    * this very request — is marked `{ state: 'active', checkedAt: jobUrlFetchedAt, reason:
-   * 'fresh-fetch' }` and NOT probed again. `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false` probes every
-   * URL (the pre-1714 behaviour). Probe verdicts keep their pre-1714 shape (no `reason`).
+   * 'fresh-fetch' }` and NOT probed again. `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false` turns
+   * that off (the pre-1714 behaviour). A job whose source listed it in an index fetched at
+   * most `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` ago (`jobUrlListedAt`, measured against
+   * now, so on a cache hit too) is marked `{ state: 'active', checkedAt: jobUrlListedAt,
+   * reason: 'listed' }` and not probed either (Spec 1715 review A3; `0` turns it off). With
+   * both off every URL is probed. Probe verdicts keep their pre-1714 shape (no `reason`).
    *
    * Spec 1723 — at most `EVER_JOBS_LIVENESS_MAX_URLS` URLs (default 100) are probed, the
-   * first ones in output order among the jobs still needing a probe (freshly fetched jobs
-   * cost no probe, so they do not count); jobs past the cap are left without a `liveness` field.
+   * first ones in output order among the jobs still needing a probe (trusted jobs cost no
+   * probe, so they do not count); jobs past the cap are left without a `liveness` field.
    */
   private async enrichLiveness(jobs: JobPostDto[], trustSince?: number): Promise<void> {
     let toProbe = this.markFreshlyFetched(jobs, trustSince);
-    // Every job was freshly fetched: nothing left to probe. (With nothing trusted,
+    // Every job was trusted (fetched or listed): nothing left to probe. (With nothing trusted,
     // `toProbe` is `jobs` itself and the batch runs exactly as before, even when empty.)
     if (toProbe !== jobs && toProbe.length === 0) return;
     const maxUrls = this.configService.get<number>('liveness.maxUrls', DEFAULT_LIVENESS_MAX_URLS);
@@ -868,34 +881,67 @@ export class JobsController {
   }
 
   /**
-   * Spec 1714 FR-16 — mark the jobs whose plugin fetched `jobUrl` at or after `trustSince` as
-   * live (`reason: 'fresh-fetch'`) and return the ones that still need a probe, in order. Returns
-   * `jobs` itself when nothing is trusted (no `trustSince`, or the switch is off).
+   * Mark the jobs whose liveness their source already vouched for, and return the ones that
+   * still need a probe, in order. Returns `jobs` itself when nothing is trusted.
+   *
+   * - Spec 1714 FR-16 — `jobUrlFetchedAt` at or after `trustSince` (the plugin fetched `jobUrl`
+   *   during this request): `reason: 'fresh-fetch'`. Needs `trustSince` (none on a cache hit)
+   *   and `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH` (default on).
+   * - Spec 1715 review A3 — otherwise, `jobUrlListedAt` at most
+   *   `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` before NOW (default 10 min; `0` = off, the
+   *   pre-fix behaviour): `reason: 'listed'`. Measured against now, not the request start, so a
+   *   search-cache hit whose listing is still young is trusted too. A listing time in the future
+   *   (a clock ahead of ours, e.g. another replica sharing the search cache) is not trusted: the
+   *   job is probed, as before the fix.
    */
   private markFreshlyFetched(jobs: JobPostDto[], trustSince: number | undefined): JobPostDto[] {
-    if (trustSince === undefined || !livenessTrustFreshFetch()) return jobs;
+    const trustFetched = trustSince !== undefined && livenessTrustFreshFetch();
+    const listedMaxAgeMs = livenessTrustListedMaxAgeMs();
+    if (!trustFetched && listedMaxAgeMs <= 0) return jobs;
+    const now = Date.now();
     const toProbe: JobPostDto[] = [];
-    let trusted = 0;
+    let fetched = 0;
+    let listed = 0;
     for (const job of jobs) {
-      const fetchedAt = typeof job.jobUrlFetchedAt === 'string' ? Date.parse(job.jobUrlFetchedAt) : Number.NaN;
-      if (Number.isFinite(fetchedAt) && fetchedAt >= trustSince) {
-        job.liveness = {
-          state: 'active',
-          checkedAt: job.jobUrlFetchedAt as string,
-          reason: JOB_LIVENESS_REASON_FRESH_FETCH,
-        };
-        trusted++;
-      } else {
-        toProbe.push(job);
+      if (trustFetched) {
+        const fetchedAt = typeof job.jobUrlFetchedAt === 'string' ? Date.parse(job.jobUrlFetchedAt) : Number.NaN;
+        if (Number.isFinite(fetchedAt) && fetchedAt >= (trustSince as number)) {
+          job.liveness = {
+            state: 'active',
+            checkedAt: job.jobUrlFetchedAt as string,
+            reason: JOB_LIVENESS_REASON_FRESH_FETCH,
+          };
+          fetched++;
+          continue;
+        }
       }
+      if (listedMaxAgeMs > 0) {
+        const listedAt = typeof job.jobUrlListedAt === 'string' ? Date.parse(job.jobUrlListedAt) : Number.NaN;
+        if (Number.isFinite(listedAt) && listedAt <= now && now - listedAt <= listedMaxAgeMs) {
+          job.liveness = {
+            state: 'active',
+            checkedAt: job.jobUrlListedAt as string,
+            reason: JOB_LIVENESS_REASON_LISTED,
+          };
+          listed++;
+          continue;
+        }
+      }
+      toProbe.push(job);
     }
-    if (trusted > 0) {
+    if (fetched > 0) {
       this.logger.log(
-        `Liveness: ${trusted} job(s) fetched by their source during this request marked active without a probe ` +
+        `Liveness: ${fetched} job(s) fetched by their source during this request marked active without a probe ` +
           `(EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false probes them anyway)`,
       );
     }
-    return trusted > 0 ? toProbe : jobs;
+    if (listed > 0) {
+      this.logger.log(
+        `Liveness: ${listed} job(s) listed by their source within the last ${listedMaxAgeMs} ms marked active ` +
+          `without a probe (EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS=0 probes them anyway)`,
+      );
+    }
+    return fetched + listed > 0 ? toProbe : jobs;
   }
 
   /**

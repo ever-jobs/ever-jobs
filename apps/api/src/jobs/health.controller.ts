@@ -35,6 +35,7 @@ import {
   CrawlPolicyOverride,
   PluginCrawlPolicy,
   ResolvedCrawlPolicy,
+  crawlBuiltinHostsDisabled,
   crawlFleetSize,
   explainCrawlPolicy,
   normalizeCrawlHostName,
@@ -72,6 +73,23 @@ export type SourceCrawlPolicyResponse = ResolvedCrawlPolicy & {
     /** Builtin host policy patterns applied (e.g. `["*.softy.pro"]`), least specific first (Spec 1714 FR-8). */
     builtinHostPatterns: string[];
     /**
+     * `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE`: the builtin host patterns the operator
+     * switched off (e.g. `["*.softy.pro", "softy.pro"]`), whatever the host; `[]` when
+     * none (Spec 1715 review F3). A disabled pattern never appears in `builtinHostPatterns`.
+     */
+    builtinHostsDisabled: string[];
+    /**
+     * The spacing between request starts, ms, that the plugin's own HTTP client
+     * enforces as a floor (`createHttpClient({ minIntervalFloorMs })`), as the plugin
+     * declares it (`clientMinIntervalFloorMs`), or `null` (Spec 1715 review F5). No
+     * crawl-policy layer shortens it — not a caller, not an operator `sites` /
+     * `hosts` entry — so the top-level `minIntervalMs` can read lower than what goes
+     * on the wire. Only the plugin's own switch removes it (Softy:
+     * `SOFTY_LEGACY=no-interval-floor`); like `minIntervalMs` it is multiplied by
+     * `fleetSize`.
+     */
+    clientMinIntervalFloorMs: number | null;
+    /**
      * `EVER_JOBS_CRAWL_FLEET_SIZE`: processes sharing one egress; this process
      * multiplies `minIntervalMs` and `minGapMs` by it (Spec 1714 FR-11). The
      * top-level policy shows the per-policy values, not the multiplied ones.
@@ -91,6 +109,15 @@ export type SourceCrawlPolicyResponse = ResolvedCrawlPolicy & {
   /** Env parse warnings and resolution notes (credentials redacted). */
   warnings: string[];
 };
+
+/**
+ * A plugin's declared `clientMinIntervalFloorMs` as reported by the crawl-policy
+ * API: a finite, positive number of milliseconds, else `null` (unset, 0 or junk
+ * declares no floor).
+ */
+export function clientMinIntervalFloorMs(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
 
 /**
  * Hide `user:password@` in anything echoed back (e.g. proxy URLs in warnings).
@@ -332,7 +359,9 @@ export class SourcesHealthController {
    * — Softy's `stricter` — can tighten the global
    * `EVER_JOBS_CRAWL_CALLER_OVERRIDES`; an operator per-site/host value replaces
    * it), with `meta.callerOverridesProvenance`, `meta.globalCallerOverrides`,
-   * `meta.builtinHostPatterns` and `meta.fleetSize`.
+   * `meta.builtinHostPatterns` and `meta.fleetSize`. Spec 1715: `meta.builtinHostsDisabled`
+   * (`EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE`) and `meta.clientMinIntervalFloorMs` (the
+   * plugin client's spacing floor, which no policy layer shortens).
    *
    * 404 for a site that is neither a known `Site`, a registered plugin, nor a
    * crawl pseudo-site (`liveness-http`, or a `sites` key of the operator policy);
@@ -348,7 +377,10 @@ export class SourcesHealthController {
       '`meta.callerOverrides` is the effective caller-override mode: a site owner can lock what a ' +
       'search caller may change (e.g. Softy: `stricter`, callers may only make its traffic more polite), ' +
       'and an operator per-site/host `callerOverrides` replaces it; `meta.callerOverridesProvenance` ' +
-      'names the deciding layer, `meta.fleetSize` the EVER_JOBS_CRAWL_FLEET_SIZE multiplier (Spec 1714).',
+      'names the deciding layer, `meta.fleetSize` the EVER_JOBS_CRAWL_FLEET_SIZE multiplier (Spec 1714). ' +
+      '`meta.builtinHostsDisabled` lists the builtin host patterns EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE switches off; ' +
+      "`meta.clientMinIntervalFloorMs` is the plugin client's own spacing floor (e.g. Softy: 1000), which no policy " +
+      'layer shortens (Spec 1715).',
   })
   @ApiParam({ name: 'site', description: 'Source key, e.g. "softy"' })
   @ApiQuery({
@@ -422,6 +454,8 @@ export class SourcesHealthController {
         callerOverridesProvenance: explanation.callerOverridesSource,
         globalCallerOverrides: explanation.globalCallerOverrides,
         builtinHostPatterns: explanation.builtinHostPatterns,
+        builtinHostsDisabled: crawlBuiltinHostsDisabled(env),
+        clientMinIntervalFloorMs: clientMinIntervalFloorMs(meta?.clientMinIntervalFloorMs),
         fleetSize: crawlFleetSize(env),
         abortOnDeadline: env.abortOnDeadline,
         envProxyCount: env.proxies.length,

@@ -29,6 +29,13 @@ import { LivenessHttpService } from '../src';
  *
  * Red control of the key test: set {@link BUILTIN_HOSTS_FOR_KEY_TEST} to
  * `'false'` → two `host:` buckets, overlapping probes, two proxies (test red).
+ *
+ * The key test answers slowly (700 ms), so the 0.5 s idle gap alone spaces the
+ * starts 1.2 s apart and it cannot see the 1 s start-to-start interval. The
+ * "fast answers" test does (Spec 1715 review C1): 20 ms answers leave only the
+ * interval to hold the starts 1 s apart, and its control lowers ONLY
+ * `minIntervalMs` (operator `hosts["*.softy.pro"]`, `minGapMs` kept) to show the
+ * starts then drop to answer + gap = 520 ms.
  */
 const BUILTIN_HOSTS_FOR_KEY_TEST: string | undefined = undefined;
 
@@ -36,6 +43,8 @@ const LIVENESS_SITE = 'liveness-http';
 const PROXIES = ['p1.example:8080', 'p2.example:8080', 'p3.example:8080', 'p4.example:8080'];
 /** The fake answers each probe after this long, so the idle gap (not the interval) decides the next start. */
 const ANSWER_MS = 700;
+/** A fast answer: answer + the 500 ms idle gap stays far below the 1 s interval, so the interval decides. */
+const FAST_ANSWER_MS = 20;
 
 const URLS = [
   'https://a.softy.pro/offers/101',
@@ -96,6 +105,7 @@ describe('LivenessHttpService — Softy probes run under the builtin host policy
   let probes: Probe[];
   let inFlight: number;
   let maxInFlight: number;
+  let answerMs: number;
 
   beforeEach(() => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
@@ -104,6 +114,7 @@ describe('LivenessHttpService — Softy probes run under the builtin host policy
     probes = [];
     inFlight = 0;
     maxInFlight = 0;
+    answerMs = ANSWER_MS;
     // Every HttpClient created from now on inherits this transport (axios.create
     // merges axios.defaults), including the one checkBatch builds.
     axios.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
@@ -116,7 +127,7 @@ describe('LivenessHttpService — Softy probes run under the builtin host policy
       inFlight++;
       maxInFlight = Math.max(maxInFlight, inFlight);
       try {
-        await new Promise((resolve) => setTimeout(resolve, ANSWER_MS));
+        await new Promise((resolve) => setTimeout(resolve, answerMs));
         const response = {
           data: ACTIVE_HTML,
           status: 200,
@@ -169,7 +180,8 @@ describe('LivenessHttpService — Softy probes run under the builtin host policy
     expect(probes).toHaveLength(4);
     // Never 2 in flight to the shared Softy server, although the batch runs 4 workers.
     expect(maxInFlight).toBe(1);
-    // ≥ 1 s between starts (minIntervalMs) …
+    // ≥ 1 s between starts (with 700 ms answers this follows from the idle gap; the
+    // interval on its own is proven by the fast-answers test below) …
     const s = starts();
     for (let i = 1; i < s.length; i++) expect(s[i] - s[i - 1]).toBeGreaterThanOrEqual(975);
     // … and ≥ 0.5 s idle after each answer (minGapMs): with 700 ms answers the gap decides.
@@ -181,6 +193,46 @@ describe('LivenessHttpService — Softy probes run under the builtin host policy
     // One bucket for the whole registrable domain, one proxy for every probe.
     expect(bucketKeys()).toEqual(['domain:softy.pro']);
     expect(new Set(probes.map((p) => p.proxy))).toEqual(new Set([proxyFor('domain:softy.pro')]));
+  });
+
+  describe('fast answers: the 1 s start-to-start interval holds on its own (Spec 1715 review C1)', () => {
+    const idleGaps = () => {
+      const byStart = [...probes].sort((a, b) => a.startedAt - b.startedAt);
+      return byStart.slice(1).map((p, i) => p.startedAt - byStart[i].endedAt!);
+    };
+    const startGaps = () => {
+      const s = starts();
+      return s.slice(1).map((t, i) => t - s[i]);
+    };
+
+    it('20 ms answers: starts stay ≥ 1 s apart although the idle gap alone would allow 520 ms', async () => {
+      answerMs = FAST_ANSWER_MS;
+
+      const { results } = await probeAll();
+
+      expect(results).toEqual(['active', 'active', 'active', 'active']);
+      expect(maxInFlight).toBe(1);
+      expect(bucketKeys()).toEqual(['domain:softy.pro']);
+      // The interval, not the gap, decides: every start is ≥ 1 s after the previous one …
+      for (const gap of startGaps()) expect(gap).toBeGreaterThanOrEqual(1000);
+      // … and the idle time is far above the 500 ms minGapMs (so the gap is not what held them).
+      for (const gap of idleGaps()) expect(gap).toBeGreaterThanOrEqual(1000 - FAST_ANSWER_MS);
+    });
+
+    it('control: an operator hosts["*.softy.pro"] {minIntervalMs: 0} (minGapMs kept) → starts only answer + 500 ms apart', async () => {
+      answerMs = FAST_ANSWER_MS;
+      setEnv({ [CRAWL_ENV.POLICIES]: JSON.stringify({ hosts: { '*.softy.pro': { minIntervalMs: 0 } } }) });
+
+      await probeAll();
+
+      // Still one bucket, one at a time, and the 500 ms idle gap still applies …
+      expect(bucketKeys()).toEqual(['domain:softy.pro']);
+      expect(maxInFlight).toBe(1);
+      for (const gap of idleGaps()) expect(gap).toBeGreaterThanOrEqual(500);
+      // … but without the interval the starts fall to answer + gap, below the 975 ms the key test allows.
+      expect(startGaps()).toEqual([FAST_ANSWER_MS + 500, FAST_ANSWER_MS + 500, FAST_ANSWER_MS + 500]);
+      for (const gap of startGaps()) expect(gap).toBeLessThan(975);
+    });
   });
 
   it('EVER_JOBS_CRAWL_BUILTIN_HOSTS=false (no host policy): two host buckets, overlapping probes, two proxies', async () => {
