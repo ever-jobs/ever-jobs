@@ -15,10 +15,12 @@ import {
   CRAWL_POLICY_ENV_VARS,
   LEGACY_RETRY_ENV,
   crawlBrowserNavigationEnabled,
+  crawlBuiltinHostsDisabled,
   crawlBuiltinHostsEnabled,
   crawlCallerProxiesAllowed,
   crawlCallerProxiesAllowedFor,
   crawlFleetSize,
+  crawlPaceRedirectsEnabled,
   crawlPluginManifestsEnabled,
   crawlProxyPinScope,
   crawlRobotsBackoffEnabled,
@@ -55,6 +57,9 @@ describe('crawl policy env (Spec 1690)', () => {
         stricterRules: '1714',
         proxyPinScope: 'base',
         robotsBackoff: true,
+        // Spec 1715 switches, each at its default.
+        paceRedirects: true,
+        builtinHostsDisable: [],
       });
     });
 
@@ -702,6 +707,106 @@ describe('crawl policy env (Spec 1690)', () => {
       expect(crawlStricterRules({ ...bare, stricterRules: '1690' } as never)).toBe('1690');
       expect(crawlProxyPinScope({ ...bare, proxyPinScope: 'bucket' } as never)).toBe('bucket');
       expect(crawlRobotsBackoffEnabled({ ...bare, robotsBackoff: false } as never)).toBe(false);
+    });
+
+    describe('Spec 1715 audit F7 — the legacy preset restores the pre-1714 value of each switch', () => {
+      /** Red control: the pre-fix defaults (fixed, preset-blind) → 1714 / base / true / true under legacy. */
+      it('legacy: STRICTER_RULES 1690, PROXY_PIN_SCOPE bucket, ROBOTS_BACKOFF false, PACE_REDIRECTS false', () => {
+        const cfg = parse({ [CRAWL_ENV.PRESET]: 'legacy' });
+        expect(cfg).toMatchObject({ stricterRules: '1690', proxyPinScope: 'bucket', robotsBackoff: false, paceRedirects: false });
+        expect(crawlStricterRules(cfg)).toBe('1690');
+        expect(crawlProxyPinScope(cfg)).toBe('bucket');
+        expect(crawlRobotsBackoffEnabled(cfg)).toBe(false);
+        expect(crawlPaceRedirectsEnabled(cfg)).toBe(false);
+        expect(cfg.warnings).toEqual([]);
+      });
+
+      it.each(['polite', 'strict'] as const)('%s: the new behaviour of every switch', (preset) => {
+        const cfg = parse({ [CRAWL_ENV.PRESET]: preset });
+        expect(cfg).toMatchObject({ stricterRules: '1714', proxyPinScope: 'base', robotsBackoff: true, paceRedirects: true });
+      });
+
+      it('an explicit value still wins under legacy (and the other way round)', () => {
+        const legacy = parse({
+          [CRAWL_ENV.PRESET]: 'legacy',
+          [CRAWL_EXTRA_ENV.STRICTER_RULES]: '1714',
+          [CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE]: 'base',
+          [CRAWL_EXTRA_ENV.ROBOTS_BACKOFF]: 'true',
+          [CRAWL_EXTRA_ENV.PACE_REDIRECTS]: 'on',
+        });
+        expect(legacy).toMatchObject({ stricterRules: '1714', proxyPinScope: 'base', robotsBackoff: true, paceRedirects: true });
+        const polite = parse({
+          [CRAWL_EXTRA_ENV.STRICTER_RULES]: '1690',
+          [CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE]: 'bucket',
+          [CRAWL_EXTRA_ENV.ROBOTS_BACKOFF]: 'false',
+          [CRAWL_EXTRA_ENV.PACE_REDIRECTS]: 'off',
+        });
+        expect(polite).toMatchObject({ stricterRules: '1690', proxyPinScope: 'bucket', robotsBackoff: false, paceRedirects: false });
+      });
+
+      it('an invalid value under legacy warns and keeps the legacy default', () => {
+        const cfg = parse({ [CRAWL_ENV.PRESET]: 'legacy', [CRAWL_EXTRA_ENV.PACE_REDIRECTS]: 'sometimes', [CRAWL_EXTRA_ENV.STRICTER_RULES]: 'x' });
+        expect(cfg.paceRedirects).toBe(false);
+        expect(cfg.stricterRules).toBe('1690');
+        expect(cfg.warnings).toEqual([
+          expect.stringContaining(`${CRAWL_EXTRA_ENV.STRICTER_RULES}: `),
+          expect.stringContaining(`${CRAWL_EXTRA_ENV.PACE_REDIRECTS}: `),
+        ]);
+        expect(cfg.warnings[0]).toContain('using "1690"');
+        expect(cfg.warnings[1]).toContain('using false');
+      });
+
+      it('the accessors follow the preset on a hand-built config without the fields', () => {
+        const bare = { preset: 'legacy', global: {}, policies: {}, callerOverrides: 'any', proxies: [], abortOnDeadline: true, warnings: [] };
+        expect(crawlStricterRules(bare as never)).toBe('1690');
+        expect(crawlProxyPinScope(bare as never)).toBe('bucket');
+        expect(crawlRobotsBackoffEnabled(bare as never)).toBe(false);
+        expect(crawlPaceRedirectsEnabled(bare as never)).toBe(false);
+        expect(crawlPaceRedirectsEnabled({ ...bare, preset: 'polite' } as never)).toBe(true);
+        expect(crawlPaceRedirectsEnabled({ ...bare, paceRedirects: true } as never)).toBe(true);
+        expect(crawlStricterRules({ ...bare, stricterRules: '1714' } as never)).toBe('1714');
+      });
+    });
+
+    describe('EVER_JOBS_CRAWL_PACE_REDIRECTS (Spec 1715 audit A0)', () => {
+      it('is listed, named, defaults on, and parses like every boolean switch', () => {
+        expect(CRAWL_EXTRA_ENV.PACE_REDIRECTS).toBe('EVER_JOBS_CRAWL_PACE_REDIRECTS');
+        expect(CRAWL_POLICY_ENV_VARS).toContain(CRAWL_EXTRA_ENV.PACE_REDIRECTS);
+        expect(parse({}).paceRedirects).toBe(true);
+        expect(parse({ [CRAWL_EXTRA_ENV.PACE_REDIRECTS]: 'false' }).paceRedirects).toBe(false);
+        expect(parse({ [CRAWL_EXTRA_ENV.PACE_REDIRECTS]: '0' }).paceRedirects).toBe(false);
+        const bad = parse({ [CRAWL_EXTRA_ENV.PACE_REDIRECTS]: 'nope' });
+        expect(bad.paceRedirects).toBe(true);
+        expect(bad.warnings).toEqual([expect.stringContaining(CRAWL_EXTRA_ENV.PACE_REDIRECTS)]);
+      });
+    });
+
+    describe('EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE (Spec 1715 audit F3)', () => {
+      it('is listed and named; unset = nothing disabled', () => {
+        expect(CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE).toBe('EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE');
+        expect(CRAWL_POLICY_ENV_VARS).toContain(CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE);
+        expect(parse({}).builtinHostsDisable).toEqual([]);
+        expect(crawlBuiltinHostsDisabled(parse({}))).toEqual([]);
+      });
+
+      it('takes a comma / whitespace list of builtin patterns, normalised, without duplicates', () => {
+        const cfg = parse({ [CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE]: ' *.SOFTY.pro, softy.pro.  *.softy.pro ' });
+        expect(cfg.builtinHostsDisable).toEqual(['*.softy.pro', 'softy.pro']);
+        expect(crawlBuiltinHostsDisabled(cfg)).toEqual(['*.softy.pro', 'softy.pro']);
+        expect(cfg.warnings).toEqual([]);
+      });
+
+      it('ignores a pattern that is not a builtin key, with a warning naming the variable and the value', () => {
+        const cfg = parse({ [CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE]: 'softy.pro,*.example.com,api.lever.co' });
+        expect(cfg.builtinHostsDisable).toEqual(['softy.pro', 'api.lever.co']);
+        expect(cfg.warnings).toEqual([expect.stringContaining(`${CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE}: "*.example.com"`)]);
+      });
+
+      it('the accessor is empty on a hand-built config without the field', () => {
+        const bare = { preset: 'polite', global: {}, policies: {}, callerOverrides: 'any', proxies: [], abortOnDeadline: true, warnings: [] };
+        expect(crawlBuiltinHostsDisabled(bare as never)).toEqual([]);
+        expect(crawlBuiltinHostsDisabled({ ...bare, builtinHostsDisable: ['softy.pro', 3] } as never)).toEqual(['softy.pro']);
+      });
     });
 
     it('EVER_JOBS_CRAWL_CALLER_OVERRIDES set → callerOverridesFromEnv (the env-global source)', () => {

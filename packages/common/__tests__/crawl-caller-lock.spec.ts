@@ -2,6 +2,7 @@ import {
   CALLER_OVERRIDES_RANK,
   DEFAULT_REQUEST_TIMEOUT_SECONDS,
   gateCallerRequestTimeout,
+  isSiteOwnerCallerLock,
   mostRestrictiveCallerOverrides,
 } from '../src/http/crawl/caller-lock';
 import {
@@ -14,11 +15,13 @@ import {
 import { CRAWL_EXTRA_ENV, readCrawlPolicyEnv } from '../src/http/crawl/env';
 import {
   explainCrawlPolicy,
+  isPolicyOwnedHost,
   normalizeCrawlOverride,
   resolveCallerOverrides,
 } from '../src/http/crawl/resolve';
 import {
   CallerOverridePolicy,
+  CallerOverridesSource,
   CrawlPolicyOverride,
   CrawlPolicyResolveInput,
   PluginCrawlPolicy,
@@ -162,6 +165,99 @@ describe('host-owned policy: every request to *.softy.pro, whichever site makes 
     expect(explained.callerOverrides).toBe('any');
     expect(explained.builtinHostPatterns).toEqual([]);
     expect(explained.notes).toEqual([expect.stringContaining('EVER_JOBS_CRAWL_BUILTIN_HOSTS=false')]);
+  });
+});
+
+describe('EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE — drop only some builtin entries (Spec 1715 audit F3)', () => {
+  const DISABLE_SOFTY = { [CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE]: '*.softy.pro,softy.pro' };
+
+  it.each(['acme.softy.pro', 'softy.pro'])('%s: the generic limits and no lock, as before Spec 1714 (noted)', (host) => {
+    const explained = explainCrawlPolicy({ site: 'liveness-http', host, caller: { minIntervalMs: 0 } }, envOf(DISABLE_SOFTY));
+    expect(explained.policy).toMatchObject({ rateLimitScope: 'host', maxConcurrentPerHost: 4, minIntervalMs: 0, minGapMs: 0 });
+    expect(explained.callerOverrides).toBe('any');
+    expect(explained.callerOverridesSource).toBe('default');
+    expect(explained.builtinHostPatterns).toEqual([]);
+    expect(explained.builtinHost).toBeUndefined();
+    expect(explained.builtinHostPatternsDisabled).toEqual([host === 'softy.pro' ? 'softy.pro' : '*.softy.pro']);
+    expect(explained.notes).toEqual([expect.stringContaining(CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE)]);
+    expect(resolveCallerOverrides({ site: 'liveness-http', host }, envOf(DISABLE_SOFTY))).toEqual({
+      mode: 'any',
+      source: 'default',
+      global: 'any',
+    });
+  });
+
+  it('keeps the pre-1714 bulk-API limits — unlike EVER_JOBS_CRAWL_BUILTIN_HOSTS=false (the red control)', () => {
+    const kept = explainCrawlPolicy({ site: 'greenhouse', host: 'boards-api.greenhouse.io' }, envOf(DISABLE_SOFTY));
+    expect(kept.policy).toMatchObject({ maxConcurrentPerHost: 16, minIntervalMs: 0 });
+    expect(kept.policy.provenance.maxConcurrentPerHost).toBe('builtin-host');
+    expect(kept.builtinHostPatterns).toEqual(['boards-api.greenhouse.io']);
+    expect(kept.builtinHostPatternsDisabled).toEqual([]);
+
+    // The only switch before Spec 1715: it drops Greenhouse's limits too (16 / 0 ms → 4 / 100 ms).
+    const allOff = explainCrawlPolicy(
+      { site: 'greenhouse', host: 'boards-api.greenhouse.io' },
+      envOf({ [CRAWL_EXTRA_ENV.BUILTIN_HOSTS]: 'false' }),
+    );
+    expect(allOff.policy).toMatchObject({ maxConcurrentPerHost: 4, minIntervalMs: 100 });
+  });
+
+  it('disabling only the apex leaves every tenant under the Softy policy and lock', () => {
+    const env = envOf({ [CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE]: 'softy.pro' });
+    expect(explainCrawlPolicy({ host: 'acme.softy.pro' }, env).callerOverrides).toBe('stricter');
+    expect(explainCrawlPolicy({ host: 'softy.pro' }, env).callerOverrides).toBe('any');
+  });
+
+  it('the Softy plugin keeps its own manifest (a plugin layer, not a builtin entry)', () => {
+    const explained = explainCrawlPolicy({ site: 'softy', host: 'acme.softy.pro', plugin: SOFTY_MANIFEST }, envOf(DISABLE_SOFTY));
+    expect(explained.policy).toMatchObject({ rateLimitScope: 'domain', maxConcurrentPerHost: 1, minIntervalMs: 1000 });
+    expect(explained.callerOverridesSource).toBe('plugin');
+  });
+
+  it('the whole-layer switch wins: with EVER_JOBS_CRAWL_BUILTIN_HOSTS=false nothing is "disabled" per pattern', () => {
+    const explained = explainCrawlPolicy(
+      { host: 'acme.softy.pro' },
+      envOf({ ...DISABLE_SOFTY, [CRAWL_EXTRA_ENV.BUILTIN_HOSTS]: 'false' }),
+    );
+    expect(explained.builtinHostPatternsDisabled).toEqual([]);
+    expect(explained.notes).toEqual([expect.stringContaining('EVER_JOBS_CRAWL_BUILTIN_HOSTS=false')]);
+  });
+});
+
+describe('isPolicyOwnedHost — a redirect hop to it is paced on its own (Spec 1715 audit A0)', () => {
+  it.each([
+    ['acme.softy.pro', true],
+    ['https://acme.softy.pro/offers/1', true],
+    ['softy.pro', true],
+    ['boards-api.greenhouse.io', false], // builtin, but neither a lock nor a domain scope
+    ['www.example.com', false],
+    ['not a host', false],
+    [undefined, false],
+  ] as const)('%s → %s', (host, expected) => {
+    expect(isPolicyOwnedHost(host, envOf())).toBe(expected);
+  });
+
+  it('an operator hosts entry with a lock or a domain scope owns its hosts; pacing alone does not', () => {
+    const env = policiesEnv({
+      hosts: {
+        'jobs.locked.example': { callerOverrides: 'stricter' },
+        '*.none.example': { callerOverrides: 'none' },
+        '*.shared.example': { rateLimitScope: 'domain' },
+        'slow.example': { minIntervalMs: 5000 },
+        'open.example': { callerOverrides: 'any' },
+      },
+    });
+    expect(isPolicyOwnedHost('jobs.locked.example', env)).toBe(true);
+    expect(isPolicyOwnedHost('a.none.example', env)).toBe(true);
+    expect(isPolicyOwnedHost('t1.shared.example', env)).toBe(true);
+    expect(isPolicyOwnedHost('slow.example', env)).toBe(false);
+    expect(isPolicyOwnedHost('open.example', env)).toBe(false);
+  });
+
+  it('follows EVER_JOBS_CRAWL_BUILTIN_HOSTS and _BUILTIN_HOSTS_DISABLE', () => {
+    expect(isPolicyOwnedHost('acme.softy.pro', envOf({ [CRAWL_EXTRA_ENV.BUILTIN_HOSTS]: 'false' }))).toBe(false);
+    expect(isPolicyOwnedHost('acme.softy.pro', envOf({ [CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE]: '*.softy.pro' }))).toBe(false);
+    expect(isPolicyOwnedHost('softy.pro', envOf({ [CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE]: '*.softy.pro' }))).toBe(true);
   });
 });
 
@@ -401,6 +497,36 @@ describe('caller-lock helpers (Spec 1714)', () => {
     [['bogus' as CallerOverridePolicy, 'any'], 'any'],
   ])('mostRestrictiveCallerOverrides(%j) → %j', (modes, expected) => {
     expect(mostRestrictiveCallerOverrides(...modes)).toBe(expected);
+  });
+
+  // Spec 1715 audit A1: a site owner's lock = stricter / none, decided by the plugin or a builtin host policy.
+  it.each<[CallerOverridePolicy, CallerOverridesSource, boolean]>([
+    ['stricter', 'plugin', true],
+    ['none', 'plugin', true],
+    ['stricter', 'builtin-host', true],
+    ['none', 'builtin-host', true],
+    ['any', 'plugin', false],
+    ['any', 'builtin-host', false],
+    ['stricter', 'env-global', false],
+    ['none', 'env-global', false],
+    ['stricter', 'operator-site', false],
+    ['stricter', 'operator-host', false],
+    ['any', 'default', false],
+  ])('isSiteOwnerCallerLock(%s from %s) → %s', (mode, source, expected) => {
+    expect(isSiteOwnerCallerLock({ mode, source })).toBe(expected);
+  });
+
+  it('isSiteOwnerCallerLock is false for nothing, and agrees with resolveCallerOverrides for Softy', () => {
+    expect(isSiteOwnerCallerLock(undefined)).toBe(false);
+    expect(isSiteOwnerCallerLock(null)).toBe(false);
+    expect(isSiteOwnerCallerLock(resolveCallerOverrides({ site: 'softy', plugin: SOFTY_MANIFEST }, envOf()))).toBe(true);
+    expect(isSiteOwnerCallerLock(resolveCallerOverrides({ site: 'jsonld', host: 'acme.softy.pro' }, envOf()))).toBe(true);
+    // An operator loosening it back: the operator's choice, not a lock.
+    const unlocked = resolveCallerOverrides(
+      { site: 'softy', plugin: SOFTY_MANIFEST },
+      policiesEnv({ sites: { softy: { callerOverrides: 'any' } } }),
+    );
+    expect(isSiteOwnerCallerLock(unlocked)).toBe(false);
   });
 });
 

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import { Logger } from '@nestjs/common';
 
-import { CRAWL_ENV, CRAWL_PRESETS } from './defaults';
+import { BUILTIN_HOST_POLICIES, CRAWL_ENV, CRAWL_PRESETS } from './defaults';
 import {
   CALLER_OVERRIDE_POLICIES,
   CRAWL_PRESET_NAMES,
@@ -60,10 +60,23 @@ const LEGACY_PER_SOURCE_KEYS: Record<string, keyof CrawlPolicy> = {
  */
 export const CRAWL_EXTRA_ENV = {
   /**
-   * Apply `BUILTIN_HOST_POLICIES` (layer 3). Default `true`; `false` under the
-   * `legacy` preset (pre-1690 had no per-host limits).
+   * Apply `BUILTIN_HOST_POLICIES` (layer 3): the bulk-API limits (Greenhouse,
+   * Lever, Ashby, SmartRecruiters) AND the site-owner entries (`*.softy.pro`,
+   * `softy.pro`: Softy's pacing and caller lock, Spec 1714). Default `true`;
+   * `false` under the `legacy` preset (pre-1690 had no per-host limits). To drop
+   * only some entries, use `BUILTIN_HOSTS_DISABLE`.
    */
   BUILTIN_HOSTS: 'EVER_JOBS_CRAWL_BUILTIN_HOSTS',
+  /**
+   * Builtin host patterns to skip, a comma / whitespace separated list of
+   * `BUILTIN_HOST_POLICIES` keys, e.g. `*.softy.pro,softy.pro` (Spec 1715, audit
+   * F3). Default empty = every builtin entry applies. Unlike `BUILTIN_HOSTS=false`
+   * it keeps the other entries, so `*.softy.pro,softy.pro` restores exactly the
+   * pre-1714 treatment of Softy's hosts by other plugins (the generic limits)
+   * while Greenhouse & co keep their pre-1714 builtin limits. A pattern that is not
+   * a builtin key is ignored with a warning.
+   */
+  BUILTIN_HOSTS_DISABLE: 'EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE',
   /**
    * Apply plugins' `@SourcePlugin({ crawl })` manifests (layer 4, manifest part;
    * the options a plugin passes to `createHttpClient` always apply). Default
@@ -99,15 +112,21 @@ export const CRAWL_EXTRA_ENV = {
    * Which `stricter` comparators judge a caller's override (Spec 1714 FR-4):
    * `1714` (default) — no parallel rate-limit bucket, a strict proxy-rotation
    * order, 429/503 kept in `retryStatuses`, `discovery` only towards `sitemap`,
-   * and `requestTimeout` gated; `1690` restores the Spec 1690 comparators (and
-   * leaves `requestTimeout` ungated) — the pre-1714 behaviour.
+   * and `requestTimeout` gated (by `JobsService` per source and, Spec 1715 audit
+   * C0, by `HttpClient` per request host, where a caller's short timeout also no
+   * longer counts as a struggling server); `1690` restores the Spec 1690
+   * comparators and leaves `requestTimeout` ungated everywhere — the pre-1714
+   * behaviour, and the default under the `legacy` preset.
    */
   STRICTER_RULES: 'EVER_JOBS_CRAWL_STRICTER_RULES',
   /**
    * What the `per-host` proxy pick keys on (Spec 1714 FR-6): `base` (default) —
    * the registrable domain whenever the scope resolved WITHOUT the caller is
-   * `domain`, so a caller setting can never split one site's tenants across
-   * proxies; `bucket` — the request's rate-limit bucket, the pre-1714 behaviour.
+   * `domain` AND the request is under a caller lock (effective mode not `any`) or
+   * a builtin host policy (Spec 1715 audit C3: an unlocked source keeps the
+   * pre-1714 pick), so a caller setting can never split one site's tenants across
+   * proxies; `bucket` — the request's rate-limit bucket, the pre-1714 behaviour
+   * and the default under the `legacy` preset.
    */
   PROXY_PIN_SCOPE: 'EVER_JOBS_CRAWL_PROXY_PIN_SCOPE',
   /**
@@ -115,9 +134,21 @@ export const CRAWL_EXTRA_ENV = {
    * FR-12): a 429/503 throttles and cools the bucket, a `Retry-After` over
    * `maxRetryAfterMs` fails the page request with `HostCoolingDownError`, a 5xx
    * applies `serverErrorCooldownMs`. Default `true`; `false` = the pre-1714
-   * behaviour (the robots.txt answer never touches the limiter).
+   * behaviour (the robots.txt answer never touches the limiter), and the default
+   * under the `legacy` preset.
    */
   ROBOTS_BACKOFF: 'EVER_JOBS_CRAWL_ROBOTS_BACKOFF',
+  /**
+   * Pace redirect hops by the hop's own policy (Spec 1715, audit A0): a hop whose
+   * host falls in a DIFFERENT rate-limit bucket than the request, or whose host
+   * carries a builtin / operator host policy with a caller lock or a `domain`
+   * scope (e.g. `*.softy.pro`), is not followed inside the request's limiter slot:
+   * `HttpClient` re-issues it as a request of its own (its own paced slot, lock,
+   * cool-down check, robots.txt and proxy pin). Other hops are followed in the slot,
+   * as before. Default `true`; `false` = the pre-fix behaviour (every hop followed
+   * inside the first request's slot), and the default under the `legacy` preset.
+   */
+  PACE_REDIRECTS: 'EVER_JOBS_CRAWL_PACE_REDIRECTS',
 } as const;
 
 /** Values of `EVER_JOBS_CRAWL_CALLER_PROXIES`. */
@@ -162,12 +193,19 @@ export interface ParsedCrawlPolicyEnv extends CrawlPolicyEnvConfig {
   callerOverridesFromEnv?: boolean;
   /** `EVER_JOBS_CRAWL_FLEET_SIZE` (missing = 1). */
   fleetSize?: number;
-  /** `EVER_JOBS_CRAWL_STRICTER_RULES` (missing = `1714`). */
+  /** `EVER_JOBS_CRAWL_STRICTER_RULES` (missing = `1714`, `1690` under `legacy`). */
   stricterRules?: CrawlStricterRules;
-  /** `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE` (missing = `base`). */
+  /** `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE` (missing = `base`, `bucket` under `legacy`). */
   proxyPinScope?: CrawlProxyPinScope;
-  /** `EVER_JOBS_CRAWL_ROBOTS_BACKOFF` (missing = `true`). */
+  /** `EVER_JOBS_CRAWL_ROBOTS_BACKOFF` (missing = `true`, `false` under `legacy`). */
   robotsBackoff?: boolean;
+  /** `EVER_JOBS_CRAWL_PACE_REDIRECTS` (missing = `true`, `false` under `legacy`). */
+  paceRedirects?: boolean;
+  /**
+   * `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE`: builtin host patterns skipped, as
+   * `BUILTIN_HOST_POLICIES` keys (missing = none).
+   */
+  builtinHostsDisable?: string[];
 }
 
 /**
@@ -222,26 +260,57 @@ export function crawlFleetSize(env: CrawlPolicyEnvConfig): number {
 
 /**
  * Which `stricter` comparators apply (`EVER_JOBS_CRAWL_STRICTER_RULES`, Spec 1714
- * FR-4): `1714` by default; `1690` restores the pre-1714 comparators.
+ * FR-4): `1714` by default; `1690` restores the pre-1714 comparators. For a
+ * hand-built config without the field: `1690` under `legacy`, else `1714` (Spec
+ * 1715 audit F7 — the `legacy` preset restores the pre-1714 behaviour).
  */
 export function crawlStricterRules(env: CrawlPolicyEnvConfig): CrawlStricterRules {
-  return (env as ParsedCrawlPolicyEnv).stricterRules === '1690' ? '1690' : '1714';
+  const value = (env as ParsedCrawlPolicyEnv).stricterRules;
+  if (value === '1690' || value === '1714') return value;
+  return env.preset === 'legacy' ? '1690' : '1714';
 }
 
 /**
  * What the `per-host` proxy pick keys on (`EVER_JOBS_CRAWL_PROXY_PIN_SCOPE`, Spec
- * 1714 FR-6): `base` by default; `bucket` restores the pre-1714 pick.
+ * 1714 FR-6): `base` by default; `bucket` restores the pre-1714 pick. For a
+ * hand-built config without the field: `bucket` under `legacy`, else `base`.
  */
 export function crawlProxyPinScope(env: CrawlPolicyEnvConfig): CrawlProxyPinScope {
-  return (env as ParsedCrawlPolicyEnv).proxyPinScope === 'bucket' ? 'bucket' : 'base';
+  const value = (env as ParsedCrawlPolicyEnv).proxyPinScope;
+  if (value === 'bucket' || value === 'base') return value;
+  return env.preset === 'legacy' ? 'bucket' : 'base';
 }
 
 /**
  * Whether robots.txt answers feed the host limiter (`EVER_JOBS_CRAWL_ROBOTS_BACKOFF`,
- * Spec 1714 FR-12): on by default; `false` restores the pre-1714 behaviour.
+ * Spec 1714 FR-12): on by default; `false` restores the pre-1714 behaviour. For a
+ * hand-built config without the field: off under `legacy`, else on.
  */
 export function crawlRobotsBackoffEnabled(env: CrawlPolicyEnvConfig): boolean {
-  return (env as ParsedCrawlPolicyEnv).robotsBackoff !== false;
+  const value = (env as ParsedCrawlPolicyEnv).robotsBackoff;
+  return typeof value === 'boolean' ? value : env.preset !== 'legacy';
+}
+
+/**
+ * Whether `HttpClient` paces redirect hops by the hop's own policy
+ * (`EVER_JOBS_CRAWL_PACE_REDIRECTS`, Spec 1715 audit A0): on by default; `false`
+ * restores the pre-fix behaviour (every hop followed inside the request's slot).
+ * For a hand-built config without the field: off under `legacy`, else on.
+ */
+export function crawlPaceRedirectsEnabled(env: CrawlPolicyEnvConfig): boolean {
+  const value = (env as ParsedCrawlPolicyEnv).paceRedirects;
+  return typeof value === 'boolean' ? value : env.preset !== 'legacy';
+}
+
+/**
+ * The builtin host patterns the operator switched off
+ * (`EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE`, Spec 1715 audit F3), as
+ * `BUILTIN_HOST_POLICIES` keys; empty when none (or on a hand-built config without
+ * the field). The whole layer is still governed by `EVER_JOBS_CRAWL_BUILTIN_HOSTS`.
+ */
+export function crawlBuiltinHostsDisabled(env: CrawlPolicyEnvConfig): string[] {
+  const value = (env as ParsedCrawlPolicyEnv).builtinHostsDisable;
+  return Array.isArray(value) ? value.filter((pattern): pattern is string => typeof pattern === 'string') : [];
 }
 
 /**
@@ -517,12 +586,28 @@ function parseCrawlPolicyEnv(env: NodeJS.ProcessEnv): ParsedCrawlPolicyEnv {
   const pluginManifests = readBooleanSwitch(env, CRAWL_EXTRA_ENV.PLUGIN_MANIFESTS, !legacy, warnings);
   const defaultProxiesFallback = readBooleanSwitch(env, CRAWL_EXTRA_ENV.DEFAULT_PROXIES_FALLBACK, !legacy, warnings);
   const browserNavigation = readBooleanSwitch(env, CRAWL_EXTRA_ENV.BROWSER_NAVIGATION, !legacy, warnings);
-  // Spec 1714 switches: each default is the new behaviour; the value that
-  // restores the pre-1714 one is named on each variable (CRAWL_EXTRA_ENV).
+  // Spec 1714 / 1715 switches: each default is the new behaviour — except under
+  // `legacy`, whose default is the pre-1714 value, like the switches above (Spec
+  // 1715 audit F7); an explicit value wins either way. The value that restores the
+  // pre-1714 behaviour is named on each variable (CRAWL_EXTRA_ENV).
   const fleetSize = readFleetSize(env, warnings);
-  const stricterRules = readEnumSwitch(env, CRAWL_EXTRA_ENV.STRICTER_RULES, STRICTER_RULES, '1714', warnings);
-  const proxyPinScope = readEnumSwitch(env, CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE, PROXY_PIN_SCOPES, 'base', warnings);
-  const robotsBackoff = readBooleanSwitch(env, CRAWL_EXTRA_ENV.ROBOTS_BACKOFF, true, warnings);
+  const stricterRules = readEnumSwitch(
+    env,
+    CRAWL_EXTRA_ENV.STRICTER_RULES,
+    STRICTER_RULES,
+    legacy ? '1690' : '1714',
+    warnings,
+  );
+  const proxyPinScope = readEnumSwitch(
+    env,
+    CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE,
+    PROXY_PIN_SCOPES,
+    legacy ? 'bucket' : 'base',
+    warnings,
+  );
+  const robotsBackoff = readBooleanSwitch(env, CRAWL_EXTRA_ENV.ROBOTS_BACKOFF, !legacy, warnings);
+  const paceRedirects = readBooleanSwitch(env, CRAWL_EXTRA_ENV.PACE_REDIRECTS, !legacy, warnings);
+  const builtinHostsDisable = readBuiltinHostsDisable(env, warnings);
   let callerProxies: CallerProxiesPolicy = callerOverrides === 'any' ? 'any' : 'none';
   const rawCallerProxies = readVar(env, CRAWL_EXTRA_ENV.CALLER_PROXIES);
   if (rawCallerProxies !== undefined) {
@@ -571,9 +656,35 @@ function parseCrawlPolicyEnv(env: NodeJS.ProcessEnv): ParsedCrawlPolicyEnv {
     stricterRules,
     proxyPinScope,
     robotsBackoff,
+    paceRedirects,
+    builtinHostsDisable,
   };
   if (contact !== undefined) config.contact = contact;
   return config;
+}
+
+/**
+ * `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE` (Spec 1715 audit F3): a comma /
+ * whitespace separated list of `BUILTIN_HOST_POLICIES` keys (case-insensitive,
+ * normalised like an operator `hosts` key; duplicates dropped). A pattern that is
+ * not a builtin key is ignored with a warning naming the valid keys. Unset → `[]`.
+ */
+function readBuiltinHostsDisable(env: NodeJS.ProcessEnv, warnings: string[]): string[] {
+  const name = CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE;
+  const raw = readVar(env, name);
+  if (raw === undefined) return [];
+  const known = Object.keys(BUILTIN_HOST_POLICIES);
+  const out: string[] = [];
+  for (const item of raw.split(/[\s,]+/)) {
+    if (!item) continue;
+    const pattern = normalizeHostPattern(item);
+    if (pattern === undefined || !known.includes(pattern)) {
+      warnings.push(`${name}: ${describeValue(item)} is not a builtin host pattern (one of ${known.join(', ')}); ignored`);
+      continue;
+    }
+    if (!out.includes(pattern)) out.push(pattern);
+  }
+  return out;
 }
 
 /** A boolean switch: unset → `fallback`; invalid → `fallback` with a warning. */

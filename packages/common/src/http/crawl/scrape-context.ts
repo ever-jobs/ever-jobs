@@ -23,6 +23,12 @@ export interface EffectiveCrawlResolution {
   policy: ResolvedCrawlPolicy;
   callerOverrides: CallerOverridesResolution;
   baseRateLimitScope: RateLimitScope;
+  /**
+   * Builtin host patterns applied to the request host (`BUILTIN_HOST_POLICIES`
+   * keys, least specific first; empty when none applies). Spec 1715 audit C3: the
+   * `per-host` proxy pin keys on the base scope only under a lock or a builtin host policy.
+   */
+  builtinHostPatterns: string[];
 }
 
 const logger = new Logger('CrawlPolicy');
@@ -74,7 +80,30 @@ export function getEffectiveCrawlPolicy(host?: string, explicit?: CrawlPolicyOve
  * Each call returns fresh copies.
  */
 export function getEffectiveCrawlResolution(host?: string, explicit?: CrawlPolicyOverride): EffectiveCrawlResolution {
-  const ctx = getScrapeContext();
+  return resolveCrawlInContext(getScrapeContext(), host, explicit);
+}
+
+/**
+ * The effective caller-override mode of a request to `host` from the scrape in
+ * scope, and the layer that decided it (Spec 1714 FR-2) — `getEffectiveCrawlResolution(host).callerOverrides`.
+ * A plugin reads it to tell a site owner's lock (`isSiteOwnerCallerLock`) from the
+ * operator's own setting (Spec 1715 audit A1). Without a host, the site-level mode.
+ */
+export function getEffectiveCallerOverrides(host?: string, explicit?: CrawlPolicyOverride): CallerOverridesResolution {
+  return getEffectiveCrawlResolution(host, explicit).callerOverrides;
+}
+
+/**
+ * `getEffectiveCrawlResolution` for an EXPLICIT scrape context instead of the one
+ * in scope (same memo, same fresh copies). `HttpClient` uses it where the async
+ * context may not be the request's own — e.g. a `beforeRedirect` hook, which runs
+ * in a socket callback (Spec 1715 audit A0).
+ */
+export function resolveCrawlInContext(
+  ctx: ScrapeContext | undefined,
+  host?: string,
+  explicit?: CrawlPolicyOverride,
+): EffectiveCrawlResolution {
   const env = readCrawlPolicyEnv();
   const leaf = memoLeaf(env, ctx?.plugin, ctx?.caller);
   // A full URL and its bare host resolve alike; key on the host so per-path URLs share one entry.
@@ -96,6 +125,7 @@ export function getEffectiveCrawlResolution(host?: string, explicit?: CrawlPolic
         global: explanation.globalCallerOverrides,
       },
       baseRateLimitScope: explanation.baseRateLimitScope,
+      builtinHostPatterns: explanation.builtinHostPatterns,
     };
     if (key !== undefined) {
       // LRU: evict the least recently used entry, not the whole leaf — a default
@@ -114,6 +144,7 @@ export function getEffectiveCrawlResolution(host?: string, explicit?: CrawlPolic
     policy: copyResolved(resolved.policy),
     callerOverrides: { ...resolved.callerOverrides },
     baseRateLimitScope: resolved.baseRateLimitScope,
+    builtinHostPatterns: [...resolved.builtinHostPatterns],
   };
 }
 

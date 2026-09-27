@@ -21,7 +21,7 @@ import {
   selectWireUserAgent,
   throttleRetryFloorMs,
 } from '../src/http/http-client';
-import { resetProxyScrapeSeed } from '../src/http/crawl/proxy-selector';
+import { createProxyRotationState, resetProxyScrapeSeed, selectProxy } from '../src/http/crawl/proxy-selector';
 import {
   CRAWL_ENV,
   EVER_JOBS_DEFAULT_USER_AGENT,
@@ -31,12 +31,13 @@ import {
   STRICT_CRAWL_POLICY,
 } from '../src/http/crawl/defaults';
 import { getGuardedAgents, resetGuardedAgents, EGRESS_GUARD_ENV } from '../src/http/crawl/egress-guard';
-import { CRAWL_EXTRA_ENV, resetCrawlPolicyEnvCache } from '../src/http/crawl/env';
+import { CRAWL_EXTRA_ENV, readCrawlPolicyEnv, resetCrawlPolicyEnvCache } from '../src/http/crawl/env';
 import { CrawlQueueTimeoutError, EgressBlockedError, HostCoolingDownError, RobotsDisallowedError } from '../src/http/crawl/errors';
-import { HostLimiter, getHostLimiter, resetHostLimiter } from '../src/http/crawl/host-limiter';
+import { HostLimiter, bucketKeyFor, getHostLimiter, resetHostLimiter } from '../src/http/crawl/host-limiter';
+import { explainCrawlPolicy } from '../src/http/crawl/resolve';
 import { resetRobotsTxtCache } from '../src/http/crawl/robots';
 import { resetEffectiveCrawlPolicyCache, runWithScrapeContext } from '../src/http/crawl/scrape-context';
-import { CrawlPolicy, ScrapeContext } from '../src/http/crawl/types';
+import { CrawlPolicy, CrawlPolicyOverride, ScrapeContext } from '../src/http/crawl/types';
 
 /**
  * Spec 1690 §4.2–§4.9 — `HttpClient` under the crawl policy. Requests go through
@@ -1326,7 +1327,13 @@ describe('egress guard (Spec 1690 §4.8)', () => {
     expect(h.sent[1].config.httpsAgent).toBeUndefined();
   });
 
-  it('checks every redirect target', async () => {
+  it.each([
+    // EVER_JOBS_CRAWL_PACE_REDIRECTS: off = the hop is followed in the slot (the hook returns);
+    // on (default, Spec 1715 audit A0) = a hop to another bucket leaves through the deferral marker.
+    ['false', undefined],
+    [undefined, 'DeferredRedirect'],
+  ])('checks every redirect target (EVER_JOBS_CRAWL_PACE_REDIRECTS=%s)', async (pace, publicHopThrows) => {
+    setEnv({ [CRAWL_EXTRA_ENV.PACE_REDIRECTS]: pace });
     const client = new HttpClient();
     const h = attach(client);
     await settle(client.get(URL_A));
@@ -1338,7 +1345,9 @@ describe('egress guard (Spec 1690 §4.8)', () => {
     expect(() => beforeRedirect({ href: 'http://169.254.169.254/latest', hostname: '169.254.169.254' }, response, request)).toThrow(
       EgressBlockedError,
     );
-    expect(() => beforeRedirect({ href: 'https://jobs.example.org/1', hostname: 'jobs.example.org' }, response, request)).not.toThrow();
+    const publicHop = () => beforeRedirect({ href: 'https://jobs.example.org/1', hostname: 'jobs.example.org' }, response, request);
+    if (publicHopThrows) expect(publicHop).toThrow(expect.objectContaining({ name: publicHopThrows }));
+    else expect(publicHop).not.toThrow();
   });
 
   it('surfaces a DNS-guard refusal (wrapped by axios) as EgressBlockedError, without retrying', async () => {
@@ -1949,41 +1958,158 @@ describe('Spec 1714 — HttpClient', () => {
   const via = (s: Sent) => (s.config.httpsAgent as unknown as { proxy?: URL } | undefined)?.proxy?.host ?? 'direct';
   const ENV_PROXIES = 'http://p1.example:8080,http://p2.example:8080,http://p3.example:8080,http://p4.example:8080';
 
-  describe('per-host proxy pin on the base scope (FR-6, audit G10)', () => {
-    /** Red control: 'bucket' (the pre-1714 pick) → the two tenants exit through p3 and p4. */
+  describe('per-host proxy pin on the base scope (FR-6, audit G10) — only under a lock (Spec 1715 audit C3)', () => {
+    /** Red control: 'bucket' (the pre-1714 pick) → the two Softy tenants exit through p1 and p2. */
     const PIN_SCOPE: string | undefined = undefined;
 
-    it('two tenants of a domain-scoped site use one proxy even when the caller picks host scope', async () => {
+    it('two Softy tenants use one proxy even when an operator unlocked callers and the caller picks host scope', async () => {
       setEnv({
         [CRAWL_ENV.PROXIES]: ENV_PROXIES,
-        [CRAWL_ENV.POLICIES]: JSON.stringify({ sites: { x: { rateLimitScope: 'domain', callerOverrides: 'any' } } }),
+        // The documented operator undo of the caller lock: callers may change every field again.
+        [CRAWL_ENV.POLICIES]: JSON.stringify({ hosts: { '*.softy.pro': { callerOverrides: 'any' } } }),
         [CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE]: PIN_SCOPE,
       });
       const client = new HttpClient();
       const h = attach(client);
 
-      await inScrape({ site: 'x', caller: { rateLimitScope: 'host' } }, () =>
+      await inScrape({ site: 'jsonld', caller: { rateLimitScope: 'host' } }, () =>
+        settle(Promise.all([client.get('https://t1.softy.pro/a'), client.get('https://t2.softy.pro/b')])),
+      );
+
+      // Two host buckets (the caller's scope was accepted), one pin: FNV-1a("domain:softy.pro") % 4 = 1 → p2.
+      expect(h.sent.map(via)).toEqual(['p2.example:8080', 'p2.example:8080']);
+    });
+
+    it('a site lock under the 1690 comparators (caller "site" scope accepted) still pins the base domain', async () => {
+      setEnv({
+        [CRAWL_ENV.PROXIES]: ENV_PROXIES,
+        [CRAWL_ENV.POLICIES]: JSON.stringify({ sites: { x: { rateLimitScope: 'domain', callerOverrides: 'stricter' } } }),
+        [CRAWL_EXTRA_ENV.STRICTER_RULES]: '1690',
+        [CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE]: PIN_SCOPE,
+      });
+      const client = new HttpClient();
+      const h = attach(client);
+
+      await inScrape({ site: 'x', caller: { rateLimitScope: 'site' } }, () =>
         settle(Promise.all([client.get('https://t1.x.example/a'), client.get('https://t2.x.example/b')])),
       );
 
-      // FNV-1a("domain:x.example") % 4 = 3 → p4 for both tenants.
+      // Bucket site:x (→ p1 under the pre-1714 pick); the pin: FNV-1a("domain:x.example") % 4 = 3 → p4.
       expect(h.sent.map(via)).toEqual(['p4.example:8080', 'p4.example:8080']);
     });
 
     it('EVER_JOBS_CRAWL_PROXY_PIN_SCOPE=bucket restores the pre-1714 pick (one proxy per tenant bucket)', async () => {
       setEnv({
         [CRAWL_ENV.PROXIES]: ENV_PROXIES,
-        [CRAWL_ENV.POLICIES]: JSON.stringify({ sites: { x: { rateLimitScope: 'domain' } } }),
+        [CRAWL_ENV.POLICIES]: JSON.stringify({ hosts: { '*.softy.pro': { callerOverrides: 'any' } } }),
         [CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE]: 'bucket',
       });
       const client = new HttpClient();
       const h = attach(client);
 
-      await inScrape({ site: 'x', caller: { rateLimitScope: 'host' } }, () =>
-        settle(Promise.all([client.get('https://t1.x.example/a'), client.get('https://t2.x.example/b')])),
+      await inScrape({ site: 'jsonld', caller: { rateLimitScope: 'host' } }, () =>
+        settle(Promise.all([client.get('https://t1.softy.pro/a'), client.get('https://t2.softy.pro/b')])),
       );
 
-      expect(h.sent.map(via).sort()).toEqual(['p3.example:8080', 'p4.example:8080']);
+      expect(h.sent.map(via).sort()).toEqual(['p1.example:8080', 'p2.example:8080']);
+    });
+
+    describe('a source without a lock keeps the pre-1714 pick, byte for byte (Spec 1715 audit C3)', () => {
+      it('an operator domain scope with callerOverrides "any": the caller host scope splits the tenants, as before', async () => {
+        setEnv({
+          [CRAWL_ENV.PROXIES]: ENV_PROXIES,
+          [CRAWL_ENV.POLICIES]: JSON.stringify({ sites: { x: { rateLimitScope: 'domain', callerOverrides: 'any' } } }),
+        });
+        const client = new HttpClient();
+        const h = attach(client);
+
+        await inScrape({ site: 'x', caller: { rateLimitScope: 'host' } }, () =>
+          settle(Promise.all([client.get('https://t1.x.example/a'), client.get('https://t2.x.example/b')])),
+        );
+
+        // The pre-1714 key is the request's bucket: host:t1 → p3, host:t2 → p4 (the base pin would give p4, p4).
+        expect(h.sent.map(via)).toEqual(['p3.example:8080', 'p4.example:8080']);
+      });
+
+      it.each([
+        ['EVER_JOBS_CRAWL_PRESET=strict', { [CRAWL_ENV.PRESET]: 'strict' }],
+        ['EVER_JOBS_CRAWL_RATE_SCOPE=domain', { [CRAWL_ENV.RATE_SCOPE]: 'domain' }],
+      ])('%s + a caller host scope on linkedin: the bucket pick (p2), not the domain pin (p1)', async (_name, vars) => {
+        setEnv({ [CRAWL_ENV.PROXIES]: ENV_PROXIES, ...vars });
+        const client = new HttpClient();
+        const h = attach(client);
+
+        await inScrape({ site: 'linkedin', caller: { rateLimitScope: 'host' } }, () =>
+          settle(client.get('https://www.linkedin.com/jobs/search')),
+        );
+
+        // FNV-1a("host:www.linkedin.com") % 4 = 1 → p2; FNV-1a("domain:linkedin.com") % 4 = 0 → p1.
+        // (The strict preset fetches robots.txt first, through the same proxy.)
+        expect(h.sent.filter((s) => !s.url.endsWith('/robots.txt')).map(via)).toEqual(['p2.example:8080']);
+      });
+
+      describe('golden: the proxy an unlocked source exits through = the pre-1714 pick, for every case', () => {
+        const PROXY_LIST = ENV_PROXIES.split(',');
+        const DOMAIN_MANIFEST = { rateLimitScope: 'domain', maxConcurrentPerHost: 1 } as const;
+        const SOURCES = [
+          { site: 'linkedin', url: 'https://www.linkedin.com/jobs/search' },
+          { site: 'greenhouse', url: 'https://boards-api.greenhouse.io/v1/boards/acme/jobs' },
+          { site: 'liveness-http', url: 'https://jobs.example.com/1' },
+          { site: 'acme-ats', url: 'https://t1.acme-ats.example.com/jobs', plugin: DOMAIN_MANIFEST },
+        ];
+        const CALLERS: Array<[string, CrawlPolicyOverride | undefined]> = [
+          ['no caller', undefined],
+          ['host scope', { rateLimitScope: 'host' }],
+          ['site scope', { rateLimitScope: 'site' }],
+          ['domain scope', { rateLimitScope: 'domain' }],
+          ['per-request', { proxyRotation: 'per-request' }],
+        ];
+        const MODES: Array<[string, Record<string, string>]> = [
+          ['default (any)', {}],
+          ['caller overrides none', { [CRAWL_ENV.CALLER_OVERRIDES]: 'none' }],
+          ['preset strict', { [CRAWL_ENV.PRESET]: 'strict' }],
+          ['rate scope domain', { [CRAWL_ENV.RATE_SCOPE]: 'domain' }],
+          ['rate scope site', { [CRAWL_ENV.RATE_SCOPE]: 'site' }],
+        ];
+        const cases = MODES.flatMap(([mode, vars]) =>
+          SOURCES.flatMap((source) => CALLERS.map(([callerName, caller]) => [`${mode} | ${source.site} | ${callerName}`, vars, source, caller] as const)),
+        );
+
+        it.each(cases)('%s', async (_key, vars, source, caller) => {
+          setEnv({ [CRAWL_ENV.PROXIES]: ENV_PROXIES, ...vars });
+          // The pre-1714 pick (90d6e350^ http-client.ts): selectProxy over the REQUEST's bucket key.
+          const policy = explainCrawlPolicy(
+            { site: source.site, host: new URL(source.url).hostname, plugin: source.plugin, caller },
+            readCrawlPolicyEnv(),
+          ).policy;
+          const expected = selectProxy(
+            PROXY_LIST,
+            policy.proxyRotation,
+            createProxyRotationState(),
+            bucketKeyFor(source.url, policy.rateLimitScope, source.site),
+          );
+          const client = new HttpClient();
+          const h = attach(client);
+
+          await inScrape({ site: source.site, plugin: source.plugin, caller }, () => settle(client.get(source.url)));
+
+          const page = h.sent.filter((s) => !s.url.endsWith('/robots.txt'));
+          expect(page.map(via)).toEqual([expected ? new URL(expected).host : 'direct']);
+        });
+      });
+
+      it('a bulk-API builtin host without a lock (Greenhouse) keeps the bucket pick too', async () => {
+        setEnv({ [CRAWL_ENV.PROXIES]: ENV_PROXIES, [CRAWL_ENV.RATE_SCOPE]: 'domain' });
+        const client = new HttpClient();
+        const h = attach(client);
+
+        await inScrape({ site: 'greenhouse', caller: { rateLimitScope: 'host' } }, () =>
+          settle(client.get('https://boards-api.greenhouse.io/v1/boards/acme/jobs')),
+        );
+
+        // host:boards-api.greenhouse.io → p1 (the domain pin would be domain:greenhouse.io → p3).
+        expect(h.sent.map(via)).toEqual(['p1.example:8080']);
+      });
     });
   });
 
@@ -2314,6 +2440,177 @@ describe('Spec 1714 — HttpClient', () => {
       expect(result).not.toBeInstanceOf(Error);
       expect(h.sent.map((s) => s.url)).toEqual(['https://acme.example.com/robots.txt', URL_A]);
       expect(h.sent[1].startedAt - h.sent[0].startedAt).toBeLessThan(POLITE_CRAWL_POLICY.throttleRetryDelayMs);
+    });
+  });
+});
+
+// ── Spec 1715 audit C0 ───────────────────────────────────────────────────────
+
+describe('Spec 1715 audit C0 — a caller timeout is gated per request HOST and never cools a bucket', () => {
+  const SOFTY_URL = 'https://acme.softy.pro/offers/1';
+  const OPEN_URL = 'https://example.com/jobs';
+
+  /**
+   * A fake server that answers after `serverMs`: a request whose axios `timeout` is
+   * shorter fails like axios' own client-side timeout (ECONNABORTED, no answer).
+   */
+  function serveAfter(client: HttpClient, serverMs: number): { timeouts: number[]; urls: string[] } {
+    const seen = { timeouts: [] as number[], urls: [] as string[] };
+    client.getAxiosInstance().defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+      seen.timeouts.push(Number(config.timeout));
+      seen.urls.push(String(config.url));
+      const limit = config.timeout && config.timeout > 0 ? config.timeout : Infinity;
+      await wait(Math.min(limit, serverMs), config.signal);
+      if (limit < serverMs) throw new AxiosError(`timeout of ${config.timeout}ms exceeded`, AxiosError.ECONNABORTED, config, {});
+      return { data: 'ok', status: 200, statusText: 'OK', headers: new AxiosHeaders(), config, request: {} };
+    };
+    return seen;
+  }
+
+  describe('(a) gated with the effective mode of the request host', () => {
+    it('an unlocked plugin (jsonld) carries 0.001 s to *.softy.pro: 60 s there, 1 ms elsewhere (unchanged)', async () => {
+      // The plugin passes the caller value as its own `timeout` option (jsonld.service.ts).
+      const client = createHttpClient({ timeout: 0.001 });
+      const seen = serveAfter(client, 5);
+
+      await inScrape({ site: 'jsonld', callerRequestTimeout: 0.001 }, async () => {
+        await settle(client.get(SOFTY_URL), 10);
+        await settle(client.get(OPEN_URL), 10);
+      });
+
+      expect(seen.timeouts).toEqual([60_000, 1]);
+    });
+
+    it('the C0 scenario: no 30 s cool-down of softy.pro from a caller-chosen abort', async () => {
+      const client = createHttpClient({ timeout: 0.001 });
+      serveAfter(client, 2000); // Softy answers in 2 s
+
+      const result = await inScrape({ site: 'jsonld', callerRequestTimeout: 0.001 }, () => settle(client.get(SOFTY_URL), 3000));
+
+      expect((result as { status?: number }).status).toBe(200);
+      expect(getHostLimiter().coolingDownUntil('domain:softy.pro')).toBe(0);
+    });
+
+    it('red control: EVER_JOBS_CRAWL_STRICTER_RULES=1690 (pre-fix) — 1 ms abort, softy.pro cools 30 s', async () => {
+      setEnv({ [CRAWL_EXTRA_ENV.STRICTER_RULES]: '1690' });
+      const client = createHttpClient({ timeout: 0.001 });
+      const seen = serveAfter(client, 2000);
+
+      const result = await inScrape({ site: 'jsonld', callerRequestTimeout: 0.001 }, () => settle(client.get(SOFTY_URL), 10));
+
+      expect(seen.timeouts).toEqual([1]);
+      expect((result as { code?: string }).code).toBe('ECONNABORTED');
+      // Cooled at 1 ms for 30 s; we look 9 ms later (fake clock).
+      expect(getHostLimiter().coolingDownUntil('domain:softy.pro') - Date.now()).toBe(30_000 - 9);
+    });
+
+    it('a plugin own timeout (not the caller value) is never touched, even on a locked host', async () => {
+      const client = createHttpClient({ timeout: 10 });
+      const seen = serveAfter(client, 5);
+
+      await inScrape({ site: 'jsonld', callerRequestTimeout: 0.001 }, () => settle(client.get(SOFTY_URL), 10));
+
+      expect(seen.timeouts).toEqual([10_000]);
+    });
+
+    it('a per-request timeout (ms) equal to the caller value is gated too; another one is not', async () => {
+      const client = new HttpClient();
+      const seen = serveAfter(client, 5);
+
+      await inScrape({ site: 'jsonld', callerRequestTimeout: 2 }, async () => {
+        await settle(client.get(SOFTY_URL, { timeout: 2000 }), 10);
+        await settle(client.get(SOFTY_URL, { timeout: 3000 }), 1500);
+      });
+
+      expect(seen.timeouts).toEqual([60_000, 3000]);
+    });
+
+    it('the caller DTO itself (the DTO branch) is the caller value without a context value', async () => {
+      const client = createHttpClient(new ScraperInputDto({ requestTimeout: 0.5 }));
+      const seen = serveAfter(client, 5);
+
+      await inScrape({ site: 'jsonld' }, async () => {
+        await settle(client.get(SOFTY_URL), 10);
+        await settle(client.get(OPEN_URL), 10);
+      });
+
+      expect(seen.timeouts).toEqual([60_000, 500]);
+      expect(clientOptionsFromScraperInput(new ScraperInputDto({ requestTimeout: 5 })).timeoutFromCaller).toBe(true);
+      // An object literal's requestTimeout is the plugin's own choice (e.g. the liveness checker).
+      expect(clientOptionsFromScraperInput({ requestTimeout: 5 }).timeoutFromCaller).toBeUndefined();
+    });
+
+    it('a caller value at or above the default passes; an operator "none" on the host forces the default', async () => {
+      setEnv({ [CRAWL_ENV.POLICIES]: JSON.stringify({ hosts: { 'none.example.org': { callerOverrides: 'none' } } }) });
+      const client = createHttpClient({ timeout: 90 });
+      const seen = serveAfter(client, 5);
+
+      await inScrape({ site: 'jsonld', callerRequestTimeout: 90 }, async () => {
+        await settle(client.get(SOFTY_URL), 10);
+        await settle(client.get('https://none.example.org/jobs'), 10);
+      });
+
+      expect(seen.timeouts).toEqual([90_000, 60_000]);
+    });
+
+    it('the robots.txt request of a locked host gets the gated timeout too', async () => {
+      setEnv({ [CRAWL_ENV.ROBOTS_TXT]: 'respect' });
+      const client = createHttpClient({ timeout: 0.001 });
+      const seen = serveAfter(client, 5);
+
+      await inScrape({ site: 'jsonld', callerRequestTimeout: 0.001 }, () => settle(client.get(SOFTY_URL), 2000));
+
+      expect(seen.urls).toEqual(['https://acme.softy.pro/robots.txt', SOFTY_URL]);
+      expect(seen.timeouts).toEqual([60_000, 60_000]);
+    });
+  });
+
+  describe('(b) a caller short timeout is not a struggling server (serverErrorCooldownMs)', () => {
+    const BUCKET = 'host:example.com';
+
+    beforeEach(() => setEnv({ [CRAWL_ENV.SERVER_ERROR_COOLDOWN_MS]: '30000', [CRAWL_ENV.RETRIES]: '0' }));
+
+    it('an unlocked host (operator cool-down on): the caller 1 s timeout fires, the bucket does not cool', async () => {
+      const client = createHttpClient({ timeout: 1 });
+      serveAfter(client, 5000);
+
+      const result = await inScrape({ site: 'x', callerRequestTimeout: 1 }, () => settle(client.get(OPEN_URL), 1500));
+
+      expect((result as { code?: string }).code).toBe('ECONNABORTED');
+      expect(getHostLimiter().coolingDownUntil(BUCKET)).toBe(0);
+    });
+
+    it('red control: EVER_JOBS_CRAWL_STRICTER_RULES=1690 counts it as struggling (pre-fix)', async () => {
+      setEnv({ [CRAWL_EXTRA_ENV.STRICTER_RULES]: '1690' });
+      const client = createHttpClient({ timeout: 1 });
+      serveAfter(client, 5000);
+
+      await inScrape({ site: 'x', callerRequestTimeout: 1 }, () => settle(client.get(OPEN_URL), 1500));
+
+      expect(getHostLimiter().coolingDownUntil(BUCKET) - Date.now()).toBeGreaterThan(28_000);
+    });
+
+    it.each([
+      ['a plugin own 1 s timeout', { timeout: 1 }, 30],
+      ['a caller timeout at the default (60 s)', { timeout: 60 }, 60],
+    ])('%s still cools the bucket (our own timeout says the server is slow)', async (_name, options, callerValue) => {
+      const client = createHttpClient(options);
+      serveAfter(client, 120_000);
+      const timeoutMs = options.timeout * 1000;
+
+      // Look 100 ms after the timeout fired.
+      await inScrape({ site: 'x', callerRequestTimeout: callerValue }, () => settle(client.get(OPEN_URL), timeoutMs + 100));
+
+      expect(getHostLimiter().coolingDownUntil(BUCKET) - Date.now()).toBe(30_000 - 100);
+    });
+
+    it('a connection reset under a caller short timeout still counts (the server hung up, not us)', async () => {
+      const client = createHttpClient({ timeout: 1 });
+      attach(client, () => Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }));
+
+      await inScrape({ site: 'x', callerRequestTimeout: 1 }, () => settle(client.get(OPEN_URL), 0));
+
+      expect(getHostLimiter().coolingDownUntil(BUCKET) - Date.now()).toBe(30_000);
     });
   });
 });

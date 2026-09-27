@@ -251,6 +251,19 @@ export interface ScrapeContext {
   /** Proxies supplied by the caller for this search. */
   proxies?: string[];
   /**
+   * The `requestTimeout` (SECONDS) the plugin was handed for this scrape — the
+   * search caller's value after `JobsService`'s per-source gate (Spec 1715, audit
+   * C0). `HttpClient` treats a client or request timeout equal to it as the
+   * caller's: it gates it again per request HOST with that host's effective
+   * caller-override mode (`gateCallerRequestTimeout`), so an unlocked plugin cannot
+   * carry a tiny caller timeout to a locked host (e.g. `*.softy.pro`), and a
+   * caller's timeout shorter than the default never counts as a struggling server
+   * (no `serverErrorCooldownMs`). Unset = no timeout is attributed to the caller
+   * except one a DTO-branch client took from `requestTimeout`.
+   * `EVER_JOBS_CRAWL_STRICTER_RULES=1690` turns both off (pre-fix).
+   */
+  callerRequestTimeout?: number;
+  /**
    * The scrape's `per-scrape` proxy pin, shared by every `HttpClient` of the
    * scrape. `runWithScrapeContext` creates one for each new scrape (a nested
    * context inherits its parent's, like every field it leaves out).

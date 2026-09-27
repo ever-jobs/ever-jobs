@@ -4,13 +4,16 @@ import { getRequestContext, getRequestId, runWithRequestContext, runWithRequestI
 import { CRAWL_ENV, POLITE_CRAWL_POLICY } from '../src/http/crawl/defaults';
 import { resetCrawlPolicyEnvCache } from '../src/http/crawl/env';
 import * as resolveModule from '../src/http/crawl/resolve';
+import { isSiteOwnerCallerLock } from '../src/http/crawl/caller-lock';
 import {
   CRAWL_POLICY_MEMO_MAX,
+  getEffectiveCallerOverrides,
   getEffectiveCrawlPolicy,
   getEffectiveCrawlResolution,
   getEffectiveProxies,
   getScrapeContext,
   resetEffectiveCrawlPolicyCache,
+  resolveCrawlInContext,
   runWithScrapeContext,
 } from '../src/http/crawl/scrape-context';
 import { PluginCrawlPolicy } from '../src/http/crawl/types';
@@ -404,6 +407,61 @@ describe('scrape context (Spec 1690)', () => {
         expect(resolution.callerOverrides).toEqual({ mode: 'any', source: 'default', global: 'any' });
         expect(resolution.baseRateLimitScope).toBe('host');
       });
+    });
+
+    it('carries the builtin host patterns applied (Spec 1715 audit C3), copied per call', () => {
+      runWithScrapeContext({ site: 'jsonld' }, () => {
+        const softy = getEffectiveCrawlResolution('https://acme.softy.pro/offers/1');
+        expect(softy.builtinHostPatterns).toEqual(['*.softy.pro']);
+        softy.builtinHostPatterns.push('mutated');
+        expect(getEffectiveCrawlResolution('acme.softy.pro').builtinHostPatterns).toEqual(['*.softy.pro']);
+        expect(getEffectiveCrawlResolution('www.linkedin.com').builtinHostPatterns).toEqual([]);
+      });
+    });
+  });
+
+  describe('getEffectiveCallerOverrides / resolveCrawlInContext (Spec 1715 audits A1, A0)', () => {
+    const SOFTY: PluginCrawlPolicy = { rateLimitScope: 'domain', maxConcurrentPerHost: 1, callerOverrides: 'stricter' };
+
+    it('inside the Softy scrape: the plugin lock, which isSiteOwnerCallerLock recognises', () => {
+      runWithScrapeContext({ site: 'softy', plugin: SOFTY }, () => {
+        const lock = getEffectiveCallerOverrides('https://acme.softy.pro/sitemap.xml');
+        expect(lock).toEqual({ mode: 'stricter', source: 'plugin', global: 'any' });
+        expect(isSiteOwnerCallerLock(lock)).toBe(true);
+        expect(getEffectiveCallerOverrides()).toEqual({ mode: 'stricter', source: 'plugin', global: 'any' });
+      });
+    });
+
+    it('another plugin on a Softy host: the builtin-host lock; an unlocked host: none', () => {
+      runWithScrapeContext({ site: 'jsonld' }, () => {
+        expect(getEffectiveCallerOverrides('acme.softy.pro')).toEqual({ mode: 'stricter', source: 'builtin-host', global: 'any' });
+        const open = getEffectiveCallerOverrides('example.com');
+        expect(open).toEqual({ mode: 'any', source: 'default', global: 'any' });
+        expect(isSiteOwnerCallerLock(open)).toBe(false);
+      });
+    });
+
+    it('an operator sites.softy value replaces the lock: no longer a site owner lock', () => {
+      process.env[CRAWL_ENV.POLICIES] = JSON.stringify({ sites: { softy: { callerOverrides: 'stricter' } } });
+      resetCrawlPolicyEnvCache();
+      runWithScrapeContext({ site: 'softy', plugin: SOFTY }, () => {
+        const lock = getEffectiveCallerOverrides();
+        expect(lock).toEqual({ mode: 'stricter', source: 'operator-site', global: 'any' });
+        expect(isSiteOwnerCallerLock(lock)).toBe(false);
+      });
+    });
+
+    it('resolveCrawlInContext resolves for an explicit context, whatever context is in scope', () => {
+      const explicitCtx = { site: 'softy', plugin: SOFTY };
+      runWithScrapeContext({ site: 'linkedin' }, () => {
+        const viaExplicit = resolveCrawlInContext(explicitCtx, 'acme.softy.pro');
+        expect(viaExplicit.callerOverrides.source).toBe('plugin');
+        expect(getEffectiveCrawlResolution('acme.softy.pro').callerOverrides.source).toBe('builtin-host');
+      });
+      expect(resolveCrawlInContext(undefined, 'example.com').callerOverrides).toEqual({ mode: 'any', source: 'default', global: 'any' });
+      // The same memo entry as the in-scope resolver.
+      const inScope = runWithScrapeContext(explicitCtx, () => getEffectiveCrawlResolution('acme.softy.pro'));
+      expect(resolveCrawlInContext(explicitCtx, 'acme.softy.pro')).toEqual(inScope);
     });
   });
 });

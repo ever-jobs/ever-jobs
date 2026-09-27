@@ -4,6 +4,7 @@ import {
   CRAWL_EXTRA_ENV,
   CrawlStricterRules,
   ParsedCrawlPolicyEnv,
+  crawlBuiltinHostsDisabled,
   crawlBuiltinHostsEnabled,
   crawlPluginManifestsEnabled,
   crawlStricterRules,
@@ -71,6 +72,13 @@ export interface CrawlPolicyExplanation {
   builtinHost?: string;
   /** Builtin host patterns applied (`BUILTIN_HOST_POLICIES` keys), least specific first (Spec 1714). */
   builtinHostPatterns: string[];
+  /**
+   * Builtin host patterns that match the host but were NOT applied because
+   * `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE` lists them (Spec 1715 audit F3), least
+   * specific first. The whole-layer switch `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false`
+   * is reported in `notes` instead.
+   */
+  builtinHostPatternsDisabled: string[];
   /** `rateLimitScope` as resolved BEFORE the caller layer — the `per-host` proxy pin keys on it (Spec 1714 FR-6). */
   baseRateLimitScope: RateLimitScope;
   /** Operator site key applied, if any. */
@@ -93,7 +101,8 @@ export interface CrawlPolicyExplanation {
  * - builtin-host: every `BUILTIN_HOST_POLICIES` pattern matching the host (an
  *   exact host or `*.suffix`, the operator `hosts` semantics), least specific
  *   first, unless `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false` (the `legacy` preset's
- *   default) — Spec 1714 FR-8.
+ *   default) — Spec 1714 FR-8 — or `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE` lists
+ *   that pattern (Spec 1715 audit F3; `builtinHostPatternsDisabled`).
  * - plugin: the manifest applies unless `EVER_JOBS_CRAWL_PLUGIN_MANIFESTS=false`
  *   (the `legacy` preset's default); the explicit options always apply. When the
  *   layers below pin `userAgentMode: 'strict'`, a plugin cannot relax it (Spec
@@ -158,15 +167,25 @@ export function explainCrawlPolicy(input: CrawlPolicyResolveInput, env?: CrawlPo
   applyLayer(policy, provenance, prepare(cfg.global, 'env-global'), 'env-global');
 
   // 3. builtin-host (EVER_JOBS_CRAWL_BUILTIN_HOSTS; off under `legacy`, which had
-  //    none): every matching pattern, least specific first (Spec 1714 FR-8).
+  //    none): every matching pattern, least specific first (Spec 1714 FR-8),
+  //    except those EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE lists (Spec 1715 F3).
   const host = normalizeHostName(input.host);
   let builtinHost: string | undefined;
   const builtinHostPatterns: string[] = [];
+  const builtinHostPatternsDisabled: string[] = [];
   const builtinMatches = host !== undefined ? matchingHostPatterns(Object.keys(BUILTIN_HOST_POLICIES), host) : [];
   if (host !== undefined && builtinMatches.length > 0) {
     if (crawlBuiltinHostsEnabled(cfg)) {
-      builtinHost = host;
+      const disabled = crawlBuiltinHostsDisabled(cfg);
       for (const pattern of builtinMatches) {
+        if (disabled.includes(pattern)) {
+          builtinHostPatternsDisabled.push(pattern);
+          notes.push(
+            `builtin host policy "${pattern}" for ${host} not applied (${CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE} lists it)`,
+          );
+          continue;
+        }
+        builtinHost = host;
         builtinHostPatterns.push(pattern);
         const layer = prepare(BUILTIN_HOST_POLICIES[pattern], 'builtin-host');
         applyLayer(policy, provenance, layer, 'builtin-host');
@@ -284,6 +303,7 @@ export function explainCrawlPolicy(input: CrawlPolicyResolveInput, env?: CrawlPo
     globalCallerOverrides,
     callerRejected: rejected,
     builtinHostPatterns,
+    builtinHostPatternsDisabled,
     baseRateLimitScope,
     operatorHostPatterns,
     notes,
@@ -321,8 +341,9 @@ export function resolveCallerOverrides(
   const locks: CallerOverrideLocks = { builtin: [], plugin: [], operatorHosts: [] };
 
   if (host !== undefined && crawlBuiltinHostsEnabled(cfg)) {
+    const disabled = crawlBuiltinHostsDisabled(cfg);
     for (const pattern of matchingHostPatterns(Object.keys(BUILTIN_HOST_POLICIES), host)) {
-      locks.builtin.push(lockOf(BUILTIN_HOST_POLICIES[pattern]));
+      if (!disabled.includes(pattern)) locks.builtin.push(lockOf(BUILTIN_HOST_POLICIES[pattern]));
     }
   }
   locks.plugin.push(crawlPluginManifestsEnabled(cfg) ? lockOf(input.plugin) : undefined, lockOf(input.explicit));
@@ -338,6 +359,41 @@ export function resolveCallerOverrides(
     }
   }
   return foldCallerOverrides(effectiveCallerOverridePolicy(cfg.callerOverrides), globalCallerOverridesSource(cfg), locks);
+}
+
+/**
+ * Whether requests to `host` fall under a HOST-level policy that must pace them on
+ * their own (Spec 1715, audit A0): a builtin host pattern that applies (the layer
+ * is on — `EVER_JOBS_CRAWL_BUILTIN_HOSTS` — and `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE`
+ * does not list it) or an operator `hosts` pattern, matching `host`, whose entry
+ * sets a caller lock (`callerOverrides` `stricter` or `none`) or
+ * `rateLimitScope: 'domain'` — e.g. `*.softy.pro`. `HttpClient` re-issues a redirect
+ * hop to such a host as a request of its own even when it stays in the same
+ * rate-limit bucket (`EVER_JOBS_CRAWL_PACE_REDIRECTS`). `host` may be a hostname or
+ * a URL; false for an unparseable one.
+ */
+export function isPolicyOwnedHost(host: string | undefined, env?: CrawlPolicyEnvConfig): boolean {
+  const cfg: CrawlPolicyEnvConfig = env ?? readCrawlPolicyEnv();
+  const name = normalizeHostName(host);
+  if (name === undefined) return false;
+  const contact = (cfg as Partial<ParsedCrawlPolicyEnv>).contact;
+  const owns = (raw: unknown): boolean => {
+    const layer = normalizedLayer(raw, contact).value;
+    return layer.callerOverrides === 'stricter' || layer.callerOverrides === 'none' || layer.rateLimitScope === 'domain';
+  };
+  if (crawlBuiltinHostsEnabled(cfg)) {
+    const disabled = crawlBuiltinHostsDisabled(cfg);
+    for (const pattern of matchingHostPatterns(Object.keys(BUILTIN_HOST_POLICIES), name)) {
+      if (!disabled.includes(pattern) && owns(BUILTIN_HOST_POLICIES[pattern])) return true;
+    }
+  }
+  const hosts = cfg.policies?.hosts;
+  if (hosts) {
+    for (const pattern of matchingHostPatterns(Object.keys(hosts), name)) {
+      if (owns(hosts[pattern])) return true;
+    }
+  }
+  return false;
 }
 
 /**

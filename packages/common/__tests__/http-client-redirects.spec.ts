@@ -10,7 +10,7 @@ import {
 } from '../src/http/http-client';
 import { CRAWL_ENV } from '../src/http/crawl/defaults';
 import { EgressBlockedError } from '../src/http/crawl/errors';
-import { resetCrawlPolicyEnvCache } from '../src/http/crawl/env';
+import { CRAWL_EXTRA_ENV, resetCrawlPolicyEnvCache } from '../src/http/crawl/env';
 import { resetHostLimiter } from '../src/http/crawl/host-limiter';
 import { resetEffectiveCrawlPolicyCache } from '../src/http/crawl/scrape-context';
 
@@ -152,6 +152,19 @@ describe('HttpClient redirect pinning (Spec 1689)', () => {
     const response = { headers: {}, statusCode: 302 } as Parameters<BeforeRedirect>[1];
     const request = { url: 'https://acme.com/careers', method: 'GET', headers: {} } as unknown as Parameters<BeforeRedirect>[2];
 
+    // These tests call the captured hook with hops to OTHER hosts; with redirect
+    // pacing on (Spec 1715 audit A0) such a hop would leave through the deferral
+    // marker instead of returning. The composition is what is under test here, so
+    // pacing is off; the paced composition has its own tests below.
+    beforeEach(() => {
+      process.env[CRAWL_EXTRA_ENV.PACE_REDIRECTS] = 'false';
+      resetCrawlState();
+    });
+    afterEach(() => {
+      delete process.env[CRAWL_EXTRA_ENV.PACE_REDIRECTS];
+      resetCrawlState();
+    });
+
     /** The `beforeRedirect` axios runs for `client.get(url, config)` — captured by a fake adapter, no network. */
     async function composedGuard(client: HttpClient, config: Record<string, unknown> = {}): Promise<BeforeRedirect> {
       let captured: InternalAxiosRequestConfig | undefined;
@@ -193,6 +206,49 @@ describe('HttpClient redirect pinning (Spec 1689)', () => {
 
       expect(() => guard({ href: 'https://evil.example/' }, response, request)).toThrow(/Refused redirect/);
       expect(own).not.toHaveBeenCalled();
+    });
+
+    describe('with redirect pacing on (the default, Spec 1715 audit A0)', () => {
+      beforeEach(() => {
+        delete process.env[CRAWL_EXTRA_ENV.PACE_REDIRECTS];
+        resetCrawlState();
+      });
+
+      /** What the paced hook throws for a hop it re-issues (internal to HttpClient). */
+      const deferral = { name: 'DeferredRedirect' };
+
+      it('still runs the pin, then the egress check, then the request’s own hook, before deciding', async () => {
+        const own = jest.fn();
+        const guard = await composedGuard(new HttpClient({ allowedRedirectHosts: ['acme.com'] }), { beforeRedirect: own });
+
+        // Refused hops are refused (never deferred), and the own hook never sees them.
+        expect(() => guard({ href: 'https://evil.example/' }, response, request)).toThrow(/Refused redirect to evil\.example/);
+        expect(() => guard({ href: 'http://169.254.169.254/latest' }, response, request)).toThrow(/Refused redirect/);
+        expect(own).not.toHaveBeenCalled();
+
+        // An allowed hop to another host bucket: the own hook ran, then the hop is deferred.
+        expect(() => guard({ href: 'https://jobs.acme.com/1', hostname: 'jobs.acme.com' }, response, request)).toThrow(
+          expect.objectContaining(deferral),
+        );
+        expect(own).toHaveBeenCalledTimes(1);
+      });
+
+      it('keeps the egress check (EgressBlockedError, not a deferral) with the pin switched off', async () => {
+        process.env[HTTP_PIN_REDIRECTS_ENV] = 'false';
+        const guard = await composedGuard(new HttpClient({ allowedRedirectHosts: ['acme.com'] }));
+
+        expect(() => guard({ href: 'http://169.254.169.254/latest', hostname: '169.254.169.254' }, response, request)).toThrow(
+          EgressBlockedError,
+        );
+        expect(() => guard({ href: 'https://evil.example/', hostname: 'evil.example' }, response, request)).toThrow(
+          expect.objectContaining(deferral),
+        );
+      });
+
+      it('a hop in the same bucket is followed in the slot (the hook returns)', async () => {
+        const guard = await composedGuard(new HttpClient({ allowedRedirectHosts: ['acme.com'] }));
+        expect(() => guard({ href: 'https://acme.com/jobs/1', hostname: 'acme.com' }, response, request)).not.toThrow();
+      });
     });
   });
 

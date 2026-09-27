@@ -1,5 +1,5 @@
 import type { CrawlStricterRules } from './env';
-import { CallerOverridePolicy } from './types';
+import { CallerOverridePolicy, CallerOverridesResolution } from './types';
 
 /**
  * Caller-override lock helpers (Spec 1714). A site owner's lock
@@ -34,6 +34,25 @@ export function mostRestrictiveCallerOverrides(
     if (out === undefined || CALLER_OVERRIDES_RANK[mode] > CALLER_OVERRIDES_RANK[out]) out = mode;
   }
   return out;
+}
+
+/**
+ * Whether `lock` (an effective caller-override resolution — `resolveCallerOverrides`,
+ * or `getEffectiveCallerOverrides()` inside a scrape) is a SITE OWNER's lock (Spec
+ * 1715, audit A1): the mode restricts callers (`stricter` or `none`) AND a site
+ * owner's layer decided it — the plugin (`plugin`: its manifest or client options)
+ * or a builtin host policy (`builtin-host`, e.g. `*.softy.pro`). The operator's
+ * global `EVER_JOBS_CRAWL_CALLER_OVERRIDES` (`default` / `env-global`) and an
+ * operator per-site / per-host value (`operator-site` / `operator-host`) are the
+ * operator's choice, not a site owner's lock. On a tie the resolver names the
+ * highest layer that asked for the mode, so a global `stricter` plus Softy's
+ * `stricter` is still the plugin's lock.
+ */
+export function isSiteOwnerCallerLock(
+  lock: Pick<CallerOverridesResolution, 'mode' | 'source'> | undefined | null,
+): boolean {
+  if (!lock || (lock.mode !== 'stricter' && lock.mode !== 'none')) return false;
+  return lock.source === 'plugin' || lock.source === 'builtin-host';
 }
 
 /** The request timeout, seconds, a search gets when the caller sends none (`ScraperInputDto.requestTimeout`). */

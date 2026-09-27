@@ -11,6 +11,17 @@ import type { CareerLevelVerdict } from '../interfaces/career-level-classifier.i
  */
 export const JOB_LIVENESS_REASON_FRESH_FETCH = 'fresh-fetch';
 
+/**
+ * `liveness.reason` of a job marked `active` because the source listed it in a
+ * sitemap fetched from the network not long ago (`jobUrlListedAt`, within
+ * `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` of now), so it was not probed again
+ * (Spec 1715, audit A3). Applies to cache hits too: the age is measured against now.
+ */
+export const JOB_LIVENESS_REASON_LISTED = 'listed';
+
+/** The `liveness.reason` values the API sets on a verdict made without a probe. */
+export type JobLivenessReason = typeof JOB_LIVENESS_REASON_FRESH_FETCH | typeof JOB_LIVENESS_REASON_LISTED;
+
 export class JobPostDto {
   id?: string | null;
   title!: string;
@@ -114,6 +125,19 @@ export class JobPostDto {
   jobUrlFetchedAt?: string | null;
 
   /**
+   * ISO-8601 UTC instant at which the sitemap that listed this posting was fetched
+   * from the network (Spec 1715, audit A3): by this request, or by an earlier one
+   * whose answer the source still holds in its sitemap cache. It says the site
+   * LISTED the posting at that time, not that `jobUrl` itself was fetched. Unset
+   * when the posting did not come from a sitemap. `?liveness=true` trusts a value
+   * not older than `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` (default 600000 =
+   * 10 min; `0` = never, the pre-fix behaviour) and marks the job
+   * `{ state: 'active', checkedAt: jobUrlListedAt, reason: JOB_LIVENESS_REASON_LISTED }`
+   * instead of probing it.
+   */
+  jobUrlListedAt?: string | null;
+
+  /**
    * Stable cross-source identity of the posting (Spec 1721): sha-256 of the
    * normalised `company|title|location` triple — the same `canonicalJobId` the
    * dedup engine clusters on. The same posting seen via different sources or
@@ -127,8 +151,12 @@ export class JobPostDto {
     state: 'active' | 'expired' | 'uncertain';
     checkedAt?: string;
     /**
-     * Why the state was set without a probe, e.g. `JOB_LIVENESS_REASON_FRESH_FETCH`
-     * (the plugin fetched the page during this request, Spec 1714). Unset on a probe verdict.
+     * Why the state was set without a probe (`JobLivenessReason`):
+     * `JOB_LIVENESS_REASON_FRESH_FETCH` (`'fresh-fetch'`: the plugin fetched the page
+     * during this request, Spec 1714) or `JOB_LIVENESS_REASON_LISTED` (`'listed'`: a
+     * sitemap fetched within `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` listed it,
+     * Spec 1715 audit A3). Unset on a probe verdict. Typed `string` so a client keeps
+     * reading reasons added later.
      */
     reason?: string;
   } | null;
