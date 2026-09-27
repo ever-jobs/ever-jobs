@@ -7,12 +7,13 @@
 | Status | in-progress |
 | Owner | agent |
 | Created | 2026-09-26 |
-| Last updated | 2026-09-26 |
+| Last updated | 2026-09-27 |
 | Supersedes | — |
 | Related specs | 1690 (crawl policy), 1691 (Softy sitemap discovery), 1715 (Softy audit hardening, the plugin half of this work), 005 (circuit breaker), 721 / 740 (liveness), 1700 (multi-location search) |
 | Plan / tasks | [plan.md](./plan.md) · [tasks.md](./tasks.md) |
 | Operator guide | [docs/CRAWL_POLICY.md](../../../docs/CRAWL_POLICY.md) |
 | Audit gaps closed | G0, G2, G3, G4, G5, G7, G8, G9, G10, G11, G12, G14, G15 (part), G16, G17, G18, G22 (part), G27, G28, G29 (part), K2, K3 |
+| Review round 2 (2026-09-27) | shared-layer and API findings A0, A3 (API half), C0, C1 (liveness half), C3, F3, F5 (meta), F7, F8 and a flaky timing test: FR-19..FR-27, tasks T21..T32. Refuted and not fixed: F0, F1 (its doc / meta core folded into F5), F2 / C2, F6, A2, A4 |
 
 ## 1. Problem Statement
 
@@ -107,8 +108,8 @@ The core problems:
 | FR-3 | `GET /api/sources/:site/crawl-policy` shows the effective mode and where it came from: `meta.callerOverrides` (effective), `meta.callerOverridesProvenance` (`default` \| `env-global` \| `builtin-host` \| `plugin` \| `operator-site` \| `operator-host`), `meta.globalCallerOverrides`, `meta.builtinHostPatterns`, `meta.fleetSize`. | G0 | must |
 | FR-4 | `stricter` comparators (rules `1714`, default): see §7.3. `EVER_JOBS_CRAWL_STRICTER_RULES=1690` restores the Spec 1690 comparators (and leaves `requestTimeout` ungated). | G3, G5, G10, G12, G22 | must |
 | FR-5 | Caller-supplied `proxies` are ignored when the effective caller mode is not `any` because of a lock or an operator per-site/host value (operator env proxies still apply). Rule (`crawlCallerProxiesAllowedFor`): source `default` / `env-global` → `EVER_JOBS_CRAWL_CALLER_PROXIES` decides exactly as before; source `plugin` / `builtin-host` → allowed only when the mode is `any` **and** `EVER_JOBS_CRAWL_CALLER_PROXIES` allows it (a lock never loosens the operator's proxy setting); source `operator-site` / `operator-host` → allowed exactly when the operator's value is `any` (per-site flexibility). Applied per plugin in `JobsService.scrapeOne` and per host in `HttpClient` (for any plugin that reaches a locked host). | G9, G29 | must |
-| FR-6 | The `per-host` proxy pick keys on the registrable domain whenever the base scope (the scope resolved without the caller) is `domain`, so two tenants of one site never exit through different proxies because of a caller setting. `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE=bucket` restores the pre-1714 pick (the request's bucket). | G10, G11 | must |
-| FR-7 | `requestTimeout` (flat DTO field, seconds): under effective mode `stricter` only a value ≥ the resolved default (60 s) is accepted, otherwise the default is used; under `none` it is ignored (default used); under `any` it passes unchanged. Helper `gateCallerRequestTimeout` exported from `@ever-jobs/common`; `apps/api` applies it once per source in `JobsService.scrapeOne`, which the REST, GraphQL, MCP (via REST) and CLI paths all reach. | K3 | must |
+| FR-6 | The `per-host` proxy pick keys on the registrable domain whenever the base scope (the scope resolved without the caller) is `domain`, so two tenants of one site never exit through different proxies because of a caller setting. `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE=bucket` restores the pre-1714 pick (the request's bucket). Round 2 (FR-24): only under a lock or a builtin lock host; every unlocked source keeps the pre-1714 pick. | G10, G11 | must |
+| FR-7 | `requestTimeout` (flat DTO field, seconds): under effective mode `stricter` only a value ≥ the resolved default (60 s) is accepted, otherwise the default is used; under `none` it is ignored (default used); under `any` it passes unchanged. Helper `gateCallerRequestTimeout` exported from `@ever-jobs/common`; `apps/api` applies it once per source in `JobsService.scrapeOne`, which the REST, GraphQL, MCP (via REST) and CLI paths all reach. Round 2 (FR-23): `HttpClient` also gates a caller's timeout per request host. | K3 | must |
 | FR-8 | `BUILTIN_HOST_POLICIES` keys accept `*.suffix` (and exact hosts), matched with the operator `hosts` semantics (`*.x` = any subdomain, not the apex); every matching pattern applies, least specific first. New entries `*.softy.pro` and `softy.pro` = `BUILTIN_SOFTY_HOST_POLICY` (§7.1). Operator `sites` / `hosts` entries still override them; `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false` switches the layer off (as before). | G2, G4, G8, G11, G28 | must |
 | FR-9 | New policy field `minGapMs` (default 0 = today): after a request of the bucket completes, the next one starts no sooner than `minGapMs` later, in addition to `minIntervalMs` start-to-start. Env `EVER_JOBS_CRAWL_MIN_GAP_MS`. | G7 | must |
 | FR-10 | New policy field `serverErrorCooldownMs` (default 0 = today): when a request of the bucket ends in 500, 502 or 504, a timeout or a connection reset, the whole bucket cools down this long (like a throttle, but for "struggling"). Env `EVER_JOBS_CRAWL_SERVER_ERROR_COOLDOWN_MS`. Applies to thrown answers, answers accepted through `validateStatus`, and browser navigations (`recordAnswerOutcome`). | G14 | must |
@@ -120,6 +121,22 @@ The core problems:
 | FR-16 | Liveness: probes run under the host policy automatically (FR-8). Additionally, a job whose `jobUrlFetchedAt` (new optional field, §7.4) is not older than the start of this request is marked `liveness: { state: 'active', checkedAt: <jobUrlFetchedAt>, reason: 'fresh-fetch' }` and not probed; a search-cache hit never counts as fresh. `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH` (default true; false = probe every URL, as today). | G4, G28 | must |
 | FR-17 | Sources without a lock: under the default `any`, `explainCrawlPolicy` gives the same policy (1690 fields), provenance and `callerRejected` as before this spec (golden test). | — | must |
 | FR-18 | Docs: `docs/CRAWL_POLICY.md` (new fields, lock semantics, fleet size, host policies, Softy section), `docs/API_CHANGELOG.md`, `docs/log.md`, `docs/index.md`, `docs/questions.md` (Q-120..Q-125), `.env.example`, `tool_manifest.json`. `npm run lint:docs` passes. | — | must |
+
+**Review round 2 (2026-09-27).** A review of the landed work confirmed the findings below
+(ids from the review; A = the asks lens, C = correctness, F = flexibility). Each keeps the
+old behaviour behind the switch named.
+
+| ID | Requirement | Finding | Priority |
+|---|---|---|---|
+| FR-19 | **Redirect pacing.** `HttpClient` does not follow a redirect hop inside the request's limiter slot when the hop's host falls in a different rate-limit bucket (its own resolved scope) or `isPolicyOwnedHost(host)` is true (a builtin — not disabled — or operator `hosts` entry matching it with `callerOverrides` `stricter` / `none` or `rateLimitScope: 'domain'`). The per-attempt `beforeRedirect` first runs the existing guards (pin, egress check, the request's own hook), then throws a private `DeferredRedirect`; `HttpClient` records the `3xx` as the slot's outcome, releases the slot and re-issues the hop through the full pipeline (memo, robots.txt, lock, proxy pick, slot, cool-down, retries). It keeps what follow-redirects would change (`GET` without a body after a `301`/`302` `POST` or a `303`; dropped headers sent as `false`; `auth` dropped off-origin; the per-request `crawl` carried). The whole chain is capped at `config.maxRedirects ?? DEFAULT_MAX_REDIRECTS` (21), then `ERR_FR_TOO_MANY_REDIRECTS`. Same-bucket hops to ordinary hosts, `307`/`308` hops with a non-replayable body and `maxRedirects: 0` keep the in-slot behaviour. `EVER_JOBS_CRAWL_PACE_REDIRECTS` (default `true`; `false` = pre-fix; `false` under `legacy`). | A0 (G6 remainder) | must |
+| FR-20 | `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE`: comma / whitespace list of `BUILTIN_HOST_POLICIES` keys (normalised, de-duplicated; unknown → warning, ignored), default empty. Skipped in `explainCrawlPolicy` (with a note per skipped pattern, `builtinHostPatternsDisabled`), `resolveCallerOverrides` and `isPolicyOwnedHost`. `crawlBuiltinHostsDisabled(env)` exposes the list. The restore rows for "other plugins reach `*.softy.pro` under the generic defaults" use `*.softy.pro,softy.pro` instead of `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false`, which also drops the pre-1714 bulk-API limits. | F3 | must |
+| FR-21 | **`legacy` restores the new switches.** Unset, `EVER_JOBS_CRAWL_STRICTER_RULES` = `1690`, `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE` = `bucket`, `EVER_JOBS_CRAWL_ROBOTS_BACKOFF` = `false`, `EVER_JOBS_CRAWL_PACE_REDIRECTS` = `false` under `EVER_JOBS_CRAWL_PRESET=legacy` (env parse and the accessors for hand-built configs), and the API switches `EVER_JOBS_BREAKER_COUNT_REFUSALS`, `EVER_JOBS_SEARCH_STOP_ON_503`, `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH` = `false`, `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` = `0` (preset read through `readCrawlPolicyEnv`: `crawlPresetIsLegacy()`). An explicit value wins. `CRAWL_POLICY.md` §16 says exactly what `legacy` restores and what it does not (`ABORT_ON_DEADLINE`, `CIRCUIT_MAX_SITES`, plugin settings such as `SOFTY_*` and the Softy client floor). | F7 | must |
+| FR-22 | Invalid values of the API switches warn **once per variable and value** (`warnInvalidSwitchOnce`, a module-level set; `resetSwitchWarnings()` for tests), naming the variable and the value used; the breaker's `readBreakerCountRefusals` passes `(raw, used)` to `onInvalid`. | F8 | must |
+| FR-23 | **Caller timeouts per request host.** `HttpClient` treats a timeout as the search caller's when the client took it from a real `ScraperInputDto` (`timeoutFromCaller`, set by `clientOptionsFromScraperInput`) or it equals the scrape context's new `callerRequestTimeout` (seconds; a per-request `timeout` in ms is compared × 1000). Such a timeout is gated with `gateCallerRequestTimeout` and the effective caller mode of the REQUEST host (robots.txt fetch included), and a client-side timeout (`ECONNABORTED` / `ETIMEDOUT`, no answer) of a caller's timeout below `DEFAULT_REQUEST_TIMEOUT_SECONDS` never applies `serverErrorCooldownMs`. Unlocked hosts are unchanged. `EVER_JOBS_CRAWL_STRICTER_RULES=1690` turns both off. **Open:** `JobsService.scrapeOne` must set `ScrapeContext.callerRequestTimeout` (T26); until then only DTO-branch clients are covered on the search API. | C0 | must |
+| FR-24 | The `per-host` proxy pin keys on the base scope only when the effective caller mode is not `any` or an applied builtin host pattern carries a site owner's lock; otherwise the pre-1714 bucket key — byte-identical for every unlocked source, including under a `domain` base scope from the preset or env. `EffectiveCrawlResolution.builtinHostPatterns` carries the applied patterns. | C3 | must |
+| FR-25 | **Listing evidence for liveness** (API half). `JobPostDto.jobUrlListedAt?: string \| null` (ISO-8601 UTC: when the source's index that listed the posting was fetched from the network), `JOB_LIVENESS_REASON_LISTED = 'listed'`, type `JobLivenessReason`. `markFreshlyFetched` (JSON, CSV and NDJSON) marks a job `{ state: 'active', checkedAt: jobUrlListedAt, reason: 'listed' }` when `0 <= now - listedAt <= EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` (default 600000; `0` = off = pre-fix), measured against now (cache hits included); a fresh fetch wins; a future or unparseable time is probed; trusted jobs do not count toward `EVER_JOBS_LIVENESS_MAX_URLS`. Mirrored as `searchSwitches.livenessTrustListedMaxAgeMs`; `tool_manifest.json` output field. | A3 | must |
+| FR-26 | Policy API meta: `meta.builtinHostsDisabled` (FR-20) and `meta.clientMinIntervalFloorMs` — a plugin's declared `IPluginMetadata.clientMinIntervalFloorMs` (finite, positive), else `null`. **Open:** the Softy plugin does not declare it yet (Spec 1715 T22). | F3, F5 (F1 core) | should |
+| FR-27 | Timing tests measure what the limiter promises: `jobs.service.plugin-crawl.spec.ts` asserts the floors on the limiter's grant instants (a recording `HostLimiter`), not on the mocked adapter's clock, with no slack; the liveness host-policy test adds a fast-answer case that only `minIntervalMs` can hold ≥ 1 s apart, with a control that lowers only the interval. | flaky CI test, C1 | must |
 
 ## 6. Non-Functional Requirements
 
@@ -283,6 +300,48 @@ export function isServerStruggling(status: number | undefined, err?: unknown): b
 type-checks with no change to `packages/plugin/src/interfaces/plugin-metadata.interface.ts`
 beyond its doc comment.
 
+Review round 2 (2026-09-27) added, as landed:
+
+```ts
+// env.ts — CRAWL_EXTRA_ENV gains:
+//   BUILTIN_HOSTS_DISABLE: 'EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE'  (comma list of BUILTIN_HOST_POLICIES keys; default [])
+//   PACE_REDIRECTS: 'EVER_JOBS_CRAWL_PACE_REDIRECTS'                (bool; default true, false under legacy)
+// STRICTER_RULES / PROXY_PIN_SCOPE / ROBOTS_BACKOFF now default to 1690 / bucket / false under legacy.
+// ParsedCrawlPolicyEnv gains paceRedirects?, builtinHostsDisable?
+export function crawlPaceRedirectsEnabled(env: CrawlPolicyEnvConfig): boolean;   // missing → !legacy
+export function crawlBuiltinHostsDisabled(env: CrawlPolicyEnvConfig): string[];  // missing → []
+
+// resolve.ts
+export interface CrawlPolicyExplanation {
+  /** Builtin patterns matching the host but skipped by EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE. */
+  builtinHostPatternsDisabled: string[];
+}
+/** A builtin (not disabled) or operator `hosts` entry matching `host` with a caller lock or a
+ *  `domain` scope: a redirect hop there is re-issued even in the same bucket (FR-19). */
+export function isPolicyOwnedHost(host: string | undefined, env?: CrawlPolicyEnvConfig): boolean;
+
+// caller-lock.ts
+/** mode `stricter` / `none` decided by `plugin` or `builtin-host` (not by the operator). */
+export function isSiteOwnerCallerLock(lock: Pick<CallerOverridesResolution, 'mode' | 'source'> | undefined | null): boolean;
+
+// scrape-context.ts
+export interface EffectiveCrawlResolution { builtinHostPatterns: string[] }        // FR-24
+export function getEffectiveCallerOverrides(host?: string, explicit?: CrawlPolicyOverride): CallerOverridesResolution;
+export function resolveCrawlInContext(ctx: ScrapeContext | undefined, host?: string, explicit?: CrawlPolicyOverride): EffectiveCrawlResolution;
+
+// types.ts — ScrapeContext gains
+callerRequestTimeout?: number;   // seconds: the caller's requestTimeout after JobsService's gate (FR-23)
+
+// http-client.ts
+export const DEFAULT_MAX_REDIRECTS = 21;   // follow-redirects' default, which axios uses when maxRedirects is unset
+// HttpClientOptions gains timeoutFromCaller?: boolean (set by clientOptionsFromScraperInput for a real DTO)
+
+// packages/plugin — IPluginMetadata gains clientMinIntervalFloorMs?: number (informational, FR-26)
+// apps/api — crawl-policy.mapping.ts: LIVENESS_TRUST_LISTED_MAX_AGE_ENV, DEFAULT_LIVENESS_TRUST_LISTED_MAX_AGE_MS (600000),
+//   livenessTrustListedMaxAgeMs(), crawlPresetIsLegacy(), warnInvalidSwitchOnce(), resetSwitchWarnings();
+//   health.controller.ts: clientMinIntervalFloorMs(value) → number | null
+```
+
 ### 7.2 `@ever-jobs/models`
 
 ```ts
@@ -299,6 +358,13 @@ serverErrorCooldownMs?: number;
 jobUrlFetchedAt?: string | null;
 liveness?: { state: 'active' | 'expired' | 'uncertain'; checkedAt?: string; reason?: string } | null;
 export const JOB_LIVENESS_REASON_FRESH_FETCH = 'fresh-fetch';
+// Review round 2 (FR-25):
+/** ISO-8601 UTC instant at which the index (sitemap) that listed this posting was fetched
+ *  from the network — by this request or an earlier one the source still caches. */
+jobUrlListedAt?: string | null;
+export const JOB_LIVENESS_REASON_LISTED = 'listed';
+export type JobLivenessReason = typeof JOB_LIVENESS_REASON_FRESH_FETCH | typeof JOB_LIVENESS_REASON_LISTED;
+// `liveness.reason` stays typed `string`, so clients keep reading reasons added later.
 
 // dtos/scrape-diagnostics.dto.ts
 /** The error a scrape should report: `next` replaces `current` when `next` is a refusal
@@ -344,18 +410,32 @@ may only be turned on (unchanged from 1690).
 | `EVER_JOBS_CRAWL_MIN_GAP_MS` | int ms (`0`) | `0` |
 | `EVER_JOBS_CRAWL_SERVER_ERROR_COOLDOWN_MS` | int ms (`0`) | `0` |
 | `EVER_JOBS_CRAWL_FLEET_SIZE` | int 1..1000 (`1`) | `1` |
-| `EVER_JOBS_CRAWL_STRICTER_RULES` | `1714` \| `1690` (`1714`) | `1690` |
-| `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE` | `base` \| `bucket` (`base`) | `bucket` |
-| `EVER_JOBS_CRAWL_ROBOTS_BACKOFF` | bool (`true`) | `false` |
-| `EVER_JOBS_SEARCH_STOP_ON_503` | bool (`true`) | `false` |
-| `EVER_JOBS_BREAKER_COUNT_REFUSALS` | bool (`true`) | `false` |
-| `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH` | bool (`true`) | `false` |
+| `EVER_JOBS_CRAWL_STRICTER_RULES` | `1714` \| `1690` (`1714`; `1690` under `legacy`, round 2) | `1690` |
+| `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE` | `base` \| `bucket` (`base`; `bucket` under `legacy`, round 2) | `bucket` |
+| `EVER_JOBS_CRAWL_ROBOTS_BACKOFF` | bool (`true`; `false` under `legacy`, round 2) | `false` |
+| `EVER_JOBS_CRAWL_PACE_REDIRECTS` (round 2) | bool (`true`; `false` under `legacy`) | `false` |
+| `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE` (round 2) | comma list of builtin host patterns (empty) | `*.softy.pro,softy.pro` (only Softy's builtin entries; the pre-1714 bulk-API limits stay) |
+| `EVER_JOBS_SEARCH_STOP_ON_503` | bool (`true`; `false` under `legacy`, round 2) | `false` |
+| `EVER_JOBS_BREAKER_COUNT_REFUSALS` | bool (`true`; `false` under `legacy`, round 2) | `false` |
+| `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH` | bool (`true`; `false` under `legacy`, round 2) | `false` |
+| `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` (round 2) | int ms (`600000`; `0` under `legacy`; `0` = off) | `0` (probing every URL needs this and `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false`) |
 | `EVER_JOBS_CRAWL_CALLER_OVERRIDES` | unchanged: `any` \| `stricter` \| `none` (`any`) | — |
+
+An invalid value of an API switch keeps its default and is logged once per variable and
+value (round 2, FR-22); the crawl switches warn as every crawl env value does.
 
 The Softy lock itself is undone per install by an operator policy:
 `{"sites":{"softy":{"callerOverrides":"any"}},"hosts":{"*.softy.pro":{"callerOverrides":"any"},"softy.pro":{"callerOverrides":"any"}}}`
-(or, more bluntly, `EVER_JOBS_CRAWL_PLUGIN_MANIFESTS=false` and
-`EVER_JOBS_CRAWL_BUILTIN_HOSTS=false`, which switch off every manifest / builtin host).
+**plus `SOFTY_LEGACY=no-interval-floor`** (round 2, F5: the Softy client's 1 s floor is a
+client option no policy layer lifts, so without it a caller's `minIntervalMs: 0` still
+leaves Softy's own requests 1 s apart) — or, more bluntly, `EVER_JOBS_CRAWL_PLUGIN_MANIFESTS=false`
+and `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false` (every manifest / builtin host off), again with
+`SOFTY_LEGACY=no-interval-floor`. The whole pre-1715 Softy crawl policy (manifest retries,
+back-off, idle gap, cool-down, UA mode) is an operator recipe in `docs/CRAWL_POLICY.md` §16:
+`EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE=*.softy.pro,softy.pro`, `SOFTY_LEGACY=no-interval-floor`
+and a `sites.softy` entry with the preset's values. A builtin host entry sits above
+env-global values, so a slower global `EVER_JOBS_CRAWL_MIN_INTERVAL_MS` does not reach
+`*.softy.pro` either (Q-121); an operator `hosts` entry does.
 
 ### 7.5 API
 
@@ -370,6 +450,11 @@ The Softy lock itself is undone per install by an operator policy:
 - Behaviour: caller fields refused by a lock come back in `?crawl=` previews as
   `meta.caller.rejected`; during a search they are dropped (logged once per search at
   warn level, as refused fields are today).
+- Round 2: `meta.builtinHostsDisabled` (FR-20) and `meta.clientMinIntervalFloorMs`
+  (FR-26) on the policy endpoint; optional job field `jobUrlListedAt` (REST JSON,
+  `tool_manifest.json`) and `liveness.reason: 'listed'` (FR-25); configuration mirrors
+  `crawl.paceRedirects`, `crawl.builtinHostsDisabled`,
+  `searchSwitches.livenessTrustListedMaxAgeMs`.
 
 ### 7.6 Errors and diagnostics
 
@@ -408,6 +493,25 @@ reason, then pass with the new default. Lanes report both runs (command + result
 | `apps/api/src/jobs/__tests__/jobs.service.crawl.spec.ts` (API) | Softy: caller `requestTimeout: 0.2` reaches the plugin as 60; caller `proxies` dropped (neither DTO nor context); non-locked site under `any`: both unchanged; global `none`: `requestTimeout` ignored for every site | `EVER_JOBS_CRAWL_STRICTER_RULES=1690` → 0.2 reaches Softy; operator `sites.softy.callerOverrides:'any'` → proxies kept |
 | `sources-crawl-policy.controller.spec.ts`, `apps/api/__tests__/integration/crawl-policy.http.spec.ts` (API) | FR-3 meta for `softy` (plugin), `softy?host=acme.softy.pro`, `liveness-http?host=acme.softy.pro` (builtin-host), `linkedin` (default); `?crawl={"proxyRotation":"per-request"}` on softy → `meta.caller.rejected` | — |
 | `gql-types.schema.spec.ts`, `apps/mcp/__tests__/crawl.spec.ts`, `tool-manifest.spec.ts` (API) | the two new fields on every surface; `callerOverrides` on none | — |
+
+Review round 2 (2026-09-27):
+
+| Test (lane) | Asserts | Red control |
+|---|---|---|
+| `packages/common/__tests__/http-client-redirect-pacing.spec.ts` (CORE, new; real axios + follow-redirects, loopback servers, names mapped to 127.0.0.1 by an agent `lookup`) | FR-19: a direct probe of `acme.softy.pro` and an aggregator link that `302`s to another Softy offer (site `liveness-http`): the hop takes a `domain:softy.pro` slot of its own, granted ≥ 1000 ms after the first (limiter grant clock) and arriving ≥ 1000 ms later; a same-host `/offres` → `/offers` hop on a Softy tenant is re-issued 1 s later; the re-issued hop is checked against its origin's robots.txt (`RobotsDisallowedError`); ordinary same-bucket hops stay in the slot; `POST` + `301`/`302`/`303` → `GET` without body or `Content-*`, `307`/`308` keep method and body; off-domain `Authorization` / `Cookie` not merged back; the per-request `crawl` goes along; `maxRedirects: 3` across two buckets → 4 requests then `ERR_FR_TOO_MANY_REDIRECTS` (paced or not); `maxRedirects: 0` untouched | `EVER_JOBS_CRAWL_PACE_REDIRECTS=false` → one Softy slot, the hop arrives < 1000 ms after it, the disallowed page is fetched; `legacy` preset → one slot; `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE=*.softy.pro` → the same-host hop follows in a `host:` slot |
+| `http-client-redirects.spec.ts` (CORE) | with pacing on, the pin, then the egress check, then the request's own hook still run before the decision; `EgressBlockedError` (not a deferral) with the pin off; a same-bucket hop is followed | — |
+| `crawl-caller-lock.spec.ts` (CORE) | FR-20: `*.softy.pro,softy.pro` disabled → generic limits and no lock for other plugins (noted), bulk-API builtin limits kept, disabling only the apex leaves tenants locked, the Softy manifest kept, the whole-layer switch wins; `isPolicyOwnedHost` for builtin / operator entries with a lock or `domain` scope (pacing alone does not count), following both builtin switches; `isSiteOwnerCallerLock` agrees with `resolveCallerOverrides` | the Greenhouse case under `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false` (4 / 100 ms instead of 16 / 0) |
+| `crawl-env.spec.ts` (CORE) | FR-21: under `legacy` STRICTER_RULES `1690`, PROXY_PIN_SCOPE `bucket`, ROBOTS_BACKOFF / PACE_REDIRECTS `false`; `polite` / `strict` keep the new values; an explicit value wins either way; an invalid value under `legacy` warns and keeps the legacy default; the accessors follow the preset on hand-built configs. `PACE_REDIRECTS` parses like every boolean switch; `BUILTIN_HOSTS_DISABLE` normalises, de-duplicates and warns on a non-builtin pattern | — |
+| `crawl-scrape-context.spec.ts` (CORE) | `builtinHostPatterns` on the resolution (copied per call); `getEffectiveCallerOverrides` inside the Softy scrape (plugin lock), on a Softy host from another plugin (builtin-host), under an operator `sites.softy` value (not a site owner's lock); `resolveCrawlInContext` for an explicit context | — |
+| `http-client-crawl-policy.spec.ts` (CORE) | FR-23 (a): an unlocked plugin with the caller's 0.001 s to `acme.softy.pro` → 60 s, to `example.com` → 1 ms; no 30 s cool-down of `domain:softy.pro` from the caller's abort; a plugin's own timeout never touched; a per-request timeout equal to the caller value gated, another not; the DTO branch counts without a context value; a value ≥ 60 s passes, an operator `none` on the host forces the default; the robots.txt request gets the gated timeout. (b): a caller's 1 s timeout on an unlocked host with an operator cool-down does not cool it; a plugin's own short timeout and a caller's timeout at the default still do; a reset under a caller's short timeout still counts. FR-24: two Softy tenants share one proxy even with callers unlocked by the operator and a caller `host` scope; a site lock under rules `1690` still pins the base domain; an unlocked source keeps the pre-1714 pick for every golden case; Greenhouse (builtin host, no lock) keeps the bucket pick | `EVER_JOBS_CRAWL_STRICTER_RULES=1690` → 1 ms abort and `domain:softy.pro` cools 30 s; the caller's short timeout counts as struggling |
+| `apps/api/src/jobs/__tests__/crawl-policy.switches.spec.ts` (API, new) | FR-21 / FR-22: `crawlPresetIsLegacy` agrees with the crawl layer (spellings, invalid preset = `polite`); each switch defaults to its new value, to the pre-1714 one under `legacy`, an explicit value wins; an invalid value keeps the default and is logged once per value naming the variable and the value used; `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` 600000 / `0` under `legacy`, rejects `ten`, `-1`, `1.5`, `1e3`, `600000ms` and an unsafe integer | — |
+| `circuit-breaker.refusals.spec.ts` (API) | `readBreakerCountRefusals` → `false` under `legacy` (any accepted spelling), `true` for `polite` / `strict` / an invalid preset; an explicit value wins; `onInvalid(raw, used)`; a breaker built under `legacy` keeps refused results as successes | `EVER_JOBS_BREAKER_COUNT_REFUSALS=true` under `legacy` → opens |
+| `jobs.controller.liveness-listed.spec.ts` (API, new) | FR-25 on JSON and NDJSON: a fresh listing trusted (`reason: 'listed'`, `checkedAt` = listing time), a stale one probed, the operator bound applies, a search-cache hit trusted while young, a future or unparseable time probed, a fresh fetch wins, trusted jobs outside the probe cap, `EVER_JOBS_LIVENESS_ENABLED=false` withholds all | `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS=0` → every job probed (and both switches off → all probed, pre-1714) |
+| `jobs.controller.liveness-trust-paths.spec.ts` (API, new) | the fresh-fetch trust on the JSON / NDJSON paths and the probe cap (Specs 1721 / 1723 × FR-16) | `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false` |
+| `sources-crawl-policy.controller.spec.ts` (API) | FR-26: `meta.builtinHostsDisabled` `[]` by default, the disabled list whatever the host, only those patterns stop applying (Greenhouse keeps its builtin host); `meta.clientMinIntervalFloorMs` = the declared floor, `null` when none / 0 / junk | — |
+| `packages/models/__tests__/job-post-board-fields.spec.ts`, `tool-manifest.spec.ts` | `jobUrlListedAt` optional, distinct from `jobUrlFetchedAt`, JSON round trip; `JOB_LIVENESS_REASON_LISTED === 'listed'`; the manifest advertises the output field | — |
+| `liveness-http.host-policy.spec.ts` (API) | FR-27 / C1: probes of Softy tenants answered in 20 ms still start ≥ 1 s apart although the idle gap alone would allow 520 ms | an operator `hosts["*.softy.pro"] {minIntervalMs: 0}` (`minGapMs` kept) → starts exactly answer + 500 ms apart |
+| `jobs.service.plugin-crawl.spec.ts` (API) | FR-27: the RemoteOK 1000 ms, WTTJ 500 ms and Simplify 2000 ms floors hold between the limiter's GRANT instants (a recording `HostLimiter`), one grant per wire request, no slack | the diagnosis: the old adapter-clock gaps read up to 13 ms under the grant gaps (987 / 988 / 994 ms on loaded Linux CI; up to 52 ms under a CPU burner on Windows) while the grants were never < 1000 ms apart |
 
 Integration verification (after all lanes): `npx tsc -p tsconfig.typecheck.json --noEmit`,
 `npm run test:core`, `npm run test:sources` for the touched plugins (Softy, liveness-http,
@@ -472,6 +576,11 @@ branches), each with a default the build proceeds with:
   site-level effective mode (REST, GraphQL, MCP-through-REST and CLI all reach it). A
   per-host clamp inside `HttpClient` was considered and rejected: a timeout on a locked
   host already cools the whole bucket (`serverErrorCooldownMs`), which bounds the overlap.
+  **Amended in review round 2 (C0, FR-23):** that cool-down was itself the problem — a
+  caller's tiny timeout on an unlocked plugin reaching `*.softy.pro` put all of
+  `softy.pro` into the 30 s cool-down, although the server never slowed down. So
+  `HttpClient` now also gates a caller's timeout per request host, and a caller's short
+  timeout never counts as a struggling server.
 - D6 **Builtin Softy policy has no identity field**: `userAgentMode: 'identify'` at the
   builtin layer could loosen an operator's env `strict`; the manifest (plugin layer,
   which cannot relax `strict`) carries it instead.
@@ -480,6 +589,24 @@ branches), each with a default the build proceeds with:
   concurrency.
 - D8 **Old `stricter` comparators stay reachable** (`EVER_JOBS_CRAWL_STRICTER_RULES=1690`)
   per the no-removal rule; they are strictly looser than the new ones.
+- D9 **Redirect hop budget** (round 2, FR-19): the review brief said to cap re-issued
+  chains at "the axios default (5)", but the installed axios passes no `maxRedirects` to
+  follow-redirects, whose own default is 21. The cap is `config.maxRedirects ?? 21`
+  (`DEFAULT_MAX_REDIRECTS`), so the redirect budget a request had before is unchanged.
+- D10 **What counts as a caller's timeout** (round 2, FR-23): only a timeout the client
+  took from a real search DTO, or one equal to the scrape context's
+  `callerRequestTimeout`. A plugin's own timeout option is never gated, so a plugin that
+  happens to use the caller's value by coincidence is gated too — an accepted edge.
+  Recognising a copied value needs `JobsService` to fill `callerRequestTimeout` (T26).
+- D11 **The `legacy` preset follows the new switches** (round 2, FR-21), like
+  `BUILTIN_HOSTS` / `PLUGIN_MANIFESTS` before them, rather than documenting a list of
+  extra switches for "all of it"; plugin settings (`SOFTY_*`, client floors) stay the
+  plugin's (listed in `CRAWL_POLICY.md` §16).
+- D12 **Redirect pacing keys on the hop's bucket and on host ownership**, not on every
+  cross-host hop: a hop in the same bucket to an ordinary host keeps the in-slot follow,
+  so unlocked sources see no extra limiter slot for a same-host redirect. A same-bucket
+  hop on a host-owned policy is re-issued anyway, because that host asked to be paced
+  per request (`/offres` → `/offers` on a Softy tenant).
 
 ## 11. References
 

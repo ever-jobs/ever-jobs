@@ -5,10 +5,13 @@
 Spec: [spec.md](./spec.md) · Plan: [plan.md](./plan.md) · Shared layer:
 [Spec 1714 tasks](../1714-crawl-caller-lock-and-host-policies/tasks.md)
 
-**Status (2026-09-26, docs pass):** in progress. T01–T14 are done. Left: **T15** — the
+**Status (2026-09-27, review round 2):** in progress. T01–T14 are done; review round 2
+(Phase 6, T16–T21) landed its code, tests and docs. Left: **T22** (open, found in the round-2
+docs pass: the plugin does not declare its 1 s client floor in `@SourcePlugin`, so the policy
+endpoint shows `meta.clientMinIntervalFloorMs: null` for Softy) and **T15** — the
 orchestrator's joint verification with Spec 1714 T20 (full Softy suite incl. the skip of the
-live e2e, typecheck, `test:core`, `lint:docs`, every red control reported). The spec moves
-to `done` when T15 is ticked.
+live e2e, typecheck, `test:core`, `lint:docs`, every red control reported, round 2
+included). The spec moves to `done` when both are ticked.
 
 All tasks below are the **SOFTY** lane unless marked otherwise (disjoint ownership,
 [Spec 1714 plan §3](../1714-crawl-caller-lock-and-host-policies/plan.md)). Each key test
@@ -213,7 +216,77 @@ packages/plugins/source-ats-softy …`). Depends on Spec 1714 T02 (types, `BUILT
 - [ ] T15 — Verify with Spec 1714 T20
   - **Acceptance:** `npx jest --testPathPatterns packages/plugins/source-ats-softy
     --testPathIgnorePatterns e2e-spec` green; the skip of the live e2e shown; typecheck,
-    `test:core`, `lint:docs` green; every red control above reported.
+    `test:core`, `lint:docs` green; every red control above reported (Phase 6 included).
+
+## Phase 6 — Review round 2 (2026-09-27)
+
+The plugin halves of the confirmed review findings (the shared-layer halves are
+[Spec 1714](../1714-crawl-caller-lock-and-host-policies/tasks.md) T21–T32). SOFTY lane
+unless marked; every file under `packages/plugins/source-ats-softy/`; each fix has a test
+and a red control the lane ran red, then green.
+
+- [x] T16 — A caller's short detail budget stays on the sitemap under the lock (FR-21, finding A1)
+  - **Files:** `src/softy.service.ts` (`resolveCallerLock`, `SoftyRun.callerLock` /
+    `budgetKeptOnSitemap`, the `keepSitemap` selection, the `partial` note),
+    `src/softy.constants.ts` / `src/softy.config.ts` (`caller-listing`; the path table
+    on `readSoftyConfig`), `__tests__/softy.service.spec.ts`, `__tests__/softy.policy.spec.ts`
+  - **Acceptance:** `detail-25` + `resultsWanted: 60` under the lock → `[SITEMAP]` + 25
+    detail pages, 25 posts, `partial` naming the mode, its layer and the switches; the
+    same above `SOFTY_MAX_DETAIL_FETCHES`; inside a scrape context, with the builtin host
+    entry alone, and under a global `none`; an operator `auto`, `sites.softy.callerOverrides:
+    "any"`, no lock layer, or `SOFTY_MAX_DETAIL_FETCHES=0` read the listing;
+    `descriptionDepth: 'board'` unchanged (D5).
+  - **Red control:** `SOFTY_LEGACY=caller-listing` → the listing is read again.
+
+- [x] T17 — Nested sitemaps: a struggling child stops, the pre-1715 skip is a switch (FR-22, findings A5, F4)
+  - **Files:** `src/softy.service.ts` (`onNestedSitemapError`, `skipsNestedErrors`,
+    `nestedErrors` passed to `fetchSitemap`), `src/softy.constants.ts` (`nested-skip`; the
+    `any-error` wording), `__tests__/softy.service.spec.ts`, `__tests__/softy.integration.spec.ts`
+  - **Acceptance:** a child answering 500/502/504, timing out or resetting → stop,
+    `fetch_error` / `timeout`, nothing after it; a 410 child still skipped; under
+    `nested-skip` or `any-error` every nested failure skipped (429/503, 403, 5xx).
+  - **Red control:** `SOFTY_LEGACY=nested-skip` → the 502 child skipped, the next child and
+    its offer fetched (integration C5).
+
+- [x] T18 — Legacy detail URLs at the redirect target (FR-23, finding A0 — plugin half)
+  - **Files:** `src/softy.service.ts` (`parseIndex`, `normaliseJob`, `buildJobUrl`),
+    `src/softy.constants.ts` (`legacy-detail-url`), `__tests__/softy.service.spec.ts`
+  - **Acceptance:** legacy cards link `/offers/{ID}`; detail GETs go there.
+  - **Red control:** `SOFTY_LEGACY=legacy-detail-url` → `/offre/{ID}-{slug}` again.
+
+- [x] T19 — `jobUrlListedAt` on sitemap posts (FR-24, finding A3 — plugin half)
+  - **Files:** `src/softy.service.ts` (`SitemapStage.listedAt`, `CachedSitemap.listedAt`,
+    `collectFromSitemap`, `buildPost`, `processJob`), `__tests__/softy.service.spec.ts`,
+    `__tests__/softy.integration.spec.ts`
+  - **Acceptance:** every sitemap post carries the root sitemap's network answer time, also
+    on a sitemap-cache hit; a new time with the cache off; none on list-page posts.
+  - **Control:** `SOFTY_SITEMAP_CACHE_TTL_MS=0` → each scrape carries its own time (the
+    cache-hit assertion tells the two apart); the API's own switch is Spec 1714 T28.
+
+- [x] T20 — Timing proof of the 1 s interval (FR-25, finding C1 — plugin half)
+  - **Files:** `__tests__/softy.integration.spec.ts` (S8, S9, S10, C3, C4, C5)
+  - **Acceptance:** spec §8.2 rows S8–S10 and controls C3–C5; lower-bound timing only.
+  - **Red control:** C3 (only the interval lowered) → the smallest start gap < 975 ms.
+
+- [x] T21 — [DOCS] Round-2 docs (with Spec 1714 T32)
+  - **Files:** `docs/CRAWL_POLICY.md` §14, §16, §21 (paths table, nested sitemaps, the
+    `any-error` wording, legacy detail URLs, `jobUrlListedAt`, the three tokens, the
+    pre-1715 crawl-policy recipe), `README.md`, `.env.example`, `docs/API_CHANGELOG.md`,
+    this spec and tasks
+  - **Acceptance:** `npm run lint:docs` clean; no competitor named.
+
+- [ ] T22 — Declare the Softy client floor in the plugin metadata (finding F5 / F1 core; open)
+  - **Found by:** the round-2 docs pass. Spec 1714 T29 added
+    `IPluginMetadata.clientMinIntervalFloorMs` and `meta.clientMinIntervalFloorMs`, but
+    `@SourcePlugin({ … })` in `src/softy.service.ts` does not set it, so the policy
+    endpoint reports `null` for Softy (its Swagger text says "e.g. Softy: 1000").
+  - **Files:** `src/softy.service.ts` (the decorator), a test next to the controller's
+    (`apps/api/src/jobs/__tests__/sources-crawl-policy.controller.spec.ts` with the real
+    Softy metadata) or in `__tests__/softy.config.spec.ts`
+  - **Acceptance:** `GET /api/sources/softy/crawl-policy` shows `1000`; decide whether
+    `SOFTY_LEGACY=no-interval-floor` should make it `null` (the decorator is evaluated
+    once, at load).
+  - **Red control:** without the declaration → `null`.
 
 ## Gap coverage
 
@@ -237,6 +310,17 @@ packages/plugins/source-ats-softy …`). Depends on Spec 1714 T02 (types, `BUILT
 | G30 | T10, T11 | |
 | K0 | T04 | unknown tenant + negative cache |
 | K1 | T04, T05 | blocked stop + diagnostic |
+
+Review round 2 (2026-09-27):
+
+| Finding | Task(s) | Note |
+|---|---|---|
+| A0 | T18 (+ Spec 1714 T21) | legacy detail URLs; redirect pacing in the shared layer |
+| A1 | T16 | `board` kept on the listing (D5) |
+| A3 | T19 (+ Spec 1714 T28) | |
+| A5, F4 | T17 | |
+| C1 | T20 (+ Spec 1714 T30) | |
+| F5 | T21, **T22 (open)** | recipe in the docs; floor declaration open |
 
 ## Notes
 

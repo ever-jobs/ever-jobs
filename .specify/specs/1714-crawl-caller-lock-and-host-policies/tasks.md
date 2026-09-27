@@ -6,12 +6,15 @@ Spec: [spec.md](./spec.md) · Plan: [plan.md](./plan.md) · Operator guide:
 [docs/CRAWL_POLICY.md](../../../docs/CRAWL_POLICY.md) · Plugin half:
 [Spec 1715](../1715-softy-audit-hardening/tasks.md)
 
-**Status (2026-09-26, docs pass):** in progress. T01–T19 are done (the docs pass checked the
+**Status (2026-09-27, review round 2):** in progress. T01–T19 are done (the docs pass checked the
 operator guide, changelog, README, index and questions against the landed code and added
-Q-126..Q-128). Left: **T20** — the orchestrator's joint verification of the three lanes
-(typecheck, `test:core`, `test:sources` for Softy / liveness-http / every suite reaching
-`*.softy.pro`, `test:scripts`, `lint:docs`, every red control with command and result, the gap
-table confirmed). The spec moves to `done` when T20 is ticked.
+Q-126..Q-128). Review round 2 (Phase 4, T21–T32) landed its code, tests and docs, except
+**T26** (open): `JobsService` does not yet fill `ScrapeContext.callerRequestTimeout`, so the
+per-host caller-timeout gate of T25 reaches only clients built from the search DTO. Left:
+**T26**, and **T20** — the orchestrator's joint verification of the three lanes, round 2
+included (typecheck, `test:core`, `test:sources` for Softy / liveness-http / every suite
+reaching `*.softy.pro`, `test:scripts`, `lint:docs`, every red control with command and
+result, the gap and finding tables confirmed). The spec moves to `done` when both are ticked.
 
 Every task names its lane (plan §3 — disjoint file ownership), the audit gaps it closes,
 and for each key test a **red control**: run the test once with the named legacy switch
@@ -386,8 +389,159 @@ Commands run from the worktree root with the Bash tool
   - **Acceptance:** `npx tsc -p tsconfig.typecheck.json --noEmit` clean; `npm run
     test:core`; `npm run test:sources` for Softy, liveness-http and every suite that
     reaches `*.softy.pro`; `npm run test:scripts`; `npm run lint:docs`; every red control
-    above reported with command and result; gap coverage table (below) confirmed.
+    above reported with command and result; gap coverage table (below) confirmed. Since
+    2026-09-27 it also covers Phase 4 (round 2) and its finding table.
   - **Estimate:** 0.5 day
+
+## Phase 4 — Review round 2 (2026-09-27)
+
+A review of the landed work (findings A0–A5, C0–C3, F0–F8; the refuted ones — F0, F1 except
+its doc / meta core, F2 / C2, F6, A2, A4 — are not fixed) confirmed the items below. Lanes
+as before (CORE, API, SOFTY in [Spec 1715](../1715-softy-audit-hardening/tasks.md), DOCS).
+Each behaviour fix has a test and a red control run by its lane (the control fails on the
+old code or under the legacy switch).
+
+- [x] T21 — [CORE] Redirect hops paced by the hop's own policy (FR-19, finding A0)
+  - **Files:** `packages/common/src/http/http-client.ts` (`DeferredRedirect`, per-attempt
+    `pacedRedirectHook`, `followDeferredRedirect`, `DEFAULT_MAX_REDIRECTS`),
+    `packages/common/src/http/crawl/{env,resolve,scrape-context}.ts` (`PACE_REDIRECTS`,
+    `crawlPaceRedirectsEnabled`, `isPolicyOwnedHost`, `resolveCrawlInContext`), new
+    `packages/common/__tests__/http-client-redirect-pacing.spec.ts`,
+    `http-client-redirects.spec.ts`, `crawl-caller-lock.spec.ts`
+  - **Acceptance:** a hop to another bucket, or to a host-owned policy, gets its own slot
+    (≥ 1000 ms after the first grant under the builtin Softy policy), its origin's
+    robots.txt, lock, proxy and retries; the guards run first; method / headers / `auth`
+    change as follow-redirects would; the chain is capped at `maxRedirects ?? 21`;
+    `maxRedirects: 0` untouched; same-bucket ordinary hops stay in the slot.
+  - **Red control:** `EVER_JOBS_CRAWL_PACE_REDIRECTS=false` → one slot, the hop < 1000 ms
+    after the grant, a robots-disallowed hop fetched; `legacy` preset → one slot.
+
+- [x] T22 — [CORE] `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE` (FR-20, finding F3)
+  - **Files:** `packages/common/src/http/crawl/{env,resolve}.ts`,
+    `packages/common/__tests__/{crawl-env,crawl-caller-lock}.spec.ts`
+  - **Acceptance:** `*.softy.pro,softy.pro` → other plugins get the generic limits and no
+    lock (noted in `notes`, listed in `builtinHostPatternsDisabled`), Greenhouse keeps 16 /
+    0 ms, the Softy manifest stays; unknown patterns warned and ignored; the whole-layer
+    switch still wins.
+  - **Red control:** the same Greenhouse case under `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false`
+    reads 4 / 100 ms (the only switch before).
+
+- [x] T23 — [CORE + API] The `legacy` preset restores the new switches (FR-21, finding F7)
+  - **Files:** `packages/common/src/http/crawl/env.ts`,
+    `apps/api/src/jobs/crawl-policy.mapping.ts` (`crawlPresetIsLegacy`),
+    `packages/plugin/src/circuit-breaker/circuit-breaker.service.ts`, tests
+    `crawl-env.spec.ts`, new `apps/api/src/jobs/__tests__/crawl-policy.switches.spec.ts`,
+    `circuit-breaker.refusals.spec.ts`
+  - **Acceptance:** unset under `legacy`: `1690` / `bucket` / `false` / `false` and the four
+    API switches at their pre-1714 values; `polite` / `strict` unchanged; explicit values
+    win; accessors follow the preset on hand-built configs.
+  - **Red control:** an explicit value under `legacy` (e.g. `EVER_JOBS_BREAKER_COUNT_REFUSALS=true`
+    → the breaker opens again).
+
+- [x] T24 — [API] Invalid API switch values warn once (FR-22, finding F8)
+  - **Files:** `apps/api/src/jobs/crawl-policy.mapping.ts` (`warnInvalidSwitchOnce`,
+    `resetSwitchWarnings`), `circuit-breaker.service.ts` (`onInvalid(raw, used)`),
+    `crawl-policy.switches.spec.ts`
+  - **Acceptance:** one log line per variable and value, naming the value used; never throws.
+
+- [x] T25 — [CORE] A caller's timeout gated per request host, never a struggling server (FR-23, finding C0 — `HttpClient` half)
+  - **Files:** `packages/common/src/http/http-client.ts` (`timeoutPlan`,
+    `isCallersShortTimeout`, `timeoutFromCaller`), `packages/common/src/http/crawl/types.ts`
+    (`ScrapeContext.callerRequestTimeout`), `http-client-crawl-policy.spec.ts`
+  - **Acceptance:** an unlocked plugin carrying the caller's 0.001 s → 60 s to
+    `acme.softy.pro`, 1 ms elsewhere; no cool-down of `domain:softy.pro` from the caller's
+    abort; a plugin's own timeout untouched; the robots.txt fetch gated too.
+  - **Red control:** `EVER_JOBS_CRAWL_STRICTER_RULES=1690` → 1 ms abort, `softy.pro` cools 30 s.
+
+- [ ] T26 — [API] `JobsService` fills `ScrapeContext.callerRequestTimeout` (FR-23, finding C0 — wiring; open)
+  - **Found by:** the round-2 docs pass. `JobsService.scrapeOne` builds the scrape context
+    without it, and the JSON-LD plugin (like any plugin that copies `requestTimeout` into
+    its own `timeout` option) builds its client from an object literal, so on the search
+    API T25 recognises only clients built from the DTO. The C0 scenario (`siteType:
+    ["jsonld"]`, a Softy `companyUrl`, `requestTimeout: 0.001`) is therefore still open on
+    a default install.
+  - **Files:** `apps/api/src/jobs/jobs.service.ts` (the `scrapeContext` of `scrapeOne`),
+    a test in `apps/api/src/jobs/__tests__/jobs.service.crawl.spec.ts`
+  - **Acceptance:** the context carries the `requestTimeout` handed to the plugin when the
+    caller sent one (unset otherwise, so an ungated source's context is unchanged); an
+    end-to-end test through `JobsService` with a JSON-LD-like plugin and a Softy URL shows
+    60 s on the wire and no cool-down.
+  - **Red control:** without the field → 1 ms on the wire and a 30 s cool-down.
+
+- [x] T27 — [CORE] The base-scope proxy pin only under a lock (FR-24, finding C3)
+  - **Files:** `packages/common/src/http/http-client.ts`,
+    `packages/common/src/http/crawl/scrape-context.ts` (`builtinHostPatterns`),
+    `http-client-crawl-policy.spec.ts`, `crawl-scrape-context.spec.ts`
+  - **Acceptance:** Softy tenants share one proxy even with callers unlocked by the
+    operator; an unlocked source under a `domain` base scope keeps the pre-1714 pick for
+    every golden case; Greenhouse keeps the bucket pick.
+  - **Control:** the golden expectations are the pre-1714 picks (the stable hash of the
+    request's bucket key), which the round-1 code did not give for a `domain` base scope
+    under `any` (finding C3).
+
+- [x] T28 — [CORE + API] `jobUrlListedAt` and the `listed` liveness trust (FR-25, finding A3 — shared half)
+  - **Files:** `packages/models/src/dtos/job-post.dto.ts`,
+    `apps/api/src/jobs/{jobs.controller,crawl-policy.mapping}.ts`,
+    `apps/api/src/config/configuration.ts`, `tool_manifest.json`, tests
+    `job-post-board-fields.spec.ts`, `tool-manifest.spec.ts`, new
+    `jobs.controller.liveness-listed.spec.ts` and `jobs.controller.liveness-trust-paths.spec.ts`
+  - **Acceptance:** JSON and NDJSON: fresh listing trusted, stale probed, operator bound,
+    cache hit trusted while young, future / unparseable probed, fresh fetch wins, trusted
+    jobs outside the probe cap, liveness disabled withholds all.
+  - **Red control:** `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS=0` → every job probed.
+
+- [x] T29 — [API] Policy API meta: `builtinHostsDisabled`, `clientMinIntervalFloorMs` (FR-26, findings F3, F5)
+  - **Files:** `apps/api/src/jobs/health.controller.ts`,
+    `packages/plugin/src/interfaces/plugin-metadata.interface.ts`,
+    `sources-crawl-policy.controller.spec.ts`
+  - **Acceptance:** `[]` by default; the disabled list; the declared floor or `null`. The
+    Softy plugin's own declaration is Spec 1715 T22 (open).
+
+- [x] T30 — [API] Liveness timing test that needs the 1 s interval (FR-27, finding C1 — liveness half)
+  - **Files:** `packages/plugins/liveness-http/__tests__/liveness-http.host-policy.spec.ts`
+  - **Acceptance:** 20 ms answers, starts ≥ 1000 ms apart and idle ≥ 980 ms; the misleading
+    comment on the key test corrected.
+  - **Red control:** operator `hosts["*.softy.pro"] {minIntervalMs: 0}` (gap kept) → starts
+    exactly 520 ms apart.
+
+- [x] T31 — [API] The flaky floor test measures the limiter's grants (FR-27)
+  - **Files:** `apps/api/src/jobs/__tests__/jobs.service.plugin-crawl.spec.ts`
+  - **Acceptance:** of the two diagnoses, the first held: the requests were stamped in the
+    mocked adapter after the async interceptor chain, while the limiter's grants were never
+    closer than the floor. The test records the real `HostLimiter`'s grant instants and
+    asserts the floors on them with no slack (`CLOCK_SLACK_MS` removed), plus one grant per
+    wire request so a rename cannot make it pass vacuously. The limiter is unchanged.
+  - **Evidence:** failing runs read 987 / 988 / 994 ms on loaded Linux runners (main run
+    36238701455; PR #101 runs 36245459464, 36249571368); the adapter gap read up to 13 ms
+    under the grant gap there, up to 52 ms under a CPU burner on Windows.
+
+- [x] T32 — [DOCS] Round-2 docs
+  - **Files:** `docs/CRAWL_POLICY.md` (§1, §2, §3, §4, §5.2, §5.4, §6.4, §7.2, §9, §10,
+    §11, §12, §13, §14, §15, §16, §17, §18, §19, §21), `README.md`, `.env.example`,
+    `docs/API_CHANGELOG.md`, this spec and tasks, Spec 1715 spec and tasks,
+    `docs/log.md`, `docs/index.md`
+  - **Acceptance:** every new switch with its default and `legacy` value; §16 "All of it"
+    rewritten (what `legacy` restores and what it does not); the pre-1715 Softy recipe;
+    `SOFTY_LEGACY=no-interval-floor` in every undo-the-lock recipe; the §6.4 note on
+    builtin host entries over env-global; restore rows use
+    `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE`; `npm run lint:docs` clean.
+
+### Finding coverage (round 2)
+
+| Finding | Closed by | Note |
+|---|---|---|
+| A0 | T21, Spec 1715 T18 | Softy's own legacy detail URLs in 1715 |
+| A1 | Spec 1715 T16 | |
+| A3 | T28, Spec 1715 T19 | |
+| A5, F4 | Spec 1715 T17 | |
+| C0 | T25, **T26 (open)** | per-host gate lands; production wiring open |
+| C1 | T30, Spec 1715 T20 | |
+| C3 | T27 | |
+| F3 | T22, T29 | |
+| F5 | T29, T32, **Spec 1715 T22 (open)** | recipe and §6.4 note; Softy's floor declaration open |
+| F7 | T23, T32 | |
+| F8 | T24 | |
+| flaky timing test | T31 | |
 
 ## Gap coverage
 
