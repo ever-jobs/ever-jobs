@@ -61,6 +61,7 @@ import {
   SOFTY_SITEMAP_PATH,
   SOFTY_UNKNOWN_TENANT_CACHE_MAX,
   SOFTY_UNKNOWN_TENANT_TTL_MAX_MS,
+  SOFTY_MIN_INTERVAL_FLOOR_MS,
 } from './softy.constants';
 import { readSoftyConfig } from './softy.config';
 import {
@@ -281,6 +282,9 @@ class SoftySitemapDecodeError extends Error {
   category: 'ats',
   isAts: true,
   crawl: SOFTY_CRAWL_POLICY,
+  // Shown by GET /api/sources/softy/crawl-policy (meta.clientMinIntervalFloorMs);
+  // enforced by this plugin's client, off with SOFTY_LEGACY=no-interval-floor.
+  clientMinIntervalFloorMs: SOFTY_MIN_INTERVAL_FLOOR_MS,
 })
 @Injectable()
 export class SoftyService implements IScraper {

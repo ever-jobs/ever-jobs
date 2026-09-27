@@ -653,10 +653,11 @@ for operators who relied on it:
   timeout as the caller's when a client took it from the search DTO
   (`createHttpClient(input)`), or when it equals the scrape context's
   `callerRequestTimeout` (seconds); a plugin's own timeout is never touched. Rules
-  `1690` (the `legacy` default) switch both parts off. *As of 2026-09-27 `JobsService`
-  does not fill `callerRequestTimeout` yet, so the per-host part covers only clients
-  built from the DTO; a plugin that copies `requestTimeout` into its own `timeout`
-  option (JSON-LD does) is covered once it does (Spec 1714 T26, open).*
+  `1690` (the `legacy` default) switch both parts off. `JobsService` fills
+  `callerRequestTimeout` with the site-gated value for every scrape (Spec 1714 T26), so
+  a plugin that copies `requestTimeout` into its own `timeout` option (JSON-LD does) is
+  covered too: `jsonld` pointed at a `*.softy.pro` page with `requestTimeout: 0.001`
+  sends the 60 s default.
 - **The request's `proxies`.** For a source or host whose effective mode comes from a
   site owner's lock, caller proxies are used only when that mode is `any` **and**
   `EVER_JOBS_CRAWL_CALLER_PROXIES` allows them; for one where the operator set

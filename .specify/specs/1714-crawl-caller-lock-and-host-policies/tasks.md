@@ -8,10 +8,9 @@ Spec: [spec.md](./spec.md) · Plan: [plan.md](./plan.md) · Operator guide:
 
 **Status (2026-09-27, review round 2):** in progress. T01–T19 are done (the docs pass checked the
 operator guide, changelog, README, index and questions against the landed code and added
-Q-126..Q-128). Review round 2 (Phase 4, T21–T32) landed its code, tests and docs, except
-**T26** (open): `JobsService` does not yet fill `ScrapeContext.callerRequestTimeout`, so the
-per-host caller-timeout gate of T25 reaches only clients built from the search DTO. Left:
-**T26**, and **T20** — the orchestrator's joint verification of the three lanes, round 2
+Q-126..Q-128). Review round 2 (Phase 4, T21–T32) landed its code, tests and docs,
+including **T26** (`JobsService` fills `ScrapeContext.callerRequestTimeout`). Left:
+**T20** — the orchestrator's joint verification of the three lanes, round 2
 included (typecheck, `test:core`, `test:sources` for Softy / liveness-http / every suite
 reaching `*.softy.pro`, `test:scripts`, `lint:docs`, every red control with command and
 result, the gap and finding tables confirmed). The spec moves to `done` when both are ticked.
@@ -453,7 +452,7 @@ old code or under the legacy switch).
     abort; a plugin's own timeout untouched; the robots.txt fetch gated too.
   - **Red control:** `EVER_JOBS_CRAWL_STRICTER_RULES=1690` → 1 ms abort, `softy.pro` cools 30 s.
 
-- [ ] T26 — [API] `JobsService` fills `ScrapeContext.callerRequestTimeout` (FR-23, finding C0 — wiring; open)
+- [x] T26 — [API] `JobsService` fills `ScrapeContext.callerRequestTimeout` (FR-23, finding C0 — wiring). `apps/api/src/jobs/jobs.service.ts` `scrapeOne`; end-to-end test `apps/api/src/jobs/__tests__/jobs.service.caller-timeout-host.spec.ts` (jsonld → `*.softy.pro` with 0.001 s → 60 s on the wire; unlocked host unchanged; `STRICTER_RULES=1690` ungated). Red control: without the wiring the Softy case sends 1 ms.
   - **Found by:** the round-2 docs pass. `JobsService.scrapeOne` builds the scrape context
     without it, and the JSON-LD plugin (like any plugin that copies `requestTimeout` into
     its own `timeout` option) builds its client from an object literal, so on the search
@@ -534,7 +533,7 @@ old code or under the legacy switch).
 | A1 | Spec 1715 T16 | |
 | A3 | T28, Spec 1715 T19 | |
 | A5, F4 | Spec 1715 T17 | |
-| C0 | T25, **T26 (open)** | per-host gate lands; production wiring open |
+| C0 | T25, T26 | per-host gate + `JobsService` wiring |
 | C1 | T30, Spec 1715 T20 | |
 | C3 | T27 | |
 | F3 | T22, T29 | |

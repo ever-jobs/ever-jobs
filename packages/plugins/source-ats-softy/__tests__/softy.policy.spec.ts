@@ -315,3 +315,14 @@ describe('SoftyService discovery through the real crawl policy (Specs 1690, 1691
     });
   });
 });
+
+describe('Softy declares its client floor for the crawl-policy API (Spec 1715 review F5)', () => {
+  it('metadata.clientMinIntervalFloorMs is the floor the client enforces', () => {
+    const { SOURCE_PLUGIN_METADATA } = require('@ever-jobs/plugin');
+    const { SoftyService } = require('../src/softy.service');
+    const { SOFTY_MIN_INTERVAL_FLOOR_MS } = require('../src/softy.constants');
+    const meta = Reflect.getMetadata(SOURCE_PLUGIN_METADATA, SoftyService);
+    expect(meta.clientMinIntervalFloorMs).toBe(SOFTY_MIN_INTERVAL_FLOOR_MS);
+    expect(SOFTY_MIN_INTERVAL_FLOOR_MS).toBe(1000);
+  });
+});

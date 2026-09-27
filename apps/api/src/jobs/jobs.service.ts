@@ -1357,6 +1357,14 @@ export class JobsService implements OnModuleInit {
       caller: 'callerCrawl' in options ? options.callerCrawl : this.buildCallerCrawl(input),
       signal,
       proxies,
+      // Spec 1715 audit C0 — the (site-gated) caller timeout, so HttpClient can gate it
+      // again per request HOST: an unlocked plugin (e.g. jsonld with a Softy
+      // companyUrl) cannot carry a tiny caller timeout to a locked host, and a short
+      // caller timeout never cools a host. A value of 60 s or more is left unchanged,
+      // so a search without `requestTimeout` (the DTO default, 60) behaves as before.
+      ...(typeof scraperInput.requestTimeout === 'number' && Number.isFinite(scraperInput.requestTimeout)
+        ? { callerRequestTimeout: scraperInput.requestTimeout }
+        : {}),
     };
     // Spec 1690 §4.6 — once the deadline aborted this scrape, its failure says
     // nothing about the source's health: mark it circuit-neutral so the
