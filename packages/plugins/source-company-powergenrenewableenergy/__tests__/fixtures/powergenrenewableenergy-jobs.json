@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PowerGenRenewableEnergy/744000132636160",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PowerGenRenewableEnergy/postings/744000132636160",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PowerGenRenewableEnergy/744000129465429",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PowerGenRenewableEnergy/postings/744000129465429",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PowerGenRenewableEnergy/744000126721814",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PowerGenRenewableEnergy/postings/744000126721814",
       "jobAd": {
         "sections": {
           "jobDescription": {

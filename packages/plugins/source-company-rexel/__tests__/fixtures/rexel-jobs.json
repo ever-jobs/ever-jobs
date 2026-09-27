@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/REXEL1/744000135779408",
+      "ref": "https://api.smartrecruiters.com/v1/companies/REXEL1/postings/744000135779408",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/REXEL1/744000135768079",
+      "ref": "https://api.smartrecruiters.com/v1/companies/REXEL1/postings/744000135768079",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/REXEL1/744000135764799",
+      "ref": "https://api.smartrecruiters.com/v1/companies/REXEL1/postings/744000135764799",
       "jobAd": {
         "sections": {
           "jobDescription": {

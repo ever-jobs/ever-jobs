@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/cityandcountyofsanfrancisco1/3743990013919106",
+      "ref": "https://api.smartrecruiters.com/v1/companies/cityandcountyofsanfrancisco1/postings/3743990013919106",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/cityandcountyofsanfrancisco1/3743990013918807",
+      "ref": "https://api.smartrecruiters.com/v1/companies/cityandcountyofsanfrancisco1/postings/3743990013918807",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/cityandcountyofsanfrancisco1/3743990013916937",
+      "ref": "https://api.smartrecruiters.com/v1/companies/cityandcountyofsanfrancisco1/postings/3743990013916937",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Experian/744000135787609",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Experian/postings/744000135787609",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Experian/744000135787569",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Experian/postings/744000135787569",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Experian/744000135786949",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Experian/postings/744000135786949",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "jj:5:JJ"
+      },
+      "atsIdPrefix": "wd-jj-"
+    }
+  ],
+  "responses": {
+    "https://jj.wd5.myworkdayjobs.com/wday/cxs/jj/JJ/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Access & Pump Engineering Co-op",
+          "externalPath": "/job/Danvers-Massachusetts-United-States-of-America/Access---Pump-Engineering-Co-op_R-101685",
+          "locationsText": "Danvers, Massachusetts, United States of America",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-101685"
+          ]
+        },
+        {
+          "title": "Director, Data, Data Science and Artificial Intelligence – Oncology / Prostate Cancer",
+          "externalPath": "/job/Spring-House-Pennsylvania-United-States-of-America/Director--Data--Data-Science-and-Artificial-Intelligence---Oncology---Prostate-Cancer_R-099559",
+          "locationsText": "6 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-099559"
+          ]
+        },
+        {
+          "title": "Facilities Management Co-Op",
+          "externalPath": "/job/Cincinnati-Ohio-United-States-of-America/Facilities-Management-Co-Op_R-099930",
+          "locationsText": "Cincinnati, Ohio, United States of America",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-099930"
+          ]
+        }
+      ]
+    },
+    "https://jj.wd5.myworkdayjobs.com/wday/cxs/jj/JJ/job/Danvers-Massachusetts-United-States-of-America/Access---Pump-Engineering-Co-op_R-101685": {
+      "jobPostingInfo": {
+        "title": "Access & Pump Engineering Co-op",
+        "jobDescription": "<p>Access &amp; Pump Engineering Co-op at Johnson &amp; Johnson.</p>",
+        "location": "Danvers, Massachusetts, United States of America",
+        "jobReqId": "R-101685",
+        "externalUrl": "https://jj.wd5.myworkdayjobs.com/JJ/job/Danvers-Massachusetts-United-States-of-America/Access---Pump-Engineering-Co-op_R-101685",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "jj"
+      }
+    },
+    "https://jj.wd5.myworkdayjobs.com/wday/cxs/jj/JJ/job/Spring-House-Pennsylvania-United-States-of-America/Director--Data--Data-Science-and-Artificial-Intelligence---Oncology---Prostate-Cancer_R-099559": {
+      "jobPostingInfo": {
+        "title": "Director, Data, Data Science and Artificial Intelligence – Oncology / Prostate Cancer",
+        "jobDescription": "<p>Director, Data, Data Science and Artificial Intelligence – Oncology / Prostate Cancer at Johnson &amp; Johnson.</p>",
+        "location": "6 Locations",
+        "jobReqId": "R-099559",
+        "externalUrl": "https://jj.wd5.myworkdayjobs.com/JJ/job/Spring-House-Pennsylvania-United-States-of-America/Director--Data--Data-Science-and-Artificial-Intelligence---Oncology---Prostate-Cancer_R-099559",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "jj"
+      }
+    },
+    "https://jj.wd5.myworkdayjobs.com/wday/cxs/jj/JJ/job/Cincinnati-Ohio-United-States-of-America/Facilities-Management-Co-Op_R-099930": {
+      "jobPostingInfo": {
+        "title": "Facilities Management Co-Op",
+        "jobDescription": "<p>Facilities Management Co-Op at Johnson &amp; Johnson.</p>",
+        "location": "Cincinnati, Ohio, United States of America",
+        "jobReqId": "R-099930",
+        "externalUrl": "https://jj.wd5.myworkdayjobs.com/JJ/job/Cincinnati-Ohio-United-States-of-America/Facilities-Management-Co-Op_R-099930",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "jj"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "jnj-R-101685",
+      "title": "Access & Pump Engineering Co-op"
+    },
+    {
+      "id": "jnj-R-099559",
+      "title": "Director, Data, Data Science and Artificial Intelligence – Oncology / Prostate Cancer"
+    },
+    {
+      "id": "jnj-R-099930",
+      "title": "Facilities Management Co-Op"
+    }
+  ]
+}

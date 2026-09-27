@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/deutschetelekomitsolutions/744000135712380",
+      "ref": "https://api.smartrecruiters.com/v1/companies/deutschetelekomitsolutions/postings/744000135712380",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/deutschetelekomitsolutions/744000135677860",
+      "ref": "https://api.smartrecruiters.com/v1/companies/deutschetelekomitsolutions/postings/744000135677860",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/deutschetelekomitsolutions/744000135656579",
+      "ref": "https://api.smartrecruiters.com/v1/companies/deutschetelekomitsolutions/postings/744000135656579",
       "jobAd": {
         "sections": {
           "jobDescription": {

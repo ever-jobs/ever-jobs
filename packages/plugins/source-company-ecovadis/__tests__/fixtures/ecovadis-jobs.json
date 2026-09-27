@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ecovadis/744000135509164",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ecovadis/postings/744000135509164",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ecovadis/744000134736909",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ecovadis/postings/744000134736909",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ecovadis/744000134207967",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ecovadis/postings/744000134207967",
       "jobAd": {
         "sections": {
           "jobDescription": {

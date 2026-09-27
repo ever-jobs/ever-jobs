@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "walmart:504:WalmartExternal"
+      },
+      "atsIdPrefix": "wd-walmart-"
+    }
+  ],
+  "responses": {
+    "https://walmart.wd504.myworkdayjobs.com/wday/cxs/walmart/WalmartExternal/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "(CAN) Food & Consumables Coach",
+          "externalPath": "/job/Slave-Lake-AB/XMLNAME--CAN--Food---Consumables-Coach_R-2598544-1",
+          "locationsText": "Slave Lake, AB",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-2598544"
+          ]
+        },
+        {
+          "title": "(USA) Operations Manager - Floor",
+          "externalPath": "/job/USA-TX-FORT-WORTH-07555-ECOMM-FULFILLMENT-SERVICES/XMLNAME--USA--Operations-Manager---Floor_R-2657601-1",
+          "locationsText": "(USA) TX FORT WORTH 07555 ECOMM FULFILLMENT SERVICES",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-2657601"
+          ]
+        },
+        {
+          "title": "Staff Pharmacist-Ca - $50,000 Sign On Bonus Available",
+          "externalPath": "/job/Porterville-CA/Staff-Pharmacist-Ca_R-2402397-2",
+          "locationsText": "Porterville, CA",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-2402397"
+          ]
+        }
+      ]
+    },
+    "https://walmart.wd504.myworkdayjobs.com/wday/cxs/walmart/WalmartExternal/job/Slave-Lake-AB/XMLNAME--CAN--Food---Consumables-Coach_R-2598544-1": {
+      "jobPostingInfo": {
+        "title": "(CAN) Food & Consumables Coach",
+        "jobDescription": "<p>(CAN) Food &amp; Consumables Coach at Walmart.</p>",
+        "location": "Slave Lake, AB",
+        "jobReqId": "R-2598544",
+        "externalUrl": "https://walmart.wd504.myworkdayjobs.com/WalmartExternal/job/Slave-Lake-AB/XMLNAME--CAN--Food---Consumables-Coach_R-2598544-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "walmart"
+      }
+    },
+    "https://walmart.wd504.myworkdayjobs.com/wday/cxs/walmart/WalmartExternal/job/USA-TX-FORT-WORTH-07555-ECOMM-FULFILLMENT-SERVICES/XMLNAME--USA--Operations-Manager---Floor_R-2657601-1": {
+      "jobPostingInfo": {
+        "title": "(USA) Operations Manager - Floor",
+        "jobDescription": "<p>(USA) Operations Manager - Floor at Walmart.</p>",
+        "location": "(USA) TX FORT WORTH 07555 ECOMM FULFILLMENT SERVICES",
+        "jobReqId": "R-2657601",
+        "externalUrl": "https://walmart.wd504.myworkdayjobs.com/WalmartExternal/job/USA-TX-FORT-WORTH-07555-ECOMM-FULFILLMENT-SERVICES/XMLNAME--USA--Operations-Manager---Floor_R-2657601-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "walmart"
+      }
+    },
+    "https://walmart.wd504.myworkdayjobs.com/wday/cxs/walmart/WalmartExternal/job/Porterville-CA/Staff-Pharmacist-Ca_R-2402397-2": {
+      "jobPostingInfo": {
+        "title": "Staff Pharmacist-Ca - $50,000 Sign On Bonus Available",
+        "jobDescription": "<p>Staff Pharmacist-Ca - $50,000 Sign On Bonus Available at Walmart.</p>",
+        "location": "Porterville, CA",
+        "jobReqId": "R-2402397",
+        "externalUrl": "https://walmart.wd504.myworkdayjobs.com/WalmartExternal/job/Porterville-CA/Staff-Pharmacist-Ca_R-2402397-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "walmart"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "walmart-R-2598544",
+      "title": "(CAN) Food & Consumables Coach"
+    },
+    {
+      "id": "walmart-R-2657601",
+      "title": "(USA) Operations Manager - Floor"
+    },
+    {
+      "id": "walmart-R-2402397",
+      "title": "Staff Pharmacist-Ca - $50,000 Sign On Bonus Available"
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "jumptrading"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/jumptrading/jobs": {
+      "jobs": [
+        {
+          "id": 4982814,
+          "title": "AI Research Scientist | Research & Development",
+          "updated_at": "2026-09-24T17:46:19.000Z",
+          "location": {
+            "name": "New York, London, Singapore"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/jumptrading/jobs/4982814",
+          "content": "&lt;p&gt;AI Research Scientist | Research &amp;amp; Development at Jump Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "jumptrading"
+        },
+        {
+          "id": 6622233,
+          "title": "Business Intelligence Researcher",
+          "updated_at": "2026-08-08T05:01:16.000Z",
+          "location": {
+            "name": "New York"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/jumptrading/jobs/6622233",
+          "content": "&lt;p&gt;Business Intelligence Researcher at Jump Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "jumptrading"
+        },
+        {
+          "id": 8027938,
+          "title": "Campus AI/ML Researcher (Intern)",
+          "updated_at": "2026-08-28T11:28:48.000Z",
+          "location": {
+            "name": "Hong Kong; Shanghai; Singapore"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/jumptrading/jobs/8027938",
+          "content": "&lt;p&gt;Campus AI/ML Researcher (Intern) at Jump Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "jumptrading"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "jumptrading-4982814",
+      "title": "AI Research Scientist | Research & Development"
+    },
+    {
+      "id": "jumptrading-6622233",
+      "title": "Business Intelligence Researcher"
+    },
+    {
+      "id": "jumptrading-8027938",
+      "title": "Campus AI/ML Researcher (Intern)"
+    }
+  ]
+}

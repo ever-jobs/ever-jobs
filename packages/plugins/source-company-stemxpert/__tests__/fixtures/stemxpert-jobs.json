@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StemXpert1/743999659630407",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StemXpert1/postings/743999659630407",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StemXpert1/743999659617879",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StemXpert1/postings/743999659617879",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StemXpert1/743999659529076",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StemXpert1/postings/743999659529076",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -1,0 +1,105 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "modernatx:1:M_tx"
+      },
+      "atsIdPrefix": "wd-modernatx-"
+    }
+  ],
+  "responses": {
+    "https://modernatx.wd1.myworkdayjobs.com/wday/cxs/modernatx/M_tx/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Scientist, Process Development (Formulation)",
+          "externalPath": "/job/Norwood-Massachusetts/Scientist--Process-Development--Formulation-_R19218",
+          "locationsText": null,
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Norwood, Massachusetts",
+            "Technical Development",
+            "R19218"
+          ]
+        },
+        {
+          "title": "Director, CMC Stability",
+          "externalPath": "/job/Norwood-Massachusetts/Director--CMC-Stability_R19494",
+          "locationsText": null,
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Norwood, Massachusetts",
+            "Technical Development",
+            "R19494"
+          ]
+        },
+        {
+          "title": "Sr. Research Associate, Clinical Biomarker Laboratory, Flow Cytometry",
+          "externalPath": "/job/Norwood-Massachusetts/Sr-Research-Associate--Clinical-Biomarker-Laboratory--Flow-Cytometry_R19590",
+          "locationsText": null,
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "Norwood, Massachusetts",
+            "Clinical Development",
+            "R19590"
+          ]
+        }
+      ]
+    },
+    "https://modernatx.wd1.myworkdayjobs.com/wday/cxs/modernatx/M_tx/job/Norwood-Massachusetts/Scientist--Process-Development--Formulation-_R19218": {
+      "jobPostingInfo": {
+        "title": "Scientist, Process Development (Formulation)",
+        "jobDescription": "<p>Scientist, Process Development (Formulation) at Moderna.</p>",
+        "location": null,
+        "jobReqId": "R19218",
+        "externalUrl": "https://modernatx.wd1.myworkdayjobs.com/M_tx/job/Norwood-Massachusetts/Scientist--Process-Development--Formulation-_R19218",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "modernatx"
+      }
+    },
+    "https://modernatx.wd1.myworkdayjobs.com/wday/cxs/modernatx/M_tx/job/Norwood-Massachusetts/Director--CMC-Stability_R19494": {
+      "jobPostingInfo": {
+        "title": "Director, CMC Stability",
+        "jobDescription": "<p>Director, CMC Stability at Moderna.</p>",
+        "location": null,
+        "jobReqId": "R19494",
+        "externalUrl": "https://modernatx.wd1.myworkdayjobs.com/M_tx/job/Norwood-Massachusetts/Director--CMC-Stability_R19494",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "modernatx"
+      }
+    },
+    "https://modernatx.wd1.myworkdayjobs.com/wday/cxs/modernatx/M_tx/job/Norwood-Massachusetts/Sr-Research-Associate--Clinical-Biomarker-Laboratory--Flow-Cytometry_R19590": {
+      "jobPostingInfo": {
+        "title": "Sr. Research Associate, Clinical Biomarker Laboratory, Flow Cytometry",
+        "jobDescription": "<p>Sr. Research Associate, Clinical Biomarker Laboratory, Flow Cytometry at Moderna.</p>",
+        "location": null,
+        "jobReqId": "R19590",
+        "externalUrl": "https://modernatx.wd1.myworkdayjobs.com/M_tx/job/Norwood-Massachusetts/Sr-Research-Associate--Clinical-Biomarker-Laboratory--Flow-Cytometry_R19590",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "modernatx"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "moderna-R19218",
+      "title": "Scientist, Process Development (Formulation)"
+    },
+    {
+      "id": "moderna-R19494",
+      "title": "Director, CMC Stability"
+    },
+    {
+      "id": "moderna-R19590",
+      "title": "Sr. Research Associate, Clinical Biomarker Laboratory, Flow Cytometry"
+    }
+  ]
+}

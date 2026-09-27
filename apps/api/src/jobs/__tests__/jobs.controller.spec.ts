@@ -138,9 +138,11 @@ describe('JobsController', () => {
 
       await controller.searchJobs(new ScraperInputDto({ searchTerm: 'node' }));
 
+      // Spec 1721 / FR-19 — one entry holds the raw set (and its completeness
+      // record when the service reports one; this stub reports none).
       expect(cacheService.set).toHaveBeenCalledWith(
         expect.any(Object),
-        jobs,
+        { jobs },
       );
     });
   });
@@ -301,6 +303,7 @@ describe('JobsController', () => {
       expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, {
         dedup: true,
         persist: true,
+        deferCareerLevel: true,
       });
     });
 
@@ -313,6 +316,7 @@ describe('JobsController', () => {
       expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, {
         dedup: true,
         persist: false,
+        deferCareerLevel: true,
       });
     });
 
@@ -332,6 +336,7 @@ describe('JobsController', () => {
       expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, {
         dedup: false,
         persist: false,
+        deferCareerLevel: true,
       });
     });
   });
@@ -345,7 +350,7 @@ describe('JobsController', () => {
         new ScraperInputDto({ searchTerm: 'node' }),
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true, deferCareerLevel: true });
     });
 
     it('honours dedup=false explicitly', async () => {
@@ -361,7 +366,7 @@ describe('JobsController', () => {
         'false',      // dedup
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false, persist: true, deferCareerLevel: true });
     });
 
     it('honours dedup=0 explicitly', async () => {
@@ -377,7 +382,7 @@ describe('JobsController', () => {
         '0',
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: false, persist: true, deferCareerLevel: true });
     });
 
     it('honours dedup=true explicitly', async () => {
@@ -393,7 +398,7 @@ describe('JobsController', () => {
         'true',
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true, deferCareerLevel: true });
     });
 
     it('falls back to dedup=true on garbage values', async () => {
@@ -409,7 +414,7 @@ describe('JobsController', () => {
         'not-a-bool',
       );
 
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(jobs, { dedup: true, persist: true, deferCareerLevel: true });
     });
 
     it('runs dedup on cached responses too', async () => {
@@ -421,7 +426,7 @@ describe('JobsController', () => {
       );
 
       expect(jobsService.searchJobs).not.toHaveBeenCalled();
-      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(cachedJobs, { dedup: true, persist: true });
+      expect(aggregator.aggregateRaw).toHaveBeenCalledWith(cachedJobs, { dedup: true, persist: true, deferCareerLevel: true });
     });
 
     it('caches RAW jobs (pre-dedup) so cache invalidation is independent of engine version', async () => {
@@ -430,8 +435,9 @@ describe('JobsController', () => {
 
       await controller.searchJobs(new ScraperInputDto({ searchTerm: 'node' }));
 
-      // Cache write should hold the unmodified raw list
-      expect(cacheService.set).toHaveBeenCalledWith(expect.any(Object), jobs);
+      // Cache write should hold the unmodified raw list (Spec 1721 / FR-19: in
+      // the one entry that also carries the completeness record).
+      expect(cacheService.set).toHaveBeenCalledWith(expect.any(Object), { jobs });
     });
 
     it('returns dedup_metrics when the engine ran', async () => {

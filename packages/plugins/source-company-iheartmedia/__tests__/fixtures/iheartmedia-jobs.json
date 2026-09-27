@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/IHeartMedia/84612667",
+      "ref": "https://api.smartrecruiters.com/v1/companies/IHeartMedia/postings/84612667",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/IHeartMedia/83955126",
+      "ref": "https://api.smartrecruiters.com/v1/companies/IHeartMedia/postings/83955126",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/IHeartMedia/83842790",
+      "ref": "https://api.smartrecruiters.com/v1/companies/IHeartMedia/postings/83842790",
       "jobAd": {
         "sections": {
           "jobDescription": {

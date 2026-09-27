@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ServiceNow/744000135774769",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ServiceNow/postings/744000135774769",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ServiceNow/744000135711260",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ServiceNow/postings/744000135711260",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ServiceNow/744000135652689",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ServiceNow/postings/744000135652689",
       "jobAd": {
         "sections": {
           "jobDescription": {

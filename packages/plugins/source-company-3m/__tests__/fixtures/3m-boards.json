@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "3m:1:Search"
+      },
+      "atsIdPrefix": "wd-3m-"
+    }
+  ],
+  "responses": {
+    "https://3m.wd1.myworkdayjobs.com/wday/cxs/3m/Search/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Treasury Manager - Cash Operations",
+          "externalPath": "/job/IN-BANGALORE/Manager---Treasury-Operations_R01169291",
+          "locationsText": "IN, BANGALORE",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R01169291"
+          ]
+        },
+        {
+          "title": "Analytical Testing Coordinator (m/f/*)",
+          "externalPath": "/job/BE-Zwijndrecht/Analytical-Testing-Coordinator--m-f---_R01170654-1",
+          "locationsText": "BE, Zwijndrecht",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R01170654"
+          ]
+        },
+        {
+          "title": "Director, Strategy & Business Development – Consumer Business",
+          "externalPath": "/job/US-Minnesota-Maplewood/Director--Strategy---Business-Development_R01170955",
+          "locationsText": "US, Minnesota, Maplewood",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "R01170955"
+          ]
+        }
+      ]
+    },
+    "https://3m.wd1.myworkdayjobs.com/wday/cxs/3m/Search/job/IN-BANGALORE/Manager---Treasury-Operations_R01169291": {
+      "jobPostingInfo": {
+        "title": "Treasury Manager - Cash Operations",
+        "jobDescription": "<p>Treasury Manager - Cash Operations at 3M.</p>",
+        "location": "IN, BANGALORE",
+        "jobReqId": "R01169291",
+        "externalUrl": "https://3m.wd1.myworkdayjobs.com/Search/job/IN-BANGALORE/Manager---Treasury-Operations_R01169291",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "3m"
+      }
+    },
+    "https://3m.wd1.myworkdayjobs.com/wday/cxs/3m/Search/job/BE-Zwijndrecht/Analytical-Testing-Coordinator--m-f---_R01170654-1": {
+      "jobPostingInfo": {
+        "title": "Analytical Testing Coordinator (m/f/*)",
+        "jobDescription": "<p>Analytical Testing Coordinator (m/f/*) at 3M.</p>",
+        "location": "BE, Zwijndrecht",
+        "jobReqId": "R01170654",
+        "externalUrl": "https://3m.wd1.myworkdayjobs.com/Search/job/BE-Zwijndrecht/Analytical-Testing-Coordinator--m-f---_R01170654-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "3m"
+      }
+    },
+    "https://3m.wd1.myworkdayjobs.com/wday/cxs/3m/Search/job/US-Minnesota-Maplewood/Director--Strategy---Business-Development_R01170955": {
+      "jobPostingInfo": {
+        "title": "Director, Strategy & Business Development – Consumer Business",
+        "jobDescription": "<p>Director, Strategy &amp; Business Development – Consumer Business at 3M.</p>",
+        "location": "US, Minnesota, Maplewood",
+        "jobReqId": "R01170955",
+        "externalUrl": "https://3m.wd1.myworkdayjobs.com/Search/job/US-Minnesota-Maplewood/Director--Strategy---Business-Development_R01170955",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "3m"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "3m-R01169291",
+      "title": "Treasury Manager - Cash Operations"
+    },
+    {
+      "id": "3m-R01170654",
+      "title": "Analytical Testing Coordinator (m/f/*)"
+    },
+    {
+      "id": "3m-R01170955",
+      "title": "Director, Strategy & Business Development – Consumer Business"
+    }
+  ]
+}

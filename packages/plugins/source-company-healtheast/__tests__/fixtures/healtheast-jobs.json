@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HealthEastCareSystem/743999651259080",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HealthEastCareSystem/postings/743999651259080",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HealthEastCareSystem/84449992",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HealthEastCareSystem/postings/84449992",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HealthEastCareSystem/80752496",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HealthEastCareSystem/postings/80752496",
       "jobAd": {
         "sections": {
           "jobDescription": {

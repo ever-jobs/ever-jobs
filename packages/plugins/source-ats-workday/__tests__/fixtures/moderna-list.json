@@ -1,0 +1,170 @@
+{
+  "total": 199,
+  "jobPostings": [
+    {
+      "title": "Sr. Specialist, Maintenance",
+      "externalPath": "/job/Norwood-Massachusetts/Sr-Specialist--Maintenance_R19827",
+      "postedOn": "Posted Today",
+      "bulletFields": [
+        "Norwood, Massachusetts",
+        "Drug Manufacturing",
+        "R19827"
+      ]
+    },
+    {
+      "title": "Scientist, Process Development (Formulation)",
+      "externalPath": "/job/Norwood-Massachusetts/Scientist--Process-Development--Formulation-_R19218",
+      "postedOn": "Posted Yesterday",
+      "bulletFields": [
+        "Norwood, Massachusetts",
+        "Technical Development",
+        "R19218"
+      ]
+    },
+    {
+      "title": "Director, CMC Stability",
+      "externalPath": "/job/Norwood-Massachusetts/Director--CMC-Stability_R19494",
+      "postedOn": "Posted Yesterday",
+      "bulletFields": [
+        "Norwood, Massachusetts",
+        "Technical Development",
+        "R19494"
+      ]
+    },
+    {
+      "title": "Sr. Research Associate, Clinical Biomarker Laboratory, Flow Cytometry",
+      "externalPath": "/job/Norwood-Massachusetts/Sr-Research-Associate--Clinical-Biomarker-Laboratory--Flow-Cytometry_R19590",
+      "postedOn": "Posted Yesterday",
+      "bulletFields": [
+        "Norwood, Massachusetts",
+        "Clinical Development",
+        "R19590"
+      ]
+    },
+    {
+      "title": "Linux Engineer",
+      "externalPath": "/job/Cambridge-Massachusetts/Linux-Engineer_R19825",
+      "postedOn": "Posted Yesterday",
+      "bulletFields": [
+        "Cambridge, Massachusetts",
+        "Digital",
+        "R19825"
+      ]
+    }
+  ],
+  "facets": [
+    {
+      "facetParameter": "primarylocation",
+      "descriptor": "Location",
+      "values": [
+        {
+          "descriptor": "Cambridge, Massachusetts",
+          "id": "b1f30a7f256201ef2f5f7908b1008a3f",
+          "count": 66
+        },
+        {
+          "descriptor": "Norwood, Massachusetts",
+          "id": "b1f30a7f2562013c18a039f7b000793f",
+          "count": 61
+        },
+        {
+          "descriptor": "Warsaw - Poland",
+          "id": "4c6ca319b27e1001fdf80d9d22700000",
+          "count": 20
+        },
+        {
+          "descriptor": "Oxford - England",
+          "id": "148b9526efac100115b6e165b6010000",
+          "count": 13
+        },
+        {
+          "descriptor": "Melbourne - Australia",
+          "id": "3f43d3f7731f1000b1c576f801080000",
+          "count": 9
+        },
+        {
+          "descriptor": "Princeton, New Jersey",
+          "id": "40d0bb40e2951000c742fbf878a70000",
+          "count": 6
+        },
+        {
+          "descriptor": "Madrid - Spain",
+          "id": "79467396c90f1000b10f73a05b9d0000",
+          "count": 5
+        },
+        {
+          "descriptor": "London - England",
+          "id": "4c6ca319b27e1001fafbd66b1e770000",
+          "count": 5
+        },
+        {
+          "descriptor": "Laval - Canada",
+          "id": "08336a499db210014480bd6e5ebd0000",
+          "count": 3
+        },
+        {
+          "descriptor": "Marlborough, Massachusetts",
+          "id": "4a5515aa8e1210010227700d0a190000",
+          "count": 2
+        },
+        {
+          "descriptor": "Remote - US",
+          "id": "3f43d3f7731f10010a87a662dc260000",
+          "count": 2
+        },
+        {
+          "descriptor": "Toronto - Canada",
+          "id": "04724f51f7461000b212fefa576e0000",
+          "count": 2
+        },
+        {
+          "descriptor": "Ciudad de México - Mexico",
+          "id": "9320699d610410015bf1222c830c0000",
+          "count": 1
+        },
+        {
+          "descriptor": "Seattle, Washington",
+          "id": "e636b7dab841100160c3013937a80000",
+          "count": 1
+        },
+        {
+          "descriptor": "Remote - Canada",
+          "id": "79467396c90f1000b1f5497893090000",
+          "count": 1
+        },
+        {
+          "descriptor": "Hong Kong",
+          "id": "3f43d3f7731f1000b176954c96030000",
+          "count": 1
+        },
+        {
+          "descriptor": "Munich - Germany",
+          "id": "04724f51f7461000b0f80925e4a40000",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "facetParameter": "workerSubType",
+      "descriptor": "Job Type",
+      "values": [
+        {
+          "descriptor": "Regular",
+          "id": "3218edf1e50d107ca6b458e6fcb44ece",
+          "count": 188
+        },
+        {
+          "descriptor": "Fixed-term (Fixed Term)",
+          "id": "50a335a397be01eacdcfe503c800a2d9",
+          "count": 6
+        },
+        {
+          "descriptor": "Intern/Co-op (Fixed Term)",
+          "id": "7bec032aec5d01158f33f064bc9ab83d",
+          "count": 5
+        }
+      ]
+    }
+  ],
+  "userAuthenticated": false
+}

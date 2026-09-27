@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/VTechSolution1/743999658915754",
+      "ref": "https://api.smartrecruiters.com/v1/companies/VTechSolution1/postings/743999658915754",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/VTechSolution1/743999658896006",
+      "ref": "https://api.smartrecruiters.com/v1/companies/VTechSolution1/postings/743999658896006",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/VTechSolution1/743999658884453",
+      "ref": "https://api.smartrecruiters.com/v1/companies/VTechSolution1/postings/743999658884453",
       "jobAd": {
         "sections": {
           "jobDescription": {

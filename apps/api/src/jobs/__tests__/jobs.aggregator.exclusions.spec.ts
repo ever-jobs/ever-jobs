@@ -67,6 +67,7 @@ describe('JobsAggregator — exclusions (Spec 1700)', () => {
       ['dedup=false', () => new JobsAggregator(jobsService, makeEngine(['a', 'b', 'c', 'd'])), { dedup: false }],
     ])('%s drops matching rows and reports metrics', async (_label, build, opts) => {
       const out = await build().aggregateRaw(rows(), {
+        careerLevels: undefined,
         ...opts,
         exclusions: { titleTerms: ['senior'], presets: [ExclusionPreset.SECURITY_CLEARANCE] },
       });
@@ -101,6 +102,7 @@ describe('JobsAggregator — exclusions (Spec 1700)', () => {
       const aggregator = new JobsAggregator(jobsService, makeEngine(['c1', 'c1', 'c2']));
 
       const out = await aggregator.aggregateRaw(jobs, {
+        careerLevels: undefined,
         exclusions: { presets: [ExclusionPreset.SECURITY_CLEARANCE] },
       });
 
@@ -116,6 +118,7 @@ describe('JobsAggregator — exclusions (Spec 1700)', () => {
       const aggregator = new JobsAggregator(jobsService, makeEngine(['c1', 'c2']), store);
 
       const out = await aggregator.aggregateRaw([makeJob('a', 'Senior Engineer'), makeJob('b', 'Engineer')], {
+        careerLevels: undefined,
         exclusions: { titleTerms: ['senior'] },
       });
 
@@ -131,6 +134,7 @@ describe('JobsAggregator — exclusions (Spec 1700)', () => {
       const aggregator = new JobsAggregator(jobsService, makeEngine([null, 'c1']));
 
       const out = await aggregator.aggregateRaw([makeJob('a', 'Senior Engineer'), makeJob('b', 'Engineer')], {
+        careerLevels: undefined,
         exclusions: { titleTerms: ['senior'] },
       });
 
@@ -141,7 +145,7 @@ describe('JobsAggregator — exclusions (Spec 1700)', () => {
     it('returns zeroed metrics on the empty path', async () => {
       const aggregator = new JobsAggregator(jobsService, makeEngine([]));
 
-      const out = await aggregator.aggregateRaw([], { exclusions: { titleTerms: ['senior'] } });
+      const out = await aggregator.aggregateRaw([], { careerLevels: undefined, exclusions: { titleTerms: ['senior'] } });
 
       expect(out.exclusionMetrics).toMatchObject({ excludedCount: 0, excludedRawCount: 0 });
     });
@@ -153,7 +157,7 @@ describe('JobsAggregator — exclusions (Spec 1700)', () => {
       ['dedup=false', () => new JobsAggregator(jobsService, makeEngine(['a', 'b', 'c', 'd'])), { dedup: false }],
       ['dedup', () => new JobsAggregator(jobsService, makeEngine(['a', 'b', 'c', 'd'])), {}],
     ])('%s: no exclusion keys when the option is absent', async (_label, build, opts) => {
-      const out = await build().aggregateRaw(rows(), opts);
+      const out = await build().aggregateRaw(rows(), { careerLevels: undefined, ...opts });
       expect(out).not.toHaveProperty('exclusionMetrics');
       expect(out).not.toHaveProperty('excludedSamples');
       expect(out).not.toHaveProperty('exclusionError');
@@ -163,6 +167,7 @@ describe('JobsAggregator — exclusions (Spec 1700)', () => {
     it('an inactive spec removes nothing but still reports (zeroed) metrics', async () => {
       const input = rows();
       const out = await new JobsAggregator(jobsService).aggregateRaw(input, {
+        careerLevels: undefined,
         exclusions: { titleTerms: ['   ', 'a*'] },
       });
 
@@ -180,6 +185,7 @@ describe('JobsAggregator — exclusions (Spec 1700)', () => {
 
     it('accepts a pre-compiled spec', async () => {
       const out = await new JobsAggregator(jobsService).aggregateRaw(rows(), {
+        careerLevels: undefined,
         exclusions: compileJobExclusions({ titleTerms: ['designer'] }),
       });
       expect(out.jobs.map((j) => j.id)).toEqual(['1', '2', '3']);
@@ -193,7 +199,7 @@ describe('JobsAggregator — exclusions (Spec 1700)', () => {
       },
     };
     const input = rows();
-    const out = await new JobsAggregator(jobsService).aggregateRaw(input, { exclusions: hostile });
+    const out = await new JobsAggregator(jobsService).aggregateRaw(input, { careerLevels: undefined, exclusions: hostile });
     expect(out.jobs).toBe(input);
     expect(out.exclusionError).toEqual({ code: ERR_EXCLUSION_FAILED, message: 'boom' });
     expect(out.exclusionMetrics).toBeUndefined();

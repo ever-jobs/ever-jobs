@@ -20,6 +20,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  firstPublicUrl,
 } from '@ever-jobs/common';
 import { LOXO_API_URL, LOXO_HEADERS } from './loxo.constants';
 import { LoxoJob, LoxoJobLocation, LoxoCompensation } from './loxo.types';
@@ -138,6 +139,7 @@ export class LoxoService implements IScraper {
           job,
           companySlug,
           input.descriptionFormat,
+          input.companyUrl,
         );
         if (post) {
           jobPosts.push(post);
@@ -159,6 +161,7 @@ export class LoxoService implements IScraper {
     job: LoxoJob,
     companySlug: string,
     format?: DescriptionFormat,
+    companyUrl?: string,
   ): JobPostDto | null {
     const title = job.title;
     if (!title) return null;
@@ -199,10 +202,13 @@ export class LoxoService implements IScraper {
       job.salary ?? job.compensation ?? null,
     );
 
-    // ─── Job URL ─────────────────────────────────────────────────
+    // ─── Job URL (Spec 1751) ─────────────────────────────────────
+    // The posting's public `url` / `apply_url`, else the caller's careers
+    // page. The API resource below is a last resort kept only because no
+    // public posting pattern is known for an agency (Q-110); it is a
+    // documented exception in scripts/__tests__/plugin-job-url-hosts.spec.ts.
     const jobUrl =
-      job.url ??
-      job.apply_url ??
+      firstPublicUrl(job.url, job.apply_url, companyUrl) ??
       `${LOXO_API_URL}/${encodeURIComponent(companySlug)}/jobs/${job.id}`;
 
     return new JobPostDto({
@@ -224,7 +230,7 @@ export class LoxoService implements IScraper {
       atsType: 'loxo',
       department: job.department ?? job.category ?? null,
       employmentType: job.employment_type ?? job.type ?? null,
-      applyUrl: job.apply_url ?? null,
+      applyUrl: firstPublicUrl(job.apply_url),
     });
   }
 

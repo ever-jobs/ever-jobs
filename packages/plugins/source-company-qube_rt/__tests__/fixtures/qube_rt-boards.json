@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "quberesearchandtechnologies"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/quberesearchandtechnologies/jobs": {
+      "jobs": [
+        {
+          "id": 8773447002,
+          "title": "2027 – Graduate or Internship, Infrastructure Engineer",
+          "updated_at": "2026-09-24T08:57:00.000Z",
+          "location": {
+            "name": "London, Paris"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/quberesearchandtechnologies/jobs/8773447002",
+          "content": "&lt;p&gt;2027 – Graduate or Internship, Infrastructure Engineer at Qube Research &amp;amp; Technologies.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "quberesearchandtechnologies"
+        },
+        {
+          "id": 8623972002,
+          "title": "2027 - Internship, Data Engineering",
+          "updated_at": "2026-09-24T08:57:00.000Z",
+          "location": {
+            "name": "Paris, London"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/quberesearchandtechnologies/jobs/8623972002",
+          "content": "&lt;p&gt;2027 - Internship, Data Engineering at Qube Research &amp;amp; Technologies.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "quberesearchandtechnologies"
+        },
+        {
+          "id": 8749947002,
+          "title": "2027 – Internship, Data Engineering",
+          "updated_at": "2026-09-24T08:57:00.000Z",
+          "location": {
+            "name": "Hong Kong, Singapore"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/quberesearchandtechnologies/jobs/8749947002",
+          "content": "&lt;p&gt;2027 – Internship, Data Engineering at Qube Research &amp;amp; Technologies.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "quberesearchandtechnologies"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "qube_rt-8773447002",
+      "title": "2027 – Graduate or Internship, Infrastructure Engineer"
+    },
+    {
+      "id": "qube_rt-8623972002",
+      "title": "2027 - Internship, Data Engineering"
+    },
+    {
+      "id": "qube_rt-8749947002",
+      "title": "2027 – Internship, Data Engineering"
+    }
+  ]
+}

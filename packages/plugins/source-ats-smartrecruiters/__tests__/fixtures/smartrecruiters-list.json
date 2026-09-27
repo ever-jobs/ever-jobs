@@ -1,0 +1,101 @@
+{
+  "offset": 0,
+  "limit": 2,
+  "totalFound": 2,
+  "content": [
+    {
+      "id": "3743990015679966",
+      "name": "Head of AI Transformation & Analytics, Medical Affairs + Health Impact",
+      "uuid": "b2b3ea82-bb03-402c-8ec2-2ea22b2e024a",
+      "jobAdId": "159bb3eb-3a46-4e0b-b283-777b6058675c",
+      "defaultJobAd": true,
+      "refNumber": "R00151365",
+      "company": {
+        "identifier": "AbbVie",
+        "name": "AbbVie"
+      },
+      "releasedDate": "2026-09-25T15:53:31.720Z",
+      "location": {
+        "city": "Mettawa",
+        "region": "IL",
+        "country": "us",
+        "remote": false,
+        "hybrid": false,
+        "latitude": "42.2333571",
+        "longitude": "-87.9259058",
+        "fullLocation": "Mettawa, IL, United States"
+      },
+      "industry": {
+        "id": "pharmaceuticals",
+        "label": "Pharmaceuticals"
+      },
+      "department": {},
+      "function": {
+        "id": "research",
+        "label": "Research"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "director",
+        "label": "Director"
+      },
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AbbVie/postings/3743990015679966",
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    },
+    {
+      "id": "3743990015679756",
+      "name": "Strategic Project Manager, Allergan Aesthetics",
+      "uuid": "f77cc35e-3164-482d-af52-331df6be9c9a",
+      "jobAdId": "329fd5ea-be23-416b-9bf6-75487ec4698a",
+      "defaultJobAd": true,
+      "refNumber": "R00147859",
+      "company": {
+        "identifier": "AbbVie",
+        "name": "AbbVie"
+      },
+      "releasedDate": "2026-09-25T15:49:21.956Z",
+      "location": {
+        "city": "Irvine",
+        "region": "CA",
+        "country": "us",
+        "remote": false,
+        "hybrid": true,
+        "latitude": "33.6845673",
+        "longitude": "-117.8265049",
+        "fullLocation": "Irvine, CA, United States"
+      },
+      "industry": {
+        "id": "pharmaceuticals",
+        "label": "Pharmaceuticals"
+      },
+      "department": {},
+      "function": {
+        "id": "other",
+        "label": "Other"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "mid_senior_level",
+        "label": "Mid-Senior Level"
+      },
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AbbVie/postings/3743990015679756",
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    }
+  ]
+}

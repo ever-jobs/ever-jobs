@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Iliad-Free/744000135765789",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Iliad-Free/postings/744000135765789",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Iliad-Free/744000135734284",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Iliad-Free/postings/744000135734284",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Iliad-Free/744000135734599",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Iliad-Free/postings/744000135734599",
       "jobAd": {
         "sections": {
           "jobDescription": {

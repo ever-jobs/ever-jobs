@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Intuitive/744000135806671",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Intuitive/postings/744000135806671",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Intuitive/744000135642670",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Intuitive/postings/744000135642670",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Intuitive/744000135521289",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Intuitive/postings/744000135521289",
       "jobAd": {
         "sections": {
           "jobDescription": {

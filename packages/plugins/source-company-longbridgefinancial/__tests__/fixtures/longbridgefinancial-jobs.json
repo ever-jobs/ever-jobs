@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LongbridgeFinancial/744000134449970",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LongbridgeFinancial/postings/744000134449970",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LongbridgeFinancial/744000134258180",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LongbridgeFinancial/postings/744000134258180",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LongbridgeFinancial/744000132871687",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LongbridgeFinancial/postings/744000132871687",
       "jobAd": {
         "sections": {
           "jobDescription": {

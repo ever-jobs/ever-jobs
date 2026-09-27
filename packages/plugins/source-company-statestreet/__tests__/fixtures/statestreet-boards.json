@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "statestreet:1:Global"
+      },
+      "atsIdPrefix": "wd-statestreet-"
+    }
+  ],
+  "responses": {
+    "https://statestreet.wd1.myworkdayjobs.com/wday/cxs/statestreet/Global/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Markets Capital Optimization Analyst, Officer",
+          "externalPath": "/job/Boston-Massachusetts/Markets-Capital-Optimization-Analyst--Officer_R-788670",
+          "locationsText": "Boston, Massachusetts",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-788670"
+          ]
+        },
+        {
+          "title": "Front Office Trading Services, FX and FS Initiatives, Vice President",
+          "externalPath": "/job/Boston-Massachusetts/Front-Office-Trading-Services--FX-and-FS-Initiatives--Vice-President_R-798553",
+          "locationsText": "Boston, Massachusetts",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-798553"
+          ]
+        },
+        {
+          "title": "Regulatory Reporting Specialist, Senior Associae",
+          "externalPath": "/job/Hyderabad-India/Regulatory-Reporting-Specialist--Senior-Associae_R-798406",
+          "locationsText": "Hyderabad, India",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-798406"
+          ]
+        }
+      ]
+    },
+    "https://statestreet.wd1.myworkdayjobs.com/wday/cxs/statestreet/Global/job/Boston-Massachusetts/Markets-Capital-Optimization-Analyst--Officer_R-788670": {
+      "jobPostingInfo": {
+        "title": "Markets Capital Optimization Analyst, Officer",
+        "jobDescription": "<p>Markets Capital Optimization Analyst, Officer at State Street.</p>",
+        "location": "Boston, Massachusetts",
+        "jobReqId": "R-788670",
+        "externalUrl": "https://statestreet.wd1.myworkdayjobs.com/Global/job/Boston-Massachusetts/Markets-Capital-Optimization-Analyst--Officer_R-788670",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "statestreet"
+      }
+    },
+    "https://statestreet.wd1.myworkdayjobs.com/wday/cxs/statestreet/Global/job/Boston-Massachusetts/Front-Office-Trading-Services--FX-and-FS-Initiatives--Vice-President_R-798553": {
+      "jobPostingInfo": {
+        "title": "Front Office Trading Services, FX and FS Initiatives, Vice President",
+        "jobDescription": "<p>Front Office Trading Services, FX and FS Initiatives, Vice President at State Street.</p>",
+        "location": "Boston, Massachusetts",
+        "jobReqId": "R-798553",
+        "externalUrl": "https://statestreet.wd1.myworkdayjobs.com/Global/job/Boston-Massachusetts/Front-Office-Trading-Services--FX-and-FS-Initiatives--Vice-President_R-798553",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "statestreet"
+      }
+    },
+    "https://statestreet.wd1.myworkdayjobs.com/wday/cxs/statestreet/Global/job/Hyderabad-India/Regulatory-Reporting-Specialist--Senior-Associae_R-798406": {
+      "jobPostingInfo": {
+        "title": "Regulatory Reporting Specialist, Senior Associae",
+        "jobDescription": "<p>Regulatory Reporting Specialist, Senior Associae at State Street.</p>",
+        "location": "Hyderabad, India",
+        "jobReqId": "R-798406",
+        "externalUrl": "https://statestreet.wd1.myworkdayjobs.com/Global/job/Hyderabad-India/Regulatory-Reporting-Specialist--Senior-Associae_R-798406",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "statestreet"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "statestreet-R-788670",
+      "title": "Markets Capital Optimization Analyst, Officer"
+    },
+    {
+      "id": "statestreet-R-798553",
+      "title": "Front Office Trading Services, FX and FS Initiatives, Vice President"
+    },
+    {
+      "id": "statestreet-R-798406",
+      "title": "Regulatory Reporting Specialist, Senior Associae"
+    }
+  ]
+}

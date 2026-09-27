@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/prosidianconsulting/744000133450499",
+      "ref": "https://api.smartrecruiters.com/v1/companies/prosidianconsulting/postings/744000133450499",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/prosidianconsulting/744000133138959",
+      "ref": "https://api.smartrecruiters.com/v1/companies/prosidianconsulting/postings/744000133138959",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/prosidianconsulting/744000133138620",
+      "ref": "https://api.smartrecruiters.com/v1/companies/prosidianconsulting/postings/744000133138620",
       "jobAd": {
         "sections": {
           "jobDescription": {

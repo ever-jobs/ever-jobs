@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "optiverus"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/optiverus/jobs": {
+      "jobs": [
+        {
+          "id": 8644364002,
+          "title": "2027 Shanghai FPGA Developer Summer Internship",
+          "updated_at": "2026-08-12T10:13:46.000Z",
+          "location": {
+            "name": "Shanghai, China"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/optiverus/jobs/8644364002",
+          "content": "&lt;p&gt;2027 Shanghai FPGA Developer Summer Internship at Optiver.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "optiverus"
+        },
+        {
+          "id": 8633966002,
+          "title": "2027 Shanghai Machine Learning Engineer Summer Internship",
+          "updated_at": "2026-08-12T10:14:53.000Z",
+          "location": {
+            "name": "Shanghai, China"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/optiverus/jobs/8633966002",
+          "content": "&lt;p&gt;2027 Shanghai Machine Learning Engineer Summer Internship at Optiver.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "optiverus"
+        },
+        {
+          "id": 8732789002,
+          "title": "2027 Shanghai Performance Researcher Summer Internship",
+          "updated_at": "2026-09-08T01:18:06.000Z",
+          "location": {
+            "name": "Shanghai, China"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/optiverus/jobs/8732789002",
+          "content": "&lt;p&gt;2027 Shanghai Performance Researcher Summer Internship at Optiver.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "optiverus"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "optiver-8644364002",
+      "title": "2027 Shanghai FPGA Developer Summer Internship"
+    },
+    {
+      "id": "optiver-8633966002",
+      "title": "2027 Shanghai Machine Learning Engineer Summer Internship"
+    },
+    {
+      "id": "optiver-8732789002",
+      "title": "2027 Shanghai Performance Researcher Summer Internship"
+    }
+  ]
+}

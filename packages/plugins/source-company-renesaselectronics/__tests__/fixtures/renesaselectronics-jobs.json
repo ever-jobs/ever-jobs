@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RenesasElectronics/744000135787869",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RenesasElectronics/postings/744000135787869",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RenesasElectronics/744000135776139",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RenesasElectronics/postings/744000135776139",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RenesasElectronics/744000135766339",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RenesasElectronics/postings/744000135766339",
       "jobAd": {
         "sections": {
           "jobDescription": {

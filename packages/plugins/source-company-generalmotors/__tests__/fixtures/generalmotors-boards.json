@@ -1,0 +1,102 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "generalmotors:5:Careers_GM"
+      },
+      "atsIdPrefix": "wd-generalmotors-"
+    }
+  ],
+  "responses": {
+    "https://generalmotors.wd5.myworkdayjobs.com/wday/cxs/generalmotors/Careers_GM/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Staff HR Business Partner",
+          "externalPath": "/job/Warren-Michigan-United-States-of-America/Staff-HR-Business-Partner_JR-202620783-1",
+          "locationsText": "Warren, Michigan, United States of America",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-202620783",
+            "Exempt"
+          ]
+        },
+        {
+          "title": "Senior Data Scientist - Product Safety Data Analytics (GPSSC)",
+          "externalPath": "/job/Warren-Michigan-United-States-of-America/Senior-Data-Scientist---Product-Safety-Data-Analytics--GPSSC-_JR-202620524-1",
+          "locationsText": "Warren, Michigan, United States of America",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-202620524",
+            "Exempt"
+          ]
+        },
+        {
+          "title": "Compliant Variation Analysis Engineer",
+          "externalPath": "/job/Warren-Michigan-United-States-of-America/Compliant-Variation-Analysis-Engineer_JR-202621086",
+          "locationsText": "Warren, Michigan, United States of America",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-202621086",
+            "Exempt"
+          ]
+        }
+      ]
+    },
+    "https://generalmotors.wd5.myworkdayjobs.com/wday/cxs/generalmotors/Careers_GM/job/Warren-Michigan-United-States-of-America/Staff-HR-Business-Partner_JR-202620783-1": {
+      "jobPostingInfo": {
+        "title": "Staff HR Business Partner",
+        "jobDescription": "<p>Staff HR Business Partner at General Motors.</p>",
+        "location": "Warren, Michigan, United States of America",
+        "jobReqId": "JR-202620783",
+        "externalUrl": "https://generalmotors.wd5.myworkdayjobs.com/Careers_GM/job/Warren-Michigan-United-States-of-America/Staff-HR-Business-Partner_JR-202620783-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "generalmotors"
+      }
+    },
+    "https://generalmotors.wd5.myworkdayjobs.com/wday/cxs/generalmotors/Careers_GM/job/Warren-Michigan-United-States-of-America/Senior-Data-Scientist---Product-Safety-Data-Analytics--GPSSC-_JR-202620524-1": {
+      "jobPostingInfo": {
+        "title": "Senior Data Scientist - Product Safety Data Analytics (GPSSC)",
+        "jobDescription": "<p>Senior Data Scientist - Product Safety Data Analytics (GPSSC) at General Motors.</p>",
+        "location": "Warren, Michigan, United States of America",
+        "jobReqId": "JR-202620524",
+        "externalUrl": "https://generalmotors.wd5.myworkdayjobs.com/Careers_GM/job/Warren-Michigan-United-States-of-America/Senior-Data-Scientist---Product-Safety-Data-Analytics--GPSSC-_JR-202620524-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "generalmotors"
+      }
+    },
+    "https://generalmotors.wd5.myworkdayjobs.com/wday/cxs/generalmotors/Careers_GM/job/Warren-Michigan-United-States-of-America/Compliant-Variation-Analysis-Engineer_JR-202621086": {
+      "jobPostingInfo": {
+        "title": "Compliant Variation Analysis Engineer",
+        "jobDescription": "<p>Compliant Variation Analysis Engineer at General Motors.</p>",
+        "location": "Warren, Michigan, United States of America",
+        "jobReqId": "JR-202621086",
+        "externalUrl": "https://generalmotors.wd5.myworkdayjobs.com/Careers_GM/job/Warren-Michigan-United-States-of-America/Compliant-Variation-Analysis-Engineer_JR-202621086",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "generalmotors"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "generalmotors-JR-202620783",
+      "title": "Staff HR Business Partner"
+    },
+    {
+      "id": "generalmotors-JR-202620524",
+      "title": "Senior Data Scientist - Product Safety Data Analytics (GPSSC)"
+    },
+    {
+      "id": "generalmotors-JR-202621086",
+      "title": "Compliant Variation Analysis Engineer"
+    }
+  ]
+}

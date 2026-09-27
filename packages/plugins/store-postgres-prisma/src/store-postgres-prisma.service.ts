@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   CanonicalJob,
   ERR_STORE_INVALID_CURSOR,
@@ -8,6 +8,7 @@ import {
   JOB_STORE_QUERY_MAX_LIMIT,
   JobStorePage,
   JobStoreQuery,
+  ObservationBatchEntry,
   Site,
   SourceObservation,
 } from '@ever-jobs/models';
@@ -225,8 +226,23 @@ export interface PrismaJobsClient {
   /**
    * Callback-form transaction. Prisma's `$transaction(fn)` runs `fn`
    * inside a single Postgres transaction and rolls back on throw.
+   *
+   * `options` overrides the client-level `transactionOptions` for one call
+   * (Prisma's own signature). Prisma's defaults are `maxWait: 2000` and
+   * `timeout: 5000` ms, which is why the batch paths below do not use an
+   * interactive transaction at all (Spec 1722 / FR-12).
    */
-  $transaction<T>(fn: (tx: PrismaJobsClient) => Promise<T>): Promise<T>;
+  $transaction<T>(
+    fn: (tx: PrismaJobsClient) => Promise<T>,
+    options?: { maxWait?: number; timeout?: number },
+  ): Promise<T>;
+
+  /**
+   * Raw parameterised query (Prisma's standard client API). Used by the
+   * set-based batch writes (Spec 1722 / FR-12, FR-13): values are sent as
+   * bind parameters, never interpolated into the SQL text.
+   */
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
 
   /**
    * Release the underlying connection pool. Tests SHOULD await this in
@@ -272,7 +288,22 @@ export interface StorePostgresPrismaConfig {
    * calling `prisma.$disconnect()` at process-shutdown.
    */
   readonly client: PrismaJobsClient;
+
+  /**
+   * Rows per statement for `upsertMany` / `putAllMany` (Spec 1722 / FR-12).
+   * Defaults to {@link DEFAULT_POSTGRES_BATCH_SIZE}; the API binds it from
+   * `EVER_JOBS_STORE_BATCH_SIZE`.
+   */
+  readonly batchSize?: number;
 }
+
+/**
+ * Default rows per batch statement. 500 canonical jobs with descriptions is
+ * a ~2–3 MB `jsonb` parameter — one round-trip that Postgres parses and
+ * upserts in well under a second — while keeping each statement's row locks
+ * short-lived.
+ */
+export const DEFAULT_POSTGRES_BATCH_SIZE = 500;
 
 /**
  * NestJS DI token for {@link StorePostgresPrismaConfig}. Bind it via a
@@ -337,6 +368,12 @@ export const STORE_POSTGRES_PRISMA_CONFIG = 'STORE_POSTGRES_PRISMA_CONFIG';
  *      bootstrap. Spec 004 §7.3 / FR-3 explicitly says misconfigured
  *      deployments MUST fail fast — silent fallback to in-memory mode
  *      would let the prod cohort silently disappear.
+ *
+ *   8. **Set-based batch writes (Spec 1722 / FR-12, FR-13).** `upsertMany`
+ *      and `putAllMany` send one raw statement per chunk of `batchSize`
+ *      rows, fed by a single `jsonb` parameter, instead of one Prisma call
+ *      per row inside an interactive transaction (which timed out at
+ *      ~10 000 rows under Prisma's default 5 s limit).
  */
 @StorePlugin({
   id: STORE_POSTGRES_PRISMA_ID,
@@ -344,7 +381,10 @@ export const STORE_POSTGRES_PRISMA_CONFIG = 'STORE_POSTGRES_PRISMA_CONFIG';
 })
 @Injectable()
 export class PostgresPrismaJobStore implements IJobStore, IJobObservationStore {
+  private readonly logger = new Logger(PostgresPrismaJobStore.name);
+
   private readonly client: PrismaJobsClient;
+  private readonly batchSize: number;
 
   constructor(
     @Optional()
@@ -364,6 +404,7 @@ export class PostgresPrismaJobStore implements IJobStore, IJobObservationStore {
       );
     }
     this.client = config.client;
+    this.batchSize = resolveBatchSize(config.batchSize);
   }
 
   // ----------------------------------------------------------------------
@@ -395,42 +436,34 @@ export class PostgresPrismaJobStore implements IJobStore, IJobObservationStore {
     if (jobs.length === 0) {
       return { inserted: 0, updated: 0 };
     }
-    // Single transaction — partial failure leaves no half-written cohort.
-    // We pre-check existence in one query so inserted-vs-updated counts
-    // come back without an extra round-trip per row.
-    return this.client.$transaction(async (tx) => {
-      const ids = jobs.map((j) => j.canonicalJobId);
-      const existing = await tx.canonicalJob.findMany({
-        where: { canonicalJobId: { in: ids } },
-      });
-      const existingSet = new Set(existing.map((e) => e.canonicalJobId));
+    // Spec 1722 / FR-12 — set-based, one statement per chunk.
+    //
+    // The previous shape (one Prisma `upsert` per row inside ONE interactive
+    // `$transaction`) hit Prisma's default 5 s interactive-transaction
+    // timeout at ~10 000 rows (P2028), so every list-mode persist failed.
+    // A single `INSERT … ON CONFLICT DO UPDATE` statement per chunk needs no
+    // interactive transaction, is atomic per chunk, and costs one
+    // round-trip per `batchSize` rows instead of one per row.
+    //
+    // Last occurrence of a repeated id wins (what sequential upserts would
+    // leave behind; `ON CONFLICT` cannot touch one row twice in a statement),
+    // and rows are written in id order so two concurrent persists lock
+    // overlapping rows in the same order and cannot deadlock.
+    const rows = [...lastById(jobs, (j) => j.canonicalJobId).values()]
+      .sort((a, b) => compareIds(a.canonicalJobId, b.canonicalJobId))
+      .map(toCanonicalJobSqlRow);
 
-      let inserted = 0;
-      let updated = 0;
-      for (const job of jobs) {
-        const row = toPrismaCanonicalJobRow(job);
-        await tx.canonicalJob.upsert({
-          where: { canonicalJobId: row.canonicalJobId },
-          create: row,
-          update: {
-            title: row.title,
-            company: row.company,
-            location: row.location,
-            description: row.description,
-            url: row.url,
-            mergedAt: row.mergedAt,
-            fields: row.fields,
-            sources: row.sources,
-          },
-        });
-        if (existingSet.has(job.canonicalJobId)) {
-          updated++;
-        } else {
-          inserted++;
-        }
-      }
-      return { inserted, updated };
-    });
+    let inserted = 0;
+    for (let start = 0; start < rows.length; start += this.batchSize) {
+      const chunk = rows.slice(start, start + this.batchSize);
+      const result = await this.client.$queryRawUnsafe<
+        Array<{ inserted: number; affected: number }>
+      >(UPSERT_CANONICAL_CHUNK_SQL, toJsonbParam(chunk));
+      inserted += Number(result[0]?.inserted ?? 0);
+    }
+    // A repeated id is an update of the row its first occurrence inserted,
+    // so `inserted + updated` is always the input length.
+    return { inserted, updated: jobs.length - inserted };
   }
 
   async getById(id: string): Promise<CanonicalJob | null> {
@@ -530,6 +563,81 @@ export class PostgresPrismaJobStore implements IJobStore, IJobObservationStore {
     });
   }
 
+  /**
+   * Batch `putAll` (Spec 1722 / FR-13) — one statement per chunk of
+   * `batchSize` canonical ids, no interactive transaction.
+   *
+   * Replace-not-merge per canonical id, without rewriting what did not
+   * change: observations no longer present are deleted, new ones inserted,
+   * and an existing one is updated only when `url`, `observed_at` or
+   * `raw_title` differ. The previous aggregator path deleted and re-inserted
+   * every observation of every job on every run, one transaction per job,
+   * all started at once — which exhausted the pool at list-mode size.
+   *
+   * Entries whose canonical row does not exist are skipped (their
+   * observations would violate the FK and fail the whole chunk). A repeated
+   * canonical id: the last entry wins, as sequential `putAll` calls would.
+   * An entry with an unparsable `observedAt` is skipped whole and its stored
+   * set left as it was — what its own `putAll` did (the transaction failed):
+   * replacing the set without that observation would delete the stored one.
+   */
+  async putAllMany(entries: ReadonlyArray<ObservationBatchEntry>): Promise<void> {
+    if (entries.length === 0) return;
+    const byId = new Map<string, ReadonlyArray<SourceObservation>>();
+    for (const entry of entries) byId.set(entry.canonicalJobId, entry.observations);
+    const ids = [...byId.keys()].sort(compareIds);
+
+    let skipped = 0;
+    for (let start = 0; start < ids.length; start += this.batchSize) {
+      const chunkIds: string[] = [];
+      const rows: ObservationSqlRow[] = [];
+      for (const canonicalJobId of ids.slice(start, start + this.batchSize)) {
+        // Within one canonical id the (site, sourceJobId) primary key must be
+        // unique in a single statement: the last observation wins.
+        const observations = lastById(
+          byId.get(canonicalJobId) ?? [],
+          (o) => `${String(o.site)}\u0000${o.sourceJobId}`,
+        );
+        const entryRows: ObservationSqlRow[] = [];
+        let valid = true;
+        for (const o of observations.values()) {
+          // `observedAt` is the source's own posting date when it had one.
+          // An unparsable value fails this entry only (see above), not the chunk.
+          const observedAt = isoOrUndefined(o.observedAt);
+          if (observedAt === undefined) {
+            valid = false;
+            break;
+          }
+          entryRows.push({
+            canonical_job_id: canonicalJobId,
+            site: String(o.site),
+            source_job_id: o.sourceJobId,
+            url: o.url,
+            observed_at: observedAt,
+            raw_title: o.rawTitle ?? null,
+          });
+        }
+        if (!valid) {
+          skipped++;
+          continue;
+        }
+        chunkIds.push(canonicalJobId);
+        rows.push(...entryRows);
+      }
+      if (chunkIds.length === 0) continue;
+      await this.client.$queryRawUnsafe(
+        REPLACE_OBSERVATIONS_CHUNK_SQL,
+        toJsonbParam(chunkIds),
+        toJsonbParam(rows),
+      );
+    }
+    if (skipped > 0) {
+      this.logger.warn(
+        `putAllMany: ${skipped} of ${ids.length} observation sets left unchanged (an unparsable observedAt)`,
+      );
+    }
+  }
+
   async listByCanonicalId(
     canonicalJobId: string,
   ): Promise<ReadonlyArray<SourceObservation>> {
@@ -564,6 +672,199 @@ export class PostgresPrismaJobStore implements IJobStore, IJobObservationStore {
   async size(): Promise<number> {
     return this.client.canonicalJob.count();
   }
+}
+
+// =====================================================================
+// Batch SQL (Spec 1722 / FR-12, FR-13)
+// =====================================================================
+
+/**
+ * Upsert one chunk of canonical jobs. `$1` is a JSON array of
+ * {@link CanonicalJobSqlRow}; one `jsonb` parameter per chunk keeps the
+ * statement far below Postgres's 65 535 bind-parameter limit whatever the
+ * chunk size. `xmax = 0` is true exactly for rows this statement inserted,
+ * which yields the inserted/updated split without a pre-read.
+ */
+export const UPSERT_CANONICAL_CHUNK_SQL = `
+WITH incoming AS (
+  SELECT *
+  FROM jsonb_to_recordset($1::jsonb) AS r(
+    canonical_job_id text,
+    title text,
+    company text,
+    location text,
+    description text,
+    url text,
+    merged_at timestamptz,
+    fields_json jsonb,
+    sources_json jsonb
+  )
+), upserted AS (
+  INSERT INTO "canonical_job" (
+    "canonical_job_id", "title", "company", "location", "description",
+    "url", "merged_at", "fields_json", "sources_json"
+  )
+  SELECT canonical_job_id, title, company, location, description, url, merged_at,
+         COALESCE(fields_json, '{}'::jsonb), COALESCE(sources_json, '[]'::jsonb)
+  FROM incoming
+  ORDER BY canonical_job_id
+  ON CONFLICT ("canonical_job_id") DO UPDATE SET
+    "title" = EXCLUDED."title",
+    "company" = EXCLUDED."company",
+    "location" = EXCLUDED."location",
+    "description" = EXCLUDED."description",
+    "url" = EXCLUDED."url",
+    "merged_at" = EXCLUDED."merged_at",
+    "fields_json" = EXCLUDED."fields_json",
+    "sources_json" = EXCLUDED."sources_json"
+  RETURNING (xmax = 0) AS inserted
+)
+SELECT (COUNT(*) FILTER (WHERE inserted))::int AS inserted, COUNT(*)::int AS affected
+FROM upserted`;
+
+/**
+ * Replace the observation sets of one chunk of canonical ids. `$1` is the
+ * JSON array of canonical ids in the chunk (including ids whose new set is
+ * empty), `$2` the JSON array of {@link ObservationSqlRow}.
+ *
+ * The two data-modifying CTEs touch disjoint rows — `removed` only rows
+ * absent from `incoming`, `written` only rows present in it — so running them
+ * in one statement is well-defined. `written` skips rows whose values did not
+ * change, so a re-persist of an unchanged corpus rewrites nothing.
+ */
+export const REPLACE_OBSERVATIONS_CHUNK_SQL = `
+WITH ids AS (
+  SELECT DISTINCT t.id AS canonical_job_id
+  FROM jsonb_array_elements_text($1::jsonb) AS t(id)
+), incoming AS (
+  SELECT r.canonical_job_id, r.site, r.source_job_id, r.url, r.observed_at, r.raw_title
+  FROM jsonb_to_recordset($2::jsonb) AS r(
+    canonical_job_id text,
+    site text,
+    source_job_id text,
+    url text,
+    observed_at timestamptz,
+    raw_title text
+  )
+  WHERE EXISTS (
+    SELECT 1 FROM "canonical_job" c WHERE c."canonical_job_id" = r.canonical_job_id
+  )
+), removed AS (
+  DELETE FROM "source_observation" o
+  USING ids
+  WHERE o."canonical_job_id" = ids.canonical_job_id
+    AND NOT EXISTS (
+      SELECT 1 FROM incoming i
+      WHERE i.canonical_job_id = o."canonical_job_id"
+        AND i.site = o."site"
+        AND i.source_job_id = o."source_job_id"
+    )
+  RETURNING 1
+), written AS (
+  INSERT INTO "source_observation" (
+    "canonical_job_id", "site", "source_job_id", "url", "observed_at", "raw_title"
+  )
+  SELECT canonical_job_id, site, source_job_id, url, observed_at, raw_title
+  FROM incoming
+  ORDER BY canonical_job_id, site, source_job_id
+  ON CONFLICT ("canonical_job_id", "site", "source_job_id") DO UPDATE SET
+    "url" = EXCLUDED."url",
+    "observed_at" = EXCLUDED."observed_at",
+    "raw_title" = EXCLUDED."raw_title"
+  WHERE ("source_observation"."url", "source_observation"."observed_at", "source_observation"."raw_title")
+    IS DISTINCT FROM (EXCLUDED."url", EXCLUDED."observed_at", EXCLUDED."raw_title")
+  RETURNING 1
+)
+SELECT (SELECT COUNT(*) FROM removed)::int AS removed,
+       (SELECT COUNT(*) FROM written)::int AS written`;
+
+/** Row shape of {@link UPSERT_CANONICAL_CHUNK_SQL}'s `jsonb` parameter. */
+interface CanonicalJobSqlRow {
+  canonical_job_id: string;
+  title: string;
+  company: string;
+  location: string;
+  description: string | null;
+  url: string;
+  merged_at: string;
+  fields_json: unknown;
+  sources_json: unknown;
+}
+
+/** Row shape of {@link REPLACE_OBSERVATIONS_CHUNK_SQL}'s `$2` parameter. */
+interface ObservationSqlRow {
+  canonical_job_id: string;
+  site: string;
+  source_job_id: string;
+  url: string;
+  observed_at: string;
+  raw_title: string | null;
+}
+
+/**
+ * Clamp a configured batch size into `[1, 5000]`; anything non-finite or
+ * non-positive means the default.
+ */
+function resolveBatchSize(raw: number | undefined): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 1) {
+    return DEFAULT_POSTGRES_BATCH_SIZE;
+  }
+  return Math.min(Math.floor(raw), 5_000);
+}
+
+/** Collapse repeated keys, keeping the LAST value (insertion order of first sighting). */
+function lastById<T>(items: ReadonlyArray<T>, keyOf: (item: T) => string): Map<string, T> {
+  const out = new Map<string, T>();
+  for (const item of items) out.set(keyOf(item), item);
+  return out;
+}
+
+/** Code-unit order; only has to be the same for every caller. */
+function compareIds(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * An ISO-8601 timestamp for a `timestamptz` column (Postgres parses ISO
+ * strings reliably), or `undefined` when `Date` cannot parse the value.
+ */
+function isoOrUndefined(value: unknown): string | undefined {
+  if (typeof value !== 'string' && !(value instanceof Date)) return undefined;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? new Date(time).toISOString() : undefined;
+}
+
+/** {@link isoOrUndefined} with a fallback for the unparsable case. */
+function toIsoTimestamp(value: unknown, fallback: () => string): string {
+  return isoOrUndefined(value) ?? fallback();
+}
+
+function toCanonicalJobSqlRow(job: CanonicalJob): CanonicalJobSqlRow {
+  return {
+    canonical_job_id: job.canonicalJobId,
+    title: job.title,
+    company: job.company,
+    location: job.location,
+    description: job.description ?? null,
+    url: job.url,
+    // `mergedAt` is the merge time; the dedup engine always stamps a valid
+    // ISO string, so the fallback is "now", i.e. when this merge is written.
+    merged_at: toIsoTimestamp(job.mergedAt, () => new Date().toISOString()),
+    fields_json: job.fields ?? {},
+    sources_json: job.sources ?? [],
+  };
+}
+
+/**
+ * Serialise a batch for a `$n::jsonb` parameter. Postgres `text` and `jsonb`
+ * cannot hold U+0000, and scraped descriptions occasionally carry one; left
+ * in, a single such job would fail its whole chunk, so the character is
+ * dropped from every string value.
+ */
+function toJsonbParam(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    typeof v === 'string' && v.includes('\u0000') ? v.split('\u0000').join('') : v,
+  );
 }
 
 // =====================================================================

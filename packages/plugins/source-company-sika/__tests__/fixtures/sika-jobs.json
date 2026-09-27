@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SikaAG/744000135787029",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SikaAG/postings/744000135787029",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SikaAG/744000135786659",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SikaAG/postings/744000135786659",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SikaAG/744000135786159",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SikaAG/postings/744000135786159",
       "jobAd": {
         "sections": {
           "jobDescription": {

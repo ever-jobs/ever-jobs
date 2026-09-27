@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MaximIntegrated/743999692253011",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MaximIntegrated/postings/743999692253011",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MaximIntegrated/743999691846027",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MaximIntegrated/postings/743999691846027",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MaximIntegrated/108956148",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MaximIntegrated/postings/108956148",
       "jobAd": {
         "sections": {
           "jobDescription": {

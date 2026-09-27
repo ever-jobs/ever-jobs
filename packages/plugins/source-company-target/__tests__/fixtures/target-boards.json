@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "target:5:targetcareers"
+      },
+      "atsIdPrefix": "wd-target-"
+    }
+  ],
+  "responses": {
+    "https://target.wd5.myworkdayjobs.com/wday/cxs/target/targetcareers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Senior Systems Engineer - Regional Distribution Center - Fridley, MN",
+          "externalPath": "/job/1090-73rd-Ave-NE-FridleyMN-55432-3407/Senior-Systems-Engineer---Regional-Distribution-Center---Fridley--MN_R0000425193",
+          "locationsText": "1090 73rd Ave NE, Fridley,MN 55432-3407",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0000425193"
+          ]
+        },
+        {
+          "title": "Executive Team Leader General Merchandise & Food Sales (Assistant Manager Operations & Grocery)- Baltimore, MD",
+          "externalPath": "/job/3559-Boston-Street-BaltimoreMD-21224-5750/Executive-Team-Leader-General-Merchandise---Food-Sales--Assistant-Manager-Operations---Grocery---Baltimore--MD_R0000475213",
+          "locationsText": "3559 Boston Street, Baltimore,MD 21224-5750",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0000475213"
+          ]
+        },
+        {
+          "title": "Specialty Sales Team Leader - Greer, SC",
+          "externalPath": "/job/6025-Wade-Hampton-Blvd-TaylorsSC-29687-5334/Specialty-Sales-Team-Leader---Greer--SC_R0000453872",
+          "locationsText": "6025 Wade Hampton Blvd, Taylors,SC 29687-5334",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0000453872"
+          ]
+        }
+      ]
+    },
+    "https://target.wd5.myworkdayjobs.com/wday/cxs/target/targetcareers/job/1090-73rd-Ave-NE-FridleyMN-55432-3407/Senior-Systems-Engineer---Regional-Distribution-Center---Fridley--MN_R0000425193": {
+      "jobPostingInfo": {
+        "title": "Senior Systems Engineer - Regional Distribution Center - Fridley, MN",
+        "jobDescription": "<p>Senior Systems Engineer - Regional Distribution Center - Fridley, MN at Target.</p>",
+        "location": "1090 73rd Ave NE, Fridley,MN 55432-3407",
+        "jobReqId": "R0000425193",
+        "externalUrl": "https://target.wd5.myworkdayjobs.com/targetcareers/job/1090-73rd-Ave-NE-FridleyMN-55432-3407/Senior-Systems-Engineer---Regional-Distribution-Center---Fridley--MN_R0000425193",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "target"
+      }
+    },
+    "https://target.wd5.myworkdayjobs.com/wday/cxs/target/targetcareers/job/3559-Boston-Street-BaltimoreMD-21224-5750/Executive-Team-Leader-General-Merchandise---Food-Sales--Assistant-Manager-Operations---Grocery---Baltimore--MD_R0000475213": {
+      "jobPostingInfo": {
+        "title": "Executive Team Leader General Merchandise & Food Sales (Assistant Manager Operations & Grocery)- Baltimore, MD",
+        "jobDescription": "<p>Executive Team Leader General Merchandise &amp; Food Sales (Assistant Manager Operations &amp; Grocery)- Baltimore, MD at Target.</p>",
+        "location": "3559 Boston Street, Baltimore,MD 21224-5750",
+        "jobReqId": "R0000475213",
+        "externalUrl": "https://target.wd5.myworkdayjobs.com/targetcareers/job/3559-Boston-Street-BaltimoreMD-21224-5750/Executive-Team-Leader-General-Merchandise---Food-Sales--Assistant-Manager-Operations---Grocery---Baltimore--MD_R0000475213",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "target"
+      }
+    },
+    "https://target.wd5.myworkdayjobs.com/wday/cxs/target/targetcareers/job/6025-Wade-Hampton-Blvd-TaylorsSC-29687-5334/Specialty-Sales-Team-Leader---Greer--SC_R0000453872": {
+      "jobPostingInfo": {
+        "title": "Specialty Sales Team Leader - Greer, SC",
+        "jobDescription": "<p>Specialty Sales Team Leader - Greer, SC at Target.</p>",
+        "location": "6025 Wade Hampton Blvd, Taylors,SC 29687-5334",
+        "jobReqId": "R0000453872",
+        "externalUrl": "https://target.wd5.myworkdayjobs.com/targetcareers/job/6025-Wade-Hampton-Blvd-TaylorsSC-29687-5334/Specialty-Sales-Team-Leader---Greer--SC_R0000453872",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "target"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "target-R0000425193",
+      "title": "Senior Systems Engineer - Regional Distribution Center - Fridley, MN"
+    },
+    {
+      "id": "target-R0000475213",
+      "title": "Executive Team Leader General Merchandise & Food Sales (Assistant Manager Operations & Grocery)- Baltimore, MD"
+    },
+    {
+      "id": "target-R0000453872",
+      "title": "Specialty Sales Team Leader - Greer, SC"
+    }
+  ]
+}

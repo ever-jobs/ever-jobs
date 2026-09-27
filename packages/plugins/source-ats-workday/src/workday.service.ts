@@ -10,6 +10,7 @@ import {
   CompensationDto,
   Site,
   DescriptionFormat,
+  ScrapeDiagnostics,
   classifyScrapeError,
 } from '@ever-jobs/models';
 import {
@@ -26,18 +27,56 @@ import {
   WORKDAY_HEADERS,
   WORKDAY_PAGE_SIZE,
   WORKDAY_DETAIL_CONCURRENCY,
+  WORKDAY_DETAIL_DELAY_MIN_MS,
+  WORKDAY_DETAIL_DELAY_MAX_MS,
+  workdaySearchText,
   parseWorkdaySlug,
   buildWorkdayUrl,
   buildWorkdayDetailUrl,
   parseWorkdayPostedOn,
+  workdayPostedOnDaysAgo,
+  resolveWorkdayBoardToday,
   workdayListingKey,
+  workdayListingRequisitionId,
+  normalizeWorkdayLocationLabel,
+  splitWorkdayAdditionalLocations,
+  workdayListingLocationLabel,
+  workdayImpliedCountryCode,
   readAtsCountryOverlay,
+  readWorkdayMaxDetailFetches,
+  resolveWorkdayScrapeTimeBudget,
+  WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR,
+  WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR,
 } from './workday.constants';
 import {
   WorkdayJobDetail,
   WorkdayJobListItem,
   WorkdaySearchResponse,
 } from './workday.types';
+
+/** Per-scrape enrichment and time limits (Spec 1736 T11). */
+interface WorkdayScrapeBudget {
+  /** Detail requests this scrape may make ({@link WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR}). */
+  readonly maxDetailFetches: number;
+  /** Time budget, ms; 0 = none ({@link WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}, capped by the deadline hint). */
+  readonly timeBudgetMs: number;
+  /** How the budget was set, for logs and diagnostics. */
+  readonly timeBudgetLabel: string;
+  /** Epoch ms after which no listing page or detail request is started. */
+  readonly deadlineAt: number;
+}
+
+/** What detail enrichment did for one scrape. */
+interface WorkdayDetailOutcome {
+  /** One entry per listing, in order; null = returned at list level. */
+  readonly details: Array<WorkdayJobDetail | null>;
+  /** Detail requests made (fulfilled or failed). */
+  readonly requested: number;
+  /** Postings with a detail path left un-enriched by the detail cap. */
+  readonly skippedByCap: number;
+  /** Postings with a detail path left un-enriched because the time budget ran out. */
+  readonly skippedByTime: number;
+}
 
 @SourcePlugin({
   site: Site.WORKDAY,
@@ -70,16 +109,41 @@ export class WorkdayService implements IScraper {
     const listingsToEnrich: WorkdayJobListItem[] = [];
     const seenKeys = new Set<string>();
     let offset = 0;
+    let boardTotal: number | undefined;
+    // Spec 1736 T6: Workday filters by keyword server-side; list mode sends ''.
+    const searchText = workdaySearchText(input.searchTerm);
+
+    // Spec 1736 T11: bound what one board can cost. Read per scrape so an env
+    // change needs no restart of the adapter's singleton. T15: measured from
+    // now, capped at 3/4 of the fan-out deadline read from the same env.
+    const timeBudget = resolveWorkdayScrapeTimeBudget();
+    const timeBudgetMs = timeBudget.budgetMs;
+    const budget: WorkdayScrapeBudget = {
+      maxDetailFetches: readWorkdayMaxDetailFetches(),
+      timeBudgetMs,
+      timeBudgetLabel:
+        `${WORKDAY_SCRAPE_TIME_BUDGET_ENV_VAR}=${timeBudget.configuredMs}` +
+        (timeBudget.cappedByDeadlineMs !== null
+          ? ` capped to ${timeBudgetMs} by the fan-out deadline ${timeBudget.cappedByDeadlineMs}`
+          : ''),
+      deadlineAt: timeBudgetMs > 0 ? Date.now() + timeBudgetMs : Number.POSITIVE_INFINITY,
+    };
+    let listingCutShort = false;
 
     try {
-      this.logger.log(`Fetching Workday jobs for ${company} (wd${wdNumber}/${site})`);
+      this.logger.log(
+        `Fetching Workday jobs for ${company} (wd${wdNumber}/${site}), ` +
+        `term=${searchText ? JSON.stringify(searchText) : '<none>'}, ` +
+        `details<=${budget.maxDetailFetches}, ` +
+        `budget=${timeBudgetMs > 0 ? `${timeBudgetMs}ms` : 'none'}`,
+      );
 
       while (listingsToEnrich.length < resultsWanted) {
         const payload = {
           appliedFacets: {},
           limit: WORKDAY_PAGE_SIZE,
           offset,
-          searchText: '',
+          searchText,
         };
 
         const response = await client.post(apiUrl, payload);
@@ -87,6 +151,7 @@ export class WorkdayService implements IScraper {
         const listings = data.jobPostings ?? [];
 
         if (listings.length === 0) break;
+        if (typeof data.total === 'number' && data.total > 0) boardTotal = data.total;
 
         this.logger.log(
           `Workday: fetched ${listings.length} jobs at offset ${offset} for ${company}` +
@@ -125,6 +190,21 @@ export class WorkdayService implements IScraper {
         // absent is not a count: a real page can report total 0 on some tenants.
         if (typeof data.total === 'number' && data.total > 0 && offset >= data.total) break;
 
+        // Filled: no pause before a page that will never be requested.
+        if (listingsToEnrich.length >= resultsWanted) break;
+
+        // Spec 1736 T11: the time budget covers listing as well as enrichment.
+        // Stop before paging on; what is listed so far is returned.
+        if (Date.now() >= budget.deadlineAt) {
+          listingCutShort = true;
+          this.logger.warn(
+            `Workday: time budget (${budget.timeBudgetLabel}) spent while listing ` +
+            `${company} (wd${wdNumber}/${site}); stopping at ${listingsToEnrich.length} of ` +
+            `${resultsWanted} wanted postings`,
+          );
+          break;
+        }
+
         // Respect rate limiting
         await randomSleep(1000, 2000);
       }
@@ -137,13 +217,27 @@ export class WorkdayService implements IScraper {
       return new JobResponseDto([], classifyScrapeError(err));
     }
 
+    // A listing cut short by the time budget returned fewer postings than asked
+    // for while the board had more: that is a partial result, and the caller
+    // should be able to tell it apart from a small board.
+    const diagnostics = listingCutShort
+      ? new ScrapeDiagnostics(
+          'partial',
+          `time budget ${budget.timeBudgetLabel} spent while listing: ` +
+          `${listingsToEnrich.length} of ${resultsWanted} wanted postings` +
+          `${boardTotal !== undefined ? ` (board total ${boardTotal})` : ''}`,
+        )
+      : undefined;
+
     return this.buildResponse(
       client,
       listingsToEnrich,
       company,
       wdNumber,
       site,
+      budget,
       input.descriptionFormat,
+      diagnostics,
     );
   }
 
@@ -153,7 +247,9 @@ export class WorkdayService implements IScraper {
     company: string,
     wdNumber: string,
     site: string,
+    budget: WorkdayScrapeBudget,
     format?: DescriptionFormat,
+    diagnostics?: ScrapeDiagnostics,
   ): Promise<JobResponseDto> {
     // Second de-dup pass: enrichment must cost one request per distinct posting even
     // if pagination ever hands over repeats again.
@@ -171,7 +267,9 @@ export class WorkdayService implements IScraper {
       );
     }
 
-    const details = await this.fetchDetails(client, distinct, company, wdNumber, site);
+    const outcome = await this.fetchDetails(client, distinct, company, wdNumber, site, budget);
+    const { details } = outcome;
+    const labelClock = this.resolveLabelClock(distinct, details, company, wdNumber, site);
     const jobPosts = distinct
       .map((listing, index) => {
         try {
@@ -181,6 +279,7 @@ export class WorkdayService implements IScraper {
             company,
             wdNumber,
             site,
+            labelClock,
             format,
           );
         } catch (err: any) {
@@ -190,53 +289,145 @@ export class WorkdayService implements IScraper {
       })
       .filter((post): post is JobPostDto => post !== null);
 
+    // Un-enriched postings are by design (Spec 1736 T11), not a failure: the
+    // job count is complete, only descriptions are missing, so no diagnostic.
+    if (outcome.skippedByCap > 0) {
+      this.logger.log(
+        `Workday: enriched ${outcome.requested} postings for ${company} (wd${wdNumber}/${site}); ` +
+        `${outcome.skippedByCap} more returned at list level without description ` +
+        `(${WORKDAY_MAX_DETAIL_FETCHES_ENV_VAR}=${budget.maxDetailFetches})`,
+      );
+    }
+    if (outcome.skippedByTime > 0) {
+      this.logger.warn(
+        `Workday: time budget (${budget.timeBudgetLabel}) spent after ` +
+        `${outcome.requested} detail requests for ${company} (wd${wdNumber}/${site}); ` +
+        `${outcome.skippedByTime} postings returned at list level without description`,
+      );
+    }
+
     this.logger.log(`Workday total: ${jobPosts.length} jobs for ${company}`);
-    return new JobResponseDto(jobPosts);
+    return new JobResponseDto(jobPosts, diagnostics);
   }
 
+  /**
+   * Enrich listings with their CXS detail, within the scrape's budget
+   * (Spec 1736 T11): at most `maxDetailFetches` requests, the first postings
+   * in list order (newest first in list mode, best match for a keyword), and
+   * none started once `deadlineAt` has passed. Every other listing gets a null
+   * detail and is returned at list level.
+   */
   private async fetchDetails(
     client: ReturnType<typeof createHttpClient>,
     listings: WorkdayJobListItem[],
     company: string,
     wdNumber: string,
     site: string,
-  ): Promise<Array<WorkdayJobDetail | null>> {
-    const details: Array<WorkdayJobDetail | null> = [];
+    budget: WorkdayScrapeBudget,
+  ): Promise<WorkdayDetailOutcome> {
+    const details: Array<WorkdayJobDetail | null> = listings.map(() => null);
+    // A listing without a detail path makes no request, so it neither spends
+    // the cap nor needs a pause.
+    const withPath = listings.flatMap((listing, index) => (listing.externalPath ? [index] : []));
+    const allowed = withPath.slice(0, budget.maxDetailFetches);
+    const skippedByCap = withPath.length - allowed.length;
+    let skippedByTime = 0;
+    let requested = 0;
     let failed = 0;
 
-    for (let index = 0; index < listings.length; index += WORKDAY_DETAIL_CONCURRENCY) {
-      const batch = listings.slice(index, index + WORKDAY_DETAIL_CONCURRENCY);
+    for (let position = 0; position < allowed.length; position += WORKDAY_DETAIL_CONCURRENCY) {
+      // Checked before the pause, so a spent budget costs neither the pause
+      // nor the request (at most one pause and one request run past it).
+      if (Date.now() >= budget.deadlineAt) {
+        skippedByTime = allowed.length - position;
+        break;
+      }
+      const batch = allowed.slice(position, position + WORKDAY_DETAIL_CONCURRENCY);
+      // Pace every detail request (Spec 1735 §4.6): a listing request or the
+      // previous detail request always precedes it on the same host.
+      await randomSleep(WORKDAY_DETAIL_DELAY_MIN_MS, WORKDAY_DETAIL_DELAY_MAX_MS);
+      requested += batch.length;
       const settled = await Promise.allSettled(
-        batch.map(async (listing): Promise<WorkdayJobDetail | null> => {
-          if (!listing.externalPath) return null;
-          const url = buildWorkdayDetailUrl(company, wdNumber, site, listing.externalPath);
+        batch.map(async (index): Promise<WorkdayJobDetail | null> => {
+          const url = buildWorkdayDetailUrl(company, wdNumber, site, listings[index].externalPath as string);
           const response = await client.get(url);
           return (response.data as WorkdayJobDetail | undefined) ?? null;
         }),
       );
 
       settled.forEach((result, batchIndex) => {
+        const index = batch[batchIndex];
         if (result.status === 'fulfilled') {
-          details.push(result.value);
+          details[index] = result.value;
           return;
         }
-        const listing = batch[batchIndex];
+        const listing = listings[index];
         failed++;
         this.logger.warn(
           `Workday detail failed for ${company} (wd${wdNumber}/${site}) ` +
           `${listing.externalPath ?? listing.title ?? 'unknown job'}: ${result.reason?.message ?? result.reason}`,
         );
-        details.push(null);
       });
     }
 
     if (failed > 0) {
       this.logger.warn(
-        `Workday: ${failed} of ${listings.length} detail requests failed for ${company} (wd${wdNumber}/${site})`,
+        `Workday: ${failed} of ${requested} detail requests failed for ${company} (wd${wdNumber}/${site})`,
       );
     }
 
-    return details;
+    return { details, requested, skippedByCap, skippedByTime };
+  }
+
+  /**
+   * The day this board's relative `postedOn` labels count back from (Spec 1736
+   * T17): the board's own date, as its enriched postings give it (the search
+   * row's label plus the detail's `startDate`), so a list-level posting gets
+   * the date its enriched copy would.
+   *
+   * `null` when no enriched posting dates the board (no detail request —
+   * `WORKDAY_MAX_DETAIL_FETCHES=0` or every detail failed — none with a
+   * `startDate`, or only "30+ Days Ago" rows). A board's calendar runs from
+   * UTC−12 to UTC+14, so at every hour of the day some boards are a day off
+   * UTC's; counting from UTC's date would then state a wrong day (at 01:33 UTC
+   * a US board's "Posted Today" is yesterday in UTC). Relative labels stay
+   * undated instead (PR #99 review).
+   */
+  private resolveLabelClock(
+    listings: WorkdayJobListItem[],
+    details: Array<WorkdayJobDetail | null>,
+    company: string,
+    wdNumber: string,
+    site: string,
+  ): Date | null {
+    const now = new Date();
+    const boardToday = resolveWorkdayBoardToday(
+      listings.map((listing, index) => ({
+        postedOn: listing.postedOn ?? details[index]?.jobPostingInfo?.postedOn,
+        startDate: details[index]?.jobPostingInfo?.startDate,
+      })),
+      now,
+    );
+    if (!boardToday) {
+      const relative = listings.filter(
+        (listing, index) => !details[index] && workdayPostedOnDaysAgo(listing.postedOn) !== null,
+      ).length;
+      if (relative > 0) {
+        this.logger.log(
+          `Workday: ${company} (wd${wdNumber}/${site}): no enriched posting dates this board's calendar; ` +
+          `${relative} list-level relative posted date(s) left unset rather than counted from UTC's`,
+        );
+      }
+      return null;
+    }
+    if (boardToday.offsetDays !== 0) {
+      this.logger.log(
+        `Workday: ${company} (wd${wdNumber}/${site}) posts on a calendar one day ` +
+        `${boardToday.offsetDays < 0 ? 'behind' : 'ahead of'} UTC's (today there is ${boardToday.date}, ` +
+        `from ${boardToday.votes} of ${boardToday.samples} enriched postings); relative posted dates count from it`,
+      );
+    }
+    return boardToday.reference;
   }
 
   private processListing(
@@ -245,20 +436,29 @@ export class WorkdayService implements IScraper {
     company: string,
     wdNumber: string,
     site: string,
+    labelClock: Date | null,
     format?: DescriptionFormat,
   ): JobPostDto | null {
     const title = listing.title;
     if (!title) return null;
     const info = detail?.jobPostingInfo;
-    const hiringOrganizationName = detail?.hiringOrganization?.name;
-    const companyName = hiringOrganizationName?.trim()
-      ? hiringOrganizationName
-      : company;
+    // Board-level on purpose (Spec 1736 T13): `hiringOrganization.name` is in
+    // the detail response only, and past the detail cap most postings of a
+    // large board are built without one. Naming a posting after it made the
+    // same posting switch between a business unit ("Collins Aerospace",
+    // "ModernaTX, Inc.") and the tenant as it crossed the cap, and
+    // `companyName` is part of the dedup key. The company plugins re-stamp the
+    // tenant to their display name.
+    const companyName = company;
 
-    // Extract job path for URL construction
+    // Extract job path for URL construction. The public posting URL is
+    // `/{site}{externalPath}` — the shape of the detail response's `externalUrl`.
+    // A list-level posting (Spec 1736 T11: past the detail cap or time budget)
+    // is linked through this URL, so it must carry the career-site segment:
+    // `https://{tenant}.wd{n}.myworkdayjobs.com/job/…` names no site at all.
     const externalPath = listing.externalPath ?? '';
     const summaryJobUrl = externalPath
-      ? `https://${company}.wd${wdNumber}.myworkdayjobs.com${externalPath.startsWith('/') ? '' : '/'}${externalPath}`
+      ? `https://${company}.wd${wdNumber}.myworkdayjobs.com/${site}${externalPath.startsWith('/') ? '' : '/'}${externalPath}`
       : `https://${company}.wd${wdNumber}.myworkdayjobs.com/en-US/${site}/details/${encodeURIComponent(title)}`;
     const jobUrl = info?.externalUrl ?? summaryJobUrl;
 
@@ -271,23 +471,38 @@ export class WorkdayService implements IScraper {
     // in `countryCode` only).
     // `locationsText` is sometimes a bare "N Locations" count rather than a
     // place; drop it so the parser doesn't treat the count as a location.
-    const summaryText = listing.locationsText?.trim();
+    // Spec 1736 T13: the row's label, from `bulletFields` when the tenant
+    // sends no `locationsText` (Moderna), so a list-level posting has the
+    // place its enriched copy has.
+    const summaryText = workdayListingLocationLabel(listing);
+    // Spec 1736 T12: an `additionalLocations` entry without a location shape
+    // is a department some tenants file there (Moderna: "Drug Manufacturing"),
+    // not a second site; it becomes the department when there is none.
+    const additional = splitWorkdayAdditionalLocations(info?.location, info?.additionalLocations);
     // Workday sometimes emits slugified location labels with underscores
     // (e.g. "Remote_USA"); the underscore is a word character that defeats the
     // shared parser's `\bremote\b` boundary check, so normalize "_" to spaces.
     const locationLabels = [
       info?.location,
-      ...(info?.additionalLocations ?? []),
+      ...additional.locations,
       summaryText && !/^\d+\s+locations?$/i.test(summaryText) ? summaryText : null,
-    ].map((label) => label?.replace(/_/g, ' ').replace(/\s+/g, ' ').trim() || null);
+    ].map((label) => normalizeWorkdayLocationLabel(label));
     const parsedLocations = parseLocationList(locationLabels);
     const countryCode = info?.jobRequisitionLocation?.country?.alpha2Code;
     const overlayCountry = readAtsCountryOverlay();
+    // Spec 1736 T13: with no requisition country (always so at list level), a
+    // single site in a US state implies the United States — what the overlay
+    // folds in for a US requisition — so both levels key the same place.
+    const overlayCode =
+      countryCode ??
+      (parsedLocations.locations.length === 1
+        ? workdayImpliedCountryCode(parsedLocations.locations[0])
+        : null);
     const location = overlayCountry
-      ? this.applyCountry(parsedLocations.location, countryCode)
+      ? this.applyCountry(parsedLocations.location, overlayCode)
       : parsedLocations.location;
     const locations = overlayCountry
-      ? this.applyCountryToSingleSite(parsedLocations.locations, countryCode)
+      ? this.applyCountryToSingleSite(parsedLocations.locations, overlayCode)
       : parsedLocations.locations;
 
     // Remote detection: Workday's remoteType enum, plus the parsed labels.
@@ -304,10 +519,20 @@ export class WorkdayService implements IScraper {
       parsedLocations.workFromHomeType;
 
     // Date: prefer the absolute startDate (drift-free), fall back to the
-    // relative postedOn label. Both go through the validated ISO/relative parser.
+    // relative postedOn label. Both go through the validated ISO/relative parser,
+    // so datePosted is always an absolute calendar date (or null). A list-level
+    // posting has only the row's label, counted back from the board's own date
+    // (Spec 1736 T17: Workday's calendar, not UTC's) — and left null when that
+    // date is unknown (PR #99 review); an absolute label is still parsed.
+    // "Posted 30+ Days Ago" stays null rather than inventing a date (§8.1).
+    const label = info?.postedOn ?? listing.postedOn;
     const datePosted =
       parseWorkdayPostedOn(info?.startDate) ??
-      parseWorkdayPostedOn(info?.postedOn ?? listing.postedOn);
+      (labelClock
+        ? parseWorkdayPostedOn(label, labelClock)
+        : workdayPostedOnDaysAgo(label) === null
+          ? parseWorkdayPostedOn(label)
+          : null);
 
     // Compensation: Workday CXS has no structured pay field; recover the
     // pay-transparency range from the description body text.
@@ -319,8 +544,15 @@ export class WorkdayService implements IScraper {
       .filter(Boolean) ?? [];
 
     // Extract job ID from externalPath (e.g., "/job/123456")
+    // Without a detail response (Spec 1736 T11: past the detail cap or time
+    // budget, or a failed request) the list row's requisition id keeps the
+    // posting on the id an enriched copy would get; the whole path is last.
     const jobIdMatch = externalPath.match(/\/(\d+)(?:\/|$)/);
-    const atsId = info?.jobReqId ?? jobIdMatch?.[1] ?? (externalPath || null);
+    const atsId =
+      info?.jobReqId ??
+      jobIdMatch?.[1] ??
+      workdayListingRequisitionId(listing) ??
+      (externalPath || null);
 
     return new JobPostDto({
       id: `wd-${company}-${atsId ?? title.replace(/\s+/g, '-').toLowerCase()}`,
@@ -340,7 +572,7 @@ export class WorkdayService implements IScraper {
       countryCode: countryCode ?? null,
       atsId,
       atsType: 'workday',
-      department: info?.jobFamily?.[0]?.name ?? subtitleTexts[0] ?? null,
+      department: info?.jobFamily?.[0]?.name ?? subtitleTexts[0] ?? additional.rejected[0] ?? null,
       employmentType: info?.timeType ?? info?.workerSubType ?? null,
     });
   }

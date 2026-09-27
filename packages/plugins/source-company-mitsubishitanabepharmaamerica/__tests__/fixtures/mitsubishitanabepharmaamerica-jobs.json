@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MitsubishiTanabePharmaAmerica/112662984",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MitsubishiTanabePharmaAmerica/postings/112662984",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MitsubishiTanabePharmaAmerica/112024727",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MitsubishiTanabePharmaAmerica/postings/112024727",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MitsubishiTanabePharmaAmerica/112024535",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MitsubishiTanabePharmaAmerica/postings/112024535",
       "jobAd": {
         "sections": {
           "jobDescription": {

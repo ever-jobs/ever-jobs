@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CityofPhiladelphia/744000135551739",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CityofPhiladelphia/postings/744000135551739",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CityofPhiladelphia/744000135349789",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CityofPhiladelphia/postings/744000135349789",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CityofPhiladelphia/744000135348820",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CityofPhiladelphia/postings/744000135348820",
       "jobAd": {
         "sections": {
           "jobDescription": {

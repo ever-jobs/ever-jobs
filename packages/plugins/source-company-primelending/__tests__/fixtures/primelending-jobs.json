@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PrimeLending/114985593",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PrimeLending/postings/114985593",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PrimeLending/100922858",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PrimeLending/postings/100922858",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PrimeLending/92512039",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PrimeLending/postings/92512039",
       "jobAd": {
         "sections": {
           "jobDescription": {

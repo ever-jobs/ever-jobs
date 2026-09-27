@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "cox:1:Cox_External_Career_Site_1"
+      },
+      "atsIdPrefix": "wd-cox-"
+    }
+  ],
+  "responses": {
+    "https://cox.wd1.myworkdayjobs.com/wday/cxs/cox/Cox_External_Career_Site_1/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Mobile Diesel &Trailer Mechanic II -Tue - Sat 11am to 7:30pm $5,000 New Hire Bonus",
+          "externalPath": "/job/San-Fernando-CA/Mobile-Diesel--Trailer-Mechanic-II--Tue---Sat-11am-to-7-30pm--5-000-New-Hire-Bonus_R202682958-1",
+          "locationsText": "3 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R202682958"
+          ]
+        },
+        {
+          "title": "Enterprise Planning and Analysis Intern",
+          "externalPath": "/job/Atlanta-GA/Enterprise-Planning-and-Analysis-Intern_R202682420-1",
+          "locationsText": "Atlanta GA",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R202682420"
+          ]
+        },
+        {
+          "title": "Manheim Mobile Vehicle Condition Inspector, Ft. Lauderdale, FL",
+          "externalPath": "/job/Remote---Florida/Manheim-Mobile-Vehicle-Condition-Inspector--North-Ft-Lauderdale--FL_R202682005",
+          "locationsText": "Remote - Florida",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R202682005"
+          ]
+        }
+      ]
+    },
+    "https://cox.wd1.myworkdayjobs.com/wday/cxs/cox/Cox_External_Career_Site_1/job/San-Fernando-CA/Mobile-Diesel--Trailer-Mechanic-II--Tue---Sat-11am-to-7-30pm--5-000-New-Hire-Bonus_R202682958-1": {
+      "jobPostingInfo": {
+        "title": "Mobile Diesel &Trailer Mechanic II -Tue - Sat 11am to 7:30pm $5,000 New Hire Bonus",
+        "jobDescription": "<p>Mobile Diesel &amp;Trailer Mechanic II -Tue - Sat 11am to 7:30pm $5,000 New Hire Bonus at Cox Enterprises.</p>",
+        "location": "3 Locations",
+        "jobReqId": "R202682958",
+        "externalUrl": "https://cox.wd1.myworkdayjobs.com/Cox_External_Career_Site_1/job/San-Fernando-CA/Mobile-Diesel--Trailer-Mechanic-II--Tue---Sat-11am-to-7-30pm--5-000-New-Hire-Bonus_R202682958-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "cox"
+      }
+    },
+    "https://cox.wd1.myworkdayjobs.com/wday/cxs/cox/Cox_External_Career_Site_1/job/Atlanta-GA/Enterprise-Planning-and-Analysis-Intern_R202682420-1": {
+      "jobPostingInfo": {
+        "title": "Enterprise Planning and Analysis Intern",
+        "jobDescription": "<p>Enterprise Planning and Analysis Intern at Cox Enterprises.</p>",
+        "location": "Atlanta GA",
+        "jobReqId": "R202682420",
+        "externalUrl": "https://cox.wd1.myworkdayjobs.com/Cox_External_Career_Site_1/job/Atlanta-GA/Enterprise-Planning-and-Analysis-Intern_R202682420-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "cox"
+      }
+    },
+    "https://cox.wd1.myworkdayjobs.com/wday/cxs/cox/Cox_External_Career_Site_1/job/Remote---Florida/Manheim-Mobile-Vehicle-Condition-Inspector--North-Ft-Lauderdale--FL_R202682005": {
+      "jobPostingInfo": {
+        "title": "Manheim Mobile Vehicle Condition Inspector, Ft. Lauderdale, FL",
+        "jobDescription": "<p>Manheim Mobile Vehicle Condition Inspector, Ft. Lauderdale, FL at Cox Enterprises.</p>",
+        "location": "Remote - Florida",
+        "jobReqId": "R202682005",
+        "externalUrl": "https://cox.wd1.myworkdayjobs.com/Cox_External_Career_Site_1/job/Remote---Florida/Manheim-Mobile-Vehicle-Condition-Inspector--North-Ft-Lauderdale--FL_R202682005",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "cox"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "coxenterprises-R202682958",
+      "title": "Mobile Diesel &Trailer Mechanic II -Tue - Sat 11am to 7:30pm $5,000 New Hire Bonus"
+    },
+    {
+      "id": "coxenterprises-R202682420",
+      "title": "Enterprise Planning and Analysis Intern"
+    },
+    {
+      "id": "coxenterprises-R202682005",
+      "title": "Manheim Mobile Vehicle Condition Inspector, Ft. Lauderdale, FL"
+    }
+  ]
+}

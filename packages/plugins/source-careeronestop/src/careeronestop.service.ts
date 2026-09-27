@@ -31,6 +31,10 @@ import { CareerOneStopResponse, CareerOneStopJob } from './careeronestop.types';
   site: Site.CAREERONESTOP,
   name: 'CareerOneStop',
   category: 'government',
+  // Spec 1720 / FR-11 — the keyword is a path segment of the v2 job-search
+  // API (`/{userId}/{keyword}/{location}/…`); without one the request has an
+  // empty segment (`//`) and is malformed, not a listing.
+  requiresSearchTerm: true,
 })
 @Injectable()
 export class CareerOneStopService implements IScraper {

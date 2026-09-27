@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CardinalLogistics1/743999713532287",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CardinalLogistics1/postings/743999713532287",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CardinalLogistics1/743999713532100",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CardinalLogistics1/postings/743999713532100",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CardinalLogistics1/743999713532020",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CardinalLogistics1/postings/743999713532020",
       "jobAd": {
         "sections": {
           "jobDescription": {

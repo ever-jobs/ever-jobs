@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ALTEN/744000135768599",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ALTEN/postings/744000135768599",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ALTEN/744000135765189",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ALTEN/postings/744000135765189",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ALTEN/744000135760030",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ALTEN/postings/744000135760030",
       "jobAd": {
         "sections": {
           "jobDescription": {

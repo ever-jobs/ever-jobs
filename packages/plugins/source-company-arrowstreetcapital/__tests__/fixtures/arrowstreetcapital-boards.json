@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "arrowstreetcapital:5:Arrowstreet"
+      },
+      "atsIdPrefix": "wd-arrowstreetcapital-"
+    }
+  ],
+  "responses": {
+    "https://arrowstreetcapital.wd5.myworkdayjobs.com/wday/cxs/arrowstreetcapital/Arrowstreet/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Pre-Trade Investment Services",
+          "externalPath": "/job/Boston/Pre-Trade-Investment-Services_R1511-1",
+          "locationsText": "Boston",
+          "postedOn": "Posted 3 Days Ago",
+          "bulletFields": [
+            "R1511"
+          ]
+        },
+        {
+          "title": "Senior Network Security Engineer",
+          "externalPath": "/job/Boston/Senior-Network-Security-Engineer_R1544-1",
+          "locationsText": "Boston",
+          "postedOn": "Posted 6 Days Ago",
+          "bulletFields": [
+            "R1544"
+          ]
+        },
+        {
+          "title": "Portfolio Compliance",
+          "externalPath": "/job/Boston/Portfolio-Compliance_R1545",
+          "locationsText": "Boston",
+          "postedOn": "Posted 8 Days Ago",
+          "bulletFields": [
+            "R1545"
+          ]
+        }
+      ]
+    },
+    "https://arrowstreetcapital.wd5.myworkdayjobs.com/wday/cxs/arrowstreetcapital/Arrowstreet/job/Boston/Pre-Trade-Investment-Services_R1511-1": {
+      "jobPostingInfo": {
+        "title": "Pre-Trade Investment Services",
+        "jobDescription": "<p>Pre-Trade Investment Services at Arrowstreet Capital.</p>",
+        "location": "Boston",
+        "jobReqId": "R1511",
+        "externalUrl": "https://arrowstreetcapital.wd5.myworkdayjobs.com/Arrowstreet/job/Boston/Pre-Trade-Investment-Services_R1511-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "arrowstreetcapital"
+      }
+    },
+    "https://arrowstreetcapital.wd5.myworkdayjobs.com/wday/cxs/arrowstreetcapital/Arrowstreet/job/Boston/Senior-Network-Security-Engineer_R1544-1": {
+      "jobPostingInfo": {
+        "title": "Senior Network Security Engineer",
+        "jobDescription": "<p>Senior Network Security Engineer at Arrowstreet Capital.</p>",
+        "location": "Boston",
+        "jobReqId": "R1544",
+        "externalUrl": "https://arrowstreetcapital.wd5.myworkdayjobs.com/Arrowstreet/job/Boston/Senior-Network-Security-Engineer_R1544-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "arrowstreetcapital"
+      }
+    },
+    "https://arrowstreetcapital.wd5.myworkdayjobs.com/wday/cxs/arrowstreetcapital/Arrowstreet/job/Boston/Portfolio-Compliance_R1545": {
+      "jobPostingInfo": {
+        "title": "Portfolio Compliance",
+        "jobDescription": "<p>Portfolio Compliance at Arrowstreet Capital.</p>",
+        "location": "Boston",
+        "jobReqId": "R1545",
+        "externalUrl": "https://arrowstreetcapital.wd5.myworkdayjobs.com/Arrowstreet/job/Boston/Portfolio-Compliance_R1545",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "arrowstreetcapital"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "arrowstreetcapital-R1511",
+      "title": "Pre-Trade Investment Services"
+    },
+    {
+      "id": "arrowstreetcapital-R1544",
+      "title": "Senior Network Security Engineer"
+    },
+    {
+      "id": "arrowstreetcapital-R1545",
+      "title": "Portfolio Compliance"
+    }
+  ]
+}

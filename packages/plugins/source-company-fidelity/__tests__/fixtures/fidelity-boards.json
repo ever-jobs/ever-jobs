@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "fmr:1:FidelityCareers"
+      },
+      "atsIdPrefix": "wd-fmr-"
+    }
+  ],
+  "responses": {
+    "https://fmr.wd1.myworkdayjobs.com/wday/cxs/fmr/FidelityCareers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Senior Pension Administrator - Core Market Defined Benefits",
+          "externalPath": "/job/Covington-KY/Senior-Pension-Administrator---Core-Market-Defined-Benefits_2133766-1",
+          "locationsText": "Covington, KY",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "2133766"
+          ]
+        },
+        {
+          "title": "Planning Consultant - Greenwood Village, CO",
+          "externalPath": "/job/Denver-CO/Planning-Consultant---Greenwood-Village--CO_2135068",
+          "locationsText": "Denver, CO",
+          "postedOn": "Posted 3 Days Ago",
+          "bulletFields": [
+            "2135068"
+          ]
+        },
+        {
+          "title": "Defined Benefit Configuration Analyst",
+          "externalPath": "/job/Covington-KY/Defined-Benefit-Configuration-Analyst_2129661-1",
+          "locationsText": "Covington, KY",
+          "postedOn": "Posted 27 Days Ago",
+          "bulletFields": [
+            "2129661"
+          ]
+        }
+      ]
+    },
+    "https://fmr.wd1.myworkdayjobs.com/wday/cxs/fmr/FidelityCareers/job/Covington-KY/Senior-Pension-Administrator---Core-Market-Defined-Benefits_2133766-1": {
+      "jobPostingInfo": {
+        "title": "Senior Pension Administrator - Core Market Defined Benefits",
+        "jobDescription": "<p>Senior Pension Administrator - Core Market Defined Benefits at Fidelity Investments.</p>",
+        "location": "Covington, KY",
+        "jobReqId": "2133766",
+        "externalUrl": "https://fmr.wd1.myworkdayjobs.com/FidelityCareers/job/Covington-KY/Senior-Pension-Administrator---Core-Market-Defined-Benefits_2133766-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "fmr"
+      }
+    },
+    "https://fmr.wd1.myworkdayjobs.com/wday/cxs/fmr/FidelityCareers/job/Denver-CO/Planning-Consultant---Greenwood-Village--CO_2135068": {
+      "jobPostingInfo": {
+        "title": "Planning Consultant - Greenwood Village, CO",
+        "jobDescription": "<p>Planning Consultant - Greenwood Village, CO at Fidelity Investments.</p>",
+        "location": "Denver, CO",
+        "jobReqId": "2135068",
+        "externalUrl": "https://fmr.wd1.myworkdayjobs.com/FidelityCareers/job/Denver-CO/Planning-Consultant---Greenwood-Village--CO_2135068",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "fmr"
+      }
+    },
+    "https://fmr.wd1.myworkdayjobs.com/wday/cxs/fmr/FidelityCareers/job/Covington-KY/Defined-Benefit-Configuration-Analyst_2129661-1": {
+      "jobPostingInfo": {
+        "title": "Defined Benefit Configuration Analyst",
+        "jobDescription": "<p>Defined Benefit Configuration Analyst at Fidelity Investments.</p>",
+        "location": "Covington, KY",
+        "jobReqId": "2129661",
+        "externalUrl": "https://fmr.wd1.myworkdayjobs.com/FidelityCareers/job/Covington-KY/Defined-Benefit-Configuration-Analyst_2129661-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "fmr"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "fidelity-2133766",
+      "title": "Senior Pension Administrator - Core Market Defined Benefits"
+    },
+    {
+      "id": "fidelity-2135068",
+      "title": "Planning Consultant - Greenwood Village, CO"
+    },
+    {
+      "id": "fidelity-2129661",
+      "title": "Defined Benefit Configuration Analyst"
+    }
+  ]
+}

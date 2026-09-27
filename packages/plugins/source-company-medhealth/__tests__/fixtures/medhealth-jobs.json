@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/medhealth3/744000135644348",
+      "ref": "https://api.smartrecruiters.com/v1/companies/medhealth3/postings/744000135644348",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/medhealth3/744000135641319",
+      "ref": "https://api.smartrecruiters.com/v1/companies/medhealth3/postings/744000135641319",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/medhealth3/744000135637519",
+      "ref": "https://api.smartrecruiters.com/v1/companies/medhealth3/postings/744000135637519",
       "jobAd": {
         "sections": {
           "jobDescription": {

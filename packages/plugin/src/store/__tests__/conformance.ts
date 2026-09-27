@@ -30,6 +30,15 @@ export type ConformanceBackend = IJobStore & IJobObservationStore;
  */
 export type ConformanceBackendFactory = () => ConformanceBackend;
 
+/** Optional capabilities a backend opts into (Spec 1722 / FR-13). */
+export interface ConformanceOptions {
+  /**
+   * The backend implements `IJobObservationStore.putAllMany`; run the batch
+   * cases (equivalence with `putAll` per entry, last-wins, unknown ids).
+   */
+  readonly batch?: boolean;
+}
+
 /**
  * Shared conformance test suite for {@link IJobStore} +
  * {@link IJobObservationStore} backends (Spec 004 / Phase 2+).
@@ -75,6 +84,7 @@ export type ConformanceBackendFactory = () => ConformanceBackend;
 export function runStoreConformance(
   label: string,
   factory: ConformanceBackendFactory,
+  options: ConformanceOptions = {},
 ): void {
   describe(`IJobStore + IJobObservationStore conformance — ${label}`, () => {
     let store: ConformanceBackend;
@@ -198,6 +208,16 @@ export function runStoreConformance(
       it('returns { 0, 0 } for an empty array', async () => {
         const result = await store.upsertMany([]);
         expect(result).toEqual({ inserted: 0, updated: 0 });
+      });
+
+      it('a repeated id counts once as insert, then as update, and the last value wins (Spec 1722 / FR-12)', async () => {
+        const result = await store.upsertMany([
+          makeJob({ canonicalJobId: 'a', title: 'first' }),
+          makeJob({ canonicalJobId: 'b' }),
+          makeJob({ canonicalJobId: 'a', title: 'last' }),
+        ]);
+        expect(result).toEqual({ inserted: 2, updated: 1 });
+        expect((await store.getById('a'))?.title).toBe('last');
       });
     });
 
@@ -470,6 +490,74 @@ export function runStoreConformance(
       it('listByCanonicalId(unknown) returns []', async () => {
         const read = await store.listByCanonicalId('never-seen');
         expect(read).toEqual([]);
+      });
+    });
+
+    // ------------------------------------------------------------------
+    // 8. putAllMany (optional batch API, Spec 1722 / FR-13)
+    // ------------------------------------------------------------------
+
+    (options.batch ? describe : describe.skip)('IJobObservationStore.putAllMany', () => {
+      const ids = (read: ReadonlyArray<SourceObservation>): string[] =>
+        read.map((o) => o.sourceJobId).sort();
+
+      it('is implemented', () => {
+        expect(typeof store.putAllMany).toBe('function');
+      });
+
+      it('equals putAll per entry: replaces, clears with [], and skips unknown canonical ids', async () => {
+        await store.upsertMany([
+          makeJob({ canonicalJobId: 'a' }),
+          makeJob({ canonicalJobId: 'b' }),
+          makeJob({ canonicalJobId: 'c' }),
+        ]);
+        await store.putAll('a', [makeObs('a-old')]);
+        await store.putAll('b', [makeObs('b-1'), makeObs('b-2')]);
+        await store.putAll('c', [makeObs('c-1')]);
+
+        await store.putAllMany!([
+          { canonicalJobId: 'a', observations: [makeObs('a-new'), makeObs('a-new-2', Site.INDEED)] },
+          { canonicalJobId: 'b', observations: [makeObs('b-2')] },
+          { canonicalJobId: 'c', observations: [] },
+          { canonicalJobId: 'not-a-canonical-job', observations: [makeObs('orphan')] },
+        ]);
+
+        expect(ids(await store.listByCanonicalId('a'))).toEqual(['a-new', 'a-new-2']);
+        expect(ids(await store.listByCanonicalId('b'))).toEqual(['b-2']);
+        expect(await store.listByCanonicalId('c')).toEqual([]);
+        expect(await store.listByCanonicalId('not-a-canonical-job')).toEqual([]);
+      });
+
+      it('a repeated canonical id: the last entry wins', async () => {
+        await store.upsert(makeJob({ canonicalJobId: 'a' }));
+        await store.putAllMany!([
+          { canonicalJobId: 'a', observations: [makeObs('first')] },
+          { canonicalJobId: 'a', observations: [makeObs('last')] },
+        ]);
+        expect(ids(await store.listByCanonicalId('a'))).toEqual(['last']);
+      });
+
+      it('a repeated (site, sourceJobId) within one entry keeps one row instead of failing', async () => {
+        await store.upsert(makeJob({ canonicalJobId: 'a' }));
+        await store.putAllMany!([
+          {
+            canonicalJobId: 'a',
+            observations: [
+              { ...makeObs('dup'), url: 'https://example.com/first' },
+              { ...makeObs('dup'), url: 'https://example.com/last' },
+            ],
+          },
+        ]);
+        const read = await store.listByCanonicalId('a');
+        expect(read).toHaveLength(1);
+        expect(read[0]!.url).toBe('https://example.com/last');
+      });
+
+      it('round-trips every field putAll round-trips', async () => {
+        await store.upsert(makeJob({ canonicalJobId: 'a' }));
+        const observation = makeObs('s1', Site.INDEED, '2026-02-03T04:05:06.000Z');
+        await store.putAllMany!([{ canonicalJobId: 'a', observations: [observation] }]);
+        expect(await store.listByCanonicalId('a')).toEqual([observation]);
       });
     });
   });

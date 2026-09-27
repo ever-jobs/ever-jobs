@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UncommonSchools/744000134603129",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UncommonSchools/postings/744000134603129",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UncommonSchools/744000134602689",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UncommonSchools/postings/744000134602689",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UncommonSchools/744000134552169",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UncommonSchools/postings/744000134552169",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "snapchat:1:snap"
+      },
+      "atsIdPrefix": "wd-snapchat-"
+    }
+  ],
+  "responses": {
+    "https://snapchat.wd1.myworkdayjobs.com/wday/cxs/snapchat/snap/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Partnerships Operations Specialist",
+          "externalPath": "/job/Los-Angeles-California/Partnerships-Operations-Specialist_R0046899-1",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0046899"
+          ]
+        },
+        {
+          "title": "Electrical Engineer, Level 4",
+          "externalPath": "/job/Los-Angeles-California/Electrical-Engineer--Level-4_H126SWEE3-2",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "H126SWEE3"
+          ]
+        },
+        {
+          "title": "Software Engineer, ML Infrastructure, Level 5",
+          "externalPath": "/job/Palo-Alto-California/Software-Engineer--ML-Infrastructure--Level-5_R0046870-2",
+          "locationsText": "3 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0046870"
+          ]
+        }
+      ]
+    },
+    "https://snapchat.wd1.myworkdayjobs.com/wday/cxs/snapchat/snap/job/Los-Angeles-California/Partnerships-Operations-Specialist_R0046899-1": {
+      "jobPostingInfo": {
+        "title": "Partnerships Operations Specialist",
+        "jobDescription": "<p>Partnerships Operations Specialist at Snap Inc..</p>",
+        "location": "2 Locations",
+        "jobReqId": "R0046899",
+        "externalUrl": "https://snapchat.wd1.myworkdayjobs.com/snap/job/Los-Angeles-California/Partnerships-Operations-Specialist_R0046899-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "snapchat"
+      }
+    },
+    "https://snapchat.wd1.myworkdayjobs.com/wday/cxs/snapchat/snap/job/Los-Angeles-California/Electrical-Engineer--Level-4_H126SWEE3-2": {
+      "jobPostingInfo": {
+        "title": "Electrical Engineer, Level 4",
+        "jobDescription": "<p>Electrical Engineer, Level 4 at Snap Inc..</p>",
+        "location": "2 Locations",
+        "jobReqId": "H126SWEE3",
+        "externalUrl": "https://snapchat.wd1.myworkdayjobs.com/snap/job/Los-Angeles-California/Electrical-Engineer--Level-4_H126SWEE3-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "snapchat"
+      }
+    },
+    "https://snapchat.wd1.myworkdayjobs.com/wday/cxs/snapchat/snap/job/Palo-Alto-California/Software-Engineer--ML-Infrastructure--Level-5_R0046870-2": {
+      "jobPostingInfo": {
+        "title": "Software Engineer, ML Infrastructure, Level 5",
+        "jobDescription": "<p>Software Engineer, ML Infrastructure, Level 5 at Snap Inc..</p>",
+        "location": "3 Locations",
+        "jobReqId": "R0046870",
+        "externalUrl": "https://snapchat.wd1.myworkdayjobs.com/snap/job/Palo-Alto-California/Software-Engineer--ML-Infrastructure--Level-5_R0046870-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "snapchat"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "snap-R0046899",
+      "title": "Partnerships Operations Specialist"
+    },
+    {
+      "id": "snap-H126SWEE3",
+      "title": "Electrical Engineer, Level 4"
+    },
+    {
+      "id": "snap-R0046870",
+      "title": "Software Engineer, ML Infrastructure, Level 5"
+    }
+  ]
+}

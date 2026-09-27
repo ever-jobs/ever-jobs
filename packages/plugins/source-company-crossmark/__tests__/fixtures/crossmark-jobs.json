@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CROSSMARK1/743999658732332",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CROSSMARK1/postings/743999658732332",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CROSSMARK1/743999658723972",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CROSSMARK1/postings/743999658723972",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CROSSMARK1/743999658723682",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CROSSMARK1/postings/743999658723682",
       "jobAd": {
         "sections": {
           "jobDescription": {

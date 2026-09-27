@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "ngc:1:Northrop_Grumman_External_Site"
+      },
+      "atsIdPrefix": "wd-ngc-"
+    }
+  ],
+  "responses": {
+    "https://ngc.wd1.myworkdayjobs.com/wday/cxs/ngc/Northrop_Grumman_External_Site/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Aircraft Inspector 2 / 3",
+          "externalPath": "/job/United-States-Florida-Melbourne/Aircraft-Inspector-2---3_R10253020",
+          "locationsText": "United States-Florida-Melbourne",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R10253020"
+          ]
+        },
+        {
+          "title": "Associate Software Engineer / Software Engineer",
+          "externalPath": "/job/United-States-Alabama-Huntsville/Associate-Software-Engineer---Software-Engineer_R10253028-1",
+          "locationsText": "United States-Alabama-Huntsville",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R10253028"
+          ]
+        },
+        {
+          "title": "Staff Software Systems Architect",
+          "externalPath": "/job/United-States-Alabama-Huntsville/Staff-Software-Systems-Architect_R10253010",
+          "locationsText": "United States-Alabama-Huntsville",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R10253010"
+          ]
+        }
+      ]
+    },
+    "https://ngc.wd1.myworkdayjobs.com/wday/cxs/ngc/Northrop_Grumman_External_Site/job/United-States-Florida-Melbourne/Aircraft-Inspector-2---3_R10253020": {
+      "jobPostingInfo": {
+        "title": "Aircraft Inspector 2 / 3",
+        "jobDescription": "<p>Aircraft Inspector 2 / 3 at Northrop Grumman.</p>",
+        "location": "United States-Florida-Melbourne",
+        "jobReqId": "R10253020",
+        "externalUrl": "https://ngc.wd1.myworkdayjobs.com/Northrop_Grumman_External_Site/job/United-States-Florida-Melbourne/Aircraft-Inspector-2---3_R10253020",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "ngc"
+      }
+    },
+    "https://ngc.wd1.myworkdayjobs.com/wday/cxs/ngc/Northrop_Grumman_External_Site/job/United-States-Alabama-Huntsville/Associate-Software-Engineer---Software-Engineer_R10253028-1": {
+      "jobPostingInfo": {
+        "title": "Associate Software Engineer / Software Engineer",
+        "jobDescription": "<p>Associate Software Engineer / Software Engineer at Northrop Grumman.</p>",
+        "location": "United States-Alabama-Huntsville",
+        "jobReqId": "R10253028",
+        "externalUrl": "https://ngc.wd1.myworkdayjobs.com/Northrop_Grumman_External_Site/job/United-States-Alabama-Huntsville/Associate-Software-Engineer---Software-Engineer_R10253028-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "ngc"
+      }
+    },
+    "https://ngc.wd1.myworkdayjobs.com/wday/cxs/ngc/Northrop_Grumman_External_Site/job/United-States-Alabama-Huntsville/Staff-Software-Systems-Architect_R10253010": {
+      "jobPostingInfo": {
+        "title": "Staff Software Systems Architect",
+        "jobDescription": "<p>Staff Software Systems Architect at Northrop Grumman.</p>",
+        "location": "United States-Alabama-Huntsville",
+        "jobReqId": "R10253010",
+        "externalUrl": "https://ngc.wd1.myworkdayjobs.com/Northrop_Grumman_External_Site/job/United-States-Alabama-Huntsville/Staff-Software-Systems-Architect_R10253010",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "ngc"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "northropgrumman-R10253020",
+      "title": "Aircraft Inspector 2 / 3"
+    },
+    {
+      "id": "northropgrumman-R10253028",
+      "title": "Associate Software Engineer / Software Engineer"
+    },
+    {
+      "id": "northropgrumman-R10253010",
+      "title": "Staff Software Systems Architect"
+    }
+  ]
+}

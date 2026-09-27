@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/QuestDiagnostics7/744000107378025",
+      "ref": "https://api.smartrecruiters.com/v1/companies/QuestDiagnostics7/postings/744000107378025",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/QuestDiagnostics7/744000106939346",
+      "ref": "https://api.smartrecruiters.com/v1/companies/QuestDiagnostics7/postings/744000106939346",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/QuestDiagnostics7/744000106863748",
+      "ref": "https://api.smartrecruiters.com/v1/companies/QuestDiagnostics7/postings/744000106863748",
       "jobAd": {
         "sections": {
           "jobDescription": {

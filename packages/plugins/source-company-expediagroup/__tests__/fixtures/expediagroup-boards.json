@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "expedia:108:search"
+      },
+      "atsIdPrefix": "wd-expedia-"
+    }
+  ],
+  "responses": {
+    "https://expedia.wd108.myworkdayjobs.com/wday/cxs/expedia/search/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Software Development Engineer III, Media Solutions",
+          "externalPath": "/job/Washington---Seattle-Campus/Software-Development-Engineer-III--Media-Solutions_R-109666-2",
+          "locationsText": "Washington - Seattle Campus",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-109666"
+          ]
+        },
+        {
+          "title": "Account Manager, Key Partners, North America",
+          "externalPath": "/job/USA---Florida---Orlando/Account-Manager--Lodging-Strategic-Partners_R-109932-1",
+          "locationsText": "9 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-109932"
+          ]
+        },
+        {
+          "title": "Senior Product Security Architect",
+          "externalPath": "/job/Austin-Domain-11---HomeAway/Senior-Product-Security-Architect_R-108173-1",
+          "locationsText": "3 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-108173"
+          ]
+        }
+      ]
+    },
+    "https://expedia.wd108.myworkdayjobs.com/wday/cxs/expedia/search/job/Washington---Seattle-Campus/Software-Development-Engineer-III--Media-Solutions_R-109666-2": {
+      "jobPostingInfo": {
+        "title": "Software Development Engineer III, Media Solutions",
+        "jobDescription": "<p>Software Development Engineer III, Media Solutions at Expedia Group.</p>",
+        "location": "Washington - Seattle Campus",
+        "jobReqId": "R-109666",
+        "externalUrl": "https://expedia.wd108.myworkdayjobs.com/search/job/Washington---Seattle-Campus/Software-Development-Engineer-III--Media-Solutions_R-109666-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "expedia"
+      }
+    },
+    "https://expedia.wd108.myworkdayjobs.com/wday/cxs/expedia/search/job/USA---Florida---Orlando/Account-Manager--Lodging-Strategic-Partners_R-109932-1": {
+      "jobPostingInfo": {
+        "title": "Account Manager, Key Partners, North America",
+        "jobDescription": "<p>Account Manager, Key Partners, North America at Expedia Group.</p>",
+        "location": "9 Locations",
+        "jobReqId": "R-109932",
+        "externalUrl": "https://expedia.wd108.myworkdayjobs.com/search/job/USA---Florida---Orlando/Account-Manager--Lodging-Strategic-Partners_R-109932-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "expedia"
+      }
+    },
+    "https://expedia.wd108.myworkdayjobs.com/wday/cxs/expedia/search/job/Austin-Domain-11---HomeAway/Senior-Product-Security-Architect_R-108173-1": {
+      "jobPostingInfo": {
+        "title": "Senior Product Security Architect",
+        "jobDescription": "<p>Senior Product Security Architect at Expedia Group.</p>",
+        "location": "3 Locations",
+        "jobReqId": "R-108173",
+        "externalUrl": "https://expedia.wd108.myworkdayjobs.com/search/job/Austin-Domain-11---HomeAway/Senior-Product-Security-Architect_R-108173-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "expedia"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "expediagroup-R-109666",
+      "title": "Software Development Engineer III, Media Solutions"
+    },
+    {
+      "id": "expediagroup-R-109932",
+      "title": "Account Manager, Key Partners, North America"
+    },
+    {
+      "id": "expediagroup-R-108173",
+      "title": "Senior Product Security Architect"
+    }
+  ]
+}

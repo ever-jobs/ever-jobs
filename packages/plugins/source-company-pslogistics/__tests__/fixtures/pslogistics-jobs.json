@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PSLogistics/744000135342819",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PSLogistics/postings/744000135342819",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PSLogistics/744000135254240",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PSLogistics/postings/744000135254240",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/PSLogistics/744000134847032",
+      "ref": "https://api.smartrecruiters.com/v1/companies/PSLogistics/postings/744000134847032",
       "jobAd": {
         "sections": {
           "jobDescription": {

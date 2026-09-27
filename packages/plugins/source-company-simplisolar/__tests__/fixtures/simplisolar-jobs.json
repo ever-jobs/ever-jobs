@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Simplisolar/99219198",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Simplisolar/postings/99219198",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Simplisolar/95907815",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Simplisolar/postings/95907815",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Simplisolar/95398076",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Simplisolar/postings/95398076",
       "jobAd": {
         "sections": {
           "jobDescription": {

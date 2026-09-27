@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "oldmissioncapital"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/oldmissioncapital/jobs": {
+      "jobs": [
+        {
+          "id": 7859507003,
+          "title": "Associate Head of Trader Education",
+          "updated_at": "2026-08-12T19:13:13.000Z",
+          "location": {
+            "name": "Chicago, IL, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/oldmissioncapital/jobs/7859507003",
+          "content": "&lt;p&gt;Associate Head of Trader Education at Old Mission.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "oldmissioncapital"
+        },
+        {
+          "id": 5607340003,
+          "title": "C++ Software Engineer",
+          "updated_at": "2026-05-26T14:31:46.000Z",
+          "location": {
+            "name": "Chicago, IL, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/oldmissioncapital/jobs/5607340003",
+          "content": "&lt;p&gt;C++ Software Engineer at Old Mission.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "oldmissioncapital"
+        },
+        {
+          "id": 5607344003,
+          "title": "C++ Software Engineer",
+          "updated_at": "2026-05-26T14:31:46.000Z",
+          "location": {
+            "name": "New York, NY, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/oldmissioncapital/jobs/5607344003",
+          "content": "&lt;p&gt;C++ Software Engineer at Old Mission.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "oldmissioncapital"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "oldmissioncapital-7859507003",
+      "title": "Associate Head of Trader Education"
+    },
+    {
+      "id": "oldmissioncapital-5607340003",
+      "title": "C++ Software Engineer"
+    },
+    {
+      "id": "oldmissioncapital-5607344003",
+      "title": "C++ Software Engineer"
+    }
+  ]
+}

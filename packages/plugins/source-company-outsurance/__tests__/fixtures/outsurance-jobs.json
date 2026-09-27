@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/OUTsurance/744000135685195",
+      "ref": "https://api.smartrecruiters.com/v1/companies/OUTsurance/postings/744000135685195",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/OUTsurance/744000135517279",
+      "ref": "https://api.smartrecruiters.com/v1/companies/OUTsurance/postings/744000135517279",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/OUTsurance/744000135505159",
+      "ref": "https://api.smartrecruiters.com/v1/companies/OUTsurance/postings/744000135505159",
       "jobAd": {
         "sections": {
           "jobDescription": {

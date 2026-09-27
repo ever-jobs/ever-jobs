@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/KeywordsStudios/744000135648309",
+      "ref": "https://api.smartrecruiters.com/v1/companies/KeywordsStudios/postings/744000135648309",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/KeywordsStudios/744000133742079",
+      "ref": "https://api.smartrecruiters.com/v1/companies/KeywordsStudios/postings/744000133742079",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/KeywordsStudios/744000133502219",
+      "ref": "https://api.smartrecruiters.com/v1/companies/KeywordsStudios/postings/744000133502219",
       "jobAd": {
         "sections": {
           "jobDescription": {

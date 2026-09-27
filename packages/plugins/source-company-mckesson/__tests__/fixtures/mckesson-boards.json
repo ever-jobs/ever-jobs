@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "mckesson:3:External_Careers"
+      },
+      "atsIdPrefix": "wd-mckesson-"
+    }
+  ],
+  "responses": {
+    "https://mckesson.wd3.myworkdayjobs.com/wday/cxs/mckesson/External_Careers/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Equipment Operator- Full Time Shifts",
+          "externalPath": "/job/USA-MS-Olive-Branch/Equipment-Operator--Full-Time-Shifts_JR0154497",
+          "locationsText": "USA, MS, Olive Branch",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR0154497"
+          ]
+        },
+        {
+          "title": "Warehouse Worker - Full-Time Shifts",
+          "externalPath": "/job/USA-AZ-Tolleson/Warehouse-Worker---Full-Time-Shifts_JR0154212",
+          "locationsText": "USA, AZ, Tolleson",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR0154212"
+          ]
+        },
+        {
+          "title": "Associate Biomed Technician",
+          "externalPath": "/job/USA-IL-Hanover-Park/Associate-Biomed-Technician_JR0154118",
+          "locationsText": "USA, IL, Hanover Park",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR0154118"
+          ]
+        }
+      ]
+    },
+    "https://mckesson.wd3.myworkdayjobs.com/wday/cxs/mckesson/External_Careers/job/USA-MS-Olive-Branch/Equipment-Operator--Full-Time-Shifts_JR0154497": {
+      "jobPostingInfo": {
+        "title": "Equipment Operator- Full Time Shifts",
+        "jobDescription": "<p>Equipment Operator- Full Time Shifts at McKesson.</p>",
+        "location": "USA, MS, Olive Branch",
+        "jobReqId": "JR0154497",
+        "externalUrl": "https://mckesson.wd3.myworkdayjobs.com/External_Careers/job/USA-MS-Olive-Branch/Equipment-Operator--Full-Time-Shifts_JR0154497",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "mckesson"
+      }
+    },
+    "https://mckesson.wd3.myworkdayjobs.com/wday/cxs/mckesson/External_Careers/job/USA-AZ-Tolleson/Warehouse-Worker---Full-Time-Shifts_JR0154212": {
+      "jobPostingInfo": {
+        "title": "Warehouse Worker - Full-Time Shifts",
+        "jobDescription": "<p>Warehouse Worker - Full-Time Shifts at McKesson.</p>",
+        "location": "USA, AZ, Tolleson",
+        "jobReqId": "JR0154212",
+        "externalUrl": "https://mckesson.wd3.myworkdayjobs.com/External_Careers/job/USA-AZ-Tolleson/Warehouse-Worker---Full-Time-Shifts_JR0154212",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "mckesson"
+      }
+    },
+    "https://mckesson.wd3.myworkdayjobs.com/wday/cxs/mckesson/External_Careers/job/USA-IL-Hanover-Park/Associate-Biomed-Technician_JR0154118": {
+      "jobPostingInfo": {
+        "title": "Associate Biomed Technician",
+        "jobDescription": "<p>Associate Biomed Technician at McKesson.</p>",
+        "location": "USA, IL, Hanover Park",
+        "jobReqId": "JR0154118",
+        "externalUrl": "https://mckesson.wd3.myworkdayjobs.com/External_Careers/job/USA-IL-Hanover-Park/Associate-Biomed-Technician_JR0154118",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "mckesson"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "mckesson-JR0154497",
+      "title": "Equipment Operator- Full Time Shifts"
+    },
+    {
+      "id": "mckesson-JR0154212",
+      "title": "Warehouse Worker - Full-Time Shifts"
+    },
+    {
+      "id": "mckesson-JR0154118",
+      "title": "Associate Biomed Technician"
+    }
+  ]
+}

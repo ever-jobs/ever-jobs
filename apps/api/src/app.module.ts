@@ -15,7 +15,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { ApiKeyGuard } from './auth/api-key.guard';
 import { LoggingInterceptor } from './interceptors/logging.interceptor';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
-import { resolveStoreBootstrap } from './jobs/store-bootstrap.factory';
+import { resolveStoreBootstrap, resolveStoreProviders } from './jobs/store-bootstrap.factory';
 
 /**
  * Spec 004 / T12 — `EVER_JOBS_STORE` env-var honoured at bootstrap.
@@ -33,6 +33,13 @@ import { resolveStoreBootstrap } from './jobs/store-bootstrap.factory';
  * `better-sqlite3` native bindings even in `memory` mode).
  */
 const ACTIVE_STORE = resolveStoreBootstrap();
+
+/**
+ * Spec 1722 — the config providers the selected backend needs (SQLite path,
+ * connected Prisma client), resolved from env. Missing required variables
+ * throw here, at module evaluation, with the variable named in the message.
+ */
+const ACTIVE_STORE_PROVIDERS = resolveStoreProviders(ACTIVE_STORE.id);
 
 @Module({
   imports: [
@@ -90,6 +97,7 @@ const ACTIVE_STORE = resolveStoreBootstrap();
     // against the bound provider rather than `undefined`.
     StoreModule.forActive(ACTIVE_STORE.id, {
       backends: [ACTIVE_STORE.backendClass],
+      providers: ACTIVE_STORE_PROVIDERS,
     }),
 
     // Job scraping

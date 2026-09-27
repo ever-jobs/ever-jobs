@@ -10,3 +10,13 @@ export const GREENHOUSE_HEADERS: Record<string, string> = {
   'User-Agent':
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129 Safari/537.36',
 };
+
+/** Env var holding an operator's Greenhouse Harvest API key. */
+export const GREENHOUSE_API_KEY_ENV_VAR = 'GREENHOUSE_API_KEY';
+
+/**
+ * Env var naming the board token the env Harvest key belongs to (Spec 1735
+ * §4.5). Harvest lists the key owner's jobs whatever board is requested, so
+ * the env key is used only when the requested `companySlug` is this board.
+ */
+export const GREENHOUSE_HARVEST_BOARD_ENV_VAR = 'GREENHOUSE_HARVEST_BOARD';

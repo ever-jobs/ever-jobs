@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HealthcareSupportStaffing1/743999659845790",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HealthcareSupportStaffing1/postings/743999659845790",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HealthcareSupportStaffing1/743999659838275",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HealthcareSupportStaffing1/postings/743999659838275",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HealthcareSupportStaffing1/743999659773582",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HealthcareSupportStaffing1/postings/743999659773582",
       "jobAd": {
         "sections": {
           "jobDescription": {

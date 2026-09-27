@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/williamoslerhealthsystem1/744000135731998",
+      "ref": "https://api.smartrecruiters.com/v1/companies/williamoslerhealthsystem1/postings/744000135731998",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/williamoslerhealthsystem1/744000135587869",
+      "ref": "https://api.smartrecruiters.com/v1/companies/williamoslerhealthsystem1/postings/744000135587869",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/williamoslerhealthsystem1/744000135571169",
+      "ref": "https://api.smartrecruiters.com/v1/companies/williamoslerhealthsystem1/postings/744000135571169",
       "jobAd": {
         "sections": {
           "jobDescription": {

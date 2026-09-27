@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StratasFoods/744000135506312",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StratasFoods/postings/744000135506312",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StratasFoods/744000135352809",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StratasFoods/postings/744000135352809",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StratasFoods/744000135342219",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StratasFoods/postings/744000135342219",
       "jobAd": {
         "sections": {
           "jobDescription": {

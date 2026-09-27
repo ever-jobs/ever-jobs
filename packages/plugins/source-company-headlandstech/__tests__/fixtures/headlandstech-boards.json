@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "headlandstechnologiesllc"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/headlandstechnologiesllc/jobs": {
+      "jobs": [
+        {
+          "id": 4227758009,
+          "title": "C++ Software Developer",
+          "updated_at": "2026-09-21T20:27:21.000Z",
+          "location": {
+            "name": "Amsterdam; Chicago; London; New York"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/headlandstechnologiesllc/jobs/4227758009",
+          "content": "&lt;p&gt;C++ Software Developer at Headlands Technologies.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "headlandstechnologiesllc"
+        },
+        {
+          "id": 4336806009,
+          "title": "C++ Software Developer - New Grad",
+          "updated_at": "2026-09-21T20:27:21.000Z",
+          "location": {
+            "name": "Amsterdam; Chicago"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/headlandstechnologiesllc/jobs/4336806009",
+          "content": "&lt;p&gt;C++ Software Developer - New Grad at Headlands Technologies.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "headlandstechnologiesllc"
+        },
+        {
+          "id": 4228114009,
+          "title": "FPGA Engineer",
+          "updated_at": "2026-09-21T20:27:21.000Z",
+          "location": {
+            "name": "Amsterdam; Chicago; London; New York"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/headlandstechnologiesllc/jobs/4228114009",
+          "content": "&lt;p&gt;FPGA Engineer at Headlands Technologies.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "headlandstechnologiesllc"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "headlandstech-4227758009",
+      "title": "C++ Software Developer"
+    },
+    {
+      "id": "headlandstech-4336806009",
+      "title": "C++ Software Developer - New Grad"
+    },
+    {
+      "id": "headlandstech-4228114009",
+      "title": "FPGA Engineer"
+    }
+  ]
+}

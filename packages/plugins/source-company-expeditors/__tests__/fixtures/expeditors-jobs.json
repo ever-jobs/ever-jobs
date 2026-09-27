@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Expeditors/744000135787359",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Expeditors/postings/744000135787359",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Expeditors/744000135786988",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Expeditors/postings/744000135786988",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Expeditors/744000135703399",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Expeditors/postings/744000135703399",
       "jobAd": {
         "sections": {
           "jobDescription": {

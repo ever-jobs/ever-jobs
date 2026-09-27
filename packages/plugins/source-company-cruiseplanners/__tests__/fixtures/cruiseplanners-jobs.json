@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CruisePlanners/743999688217418",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CruisePlanners/postings/743999688217418",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CruisePlanners/743999688080715",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CruisePlanners/postings/743999688080715",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CruisePlanners/743999687856766",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CruisePlanners/postings/743999687856766",
       "jobAd": {
         "sections": {
           "jobDescription": {

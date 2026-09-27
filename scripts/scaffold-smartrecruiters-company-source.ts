@@ -255,7 +255,10 @@ function buildFixture(d: SmartRecruitersCompanyDescriptor): string {
       },
       department: { id: `dept-${i + 1}`, label: l.department ?? null },
       typeOfEmployment: { id: 'permanent', label: 'Full-time' },
-      ref: `https://jobs.smartrecruiters.com/${d.companySlug}/${id}`,
+      // The Posting API's `ref` is the posting's API resource, not its public
+      // page (Spec 1750). The fixture mirrors the live shape, so the delegation
+      // test proves `jobUrl` is built from the identifier + id instead.
+      ref: `https://api.smartrecruiters.com/v1/companies/${d.companySlug}/postings/${id}`,
       jobAd: {
         sections: {
           jobDescription: { title: 'Job Description', text: `<p>${desc}</p>` },
@@ -370,7 +373,11 @@ describe('${d.serviceName} — SmartRecruiters delegation', () => {
       expect(job0?.id?.startsWith('sr-')).toBe(false);
       // SmartRecruiters-mapped fields flow through untouched
       expect(job0?.title).toBe(first.name);
-      expect(job0?.jobUrl).toBe(first.ref);
+      // jobUrl is the public posting page, never the API \`ref\` (Spec 1750)
+      expect(job0?.jobUrl).toBe(
+        \`https://jobs.smartrecruiters.com/\${first.company.identifier}/\${first.id}\`,
+      );
+      expect(job0?.jobUrl).not.toContain('api.smartrecruiters.com');
       expect(job0?.department).toBe(first.department.label);
 
       // it hit the SmartRecruiters board for the company slug, not GH/Lever/Ashby

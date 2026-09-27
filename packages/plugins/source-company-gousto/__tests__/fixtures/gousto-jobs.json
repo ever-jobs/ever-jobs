@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Gousto/743999825777632",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Gousto/postings/743999825777632",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Gousto/743999825777594",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Gousto/postings/743999825777594",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Gousto/743999825777589",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Gousto/postings/743999825777589",
       "jobAd": {
         "sections": {
           "jobDescription": {

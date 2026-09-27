@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TheWonderfulCompany/744000135595670",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TheWonderfulCompany/postings/744000135595670",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TheWonderfulCompany/744000135592819",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TheWonderfulCompany/postings/744000135592819",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TheWonderfulCompany/744000135585049",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TheWonderfulCompany/postings/744000135585049",
       "jobAd": {
         "sections": {
           "jobDescription": {

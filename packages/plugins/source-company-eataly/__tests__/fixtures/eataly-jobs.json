@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Eataly/744000135736309",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Eataly/postings/744000135736309",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Eataly/744000135590591",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Eataly/postings/744000135590591",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Eataly/744000135560884",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Eataly/postings/744000135560884",
       "jobAd": {
         "sections": {
           "jobDescription": {

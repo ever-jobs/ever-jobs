@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TurnerTownsend/744000135774960",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TurnerTownsend/postings/744000135774960",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TurnerTownsend/744000135763969",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TurnerTownsend/postings/744000135763969",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TurnerTownsend/744000135757469",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TurnerTownsend/postings/744000135757469",
       "jobAd": {
         "sections": {
           "jobDescription": {

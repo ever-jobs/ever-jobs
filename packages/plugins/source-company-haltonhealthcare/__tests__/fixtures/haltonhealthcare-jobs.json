@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HaltonHealthcare1/3743990013925516",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HaltonHealthcare1/postings/3743990013925516",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HaltonHealthcare1/3743990013925321",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HaltonHealthcare1/postings/3743990013925321",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HaltonHealthcare1/3743990013925022",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HaltonHealthcare1/postings/3743990013925022",
       "jobAd": {
         "sections": {
           "jobDescription": {

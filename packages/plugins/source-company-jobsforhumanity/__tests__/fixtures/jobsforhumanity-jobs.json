@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/jobsforhumanity/744000135784229",
+      "ref": "https://api.smartrecruiters.com/v1/companies/jobsforhumanity/postings/744000135784229",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/jobsforhumanity/744000135769399",
+      "ref": "https://api.smartrecruiters.com/v1/companies/jobsforhumanity/postings/744000135769399",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/jobsforhumanity/744000135769229",
+      "ref": "https://api.smartrecruiters.com/v1/companies/jobsforhumanity/postings/744000135769229",
       "jobAd": {
         "sections": {
           "jobDescription": {

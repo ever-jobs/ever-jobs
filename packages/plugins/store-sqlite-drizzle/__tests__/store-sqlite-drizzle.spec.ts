@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import { Reflector } from '@nestjs/core';
 import {
+  CanonicalJob,
   ERR_STORE_INVALID_CURSOR,
   IStoreMetadata,
   STORE_PLUGIN_METADATA_KEY,
@@ -53,6 +54,13 @@ describe('SqliteDrizzleJobStore — backend-specific', () => {
   runStoreConformance(
     'store-sqlite-drizzle',
     () => new SqliteDrizzleJobStore({ databaseUrl: ':memory:' }),
+    { batch: true },
+  );
+  // Spec 1722 / FR-15 — the same contract when every batch spans many chunks.
+  runStoreConformance(
+    'store-sqlite-drizzle (batchSize 2)',
+    () => new SqliteDrizzleJobStore({ databaseUrl: ':memory:', batchSize: 2 }),
+    { batch: true },
   );
 
   // ----------------------------------------------------------------------
@@ -372,5 +380,101 @@ describe('SqliteDrizzleJobStore — backend-specific', () => {
         store.close();
       }
     });
+  });
+});
+
+/**
+ * Spec 1722 / FR-15 — list-mode-sized writes. Before the fix `upsertMany`
+ * bound every id of the batch in ONE `IN (…)` pre-check (SQLite caps a
+ * statement at 32 766 variables, so 33 000 rows failed with "too many SQL
+ * variables") and wrote the batch in one synchronous transaction (a 10 000-row
+ * persist blocked the event loop for ~4 s).
+ */
+describe('SqliteDrizzleJobStore — list-mode scale (Spec 1722 / FR-15)', () => {
+  const job = (i: number, title = `Engineer ${i}`): CanonicalJob => ({
+    canonicalJobId: `k${i.toString().padStart(6, '0')}`,
+    title,
+    company: 'Acme',
+    location: 'Berlin',
+    url: `https://example.com/${i}`,
+    description: 'x'.repeat(200),
+    mergedAt: '2026-09-25T00:00:00.000Z',
+    fields: {},
+    sources: [],
+  });
+
+  it('upserts 33 000 rows (more than SQLite binds in one statement), then reports them all as updates', async () => {
+    const store = new SqliteDrizzleJobStore({ databaseUrl: ':memory:' });
+    try {
+      const rows = Array.from({ length: 33_000 }, (_, i) => job(i));
+      expect(await store.upsertMany(rows)).toEqual({ inserted: 33_000, updated: 0 });
+      expect(store.size).toBe(33_000);
+
+      const again = rows.map((r) => ({ ...r, title: `${r.title} (v2)` }));
+      expect(await store.upsertMany(again)).toEqual({ inserted: 0, updated: 33_000 });
+      expect((await store.getById('k032999'))?.title).toBe('Engineer 32999 (v2)');
+    } finally {
+      store.close();
+    }
+  });
+
+  it('putAllMany writes 33 000 observation sets and replaces them on the next run', async () => {
+    const store = new SqliteDrizzleJobStore({ databaseUrl: ':memory:' });
+    try {
+      const rows = Array.from({ length: 33_000 }, (_, i) => job(i));
+      await store.upsertMany(rows);
+      const entries = (suffix: string) =>
+        rows.map((r) => ({
+          canonicalJobId: r.canonicalJobId,
+          observations: [
+            {
+              site: Site.LINKEDIN,
+              sourceJobId: `${r.canonicalJobId}-${suffix}`,
+              url: r.url,
+              observedAt: '2026-09-24T00:00:00.000Z',
+            },
+          ],
+        }));
+      await store.putAllMany(entries('a'));
+      await store.putAllMany(entries('b'));
+      expect((await store.listByCanonicalId('k000000')).map((o) => o.sourceJobId)).toEqual(['k000000-b']);
+      expect((await store.listByCanonicalId('k032999')).map((o) => o.sourceJobId)).toEqual(['k032999-b']);
+    } finally {
+      store.close();
+    }
+  });
+
+  it('gives the event loop a turn between chunks (a probe scheduled after the call runs before it resolves)', async () => {
+    const store = new SqliteDrizzleJobStore({ databaseUrl: ':memory:', batchSize: 100 });
+    try {
+      const rows = Array.from({ length: 1_000 }, (_, i) => job(i));
+      let rowsWhenProbeRan = -1;
+      const done = store.upsertMany(rows);
+      setImmediate(() => {
+        rowsWhenProbeRan = store.size;
+      });
+      await done;
+      // Red before the fix: the whole batch ran synchronously inside the call,
+      // so the probe only ran afterwards and saw all 1 000 rows (or -1).
+      expect(rowsWhenProbeRan).toBeGreaterThan(0);
+      expect(rowsWhenProbeRan).toBeLessThan(1_000);
+      expect(store.size).toBe(1_000);
+    } finally {
+      store.close();
+    }
+  });
+
+  it('a chunk that fails leaves earlier chunks written and later ones untouched', async () => {
+    const store = new SqliteDrizzleJobStore({ databaseUrl: ':memory:', batchSize: 10 });
+    try {
+      const rows = Array.from({ length: 30 }, (_, i) => job(i));
+      // NOT NULL violation in the second chunk.
+      (rows[15] as { url: unknown }).url = null;
+      await expect(store.upsertMany(rows)).rejects.toThrow(/NOT NULL/i);
+      expect(store.size).toBe(10);
+      expect(await store.getById('k000015')).toBeNull();
+    } finally {
+      store.close();
+    }
   });
 });

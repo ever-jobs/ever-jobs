@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Salomon/744000135743279",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Salomon/postings/744000135743279",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Salomon/744000135740491",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Salomon/postings/744000135740491",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Salomon/744000135461849",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Salomon/postings/744000135461849",
       "jobAd": {
         "sections": {
           "jobDescription": {

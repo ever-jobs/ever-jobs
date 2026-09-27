@@ -104,10 +104,11 @@ export const CEIPAL_MAX_PAGES = 25;
 export const CEIPAL_DEFAULT_RESULTS = 100;
 
 /**
- * Public career-portal page URL template for an individual role. The reference
- * portal routes job detail through a hash fragment on the tenant's own portal,
- * but the canonical, tenant-agnostic apply surface is the API detail resource.
- * `{key}` and `{id}` are substituted at runtime.
+ * The API detail resource for an individual role (`{key}` and `{id}` are
+ * substituted at runtime). 🛑 It serves JSON, not a page (Spec 1751): the
+ * reference portal routes job detail through a hash fragment on the tenant's
+ * own portal, which a bare key does not name. `buildJobUrl` uses it only when
+ * no public page (`apply_job`, the caller's portal, a syndication link) is known.
  */
 export const CEIPAL_JOB_PAGE_TEMPLATE =
   'https://api.ceipal.com/{key}/job-postings/{id}/';

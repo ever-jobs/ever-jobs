@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/scalablegmbh/744000135737270",
+      "ref": "https://api.smartrecruiters.com/v1/companies/scalablegmbh/postings/744000135737270",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/scalablegmbh/744000135708060",
+      "ref": "https://api.smartrecruiters.com/v1/companies/scalablegmbh/postings/744000135708060",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/scalablegmbh/744000135236659",
+      "ref": "https://api.smartrecruiters.com/v1/companies/scalablegmbh/postings/744000135236659",
       "jobAd": {
         "sections": {
           "jobDescription": {

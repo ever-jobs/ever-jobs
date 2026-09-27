@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "gdit:5:External_Career_Site"
+      },
+      "atsIdPrefix": "wd-gdit-"
+    }
+  ],
+  "responses": {
+    "https://gdit.wd5.myworkdayjobs.com/wday/cxs/gdit/External_Career_Site/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Principal Systems and Network Engineer",
+          "externalPath": "/job/USA-HI-Pearl-Harbor/Principal-Systems-and-Network-Engineer_RQ228945-1",
+          "locationsText": "USA HI Pearl Harbor",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "RQ228945"
+          ]
+        },
+        {
+          "title": "Network Engineer Senior",
+          "externalPath": "/job/KOR-Seoul---Osan-Air-Base-APC168/Network-Engineer-Senior_RQ223042-1",
+          "locationsText": "KOR Seoul - Osan Air Base (APC168)",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "RQ223042"
+          ]
+        },
+        {
+          "title": "Network Engineer SME",
+          "externalPath": "/job/USA-HI-Camp-Smith/Network-Engineer-SME_RQ223039-1",
+          "locationsText": "USA HI Camp Smith",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "RQ223039"
+          ]
+        }
+      ]
+    },
+    "https://gdit.wd5.myworkdayjobs.com/wday/cxs/gdit/External_Career_Site/job/USA-HI-Pearl-Harbor/Principal-Systems-and-Network-Engineer_RQ228945-1": {
+      "jobPostingInfo": {
+        "title": "Principal Systems and Network Engineer",
+        "jobDescription": "<p>Principal Systems and Network Engineer at General Dynamics Information Technology.</p>",
+        "location": "USA HI Pearl Harbor",
+        "jobReqId": "RQ228945",
+        "externalUrl": "https://gdit.wd5.myworkdayjobs.com/External_Career_Site/job/USA-HI-Pearl-Harbor/Principal-Systems-and-Network-Engineer_RQ228945-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "gdit"
+      }
+    },
+    "https://gdit.wd5.myworkdayjobs.com/wday/cxs/gdit/External_Career_Site/job/KOR-Seoul---Osan-Air-Base-APC168/Network-Engineer-Senior_RQ223042-1": {
+      "jobPostingInfo": {
+        "title": "Network Engineer Senior",
+        "jobDescription": "<p>Network Engineer Senior at General Dynamics Information Technology.</p>",
+        "location": "KOR Seoul - Osan Air Base (APC168)",
+        "jobReqId": "RQ223042",
+        "externalUrl": "https://gdit.wd5.myworkdayjobs.com/External_Career_Site/job/KOR-Seoul---Osan-Air-Base-APC168/Network-Engineer-Senior_RQ223042-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "gdit"
+      }
+    },
+    "https://gdit.wd5.myworkdayjobs.com/wday/cxs/gdit/External_Career_Site/job/USA-HI-Camp-Smith/Network-Engineer-SME_RQ223039-1": {
+      "jobPostingInfo": {
+        "title": "Network Engineer SME",
+        "jobDescription": "<p>Network Engineer SME at General Dynamics Information Technology.</p>",
+        "location": "USA HI Camp Smith",
+        "jobReqId": "RQ223039",
+        "externalUrl": "https://gdit.wd5.myworkdayjobs.com/External_Career_Site/job/USA-HI-Camp-Smith/Network-Engineer-SME_RQ223039-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "gdit"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "gdit-RQ228945",
+      "title": "Principal Systems and Network Engineer"
+    },
+    {
+      "id": "gdit-RQ223042",
+      "title": "Network Engineer Senior"
+    },
+    {
+      "id": "gdit-RQ223039",
+      "title": "Network Engineer SME"
+    }
+  ]
+}

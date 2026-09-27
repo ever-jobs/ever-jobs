@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "flowtraders"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/flowtraders/jobs": {
+      "jobs": [
+        {
+          "id": 8092416,
+          "title": "Compliance Officer",
+          "updated_at": "2026-09-10T06:39:25.000Z",
+          "location": {
+            "name": "New York"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/flowtraders/jobs/8092416",
+          "content": "&lt;p&gt;Compliance Officer at Flow Traders.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "flowtraders"
+        },
+        {
+          "id": 7621695,
+          "title": "Compliance Officer - Digital Assets Specialist",
+          "updated_at": "2026-08-05T13:33:35.000Z",
+          "location": {
+            "name": "Amsterdam"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/flowtraders/jobs/7621695",
+          "content": "&lt;p&gt;Compliance Officer - Digital Assets Specialist at Flow Traders.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "flowtraders"
+        },
+        {
+          "id": 8203712,
+          "title": "Data Center Engineer",
+          "updated_at": "2026-09-21T12:33:14.000Z",
+          "location": {
+            "name": "Amsterdam"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/flowtraders/jobs/8203712",
+          "content": "&lt;p&gt;Data Center Engineer at Flow Traders.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "flowtraders"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "flowtraders-8092416",
+      "title": "Compliance Officer"
+    },
+    {
+      "id": "flowtraders-7621695",
+      "title": "Compliance Officer - Digital Assets Specialist"
+    },
+    {
+      "id": "flowtraders-8203712",
+      "title": "Data Center Engineer"
+    }
+  ]
+}

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/OfficeDepot/87068646",
+      "ref": "https://api.smartrecruiters.com/v1/companies/OfficeDepot/postings/87068646",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/OfficeDepot/86726730",
+      "ref": "https://api.smartrecruiters.com/v1/companies/OfficeDepot/postings/86726730",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/OfficeDepot/86205623",
+      "ref": "https://api.smartrecruiters.com/v1/companies/OfficeDepot/postings/86205623",
       "jobAd": {
         "sections": {
           "jobDescription": {

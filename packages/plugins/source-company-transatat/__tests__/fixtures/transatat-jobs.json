@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TransatAT1/744000135784189",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TransatAT1/postings/744000135784189",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TransatAT1/744000135784089",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TransatAT1/postings/744000135784089",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/TransatAT1/744000135493729",
+      "ref": "https://api.smartrecruiters.com/v1/companies/TransatAT1/postings/744000135493729",
       "jobAd": {
         "sections": {
           "jobDescription": {

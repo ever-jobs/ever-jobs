@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Cielo2/744000135774308",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Cielo2/postings/744000135774308",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Cielo2/744000135750196",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Cielo2/postings/744000135750196",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Cielo2/744000135675259",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Cielo2/postings/744000135675259",
       "jobAd": {
         "sections": {
           "jobDescription": {

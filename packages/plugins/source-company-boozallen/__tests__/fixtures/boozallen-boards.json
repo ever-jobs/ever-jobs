@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "bah:1:BAH_Jobs"
+      },
+      "atsIdPrefix": "wd-bah-"
+    }
+  ],
+  "responses": {
+    "https://bah.wd1.myworkdayjobs.com/wday/cxs/bah/BAH_Jobs/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "DevOps Platform Engineer",
+          "externalPath": "/job/Rome-NY/DevOps-Platform-Engineer_R0243162",
+          "locationsText": "Rome, NY",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0243162"
+          ]
+        },
+        {
+          "title": "Recruiter, Mid",
+          "externalPath": "/job/Honolulu-HI/Recruiter--Mid_R0250332",
+          "locationsText": "Honolulu, HI",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0250332"
+          ]
+        },
+        {
+          "title": "Electronic Warfare Mission Expert",
+          "externalPath": "/job/Fayetteville-NC/Electronic-Warfare-Mission-Expert_R0249705",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R0249705"
+          ]
+        }
+      ]
+    },
+    "https://bah.wd1.myworkdayjobs.com/wday/cxs/bah/BAH_Jobs/job/Rome-NY/DevOps-Platform-Engineer_R0243162": {
+      "jobPostingInfo": {
+        "title": "DevOps Platform Engineer",
+        "jobDescription": "<p>DevOps Platform Engineer at Booz Allen Hamilton.</p>",
+        "location": "Rome, NY",
+        "jobReqId": "R0243162",
+        "externalUrl": "https://bah.wd1.myworkdayjobs.com/BAH_Jobs/job/Rome-NY/DevOps-Platform-Engineer_R0243162",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "bah"
+      }
+    },
+    "https://bah.wd1.myworkdayjobs.com/wday/cxs/bah/BAH_Jobs/job/Honolulu-HI/Recruiter--Mid_R0250332": {
+      "jobPostingInfo": {
+        "title": "Recruiter, Mid",
+        "jobDescription": "<p>Recruiter, Mid at Booz Allen Hamilton.</p>",
+        "location": "Honolulu, HI",
+        "jobReqId": "R0250332",
+        "externalUrl": "https://bah.wd1.myworkdayjobs.com/BAH_Jobs/job/Honolulu-HI/Recruiter--Mid_R0250332",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "bah"
+      }
+    },
+    "https://bah.wd1.myworkdayjobs.com/wday/cxs/bah/BAH_Jobs/job/Fayetteville-NC/Electronic-Warfare-Mission-Expert_R0249705": {
+      "jobPostingInfo": {
+        "title": "Electronic Warfare Mission Expert",
+        "jobDescription": "<p>Electronic Warfare Mission Expert at Booz Allen Hamilton.</p>",
+        "location": "2 Locations",
+        "jobReqId": "R0249705",
+        "externalUrl": "https://bah.wd1.myworkdayjobs.com/BAH_Jobs/job/Fayetteville-NC/Electronic-Warfare-Mission-Expert_R0249705",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "bah"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "boozallen-R0243162",
+      "title": "DevOps Platform Engineer"
+    },
+    {
+      "id": "boozallen-R0250332",
+      "title": "Recruiter, Mid"
+    },
+    {
+      "id": "boozallen-R0249705",
+      "title": "Electronic Warfare Mission Expert"
+    }
+  ]
+}

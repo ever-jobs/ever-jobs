@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UnitekLearning/744000135604034",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UnitekLearning/postings/744000135604034",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UnitekLearning/744000135590999",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UnitekLearning/postings/744000135590999",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/UnitekLearning/744000135590540",
+      "ref": "https://api.smartrecruiters.com/v1/companies/UnitekLearning/postings/744000135590540",
       "jobAd": {
         "sections": {
           "jobDescription": {

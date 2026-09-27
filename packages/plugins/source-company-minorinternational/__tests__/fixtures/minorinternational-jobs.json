@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MinorInternational/744000135647255",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MinorInternational/postings/744000135647255",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MinorInternational/744000135636679",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MinorInternational/postings/744000135636679",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/MinorInternational/744000135633518",
+      "ref": "https://api.smartrecruiters.com/v1/companies/MinorInternational/postings/744000135633518",
       "jobAd": {
         "sections": {
           "jobDescription": {

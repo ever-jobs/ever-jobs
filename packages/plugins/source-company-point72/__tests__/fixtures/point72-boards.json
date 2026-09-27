@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "point72"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/point72/jobs": {
+      "jobs": [
+        {
+          "id": 8726366002,
+          "title": "2026 Point72 Academy National Case Competition - US",
+          "updated_at": "2026-09-15T21:33:58.000Z",
+          "location": {
+            "name": "United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/point72/jobs/8726366002",
+          "content": "&lt;p&gt;2026 Point72 Academy National Case Competition - US at Point72.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "point72"
+        },
+        {
+          "id": 7598678002,
+          "title": "2027 Cubist Quant Academy – Developers",
+          "updated_at": "2026-09-15T21:33:58.000Z",
+          "location": {
+            "name": "New York"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/point72/jobs/7598678002",
+          "content": "&lt;p&gt;2027 Cubist Quant Academy – Developers at Point72.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "point72"
+        },
+        {
+          "id": 8811167002,
+          "title": "2027 Investment Services Internship",
+          "updated_at": "2026-09-22T13:53:38.000Z",
+          "location": {
+            "name": "New York, New York, United States, Stamford, Connecticut, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/point72/jobs/8811167002",
+          "content": "&lt;p&gt;2027 Investment Services Internship at Point72.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "point72"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "point72-8726366002",
+      "title": "2026 Point72 Academy National Case Competition - US"
+    },
+    {
+      "id": "point72-7598678002",
+      "title": "2027 Cubist Quant Academy – Developers"
+    },
+    {
+      "id": "point72-8811167002",
+      "title": "2027 Investment Services Internship"
+    }
+  ]
+}

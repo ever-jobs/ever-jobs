@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AECOM2/744000135782579",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AECOM2/postings/744000135782579",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AECOM2/744000135773579",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AECOM2/postings/744000135773579",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AECOM2/744000135768379",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AECOM2/postings/744000135768379",
       "jobAd": {
         "sections": {
           "jobDescription": {

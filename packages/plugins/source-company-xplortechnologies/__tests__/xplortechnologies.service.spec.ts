@@ -94,7 +94,11 @@ describe('XplorTechnologiesService — SmartRecruiters delegation', () => {
       expect(job0?.id?.startsWith('sr-')).toBe(false);
       // SmartRecruiters-mapped fields flow through untouched
       expect(job0?.title).toBe(first.name);
-      expect(job0?.jobUrl).toBe(first.ref);
+      // jobUrl is the public posting page, never the API `ref` (Spec 1750)
+      expect(job0?.jobUrl).toBe(
+        `https://jobs.smartrecruiters.com/${first.company.identifier}/${first.id}`,
+      );
+      expect(job0?.jobUrl).not.toContain('api.smartrecruiters.com');
       expect(job0?.department).toBe(first.department.label);
 
       // it hit the SmartRecruiters board for the company slug, not GH/Lever/Ashby

@@ -71,6 +71,18 @@ export interface StoreModuleForActiveOptions {
    * separately and disables the auto-binding).
    */
   readonly bindHealthSnapshotStore?: boolean;
+
+  /**
+   * Extra providers registered inside the store module's scope (Spec 1722).
+   *
+   * Backends inject their configuration through DI tokens
+   * (`STORE_SQLITE_DRIZZLE_CONFIG`, `STORE_POSTGRES_PRISMA_CONFIG`). Those
+   * tokens must resolve in *this* dynamic module — a provider declared in the
+   * app's root module is not visible to a backend instantiated here — so the
+   * bootstrap passes them through this option. Additive: omitting it keeps the
+   * previous behaviour exactly.
+   */
+  readonly providers?: ReadonlyArray<Provider>;
 }
 
 /**
@@ -237,6 +249,7 @@ export class StoreModule {
     };
 
     const providers: Provider[] = [
+      ...(options.providers ?? []),
       StoreRegistry,
       ...backendProviders,
       activeStoreProvider,

@@ -1,5 +1,11 @@
 import { CanonicalJobSchema, JobPostDto, LocationDto, OfficeDto, RawJobSchema, Site } from '@ever-jobs/models';
-import { parseLocationList } from '@ever-jobs/common';
+import {
+  canonicalJobId,
+  canonicalKeyInputForJob,
+  dedupKeyForJob,
+  formatJobLocation,
+  parseLocationList,
+} from '@ever-jobs/common';
 import { DedupHybridService } from '../src/dedup-hybrid.service';
 
 /**
@@ -453,5 +459,86 @@ describe('remote postings hash-merge across sources (Spec 1689)', () => {
       icimsRemote(DESCRIPTIONS[2]),
     ]);
     expect(out.canonical).toHaveLength(3);
+  });
+});
+
+describe('dedupKeyForJob equals the engine canonicalJobId (Spec 1721 / FR-10)', () => {
+  let service: DedupHybridService;
+
+  beforeEach(() => {
+    service = new DedupHybridService();
+  });
+
+  /** The engine's id for a job deduped on its own (a singleton cluster). */
+  async function engineId(j: JobPostDto): Promise<string> {
+    const out = await service.dedup([j]);
+    expect(out.canonical).toHaveLength(1);
+    return out.canonical[0]!.canonicalJobId;
+  }
+
+  it('a remote country-only posting (parsed "Remote - US"): the key reads isRemote and locations[]', async () => {
+    const parsed = parseLocationList(['Remote - US']);
+    const remoteUs = new JobPostDto({
+      id: 'lever-7',
+      title: 'Staff Engineer',
+      companyName: 'Acme',
+      jobUrl: 'https://jobs.example.com/7',
+      site: Site.LEVER,
+      location: parsed.location ?? undefined,
+      locations: parsed.locations,
+      isRemote: true,
+    });
+    // Control: the posting really is country-only, so the remote bucket applies.
+    expect(remoteUs.location?.city ?? null).toBeNull();
+
+    const id = await engineId(remoteUs);
+    expect(dedupKeyForJob(remoteUs)).toBe(id);
+    // Control: the pre-fix 3-field key (no locations[], no isRemote) is a
+    // different id — this is the case the shared helper fixed.
+    expect(
+      canonicalJobId({ title: remoteUs.title, company: remoteUs.companyName, location: formatJobLocation(remoteUs.location) }),
+    ).not.toBe(id);
+    // A cache round-trip (plain objects) keeps the key.
+    expect(dedupKeyForJob(JSON.parse(JSON.stringify(remoteUs)))).toBe(id);
+  });
+
+  it('a multi-location posting: the key is built from every site, as the engine clusters', async () => {
+    const multi = new JobPostDto({
+      id: 'gh-42',
+      title: 'Quant Researcher',
+      companyName: 'Acme',
+      jobUrl: 'https://boards.example.com/42',
+      site: Site.GREENHOUSE,
+      location: new LocationDto({ city: 'New York', state: 'NY', country: 'US' }),
+      locations: [
+        new LocationDto({ city: 'New York', state: 'NY', country: 'US', text: 'New York, NY' }),
+        new LocationDto({ city: 'London', country: 'GB', text: 'London' }),
+      ],
+    });
+
+    const id = await engineId(multi);
+    expect(dedupKeyForJob(multi)).toBe(id);
+    expect(canonicalJobId(canonicalKeyInputForJob(multi))).toBe(id);
+    expect(
+      canonicalJobId({ title: multi.title, company: multi.companyName, location: formatJobLocation(multi.location) }),
+    ).not.toBe(id);
+  });
+
+  it('every input of a mixed batch keys to the id the engine assigned it', async () => {
+    const batch = [
+      job({ id: '1' }),
+      job({ id: '2', title: 'Data Engineer', isRemote: true, location: new LocationDto({ country: 'Germany' }) }),
+      job({
+        id: '3',
+        title: 'Designer',
+        locations: [
+          new LocationDto({ city: 'Austin', state: 'TX' }),
+          new LocationDto({ city: 'Denver', state: 'CO' }),
+        ],
+      }),
+    ];
+    const out = await service.dedup(batch);
+    expect(out.canonical).toHaveLength(3);
+    batch.forEach((j, i) => expect(dedupKeyForJob(j)).toBe(out.assignments[i]));
   });
 });

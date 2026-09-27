@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "hp:5:ExternalCareerSite"
+      },
+      "atsIdPrefix": "wd-hp-"
+    }
+  ],
+  "responses": {
+    "https://hp.wd5.myworkdayjobs.com/wday/cxs/hp/ExternalCareerSite/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Technical Solutions Cons I",
+          "externalPath": "/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168552-2",
+          "locationsText": "Heredia, Heredia, Costa Rica",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "3168552"
+          ]
+        },
+        {
+          "title": "Technical Solutions Cons I",
+          "externalPath": "/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168549-2",
+          "locationsText": "Heredia, Heredia, Costa Rica",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "3168549"
+          ]
+        },
+        {
+          "title": "Technical Solutions Cons I",
+          "externalPath": "/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168547-1",
+          "locationsText": "Heredia, Heredia, Costa Rica",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "3168547"
+          ]
+        }
+      ]
+    },
+    "https://hp.wd5.myworkdayjobs.com/wday/cxs/hp/ExternalCareerSite/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168552-2": {
+      "jobPostingInfo": {
+        "title": "Technical Solutions Cons I",
+        "jobDescription": "<p>Technical Solutions Cons I at HP Inc..</p>",
+        "location": "Heredia, Heredia, Costa Rica",
+        "jobReqId": "3168552",
+        "externalUrl": "https://hp.wd5.myworkdayjobs.com/ExternalCareerSite/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168552-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "hp"
+      }
+    },
+    "https://hp.wd5.myworkdayjobs.com/wday/cxs/hp/ExternalCareerSite/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168549-2": {
+      "jobPostingInfo": {
+        "title": "Technical Solutions Cons I",
+        "jobDescription": "<p>Technical Solutions Cons I at HP Inc..</p>",
+        "location": "Heredia, Heredia, Costa Rica",
+        "jobReqId": "3168549",
+        "externalUrl": "https://hp.wd5.myworkdayjobs.com/ExternalCareerSite/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168549-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "hp"
+      }
+    },
+    "https://hp.wd5.myworkdayjobs.com/wday/cxs/hp/ExternalCareerSite/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168547-1": {
+      "jobPostingInfo": {
+        "title": "Technical Solutions Cons I",
+        "jobDescription": "<p>Technical Solutions Cons I at HP Inc..</p>",
+        "location": "Heredia, Heredia, Costa Rica",
+        "jobReqId": "3168547",
+        "externalUrl": "https://hp.wd5.myworkdayjobs.com/ExternalCareerSite/job/Heredia-Heredia-Costa-Rica/Technical-Solutions-Cons-I_3168547-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "hp"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "hp-3168552",
+      "title": "Technical Solutions Cons I"
+    },
+    {
+      "id": "hp-3168549",
+      "title": "Technical Solutions Cons I"
+    },
+    {
+      "id": "hp-3168547",
+      "title": "Technical Solutions Cons I"
+    }
+  ]
+}

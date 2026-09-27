@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/airnewzealand/6000000001207551",
+      "ref": "https://api.smartrecruiters.com/v1/companies/airnewzealand/postings/6000000001207551",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/airnewzealand/6000000001202030",
+      "ref": "https://api.smartrecruiters.com/v1/companies/airnewzealand/postings/6000000001202030",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/airnewzealand/6000000001199597",
+      "ref": "https://api.smartrecruiters.com/v1/companies/airnewzealand/postings/6000000001199597",
       "jobAd": {
         "sections": {
           "jobDescription": {

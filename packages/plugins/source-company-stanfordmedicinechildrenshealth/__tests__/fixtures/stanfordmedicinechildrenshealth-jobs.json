@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StanfordMedicineChildrensHealth/3743990013917746",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StanfordMedicineChildrensHealth/postings/3743990013917746",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StanfordMedicineChildrensHealth/3743990013903697",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StanfordMedicineChildrensHealth/postings/3743990013903697",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StanfordMedicineChildrensHealth/3743990013894976",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StanfordMedicineChildrensHealth/postings/3743990013894976",
       "jobAd": {
         "sections": {
           "jobDescription": {

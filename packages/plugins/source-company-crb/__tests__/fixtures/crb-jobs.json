@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CRB/744000135550470",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CRB/postings/744000135550470",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CRB/744000135468239",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CRB/postings/744000135468239",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CRB/744000135461575",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CRB/postings/744000135461575",
       "jobAd": {
         "sections": {
           "jobDescription": {

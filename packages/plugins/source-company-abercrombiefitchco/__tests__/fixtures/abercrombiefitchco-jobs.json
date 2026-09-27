@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AbercrombieAndFitchCo/744000132171214",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AbercrombieAndFitchCo/postings/744000132171214",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AbercrombieAndFitchCo/744000132170550",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AbercrombieAndFitchCo/postings/744000132170550",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AbercrombieAndFitchCo/744000132171439",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AbercrombieAndFitchCo/postings/744000132171439",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WesternDigital/744000135711559",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WesternDigital/postings/744000135711559",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WesternDigital/744000135705479",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WesternDigital/postings/744000135705479",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/WesternDigital/744000135642699",
+      "ref": "https://api.smartrecruiters.com/v1/companies/WesternDigital/postings/744000135642699",
       "jobAd": {
         "sections": {
           "jobDescription": {

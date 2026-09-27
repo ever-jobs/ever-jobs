@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/North40Outfitters/744000135554879",
+      "ref": "https://api.smartrecruiters.com/v1/companies/North40Outfitters/postings/744000135554879",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/North40Outfitters/744000135553209",
+      "ref": "https://api.smartrecruiters.com/v1/companies/North40Outfitters/postings/744000135553209",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/North40Outfitters/744000135541917",
+      "ref": "https://api.smartrecruiters.com/v1/companies/North40Outfitters/postings/744000135541917",
       "jobAd": {
         "sections": {
           "jobDescription": {

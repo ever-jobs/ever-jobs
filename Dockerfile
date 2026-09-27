@@ -8,7 +8,7 @@ WORKDIR /app
 # fails when node-gyp tries to compile native modules. The toolchain only
 # lives in the builder stage — the runtime stage copies prebuilt
 # node_modules and stays slim.
-RUN apk add --no-cache python3 make g++ libc-dev
+RUN apk add --no-cache python3 make g++ libc-dev openssl
 
 # Build native modules against the headers ALREADY IN THIS IMAGE instead of
 # downloading them.
@@ -40,6 +40,16 @@ RUN npm ci
 # Copy full source
 COPY . .
 
+# Spec 1722 — generate the Prisma client for the optional Postgres store
+# (EVER_JOBS_STORE=postgres). `openssl` above lets Prisma pick the right
+# musl engine. Best-effort on purpose: a failure here must never break the
+# image build; a deployment that selects postgres without a generated client
+# fails fast at boot with the command to run instead. The placeholder URL only
+# satisfies schema validation — generate never connects.
+RUN DATABASE_URL=postgresql://placeholder@localhost:5432/placeholder \
+  npx prisma generate --schema packages/plugins/store-postgres-prisma/prisma/schema.prisma \
+  || echo 'WARN: prisma generate failed; EVER_JOBS_STORE=postgres will fail fast at boot'
+
 # Build the API application
 RUN npx nest build
 
@@ -48,8 +58,9 @@ FROM node:20-alpine AS runtime
 
 WORKDIR /app
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
+# Install curl for healthcheck; openssl (libssl3) is what the Prisma query
+# engine links against when EVER_JOBS_STORE=postgres (Spec 1722).
+RUN apk add --no-cache curl openssl
 
 # Copy production deps from builder
 COPY --from=builder /app/node_modules ./node_modules

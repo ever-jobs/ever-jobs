@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/valeofoods/744000135731459",
+      "ref": "https://api.smartrecruiters.com/v1/companies/valeofoods/postings/744000135731459",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/valeofoods/744000135242130",
+      "ref": "https://api.smartrecruiters.com/v1/companies/valeofoods/postings/744000135242130",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/valeofoods/744000135239116",
+      "ref": "https://api.smartrecruiters.com/v1/companies/valeofoods/postings/744000135239116",
       "jobAd": {
         "sections": {
           "jobDescription": {

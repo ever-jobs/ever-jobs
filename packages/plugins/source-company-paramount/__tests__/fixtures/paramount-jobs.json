@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ParamountATL/744000119699543",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ParamountATL/postings/744000119699543",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ParamountATL/744000119698417",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ParamountATL/postings/744000119698417",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ParamountATL/743999991761051",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ParamountATL/postings/743999991761051",
       "jobAd": {
         "sections": {
           "jobDescription": {

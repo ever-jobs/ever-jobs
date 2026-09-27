@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "vaticlabs"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/vaticlabs/jobs": {
+      "jobs": [
+        {
+          "id": 5414236,
+          "title": "AI Engineer",
+          "updated_at": "2026-07-22T17:55:40.000Z",
+          "location": {
+            "name": "New York"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/vaticlabs/jobs/5414236",
+          "content": "&lt;p&gt;AI Engineer at Vatic Labs.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "vaticlabs"
+        },
+        {
+          "id": 7235544,
+          "title": "AI Engineer (UAE)",
+          "updated_at": "2026-06-01T09:22:44.000Z",
+          "location": {
+            "name": "Abu Dhabi"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/vaticlabs/jobs/7235544",
+          "content": "&lt;p&gt;AI Engineer (UAE) at Vatic Labs.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "vaticlabs"
+        },
+        {
+          "id": 5114560,
+          "title": "AI Researcher",
+          "updated_at": "2026-07-22T17:55:40.000Z",
+          "location": {
+            "name": "New York"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/vaticlabs/jobs/5114560",
+          "content": "&lt;p&gt;AI Researcher at Vatic Labs.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "vaticlabs"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "vaticlabs-5414236",
+      "title": "AI Engineer"
+    },
+    {
+      "id": "vaticlabs-7235544",
+      "title": "AI Engineer (UAE)"
+    },
+    {
+      "id": "vaticlabs-5114560",
+      "title": "AI Researcher"
+    }
+  ]
+}

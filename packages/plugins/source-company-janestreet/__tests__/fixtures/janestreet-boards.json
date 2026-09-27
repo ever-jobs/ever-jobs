@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "janestreet"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/janestreet/jobs": {
+      "jobs": [
+        {
+          "id": 8631912002,
+          "title": "Accounting Coordinator",
+          "updated_at": "2026-09-21T15:16:43.000Z",
+          "location": {
+            "name": "New York, New York, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/janestreet/jobs/8631912002",
+          "content": "&lt;p&gt;Accounting Coordinator at Jane Street.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "janestreet"
+        },
+        {
+          "id": 8596771002,
+          "title": "ꓟachine ꓡearning ꓣesearcher",
+          "updated_at": "2026-09-21T15:16:40.000Z",
+          "location": {
+            "name": "Hong Kong, Hong Kong"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/janestreet/jobs/8596771002",
+          "content": "&lt;p&gt;ꓟachine ꓡearning ꓣesearcher at Jane Street.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "janestreet"
+        },
+        {
+          "id": 8836991002,
+          "title": "Architect",
+          "updated_at": "2026-09-24T21:24:47.000Z",
+          "location": {
+            "name": "New York, New York, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/janestreet/jobs/8836991002",
+          "content": "&lt;p&gt;Architect at Jane Street.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "janestreet"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "janestreet-8631912002",
+      "title": "Accounting Coordinator"
+    },
+    {
+      "id": "janestreet-8596771002",
+      "title": "ꓟachine ꓡearning ꓣesearcher"
+    },
+    {
+      "id": "janestreet-8836991002",
+      "title": "Architect"
+    }
+  ]
+}

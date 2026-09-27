@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "capitalone:12:Capital_One"
+      },
+      "atsIdPrefix": "wd-capitalone-"
+    }
+  ],
+  "responses": {
+    "https://capitalone.wd12.myworkdayjobs.com/wday/cxs/capitalone/Capital_One/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Full Stack Engineer 4",
+          "externalPath": "/job/Richmond-VA/Full-Stack-Engineer-4_R1002073-1",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R1002073"
+          ]
+        },
+        {
+          "title": "Director, HR Business Partner - Risk",
+          "externalPath": "/job/McLean-VA/Director--HR-Business-Partner---Risk_R1000798",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R1000798"
+          ]
+        },
+        {
+          "title": "Product Manager - Trade Credit",
+          "externalPath": "/job/Chicago-IL/Product-Manager---Trade-Credit_R246392-1",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R246392"
+          ]
+        }
+      ]
+    },
+    "https://capitalone.wd12.myworkdayjobs.com/wday/cxs/capitalone/Capital_One/job/Richmond-VA/Full-Stack-Engineer-4_R1002073-1": {
+      "jobPostingInfo": {
+        "title": "Full Stack Engineer 4",
+        "jobDescription": "<p>Full Stack Engineer 4 at Capital One.</p>",
+        "location": "2 Locations",
+        "jobReqId": "R1002073",
+        "externalUrl": "https://capitalone.wd12.myworkdayjobs.com/Capital_One/job/Richmond-VA/Full-Stack-Engineer-4_R1002073-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "capitalone"
+      }
+    },
+    "https://capitalone.wd12.myworkdayjobs.com/wday/cxs/capitalone/Capital_One/job/McLean-VA/Director--HR-Business-Partner---Risk_R1000798": {
+      "jobPostingInfo": {
+        "title": "Director, HR Business Partner - Risk",
+        "jobDescription": "<p>Director, HR Business Partner - Risk at Capital One.</p>",
+        "location": "2 Locations",
+        "jobReqId": "R1000798",
+        "externalUrl": "https://capitalone.wd12.myworkdayjobs.com/Capital_One/job/McLean-VA/Director--HR-Business-Partner---Risk_R1000798",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "capitalone"
+      }
+    },
+    "https://capitalone.wd12.myworkdayjobs.com/wday/cxs/capitalone/Capital_One/job/Chicago-IL/Product-Manager---Trade-Credit_R246392-1": {
+      "jobPostingInfo": {
+        "title": "Product Manager - Trade Credit",
+        "jobDescription": "<p>Product Manager - Trade Credit at Capital One.</p>",
+        "location": "2 Locations",
+        "jobReqId": "R246392",
+        "externalUrl": "https://capitalone.wd12.myworkdayjobs.com/Capital_One/job/Chicago-IL/Product-Manager---Trade-Credit_R246392-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "capitalone"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "capitalone-R1002073",
+      "title": "Full Stack Engineer 4"
+    },
+    {
+      "id": "capitalone-R1000798",
+      "title": "Director, HR Business Partner - Risk"
+    },
+    {
+      "id": "capitalone-R246392",
+      "title": "Product Manager - Trade Credit"
+    }
+  ]
+}

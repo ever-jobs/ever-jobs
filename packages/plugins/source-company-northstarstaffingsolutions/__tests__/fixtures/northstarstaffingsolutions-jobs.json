@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NorthStarStaffingSolutions1/86388137",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NorthStarStaffingSolutions1/postings/86388137",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NorthStarStaffingSolutions1/86387687",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NorthStarStaffingSolutions1/postings/86387687",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/NorthStarStaffingSolutions1/86387211",
+      "ref": "https://api.smartrecruiters.com/v1/companies/NorthStarStaffingSolutions1/postings/86387211",
       "jobAd": {
         "sections": {
           "jobDescription": {

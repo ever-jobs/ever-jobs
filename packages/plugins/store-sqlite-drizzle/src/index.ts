@@ -8,6 +8,7 @@ export {
   STORE_SQLITE_DRIZZLE_ID,
   STORE_SQLITE_DRIZZLE_DESCRIPTION,
   STORE_SQLITE_DRIZZLE_CONFIG,
+  DEFAULT_SQLITE_BATCH_SIZE,
 } from './store-sqlite-drizzle.service';
 export type { StoreSqliteDrizzleConfig } from './store-sqlite-drizzle.service';
 export { StoreSqliteDrizzleModule } from './store-sqlite-drizzle.module';

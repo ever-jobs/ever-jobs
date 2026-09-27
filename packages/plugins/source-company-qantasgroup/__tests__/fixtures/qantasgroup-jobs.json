@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/QantasGroup/6000000001207389",
+      "ref": "https://api.smartrecruiters.com/v1/companies/QantasGroup/postings/6000000001207389",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/QantasGroup/6000000001207307",
+      "ref": "https://api.smartrecruiters.com/v1/companies/QantasGroup/postings/6000000001207307",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/QantasGroup/6000000001206901",
+      "ref": "https://api.smartrecruiters.com/v1/companies/QantasGroup/postings/6000000001206901",
       "jobAd": {
         "sections": {
           "jobDescription": {

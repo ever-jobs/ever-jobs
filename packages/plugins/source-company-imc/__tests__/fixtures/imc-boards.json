@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "imc"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/imc/jobs": {
+      "jobs": [
+        {
+          "id": 4979079101,
+          "title": "2026 Chess Academy Australia & New Zealand - Expression of Interest",
+          "updated_at": "2026-09-23T23:32:46.000Z",
+          "location": {
+            "name": "APAC"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/imc/jobs/4979079101",
+          "content": "&lt;p&gt;2026 Chess Academy Australia &amp;amp; New Zealand - Expression of Interest at IMC Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "imc"
+        },
+        {
+          "id": 4940448101,
+          "title": "2027 EU Campus Programme Talent Community",
+          "updated_at": "2026-09-22T11:43:56.000Z",
+          "location": {
+            "name": "Europe"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/imc/jobs/4940448101",
+          "content": "&lt;p&gt;2027 EU Campus Programme Talent Community at IMC Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "imc"
+        },
+        {
+          "id": 4981180101,
+          "title": "2027 EU Chess Academy - Expression of Interest",
+          "updated_at": "2026-09-21T12:06:53.000Z",
+          "location": {
+            "name": "Europe"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/imc/jobs/4981180101",
+          "content": "&lt;p&gt;2027 EU Chess Academy - Expression of Interest at IMC Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "imc"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "imc-4979079101",
+      "title": "2026 Chess Academy Australia & New Zealand - Expression of Interest"
+    },
+    {
+      "id": "imc-4940448101",
+      "title": "2027 EU Campus Programme Talent Community"
+    },
+    {
+      "id": "imc-4981180101",
+      "title": "2027 EU Chess Academy - Expression of Interest"
+    }
+  ]
+}

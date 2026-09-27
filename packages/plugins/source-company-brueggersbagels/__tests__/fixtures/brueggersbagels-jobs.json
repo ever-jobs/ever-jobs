@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BrueggersBagels/743999660184395",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BrueggersBagels/postings/743999660184395",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BrueggersBagels/743999660184129",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BrueggersBagels/postings/743999660184129",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BrueggersBagels/91103038",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BrueggersBagels/postings/91103038",
       "jobAd": {
         "sections": {
           "jobDescription": {

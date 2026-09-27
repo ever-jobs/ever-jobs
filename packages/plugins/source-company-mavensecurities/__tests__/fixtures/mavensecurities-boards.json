@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "mavensecuritiesholdingltd"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/mavensecuritiesholdingltd/jobs": {
+      "jobs": [
+        {
+          "id": 8048591,
+          "title": "Amsterdam Trader Summer Internship 2027",
+          "updated_at": "2026-09-18T16:05:23.000Z",
+          "location": {
+            "name": "Amsterdam"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/mavensecuritiesholdingltd/jobs/8048591",
+          "content": "&lt;p&gt;Amsterdam Trader Summer Internship 2027 at Maven Securities.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "mavensecuritiesholdingltd"
+        },
+        {
+          "id": 5511938,
+          "title": "Associate Portfolio Manager",
+          "updated_at": "2026-09-10T15:34:09.000Z",
+          "location": {
+            "name": "London"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/mavensecuritiesholdingltd/jobs/5511938",
+          "content": "&lt;p&gt;Associate Portfolio Manager at Maven Securities.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "mavensecuritiesholdingltd"
+        },
+        {
+          "id": 8132023,
+          "title": "Campus Recruitment & HR Specialist",
+          "updated_at": "2026-09-10T15:34:13.000Z",
+          "location": {
+            "name": "Amsterdam"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/mavensecuritiesholdingltd/jobs/8132023",
+          "content": "&lt;p&gt;Campus Recruitment &amp;amp; HR Specialist at Maven Securities.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "mavensecuritiesholdingltd"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "mavensecurities-8048591",
+      "title": "Amsterdam Trader Summer Internship 2027"
+    },
+    {
+      "id": "mavensecurities-5511938",
+      "title": "Associate Portfolio Manager"
+    },
+    {
+      "id": "mavensecurities-8132023",
+      "title": "Campus Recruitment & HR Specialist"
+    }
+  ]
+}

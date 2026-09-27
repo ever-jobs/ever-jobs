@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Freshworks/744000135680950",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Freshworks/postings/744000135680950",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Freshworks/744000135654009",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Freshworks/postings/744000135654009",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Freshworks/744000135653025",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Freshworks/postings/744000135653025",
       "jobAd": {
         "sections": {
           "jobDescription": {

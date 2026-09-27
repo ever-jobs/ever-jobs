@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/VillaGroup/744000134941319",
+      "ref": "https://api.smartrecruiters.com/v1/companies/VillaGroup/postings/744000134941319",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/VillaGroup/744000134941029",
+      "ref": "https://api.smartrecruiters.com/v1/companies/VillaGroup/postings/744000134941029",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/VillaGroup/744000134940356",
+      "ref": "https://api.smartrecruiters.com/v1/companies/VillaGroup/postings/744000134940356",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RaisingCanes/744000135773849",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RaisingCanes/postings/744000135773849",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RaisingCanes/744000135770809",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RaisingCanes/postings/744000135770809",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RaisingCanes/744000135769660",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RaisingCanes/postings/744000135769660",
       "jobAd": {
         "sections": {
           "jobDescription": {

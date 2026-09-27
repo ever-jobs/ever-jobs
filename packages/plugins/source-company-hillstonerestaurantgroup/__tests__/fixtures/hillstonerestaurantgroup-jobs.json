@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HillstoneRestaurantGroup/744000135544780",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HillstoneRestaurantGroup/postings/744000135544780",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HillstoneRestaurantGroup/744000135546989",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HillstoneRestaurantGroup/postings/744000135546989",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HillstoneRestaurantGroup/744000135543316",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HillstoneRestaurantGroup/postings/744000135543316",
       "jobAd": {
         "sections": {
           "jobDescription": {

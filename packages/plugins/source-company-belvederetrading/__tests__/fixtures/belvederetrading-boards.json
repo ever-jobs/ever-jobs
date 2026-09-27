@@ -1,0 +1,72 @@
+{
+  "note": "Recorded Lever listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "lever",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "belvederetrading"
+      },
+      "atsIdPrefix": "lever-"
+    }
+  ],
+  "responses": {
+    "https://api.lever.co/v0/postings/belvederetrading": [
+      {
+        "id": "fd619115-ced7-4d59-bd2b-0948b5ee5fde",
+        "text": "Early Career Talent Partner - Technology & Platform",
+        "categories": {
+          "location": "Chicago, Illinois",
+          "team": "Talent",
+          "commitment": "Full-time"
+        },
+        "createdAt": 1790110014068,
+        "hostedUrl": "https://jobs.lever.co/belvederetrading/fd619115-ced7-4d59-bd2b-0948b5ee5fde",
+        "applyUrl": "https://jobs.lever.co/belvederetrading/fd619115-ced7-4d59-bd2b-0948b5ee5fde/apply",
+        "descriptionPlain": "Early Career Talent Partner - Technology & Platform at Belvedere Trading.",
+        "lists": []
+      },
+      {
+        "id": "fb74cb4d-a250-47c7-96a5-0450095add27",
+        "text": "Early Career Talent Partner - Trading",
+        "categories": {
+          "location": "Chicago, Illinois",
+          "team": "Talent",
+          "commitment": "Full-time"
+        },
+        "createdAt": 1790110145569,
+        "hostedUrl": "https://jobs.lever.co/belvederetrading/fb74cb4d-a250-47c7-96a5-0450095add27",
+        "applyUrl": "https://jobs.lever.co/belvederetrading/fb74cb4d-a250-47c7-96a5-0450095add27/apply",
+        "descriptionPlain": "Early Career Talent Partner - Trading at Belvedere Trading.",
+        "lists": []
+      },
+      {
+        "id": "886e04f8-1ec2-4f0f-8237-fdbda729c14c",
+        "text": "Employee Experience Coordinator",
+        "categories": {
+          "location": "Chicago, Illinois",
+          "team": "Employee Experience",
+          "commitment": "Full-time"
+        },
+        "createdAt": 1789568321639,
+        "hostedUrl": "https://jobs.lever.co/belvederetrading/886e04f8-1ec2-4f0f-8237-fdbda729c14c",
+        "applyUrl": "https://jobs.lever.co/belvederetrading/886e04f8-1ec2-4f0f-8237-fdbda729c14c/apply",
+        "descriptionPlain": "Employee Experience Coordinator at Belvedere Trading.",
+        "lists": []
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "belvederetrading-fd619115-ced7-4d59-bd2b-0948b5ee5fde",
+      "title": "Early Career Talent Partner - Technology & Platform"
+    },
+    {
+      "id": "belvederetrading-fb74cb4d-a250-47c7-96a5-0450095add27",
+      "title": "Early Career Talent Partner - Trading"
+    },
+    {
+      "id": "belvederetrading-886e04f8-1ec2-4f0f-8237-fdbda729c14c",
+      "title": "Employee Experience Coordinator"
+    }
+  ]
+}

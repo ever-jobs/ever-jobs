@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "leidos:5:External"
+      },
+      "atsIdPrefix": "wd-leidos-"
+    }
+  ],
+  "responses": {
+    "https://leidos.wd5.myworkdayjobs.com/wday/cxs/leidos/External/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Software Engineer/Data Science Librarian",
+          "externalPath": "/job/Arnold-MO/Software-Engineer-Data-Science-Librarian_R-00184468",
+          "locationsText": "Arnold, MO",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-00184468"
+          ]
+        },
+        {
+          "title": "Cyber Security Engineer—Technical Lead",
+          "externalPath": "/job/Bethesda-MD/Cyber-Security-Engineer-Technical-lead_R-00179079",
+          "locationsText": "Bethesda, MD",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-00179079"
+          ]
+        },
+        {
+          "title": "DevOps Engineer (SME)",
+          "externalPath": "/job/Bethesda-MD/DevOps-Engineer--SME-_R-00174057",
+          "locationsText": "Bethesda, MD",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R-00174057"
+          ]
+        }
+      ]
+    },
+    "https://leidos.wd5.myworkdayjobs.com/wday/cxs/leidos/External/job/Arnold-MO/Software-Engineer-Data-Science-Librarian_R-00184468": {
+      "jobPostingInfo": {
+        "title": "Software Engineer/Data Science Librarian",
+        "jobDescription": "<p>Software Engineer/Data Science Librarian at Leidos.</p>",
+        "location": "Arnold, MO",
+        "jobReqId": "R-00184468",
+        "externalUrl": "https://leidos.wd5.myworkdayjobs.com/External/job/Arnold-MO/Software-Engineer-Data-Science-Librarian_R-00184468",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "leidos"
+      }
+    },
+    "https://leidos.wd5.myworkdayjobs.com/wday/cxs/leidos/External/job/Bethesda-MD/Cyber-Security-Engineer-Technical-lead_R-00179079": {
+      "jobPostingInfo": {
+        "title": "Cyber Security Engineer—Technical Lead",
+        "jobDescription": "<p>Cyber Security Engineer—Technical Lead at Leidos.</p>",
+        "location": "Bethesda, MD",
+        "jobReqId": "R-00179079",
+        "externalUrl": "https://leidos.wd5.myworkdayjobs.com/External/job/Bethesda-MD/Cyber-Security-Engineer-Technical-lead_R-00179079",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "leidos"
+      }
+    },
+    "https://leidos.wd5.myworkdayjobs.com/wday/cxs/leidos/External/job/Bethesda-MD/DevOps-Engineer--SME-_R-00174057": {
+      "jobPostingInfo": {
+        "title": "DevOps Engineer (SME)",
+        "jobDescription": "<p>DevOps Engineer (SME) at Leidos.</p>",
+        "location": "Bethesda, MD",
+        "jobReqId": "R-00174057",
+        "externalUrl": "https://leidos.wd5.myworkdayjobs.com/External/job/Bethesda-MD/DevOps-Engineer--SME-_R-00174057",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "leidos"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "leidos-R-00184468",
+      "title": "Software Engineer/Data Science Librarian"
+    },
+    {
+      "id": "leidos-R-00179079",
+      "title": "Cyber Security Engineer—Technical Lead"
+    },
+    {
+      "id": "leidos-R-00174057",
+      "title": "DevOps Engineer (SME)"
+    }
+  ]
+}

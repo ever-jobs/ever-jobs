@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SpectrumHealthCare/744000135781039",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SpectrumHealthCare/postings/744000135781039",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SpectrumHealthCare/744000135591759",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SpectrumHealthCare/postings/744000135591759",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SpectrumHealthCare/744000134792676",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SpectrumHealthCare/postings/744000134792676",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "geaerospace:5:GE_ExternalSite"
+      },
+      "atsIdPrefix": "wd-geaerospace-"
+    }
+  ],
+  "responses": {
+    "https://geaerospace.wd5.myworkdayjobs.com/wday/cxs/geaerospace/GE_ExternalSite/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Lead Manufacturing Engineer - 2nd Shift",
+          "externalPath": "/job/Clearwater/Lead-Manufacturing-Engineer---2nd-Shift_R5040369-1",
+          "locationsText": "Clearwater",
+          "postedOn": "Posted 3 Days Ago",
+          "bulletFields": [
+            "R5040369"
+          ]
+        },
+        {
+          "title": "Customer Account Manager - Lockheed Martin",
+          "externalPath": "/job/Remote/Customer-Account-Manager---Lockheed-Martin_R5040429-1",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R5040429"
+          ]
+        },
+        {
+          "title": "Operador de Usinagem I",
+          "externalPath": "/job/Petropolis/Operador-de-Usinagem-I_R5040013-1",
+          "locationsText": "Petropolis",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R5040013"
+          ]
+        }
+      ]
+    },
+    "https://geaerospace.wd5.myworkdayjobs.com/wday/cxs/geaerospace/GE_ExternalSite/job/Clearwater/Lead-Manufacturing-Engineer---2nd-Shift_R5040369-1": {
+      "jobPostingInfo": {
+        "title": "Lead Manufacturing Engineer - 2nd Shift",
+        "jobDescription": "<p>Lead Manufacturing Engineer - 2nd Shift at GE Aerospace.</p>",
+        "location": "Clearwater",
+        "jobReqId": "R5040369",
+        "externalUrl": "https://geaerospace.wd5.myworkdayjobs.com/GE_ExternalSite/job/Clearwater/Lead-Manufacturing-Engineer---2nd-Shift_R5040369-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "geaerospace"
+      }
+    },
+    "https://geaerospace.wd5.myworkdayjobs.com/wday/cxs/geaerospace/GE_ExternalSite/job/Remote/Customer-Account-Manager---Lockheed-Martin_R5040429-1": {
+      "jobPostingInfo": {
+        "title": "Customer Account Manager - Lockheed Martin",
+        "jobDescription": "<p>Customer Account Manager - Lockheed Martin at GE Aerospace.</p>",
+        "location": "2 Locations",
+        "jobReqId": "R5040429",
+        "externalUrl": "https://geaerospace.wd5.myworkdayjobs.com/GE_ExternalSite/job/Remote/Customer-Account-Manager---Lockheed-Martin_R5040429-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "geaerospace"
+      }
+    },
+    "https://geaerospace.wd5.myworkdayjobs.com/wday/cxs/geaerospace/GE_ExternalSite/job/Petropolis/Operador-de-Usinagem-I_R5040013-1": {
+      "jobPostingInfo": {
+        "title": "Operador de Usinagem I",
+        "jobDescription": "<p>Operador de Usinagem I at GE Aerospace.</p>",
+        "location": "Petropolis",
+        "jobReqId": "R5040013",
+        "externalUrl": "https://geaerospace.wd5.myworkdayjobs.com/GE_ExternalSite/job/Petropolis/Operador-de-Usinagem-I_R5040013-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "geaerospace"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "geaerospace-R5040369",
+      "title": "Lead Manufacturing Engineer - 2nd Shift"
+    },
+    {
+      "id": "geaerospace-R5040429",
+      "title": "Customer Account Manager - Lockheed Martin"
+    },
+    {
+      "id": "geaerospace-R5040013",
+      "title": "Operador de Usinagem I"
+    }
+  ]
+}

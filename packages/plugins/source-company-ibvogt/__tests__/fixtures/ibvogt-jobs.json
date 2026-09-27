@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ib-vogt-GmbH/744000135743930",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ib-vogt-GmbH/postings/744000135743930",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ib-vogt-GmbH/744000135746879",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ib-vogt-GmbH/postings/744000135746879",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ib-vogt-GmbH/744000135462782",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ib-vogt-GmbH/postings/744000135462782",
       "jobAd": {
         "sections": {
           "jobDescription": {

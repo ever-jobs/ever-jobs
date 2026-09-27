@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Assent/744000135512560",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Assent/postings/744000135512560",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Assent/744000135510439",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Assent/postings/744000135510439",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Assent/744000135222019",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Assent/postings/744000135222019",
       "jobAd": {
         "sections": {
           "jobDescription": {

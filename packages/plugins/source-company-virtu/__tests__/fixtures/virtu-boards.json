@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "virtu"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/virtu/jobs": {
+      "jobs": [
+        {
+          "id": 6329460002,
+          "title": "2027 Internship – Core Operations Engineer",
+          "updated_at": "2026-07-30T07:08:51.000Z",
+          "location": {
+            "name": "Singapore"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/virtu/jobs/6329460002",
+          "content": "&lt;p&gt;2027 Internship – Core Operations Engineer at Virtu Financial.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "virtu"
+        },
+        {
+          "id": 8638124002,
+          "title": "2027 Internship - FPGA Engineer",
+          "updated_at": "2026-08-12T16:42:24.000Z",
+          "location": {
+            "name": "Dublin, Ireland"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/virtu/jobs/8638124002",
+          "content": "&lt;p&gt;2027 Internship - FPGA Engineer at Virtu Financial.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "virtu"
+        },
+        {
+          "id": 8657286002,
+          "title": "2027 Internship- Hardware Engineer (FPGA)",
+          "updated_at": "2026-08-18T18:36:23.000Z",
+          "location": {
+            "name": "Austin, TX"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/virtu/jobs/8657286002",
+          "content": "&lt;p&gt;2027 Internship- Hardware Engineer (FPGA) at Virtu Financial.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "virtu"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "virtu-6329460002",
+      "title": "2027 Internship – Core Operations Engineer"
+    },
+    {
+      "id": "virtu-8638124002",
+      "title": "2027 Internship - FPGA Engineer"
+    },
+    {
+      "id": "virtu-8657286002",
+      "title": "2027 Internship- Hardware Engineer (FPGA)"
+    }
+  ]
+}

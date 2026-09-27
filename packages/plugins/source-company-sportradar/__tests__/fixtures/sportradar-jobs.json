@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Sportradar/744000135737625",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Sportradar/postings/744000135737625",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Sportradar/744000135737276",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Sportradar/postings/744000135737276",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Sportradar/744000135738430",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Sportradar/postings/744000135738430",
       "jobAd": {
         "sections": {
           "jobDescription": {

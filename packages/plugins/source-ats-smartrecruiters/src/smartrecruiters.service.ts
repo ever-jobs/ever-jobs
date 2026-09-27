@@ -19,11 +19,13 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  firstPublicUrl,
 } from '@ever-jobs/common';
 import {
   SMARTRECRUITERS_API_URL,
   SMARTRECRUITERS_HEADERS,
   SMARTRECRUITERS_PAGE_SIZE,
+  SMARTRECRUITERS_PUBLIC_JOBS_URL,
 } from './smartrecruiters.constants';
 import { SmartRecruitersJob, SmartRecruitersResponse } from './smartrecruiters.types';
 
@@ -209,6 +211,13 @@ export class SmartRecruitersService implements IScraper {
     const title = job.name;
     if (!title) return null;
 
+    // Identity. `ref` is the posting's API resource
+    // (`…/v1/companies/<Co>/postings/<id>`): it is read only as a fallback
+    // source of the id and the company identifier, never used as a link.
+    const fromRef = this.parseRef(job.ref);
+    const postingId = this.nonEmpty(job.id) ?? fromRef?.postingId ?? null;
+    if (!postingId) return null;
+
     // Location
     const loc = job.location;
     const location = loc
@@ -224,9 +233,18 @@ export class SmartRecruitersService implements IScraper {
     // Date
     const datePosted = job.releasedDate ?? null;
 
-    // Job URL
+    // Job URL (Spec 1750): the public posting page. The detail endpoint's
+    // `postingUrl` when present; otherwise the public pattern built from the
+    // company identifier the API returned (case-sensitive: `AbbVie`, not the
+    // caller's `abbvie`). `applyUrl` exists on the detail endpoint only.
+    const identifier =
+      this.nonEmpty(job.company?.identifier) ??
+      fromRef?.companyIdentifier ??
+      companySlug.trim();
     const jobUrl =
-      job.ref ?? `https://jobs.smartrecruiters.com/${companySlug}/${job.id}`;
+      firstPublicUrl(job.postingUrl) ??
+      `${SMARTRECRUITERS_PUBLIC_JOBS_URL}/${encodeURIComponent(identifier)}/${encodeURIComponent(postingId)}`;
+    const applyUrl = firstPublicUrl(job.applyUrl);
 
     // Description from jobAd sections
     let description: string | null = null;
@@ -251,10 +269,11 @@ export class SmartRecruitersService implements IScraper {
     }
 
     return new JobPostDto({
-      id: `sr-${job.id}`,
+      id: `sr-${postingId}`,
       title,
       companyName: job.company?.name ?? companySlug,
       jobUrl,
+      applyUrl,
       location,
       description,
       datePosted: datePosted
@@ -263,11 +282,46 @@ export class SmartRecruitersService implements IScraper {
       isRemote,
       emails: extractEmails(description),
       site: Site.SMARTRECRUITERS,
-      // ATS-specific fields
-      atsId: job.id ?? null,
+      // ATS-specific fields — `atsId` is the same posting id `id` and `jobUrl` carry.
+      atsId: postingId,
       atsType: 'smartrecruiters',
       department: job.department?.label ?? null,
       employmentType: job.typeOfEmployment?.label ?? null,
     });
+  }
+
+  /** A trimmed non-empty string (numbers are stringified), else `null`. */
+  private nonEmpty(value: unknown): string | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  /**
+   * Read the company identifier and posting id out of an API `ref`
+   * (`https://api.smartrecruiters.com/v1/companies/<Co>/postings/<id>`).
+   * Returns `null` for anything else.
+   */
+  private parseRef(
+    ref: string | null | undefined,
+  ): { companyIdentifier: string; postingId: string } | null {
+    if (typeof ref !== 'string' || !ref.trim()) return null;
+    let path: string;
+    try {
+      path = new URL(ref.trim()).pathname;
+    } catch {
+      return null;
+    }
+    const match = /\/companies\/([^/]+)\/postings\/([^/?#]+)/.exec(path);
+    if (!match) return null;
+    try {
+      return {
+        companyIdentifier: decodeURIComponent(match[1]),
+        postingId: decodeURIComponent(match[2]),
+      };
+    } catch {
+      return null;
+    }
   }
 }

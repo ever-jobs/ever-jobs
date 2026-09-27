@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Vattenfall/744000135745899",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Vattenfall/postings/744000135745899",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Vattenfall/744000135745499",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Vattenfall/postings/744000135745499",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Vattenfall/744000135740036",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Vattenfall/postings/744000135740036",
       "jobAd": {
         "sections": {
           "jobDescription": {

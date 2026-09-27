@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "radixexperienced"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/radixexperienced/jobs": {
+      "jobs": [
+        {
+          "id": 6954287002,
+          "title": "Compliance Specialist – Amsterdam",
+          "updated_at": "2026-05-04T19:18:00.000Z",
+          "location": {
+            "name": "Radix Trading Amsterdam"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/radixexperienced/jobs/6954287002",
+          "content": "&lt;p&gt;Compliance Specialist – Amsterdam at Radix Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "radixexperienced"
+        },
+        {
+          "id": 8121869002,
+          "title": "HPC Systems Engineer",
+          "updated_at": "2026-09-09T05:01:33.000Z",
+          "location": {
+            "name": "Chicago, Illinois, United States; New York, New York, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/radixexperienced/jobs/8121869002",
+          "content": "&lt;p&gt;HPC Systems Engineer at Radix Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "radixexperienced"
+        },
+        {
+          "id": 7745843002,
+          "title": "Network Engineer",
+          "updated_at": "2026-09-09T05:01:32.000Z",
+          "location": {
+            "name": "Chicago, Illinois, United States; New York, New York, United States"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/radixexperienced/jobs/7745843002",
+          "content": "&lt;p&gt;Network Engineer at Radix Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "radixexperienced"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "radixtrading-6954287002",
+      "title": "Compliance Specialist – Amsterdam"
+    },
+    {
+      "id": "radixtrading-8121869002",
+      "title": "HPC Systems Engineer"
+    },
+    {
+      "id": "radixtrading-7745843002",
+      "title": "Network Engineer"
+    }
+  ]
+}

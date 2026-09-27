@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Scalian/744000135764259",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Scalian/postings/744000135764259",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Scalian/744000135663050",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Scalian/postings/744000135663050",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Scalian/744000135538301",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Scalian/postings/744000135538301",
       "jobAd": {
         "sections": {
           "jobDescription": {

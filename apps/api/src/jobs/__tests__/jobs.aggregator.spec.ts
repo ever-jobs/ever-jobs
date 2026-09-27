@@ -175,7 +175,7 @@ describe('JobsAggregator', () => {
       const engine = makeStubEngine(['c1', 'c1']); // would merge if invoked
       const aggregator = new JobsAggregator(makeJobsService(), engine);
 
-      const out = await aggregator.aggregateRaw(jobs, { dedup: false });
+      const out = await aggregator.aggregateRaw(jobs, { dedup: false, careerLevels: undefined });
 
       expect(engine.dedup).not.toHaveBeenCalled();
       expect(out.jobs).toBe(jobs);
@@ -186,7 +186,7 @@ describe('JobsAggregator', () => {
       const engine = makeStubEngine([]);
       const aggregator = new JobsAggregator(makeJobsService(), engine);
 
-      const out = await aggregator.aggregateRaw([], { dedup: true });
+      const out = await aggregator.aggregateRaw([], { dedup: true, careerLevels: undefined });
 
       expect(engine.dedup).not.toHaveBeenCalled();
       expect(out.jobs).toEqual([]);
@@ -209,7 +209,7 @@ describe('JobsAggregator', () => {
       const engine = makeStubEngine(['c1', 'c1', 'c1']);
       const aggregator = new JobsAggregator(makeJobsService(), engine);
 
-      const out = await aggregator.aggregateRaw(jobs, { dedup: true });
+      const out = await aggregator.aggregateRaw(jobs, { dedup: true, careerLevels: undefined });
 
       expect(out.jobs).toHaveLength(1);
       expect(out.jobs[0].id).toBe('1'); // first input is the representative
@@ -230,7 +230,7 @@ describe('JobsAggregator', () => {
       const engine = makeStubEngine(['a', 'b', 'a', 'b']);
       const aggregator = new JobsAggregator(makeJobsService(), engine);
 
-      const out = await aggregator.aggregateRaw(jobs, { dedup: true });
+      const out = await aggregator.aggregateRaw(jobs, { dedup: true, careerLevels: undefined });
 
       expect(out.jobs.map((j) => j.id)).toEqual(['j0', 'j1']);
     });
@@ -240,7 +240,7 @@ describe('JobsAggregator', () => {
       const engine = makeStubEngine([null, 'c1', 'c2']);
       const aggregator = new JobsAggregator(makeJobsService(), engine);
 
-      const out = await aggregator.aggregateRaw(jobs, { dedup: true });
+      const out = await aggregator.aggregateRaw(jobs, { dedup: true, careerLevels: undefined });
 
       expect(out.jobs.map((j) => j.id)).toEqual(['2', '3']);
       expect(out.outputCount).toBe(2);
@@ -320,7 +320,7 @@ describe('JobsAggregator', () => {
       const store = makeStubStore();
       const aggregator = new JobsAggregator(makeJobsService(), engine, store);
 
-      const out = await aggregator.aggregateRaw(jobs, { persist: false });
+      const out = await aggregator.aggregateRaw(jobs, { persist: false, careerLevels: undefined });
 
       expect(store.upsertMany).not.toHaveBeenCalled();
       expect(out.persisted).toBeUndefined();
@@ -455,7 +455,7 @@ describe('JobsAggregator', () => {
       const store = makeStubStore();
       const aggregator = new JobsAggregator(makeJobsService(), engine, store);
 
-      const out = await aggregator.aggregateRaw(jobs, { dedup: false });
+      const out = await aggregator.aggregateRaw(jobs, { dedup: false, careerLevels: undefined });
 
       expect(store.upsertMany).not.toHaveBeenCalled();
       expect(out.deduped).toBe(false);

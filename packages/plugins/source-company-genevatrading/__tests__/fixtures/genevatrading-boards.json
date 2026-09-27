@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "genevatrading"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/genevatrading/jobs": {
+      "jobs": [
+        {
+          "id": 5240107007,
+          "title": "AI Engineer Internship - Summer 2027",
+          "updated_at": "2026-09-24T17:25:39.000Z",
+          "location": {
+            "name": "Chicago Office"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/genevatrading/jobs/5240107007",
+          "content": "&lt;p&gt;AI Engineer Internship - Summer 2027 at Geneva Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "genevatrading"
+        },
+        {
+          "id": 5242063007,
+          "title": "C++ Developer (Intern)",
+          "updated_at": "2026-09-24T17:25:39.000Z",
+          "location": {
+            "name": "Chicago Office"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/genevatrading/jobs/5242063007",
+          "content": "&lt;p&gt;C++ Developer (Intern) at Geneva Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "genevatrading"
+        },
+        {
+          "id": 5202927007,
+          "title": "Data Analyst – Mid/Back Office Tech Team",
+          "updated_at": "2026-09-24T18:25:38.000Z",
+          "location": {
+            "name": "Chicago Office"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/genevatrading/jobs/5202927007",
+          "content": "&lt;p&gt;Data Analyst – Mid/Back Office Tech Team at Geneva Trading.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "genevatrading"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "genevatrading-5240107007",
+      "title": "AI Engineer Internship - Summer 2027"
+    },
+    {
+      "id": "genevatrading-5242063007",
+      "title": "C++ Developer (Intern)"
+    },
+    {
+      "id": "genevatrading-5202927007",
+      "title": "Data Analyst – Mid/Back Office Tech Team"
+    }
+  ]
+}

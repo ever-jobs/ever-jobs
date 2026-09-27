@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Masdar/744000134798529",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Masdar/postings/744000134798529",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Masdar/744000134797722",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Masdar/postings/744000134797722",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Masdar/744000134794419",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Masdar/postings/744000134794419",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -23,7 +23,13 @@ import {
   resolveCompensation,
   toDateOnly,
 } from '@ever-jobs/common';
-import { GREENHOUSE_API_URL, GREENHOUSE_HARVEST_API_URL, GREENHOUSE_HEADERS } from './greenhouse.constants';
+import {
+  GREENHOUSE_API_KEY_ENV_VAR,
+  GREENHOUSE_API_URL,
+  GREENHOUSE_HARVEST_API_URL,
+  GREENHOUSE_HARVEST_BOARD_ENV_VAR,
+  GREENHOUSE_HEADERS,
+} from './greenhouse.constants';
 import {
   GreenhouseJob,
   GreenhouseResponse,
@@ -47,6 +53,8 @@ const ENCODED_TAG_RE = new RegExp(`&lt;(?:${BLOCK_TAGS})\\b`, 'i');
 @Injectable()
 export class GreenhouseService implements IScraper {
   private readonly logger = new Logger(GreenhouseService.name);
+  /** The unscoped-env-key warning is logged once per adapter instance. */
+  private warnedUnscopedEnvKey = false;
 
   async scrape(input: ScraperInputDto): Promise<JobResponseDto> {
     const companySlug = input.companySlug;
@@ -56,7 +64,7 @@ export class GreenhouseService implements IScraper {
     }
 
     // ── Authenticated Harvest API path ──────────────────────────────
-    const apiKey = input.auth?.greenhouse?.apiKey ?? process.env.GREENHOUSE_API_KEY;
+    const apiKey = this.harvestKeyFor(input, companySlug);
     if (apiKey) {
       try {
         return await this.scrapeWithApi(apiKey, input, companySlug);
@@ -293,6 +301,41 @@ export class GreenhouseService implements IScraper {
   }
 
   // ─── Harvest API (authenticated) ───────────────────────────────────
+
+  /**
+   * The Harvest key for this scrape, or `undefined` for the public board
+   * (Spec 1735 §4.5).
+   *
+   * Harvest `/v1/jobs` lists the key OWNER's jobs — confidential ones included
+   * — whatever `companySlug` says. Company plugins delegate here with their own
+   * board in the default fan-out, so an unscoped env key made every one of them
+   * return the operator's jobs under another firm's name. Therefore:
+   * - a per-request `auth.greenhouse.apiKey` is the caller's explicit choice for
+   *   its own `companySlug` and is honoured as before;
+   * - the env key is used only when {@link GREENHOUSE_HARVEST_BOARD_ENV_VAR}
+   *   names the requested board (case-insensitive); otherwise the public board
+   *   is read and one warning is logged (the key itself is never logged).
+   */
+  private harvestKeyFor(input: ScraperInputDto, companySlug: string): string | undefined {
+    const requestKey = input.auth?.greenhouse?.apiKey;
+    if (requestKey) return requestKey;
+
+    const envKey = process.env[GREENHOUSE_API_KEY_ENV_VAR];
+    if (!envKey) return undefined;
+
+    const board = process.env[GREENHOUSE_HARVEST_BOARD_ENV_VAR]?.trim().toLowerCase();
+    if (board && board === companySlug.trim().toLowerCase()) return envKey;
+
+    if (!this.warnedUnscopedEnvKey) {
+      this.warnedUnscopedEnvKey = true;
+      this.logger.warn(
+        `${GREENHOUSE_API_KEY_ENV_VAR} is set but ${GREENHOUSE_HARVEST_BOARD_ENV_VAR} does not name ` +
+          `board '${companySlug}'; reading the public board. Harvest returns the key owner's jobs for any ` +
+          `board, so set ${GREENHOUSE_HARVEST_BOARD_ENV_VAR} to your own board token to use it there.`,
+      );
+    }
+    return undefined;
+  }
 
   /**
    * Scrape jobs using the official Greenhouse Harvest API.

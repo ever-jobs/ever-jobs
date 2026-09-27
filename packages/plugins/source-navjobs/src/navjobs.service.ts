@@ -17,8 +17,9 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  firstPublicUrl,
 } from '@ever-jobs/common';
-import { NAVJOBS_FEED_URL, NAVJOBS_PUBLIC_TOKEN_URL, NAVJOBS_HEADERS, NAVJOBS_DEFAULT_RESULTS, NAVJOBS_TOKEN_TIMEOUT_SECONDS } from './navjobs.constants';
+import { NAVJOBS_FEED_URL, NAVJOBS_PUBLIC_TOKEN_URL, NAVJOBS_HEADERS, NAVJOBS_DEFAULT_RESULTS, NAVJOBS_TOKEN_TIMEOUT_SECONDS, NAVJOBS_PUBLIC_AD_URL } from './navjobs.constants';
 import { NavJobsFeedResponse, NavJobsFeedItem } from './navjobs.types';
 
 @SourcePlugin({
@@ -148,13 +149,23 @@ export class NavJobsService implements IScraper {
       }
     }
 
-    const jobUrl = entry?.applicationUrl ?? entry?.sourceurl ?? item.url;
+    // Links (Spec 1751). `item.url` is the feed's API resource
+    // (`/api/v1/feedentry/<uuid>`), so it is never a link: the fallback is the
+    // ad's public page on arbeidsplassen.nav.no. `applicationUrl` / `sourceurl`
+    // keep their precedence, but only when they are real http(s) pages.
+    const adId = entry?.uuid ?? item.id;
+    const applyUrl = firstPublicUrl(entry?.applicationUrl);
+    const jobUrl =
+      applyUrl ??
+      firstPublicUrl(entry?.sourceurl) ??
+      `${NAVJOBS_PUBLIC_AD_URL}/${encodeURIComponent(adId)}`;
 
     return new JobPostDto({
-      id: `navjobs-${entry?.uuid ?? item.id}`,
+      id: `navjobs-${adId}`,
       title: item.title,
       companyName: entry?.businessName ?? null,
       jobUrl,
+      applyUrl,
       location,
       description,
       compensation: null,

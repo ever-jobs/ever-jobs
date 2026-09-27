@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "blackrock:1:BlackRock_Professional"
+      },
+      "atsIdPrefix": "wd-blackrock-"
+    }
+  ],
+  "responses": {
+    "https://blackrock.wd1.myworkdayjobs.com/wday/cxs/blackrock/BlackRock_Professional/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Vice President, Alternatives Fund Accounting - Delaware",
+          "externalPath": "/job/Wilmington-DE/Vice-President--Alternatives-Fund-Accounting_R264269",
+          "locationsText": "Wilmington, DE",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R264269"
+          ]
+        },
+        {
+          "title": "Admin Business Partner",
+          "externalPath": "/job/NY7---50-Hudson-Yards-New-York/Admin-Business-Partner_R266604",
+          "locationsText": "NY7 - 50 Hudson Yards, New York",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R266604"
+          ]
+        },
+        {
+          "title": "Aladdin Product Management Whole Portfolio technology Team, Director",
+          "externalPath": "/job/NY7---50-Hudson-Yards-New-York/Aladdin-Product-Management-Whole-Portfolio-technology-Team--Director_R266252-1",
+          "locationsText": "NY7 - 50 Hudson Yards, New York",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R266252"
+          ]
+        }
+      ]
+    },
+    "https://blackrock.wd1.myworkdayjobs.com/wday/cxs/blackrock/BlackRock_Professional/job/Wilmington-DE/Vice-President--Alternatives-Fund-Accounting_R264269": {
+      "jobPostingInfo": {
+        "title": "Vice President, Alternatives Fund Accounting - Delaware",
+        "jobDescription": "<p>Vice President, Alternatives Fund Accounting - Delaware at BlackRock.</p>",
+        "location": "Wilmington, DE",
+        "jobReqId": "R264269",
+        "externalUrl": "https://blackrock.wd1.myworkdayjobs.com/BlackRock_Professional/job/Wilmington-DE/Vice-President--Alternatives-Fund-Accounting_R264269",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "blackrock"
+      }
+    },
+    "https://blackrock.wd1.myworkdayjobs.com/wday/cxs/blackrock/BlackRock_Professional/job/NY7---50-Hudson-Yards-New-York/Admin-Business-Partner_R266604": {
+      "jobPostingInfo": {
+        "title": "Admin Business Partner",
+        "jobDescription": "<p>Admin Business Partner at BlackRock.</p>",
+        "location": "NY7 - 50 Hudson Yards, New York",
+        "jobReqId": "R266604",
+        "externalUrl": "https://blackrock.wd1.myworkdayjobs.com/BlackRock_Professional/job/NY7---50-Hudson-Yards-New-York/Admin-Business-Partner_R266604",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "blackrock"
+      }
+    },
+    "https://blackrock.wd1.myworkdayjobs.com/wday/cxs/blackrock/BlackRock_Professional/job/NY7---50-Hudson-Yards-New-York/Aladdin-Product-Management-Whole-Portfolio-technology-Team--Director_R266252-1": {
+      "jobPostingInfo": {
+        "title": "Aladdin Product Management Whole Portfolio technology Team, Director",
+        "jobDescription": "<p>Aladdin Product Management Whole Portfolio technology Team, Director at BlackRock.</p>",
+        "location": "NY7 - 50 Hudson Yards, New York",
+        "jobReqId": "R266252",
+        "externalUrl": "https://blackrock.wd1.myworkdayjobs.com/BlackRock_Professional/job/NY7---50-Hudson-Yards-New-York/Aladdin-Product-Management-Whole-Portfolio-technology-Team--Director_R266252-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "blackrock"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "blackrock-R264269",
+      "title": "Vice President, Alternatives Fund Accounting - Delaware"
+    },
+    {
+      "id": "blackrock-R266604",
+      "title": "Admin Business Partner"
+    },
+    {
+      "id": "blackrock-R266252",
+      "title": "Aladdin Product Management Whole Portfolio technology Team, Director"
+    }
+  ]
+}

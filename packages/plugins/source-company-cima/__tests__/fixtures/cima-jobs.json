@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CIMA2/744000135742070",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CIMA2/postings/744000135742070",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CIMA2/744000135738498",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CIMA2/postings/744000135738498",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/CIMA2/744000135592959",
+      "ref": "https://api.smartrecruiters.com/v1/companies/CIMA2/postings/744000135592959",
       "jobAd": {
         "sections": {
           "jobDescription": {

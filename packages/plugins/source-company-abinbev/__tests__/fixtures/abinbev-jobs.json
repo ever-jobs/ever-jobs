@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ABInBev1/743999801129577",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ABInBev1/postings/743999801129577",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ABInBev1/743999798957828",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ABInBev1/postings/743999798957828",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ABInBev1/743999794167838",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ABInBev1/postings/743999794167838",
       "jobAd": {
         "sections": {
           "jobDescription": {

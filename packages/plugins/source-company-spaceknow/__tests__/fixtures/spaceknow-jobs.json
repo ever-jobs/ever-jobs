@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SpaceknowInc/743999763456512",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SpaceknowInc/postings/743999763456512",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SpaceknowInc/743999749088534",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SpaceknowInc/postings/743999749088534",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/SpaceknowInc/743999684663167",
+      "ref": "https://api.smartrecruiters.com/v1/companies/SpaceknowInc/postings/743999684663167",
       "jobAd": {
         "sections": {
           "jobDescription": {

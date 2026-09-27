@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EgisGroup/744000135782879",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EgisGroup/postings/744000135782879",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EgisGroup/744000135780870",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EgisGroup/postings/744000135780870",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/EgisGroup/744000135780829",
+      "ref": "https://api.smartrecruiters.com/v1/companies/EgisGroup/postings/744000135780829",
       "jobAd": {
         "sections": {
           "jobDescription": {

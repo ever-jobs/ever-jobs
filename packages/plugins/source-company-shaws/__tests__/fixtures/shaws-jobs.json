@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Shaws/85700548",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Shaws/postings/85700548",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Shaws/80511098",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Shaws/postings/80511098",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Shaws/80510982",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Shaws/postings/80510982",
       "jobAd": {
         "sections": {
           "jobDescription": {

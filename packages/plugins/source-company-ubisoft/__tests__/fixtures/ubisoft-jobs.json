@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ubisoft2/744000135778609",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ubisoft2/postings/744000135778609",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ubisoft2/744000135750460",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ubisoft2/postings/744000135750460",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/ubisoft2/744000135750880",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ubisoft2/postings/744000135750880",
       "jobAd": {
         "sections": {
           "jobDescription": {

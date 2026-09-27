@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "disney:5:disneycareer"
+      },
+      "atsIdPrefix": "wd-disney-"
+    }
+  ],
+  "responses": {
+    "https://disney.wd5.myworkdayjobs.com/wday/cxs/disney/disneycareer/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Manager, Software Engineering",
+          "externalPath": "/job/Orlando-FL-USA/Manager--Software-Engineering_10158386-2",
+          "locationsText": "Orlando, FL, USA",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "10158386"
+          ]
+        },
+        {
+          "title": "Sr Software Engineer (Project Hire)",
+          "externalPath": "/job/Lake-Buena-Vista-FL-USA/Sr-Software-Engineer--Project-Hire-_10150093",
+          "locationsText": "Lake Buena Vista, FL, USA",
+          "postedOn": "Posted 7 Days Ago",
+          "bulletFields": [
+            "10150093"
+          ]
+        },
+        {
+          "title": "Lead Software Engineer-AI Licensing & Publishing Systems",
+          "externalPath": "/job/Orlando-FL-USA/Lead-Software-Engineer_10132666",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted 30+ Days Ago",
+          "bulletFields": [
+            "10132666"
+          ]
+        }
+      ]
+    },
+    "https://disney.wd5.myworkdayjobs.com/wday/cxs/disney/disneycareer/job/Orlando-FL-USA/Manager--Software-Engineering_10158386-2": {
+      "jobPostingInfo": {
+        "title": "Manager, Software Engineering",
+        "jobDescription": "<p>Manager, Software Engineering at The Walt Disney Company.</p>",
+        "location": "Orlando, FL, USA",
+        "jobReqId": "10158386",
+        "externalUrl": "https://disney.wd5.myworkdayjobs.com/disneycareer/job/Orlando-FL-USA/Manager--Software-Engineering_10158386-2",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "disney"
+      }
+    },
+    "https://disney.wd5.myworkdayjobs.com/wday/cxs/disney/disneycareer/job/Lake-Buena-Vista-FL-USA/Sr-Software-Engineer--Project-Hire-_10150093": {
+      "jobPostingInfo": {
+        "title": "Sr Software Engineer (Project Hire)",
+        "jobDescription": "<p>Sr Software Engineer (Project Hire) at The Walt Disney Company.</p>",
+        "location": "Lake Buena Vista, FL, USA",
+        "jobReqId": "10150093",
+        "externalUrl": "https://disney.wd5.myworkdayjobs.com/disneycareer/job/Lake-Buena-Vista-FL-USA/Sr-Software-Engineer--Project-Hire-_10150093",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "disney"
+      }
+    },
+    "https://disney.wd5.myworkdayjobs.com/wday/cxs/disney/disneycareer/job/Orlando-FL-USA/Lead-Software-Engineer_10132666": {
+      "jobPostingInfo": {
+        "title": "Lead Software Engineer-AI Licensing & Publishing Systems",
+        "jobDescription": "<p>Lead Software Engineer-AI Licensing &amp; Publishing Systems at The Walt Disney Company.</p>",
+        "location": "2 Locations",
+        "jobReqId": "10132666",
+        "externalUrl": "https://disney.wd5.myworkdayjobs.com/disneycareer/job/Orlando-FL-USA/Lead-Software-Engineer_10132666",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "disney"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "disney-10158386",
+      "title": "Manager, Software Engineering"
+    },
+    {
+      "id": "disney-10150093",
+      "title": "Sr Software Engineer (Project Hire)"
+    },
+    {
+      "id": "disney-10132666",
+      "title": "Lead Software Engineer-AI Licensing & Publishing Systems"
+    }
+  ]
+}

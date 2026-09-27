@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "adobe:5:external_experienced"
+      },
+      "atsIdPrefix": "wd-adobe-"
+    }
+  ],
+  "responses": {
+    "https://adobe.wd5.myworkdayjobs.com/wday/cxs/adobe/external_experienced/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Forward Deployed Engineer",
+          "externalPath": "/job/San-Jose/Forward-Deployed-Engineer_R171447-1",
+          "locationsText": "San Jose",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "R171447"
+          ]
+        },
+        {
+          "title": "Senior Engineering Program Manager",
+          "externalPath": "/job/San-Jose/Senior-Engineering-Program-Manager_R171555",
+          "locationsText": "San Jose",
+          "postedOn": "Posted 2 Days Ago",
+          "bulletFields": [
+            "R171555"
+          ]
+        },
+        {
+          "title": "Senior Manager, Employee Relations",
+          "externalPath": "/job/San-Jose/Senior-Manager--Employee-Relations_R171834",
+          "locationsText": "San Jose",
+          "postedOn": "Posted 3 Days Ago",
+          "bulletFields": [
+            "R171834"
+          ]
+        }
+      ]
+    },
+    "https://adobe.wd5.myworkdayjobs.com/wday/cxs/adobe/external_experienced/job/San-Jose/Forward-Deployed-Engineer_R171447-1": {
+      "jobPostingInfo": {
+        "title": "Forward Deployed Engineer",
+        "jobDescription": "<p>Forward Deployed Engineer at Adobe.</p>",
+        "location": "San Jose",
+        "jobReqId": "R171447",
+        "externalUrl": "https://adobe.wd5.myworkdayjobs.com/external_experienced/job/San-Jose/Forward-Deployed-Engineer_R171447-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "adobe"
+      }
+    },
+    "https://adobe.wd5.myworkdayjobs.com/wday/cxs/adobe/external_experienced/job/San-Jose/Senior-Engineering-Program-Manager_R171555": {
+      "jobPostingInfo": {
+        "title": "Senior Engineering Program Manager",
+        "jobDescription": "<p>Senior Engineering Program Manager at Adobe.</p>",
+        "location": "San Jose",
+        "jobReqId": "R171555",
+        "externalUrl": "https://adobe.wd5.myworkdayjobs.com/external_experienced/job/San-Jose/Senior-Engineering-Program-Manager_R171555",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "adobe"
+      }
+    },
+    "https://adobe.wd5.myworkdayjobs.com/wday/cxs/adobe/external_experienced/job/San-Jose/Senior-Manager--Employee-Relations_R171834": {
+      "jobPostingInfo": {
+        "title": "Senior Manager, Employee Relations",
+        "jobDescription": "<p>Senior Manager, Employee Relations at Adobe.</p>",
+        "location": "San Jose",
+        "jobReqId": "R171834",
+        "externalUrl": "https://adobe.wd5.myworkdayjobs.com/external_experienced/job/San-Jose/Senior-Manager--Employee-Relations_R171834",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "adobe"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "adobe-R171447",
+      "title": "Forward Deployed Engineer"
+    },
+    {
+      "id": "adobe-R171555",
+      "title": "Senior Engineering Program Manager"
+    },
+    {
+      "id": "adobe-R171834",
+      "title": "Senior Manager, Employee Relations"
+    }
+  ]
+}

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LVMH2/744000133746278",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LVMH2/postings/744000133746278",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LVMH2/744000133300019",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LVMH2/postings/744000133300019",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/LVMH2/744000130738559",
+      "ref": "https://api.smartrecruiters.com/v1/companies/LVMH2/postings/744000130738559",
       "jobAd": {
         "sections": {
           "jobDescription": {

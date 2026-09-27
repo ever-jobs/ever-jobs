@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RedBull/744000135777079",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RedBull/postings/744000135777079",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RedBull/744000135771729",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RedBull/postings/744000135771729",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/RedBull/744000135769359",
+      "ref": "https://api.smartrecruiters.com/v1/companies/RedBull/postings/744000135769359",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StandardBankGroup/744000135743166",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StandardBankGroup/postings/744000135743166",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StandardBankGroup/744000135743459",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StandardBankGroup/postings/744000135743459",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/StandardBankGroup/744000135741109",
+      "ref": "https://api.smartrecruiters.com/v1/companies/StandardBankGroup/postings/744000135741109",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -1,0 +1,74 @@
+{
+  "note": "Recorded Greenhouse listings (live verification 2026-09-24, Spec 1737); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "greenhouse",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "squarepointcapital"
+      },
+      "atsIdPrefix": "gh-"
+    }
+  ],
+  "responses": {
+    "https://api.greenhouse.io/v1/boards/squarepointcapital/jobs": {
+      "jobs": [
+        {
+          "id": 7454476,
+          "title": "Accountant",
+          "updated_at": "2026-08-06T11:00:40.000Z",
+          "location": {
+            "name": "Jersey, Montreal, Warsaw"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/squarepointcapital/jobs/7454476",
+          "content": "&lt;p&gt;Accountant at Squarepoint Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "squarepointcapital"
+        },
+        {
+          "id": 7731544,
+          "title": "Accounts Payable Finance Analyst",
+          "updated_at": "2026-08-06T11:00:40.000Z",
+          "location": {
+            "name": "Montreal, Warsaw"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/squarepointcapital/jobs/7731544",
+          "content": "&lt;p&gt;Accounts Payable Finance Analyst at Squarepoint Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "squarepointcapital"
+        },
+        {
+          "id": 8002291,
+          "title": "APAC Delta One Trader",
+          "updated_at": "2026-09-11T10:53:55.000Z",
+          "location": {
+            "name": "Hong Kong, Singapore"
+          },
+          "absolute_url": "https://job-boards.greenhouse.io/squarepointcapital/jobs/8002291",
+          "content": "&lt;p&gt;APAC Delta One Trader at Squarepoint Capital.&lt;/p&gt;",
+          "departments": [],
+          "offices": [],
+          "metadata": [],
+          "company_name": "squarepointcapital"
+        }
+      ]
+    }
+  },
+  "expected": [
+    {
+      "id": "squarepoint-7454476",
+      "title": "Accountant"
+    },
+    {
+      "id": "squarepoint-7731544",
+      "title": "Accounts Payable Finance Analyst"
+    },
+    {
+      "id": "squarepoint-8002291",
+      "title": "APAC Delta One Trader"
+    }
+  ]
+}

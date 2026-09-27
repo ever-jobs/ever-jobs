@@ -5,8 +5,9 @@
  * and config are active. Mirrors main.ts by applying ValidationPipe.
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { AppModule } from '../../src/app.module';
+import { createGlobalValidationPipe } from '../../src/pipes/global-validation.pipe';
 
 export async function createTestApp(): Promise<INestApplication> {
   const module: TestingModule = await Test.createTestingModule({
@@ -15,13 +16,7 @@ export async function createTestApp(): Promise<INestApplication> {
 
   const app = module.createNestApplication();
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: false,
-    }),
-  );
+  app.useGlobalPipes(createGlobalValidationPipe());
 
   await app.init();
   return app;

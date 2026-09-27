@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BCforward3/743999651326273",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BCforward3/postings/743999651326273",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BCforward3/116020319",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BCforward3/postings/116020319",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/BCforward3/115083324",
+      "ref": "https://api.smartrecruiters.com/v1/companies/BCforward3/postings/115083324",
       "jobAd": {
         "sections": {
           "jobDescription": {

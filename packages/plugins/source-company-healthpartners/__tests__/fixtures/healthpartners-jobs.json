@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HealthPartners1/108476451",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HealthPartners1/postings/108476451",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HealthPartners1/94654392",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HealthPartners1/postings/94654392",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/HealthPartners1/94478649",
+      "ref": "https://api.smartrecruiters.com/v1/companies/HealthPartners1/postings/94478649",
       "jobAd": {
         "sections": {
           "jobDescription": {

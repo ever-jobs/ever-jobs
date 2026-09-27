@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Eurofins/744000135782279",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Eurofins/postings/744000135782279",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Eurofins/744000135777949",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Eurofins/postings/744000135777949",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Eurofins/744000135771450",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Eurofins/postings/744000135771450",
       "jobAd": {
         "sections": {
           "jobDescription": {

@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AlpadiaLanguageSchoolsSA/744000135702186",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AlpadiaLanguageSchoolsSA/postings/744000135702186",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AlpadiaLanguageSchoolsSA/744000135655919",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AlpadiaLanguageSchoolsSA/postings/744000135655919",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AlpadiaLanguageSchoolsSA/744000135562289",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AlpadiaLanguageSchoolsSA/postings/744000135562289",
       "jobAd": {
         "sections": {
           "jobDescription": {

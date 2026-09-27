@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AubergeCollection/744000135774219",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AubergeCollection/postings/744000135774219",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AubergeCollection/744000135771390",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AubergeCollection/postings/744000135771390",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AubergeCollection/744000135772289",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AubergeCollection/postings/744000135772289",
       "jobAd": {
         "sections": {
           "jobDescription": {

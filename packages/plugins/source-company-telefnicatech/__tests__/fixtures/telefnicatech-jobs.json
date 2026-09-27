@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/telefonicatech/744000135727449",
+      "ref": "https://api.smartrecruiters.com/v1/companies/telefonicatech/postings/744000135727449",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/telefonicatech/744000135727074",
+      "ref": "https://api.smartrecruiters.com/v1/companies/telefonicatech/postings/744000135727074",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/telefonicatech/744000135725645",
+      "ref": "https://api.smartrecruiters.com/v1/companies/telefonicatech/postings/744000135725645",
       "jobAd": {
         "sections": {
           "jobDescription": {

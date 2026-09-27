@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Covista/744000135722195",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Covista/postings/744000135722195",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Covista/744000135721282",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Covista/postings/744000135721282",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Covista/744000135598449",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Covista/postings/744000135598449",
       "jobAd": {
         "sections": {
           "jobDescription": {

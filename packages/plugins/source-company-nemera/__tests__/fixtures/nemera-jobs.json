@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Nemera/744000135737920",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Nemera/postings/744000135737920",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Nemera/744000135487619",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Nemera/postings/744000135487619",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/Nemera/744000135466789",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Nemera/postings/744000135466789",
       "jobAd": {
         "sections": {
           "jobDescription": {

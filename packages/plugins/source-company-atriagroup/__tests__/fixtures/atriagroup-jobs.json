@@ -28,7 +28,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AtriaGroupLLC/743999657011736",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AtriaGroupLLC/postings/743999657011736",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -63,7 +63,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AtriaGroupLLC/743999657011602",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AtriaGroupLLC/postings/743999657011602",
       "jobAd": {
         "sections": {
           "jobDescription": {
@@ -98,7 +98,7 @@
         "id": "permanent",
         "label": "Full-time"
       },
-      "ref": "https://jobs.smartrecruiters.com/AtriaGroupLLC/743999655449938",
+      "ref": "https://api.smartrecruiters.com/v1/companies/AtriaGroupLLC/postings/743999655449938",
       "jobAd": {
         "sections": {
           "jobDescription": {

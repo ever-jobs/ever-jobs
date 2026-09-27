@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "workday:5:Workday"
+      },
+      "atsIdPrefix": "wd-workday-"
+    }
+  ],
+  "responses": {
+    "https://workday.wd5.myworkdayjobs.com/wday/cxs/workday/Workday/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Engagement Manager - Sana",
+          "externalPath": "/job/USA-NY-New-York-City/Senior-Engagement-Manager---Sana-Learn_JR-0109829",
+          "locationsText": "USA, NY, New York City",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-0109829"
+          ]
+        },
+        {
+          "title": "Principal AI GTM Strategist – Outbound & Demand Generation",
+          "externalPath": "/job/USA-CA-Pleasanton/Principal-AI-GTM-Strategist---Outbound---Demand-Generation_JR-0110306",
+          "locationsText": "6 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-0110306"
+          ]
+        },
+        {
+          "title": "Technical Support Delivery Associate - Paradox (Tuesday - Saturday, 12pm-9pm)",
+          "externalPath": "/job/Costa-Rica/Technical-Support-Delivery-Associate---Paradox--Tuesday---Saturday--12pm-9pm-_JR-0110428",
+          "locationsText": "Costa Rica",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "JR-0110428"
+          ]
+        }
+      ]
+    },
+    "https://workday.wd5.myworkdayjobs.com/wday/cxs/workday/Workday/job/USA-NY-New-York-City/Senior-Engagement-Manager---Sana-Learn_JR-0109829": {
+      "jobPostingInfo": {
+        "title": "Engagement Manager - Sana",
+        "jobDescription": "<p>Engagement Manager - Sana at Workday.</p>",
+        "location": "USA, NY, New York City",
+        "jobReqId": "JR-0109829",
+        "externalUrl": "https://workday.wd5.myworkdayjobs.com/Workday/job/USA-NY-New-York-City/Senior-Engagement-Manager---Sana-Learn_JR-0109829",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "workday"
+      }
+    },
+    "https://workday.wd5.myworkdayjobs.com/wday/cxs/workday/Workday/job/USA-CA-Pleasanton/Principal-AI-GTM-Strategist---Outbound---Demand-Generation_JR-0110306": {
+      "jobPostingInfo": {
+        "title": "Principal AI GTM Strategist – Outbound & Demand Generation",
+        "jobDescription": "<p>Principal AI GTM Strategist – Outbound &amp; Demand Generation at Workday.</p>",
+        "location": "6 Locations",
+        "jobReqId": "JR-0110306",
+        "externalUrl": "https://workday.wd5.myworkdayjobs.com/Workday/job/USA-CA-Pleasanton/Principal-AI-GTM-Strategist---Outbound---Demand-Generation_JR-0110306",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "workday"
+      }
+    },
+    "https://workday.wd5.myworkdayjobs.com/wday/cxs/workday/Workday/job/Costa-Rica/Technical-Support-Delivery-Associate---Paradox--Tuesday---Saturday--12pm-9pm-_JR-0110428": {
+      "jobPostingInfo": {
+        "title": "Technical Support Delivery Associate - Paradox (Tuesday - Saturday, 12pm-9pm)",
+        "jobDescription": "<p>Technical Support Delivery Associate - Paradox (Tuesday - Saturday, 12pm-9pm) at Workday.</p>",
+        "location": "Costa Rica",
+        "jobReqId": "JR-0110428",
+        "externalUrl": "https://workday.wd5.myworkdayjobs.com/Workday/job/Costa-Rica/Technical-Support-Delivery-Associate---Paradox--Tuesday---Saturday--12pm-9pm-_JR-0110428",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "workday"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "workdayinc-JR-0109829",
+      "title": "Engagement Manager - Sana"
+    },
+    {
+      "id": "workdayinc-JR-0110306",
+      "title": "Principal AI GTM Strategist – Outbound & Demand Generation"
+    },
+    {
+      "id": "workdayinc-JR-0110428",
+      "title": "Technical Support Delivery Associate - Paradox (Tuesday - Saturday, 12pm-9pm)"
+    }
+  ]
+}

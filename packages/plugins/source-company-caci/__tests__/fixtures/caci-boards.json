@@ -1,0 +1,99 @@
+{
+  "note": "Recorded Workday listings (live verification 2026-09-24, Spec 1736); descriptions and detail payloads are minimal stand-ins derived from the listing.",
+  "backend": "workday",
+  "boards": [
+    {
+      "input": {
+        "companySlug": "caci:1:External"
+      },
+      "atsIdPrefix": "wd-caci-"
+    }
+  ],
+  "responses": {
+    "https://caci.wd1.myworkdayjobs.com/wday/cxs/caci/External/jobs": {
+      "total": 3,
+      "jobPostings": [
+        {
+          "title": "Systems Engineer",
+          "externalPath": "/job/Ypsilanti-MI-US/Systems-Engineer_332638-1",
+          "locationsText": "Ypsilanti, MI, US",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "332638"
+          ]
+        },
+        {
+          "title": "Software Integration & Test Engineer",
+          "externalPath": "/job/King-of-Prussia-PA-US/Software-Integration---Test-Engineer_332564",
+          "locationsText": "3 Locations",
+          "postedOn": "Posted Today",
+          "bulletFields": [
+            "332564"
+          ]
+        },
+        {
+          "title": "Software Engineer",
+          "externalPath": "/job/Ypsilanti-MI-US/Software-Engineer_332174",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted Yesterday",
+          "bulletFields": [
+            "332174"
+          ]
+        }
+      ]
+    },
+    "https://caci.wd1.myworkdayjobs.com/wday/cxs/caci/External/job/Ypsilanti-MI-US/Systems-Engineer_332638-1": {
+      "jobPostingInfo": {
+        "title": "Systems Engineer",
+        "jobDescription": "<p>Systems Engineer at CACI.</p>",
+        "location": "Ypsilanti, MI, US",
+        "jobReqId": "332638",
+        "externalUrl": "https://caci.wd1.myworkdayjobs.com/External/job/Ypsilanti-MI-US/Systems-Engineer_332638-1",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "caci"
+      }
+    },
+    "https://caci.wd1.myworkdayjobs.com/wday/cxs/caci/External/job/King-of-Prussia-PA-US/Software-Integration---Test-Engineer_332564": {
+      "jobPostingInfo": {
+        "title": "Software Integration & Test Engineer",
+        "jobDescription": "<p>Software Integration &amp; Test Engineer at CACI.</p>",
+        "location": "3 Locations",
+        "jobReqId": "332564",
+        "externalUrl": "https://caci.wd1.myworkdayjobs.com/External/job/King-of-Prussia-PA-US/Software-Integration---Test-Engineer_332564",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "caci"
+      }
+    },
+    "https://caci.wd1.myworkdayjobs.com/wday/cxs/caci/External/job/Ypsilanti-MI-US/Software-Engineer_332174": {
+      "jobPostingInfo": {
+        "title": "Software Engineer",
+        "jobDescription": "<p>Software Engineer at CACI.</p>",
+        "location": "2 Locations",
+        "jobReqId": "332174",
+        "externalUrl": "https://caci.wd1.myworkdayjobs.com/External/job/Ypsilanti-MI-US/Software-Engineer_332174",
+        "timeType": "Full time"
+      },
+      "hiringOrganization": {
+        "name": "caci"
+      }
+    }
+  },
+  "expected": [
+    {
+      "id": "caci-332638",
+      "title": "Systems Engineer"
+    },
+    {
+      "id": "caci-332564",
+      "title": "Software Integration & Test Engineer"
+    },
+    {
+      "id": "caci-332174",
+      "title": "Software Engineer"
+    }
+  ]
+}
