@@ -127,6 +127,72 @@ export function markCircuitNeutral(err: unknown): unknown {
   return wrapped;
 }
 
+/**
+ * Environment variable: count a *refused empty result* as a breaker failure
+ * (Spec 1714 FR-15, audit K2). A plugin that turns its own failures into a
+ * resolved response (jobs `[]` plus a `rate_limited` / `blocked` diagnostic —
+ * Softy does, so one refused tenant never throws) used to be recorded as a
+ * success, so its breaker could never open however often the host said stop.
+ *
+ * Default `true`. **`false` restores the pre-1714 behaviour** (every resolved
+ * call is a success). Read once at construction, like
+ * {@link CIRCUIT_MAX_SITES_ENV_VAR}; `setCountRefusals()` changes it at runtime.
+ */
+export const BREAKER_COUNT_REFUSALS_ENV = 'EVER_JOBS_BREAKER_COUNT_REFUSALS';
+
+/** Diagnostic reasons of a resolved, empty result that count as a failure (Spec 1714 FR-15). */
+export const BREAKER_REFUSAL_REASONS: readonly string[] = Object.freeze(['rate_limited', 'blocked']);
+
+/** `code` of the synthetic error recorded as `lastError` for a refused empty result. */
+export const ERR_SOURCE_REFUSED = 'ERR_SOURCE_REFUSED';
+
+/**
+ * Parse {@link BREAKER_COUNT_REFUSALS_ENV}: `true` / `1` / `yes` / `on` → true,
+ * `false` / `0` / `no` / `off` → false (case-insensitive). Unset or empty → the
+ * default `true`; anything else → `true`, reported through `onInvalid` (never thrown).
+ */
+export function readBreakerCountRefusals(
+  env: NodeJS.ProcessEnv = process.env,
+  onInvalid?: (raw: string) => void,
+): boolean {
+  const raw = env[BREAKER_COUNT_REFUSALS_ENV];
+  if (raw === undefined || raw.trim() === '') return true;
+  const value = raw.trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(value)) return true;
+  if (['false', '0', 'no', 'off'].includes(value)) return false;
+  onInvalid?.(raw);
+  return true;
+}
+
+/**
+ * Is `result` a *refused empty result* (Spec 1714 FR-15): an object whose `jobs`
+ * is an empty array and whose `diagnostics.reason` is one of
+ * {@link BREAKER_REFUSAL_REASONS}? Returns that reason and the diagnostic's
+ * `detail`, else `undefined`. A result with jobs (a `partial` scrape), a
+ * `fetch_error`, an `empty` board or any other shape is not a refusal.
+ */
+export function refusedEmptyResult(result: unknown): { reason: string; detail?: string } | undefined {
+  if (!result || typeof result !== 'object') return undefined;
+  const { jobs, diagnostics } = result as { jobs?: unknown; diagnostics?: unknown };
+  if (!Array.isArray(jobs) || jobs.length !== 0) return undefined;
+  if (!diagnostics || typeof diagnostics !== 'object') return undefined;
+  const { reason, detail } = diagnostics as { reason?: unknown; detail?: unknown };
+  if (typeof reason !== 'string' || !BREAKER_REFUSAL_REASONS.includes(reason)) return undefined;
+  return typeof detail === 'string' && detail !== '' ? { reason, detail } : { reason };
+}
+
+/**
+ * The synthetic failure recorded for a refused empty result (Spec 1714 §7.6):
+ * `Error('<site>: resolved with 0 jobs and diagnostic <reason>: <detail>')`, with
+ * `code` {@link ERR_SOURCE_REFUSED}. The scrape's own result is still returned.
+ */
+function refusedResultError(site: Site, refusal: { reason: string; detail?: string }): Error & { code: string } {
+  const suffix = refusal.detail !== undefined ? `: ${refusal.detail}` : '';
+  return Object.assign(new Error(`${site}: resolved with 0 jobs and diagnostic ${refusal.reason}${suffix}`), {
+    code: ERR_SOURCE_REFUSED,
+  });
+}
+
 /** Per-site sample ring-buffer cap (~600 / 60 s = 10 RPS ceiling per site). */
 const MAX_SAMPLES = 600;
 
@@ -169,6 +235,10 @@ export class CircuitBreakerService implements ICircuitBreakerService {
   static readonly readMaxSites = readCircuitMaxSites;
   static readonly isNeutralError = isCircuitNeutralError;
   static readonly markNeutral = markCircuitNeutral;
+  /** Mirrors of the Spec 1714 refused-result helpers. */
+  static readonly COUNT_REFUSALS_ENV_VAR = BREAKER_COUNT_REFUSALS_ENV;
+  static readonly readCountRefusals = readBreakerCountRefusals;
+  static readonly refusedEmptyResult = refusedEmptyResult;
 
   private readonly logger = new Logger(CircuitBreakerService.name);
   private readonly entries = new Map<Site, BreakerEntry>();
@@ -185,10 +255,22 @@ export class CircuitBreakerService implements ICircuitBreakerService {
    */
   private maxSites: number;
 
+  /**
+   * Whether a resolved result with 0 jobs and a `rate_limited` / `blocked`
+   * diagnostic counts as a failure (Spec 1714 FR-15). Read once from
+   * {@link BREAKER_COUNT_REFUSALS_ENV} at construction; `false` = pre-1714.
+   */
+  private countRefusals: boolean;
+
   constructor() {
     this.maxSites = readCircuitMaxSites(process.env, (raw) =>
       this.logger.warn(
         `${CIRCUIT_MAX_SITES_ENV_VAR}=${JSON.stringify(raw)} is not a non-negative integer; using ${DEFAULT_CIRCUIT_MAX_SITES}`,
+      ),
+    );
+    this.countRefusals = readBreakerCountRefusals(process.env, (raw) =>
+      this.logger.warn(
+        `${BREAKER_COUNT_REFUSALS_ENV}=${JSON.stringify(raw)} is not a boolean; using true (count refused empty results)`,
       ),
     );
   }
@@ -196,6 +278,19 @@ export class CircuitBreakerService implements ICircuitBreakerService {
   /** The max number of sites this breaker tracks (`0` = no cap). */
   getMaxSites(): number {
     return this.maxSites;
+  }
+
+  /** Whether refused empty results count as failures (Spec 1714 FR-15). */
+  getCountRefusals(): boolean {
+    return this.countRefusals;
+  }
+
+  /**
+   * Change {@link getCountRefusals} at runtime (`false` = the pre-1714 behaviour:
+   * every resolved call is a success).
+   */
+  setCountRefusals(countRefusals: boolean): void {
+    this.countRefusals = countRefusals === true;
   }
 
   /**
@@ -228,7 +323,11 @@ export class CircuitBreakerService implements ICircuitBreakerService {
    *   1. transition `open → half-open` if cooldown elapsed (probe gate);
    *   2. short-circuit when still `open` (or already-issued half-open probe
    *      quota is spent);
-   *   3. invoke `fn`, time it, record outcome.
+   *   3. invoke `fn`, time it, record outcome. A resolved value that is a
+   *      *refused empty result* ({@link refusedEmptyResult}: jobs `[]` and a
+   *      `rate_limited` / `blocked` diagnostic) is recorded as a failure — and
+   *      still returned unchanged — unless `EVER_JOBS_BREAKER_COUNT_REFUSALS=false`
+   *      (Spec 1714 FR-15). Half-open probes follow the same rule.
    */
   async exec<T>(site: Site, fn: () => Promise<T>): Promise<T> {
     const entry = this.getOrCreate(site);
@@ -267,10 +366,9 @@ export class CircuitBreakerService implements ICircuitBreakerService {
       entry.halfOpenInFlight += 1;
     }
     const startedAt = now;
+    let result: T;
     try {
-      const result = await fn();
-      this.onSuccess(site, entry, this.clock() - startedAt);
-      return result;
+      result = await fn();
     } catch (err) {
       if (isCircuitNeutralError(err)) {
         // Spec 1690 §4.6 — e.g. a scrape we aborted at the search deadline.
@@ -282,6 +380,14 @@ export class CircuitBreakerService implements ICircuitBreakerService {
       this.onFailure(site, entry, this.clock() - startedAt, err);
       throw err;
     }
+    // Spec 1714 FR-15 — the plugin swallowed a refusal into an empty response.
+    const refusal = this.countRefusals ? refusedEmptyResult(result) : undefined;
+    if (refusal) {
+      this.onFailure(site, entry, this.clock() - startedAt, refusedResultError(site, refusal));
+    } else {
+      this.onSuccess(site, entry, this.clock() - startedAt);
+    }
+    return result;
   }
 
   state(site: Site): CircuitState {

@@ -30,9 +30,12 @@ import {
   SourceHealth,
 } from '@ever-jobs/models';
 import {
+  CallerOverridePolicy,
+  CallerOverridesSource,
   CrawlPolicyOverride,
   PluginCrawlPolicy,
   ResolvedCrawlPolicy,
+  crawlFleetSize,
   explainCrawlPolicy,
   normalizeCrawlHostName,
   readCrawlPolicyEnv,
@@ -54,7 +57,26 @@ export type SourceCrawlPolicyResponse = ResolvedCrawlPolicy & {
   userAgentReason?: string;
   meta: {
     preset: string;
-    callerOverrides: string;
+    /**
+     * The EFFECTIVE caller-override mode a search caller's `crawl` is filtered with
+     * for this site (and host): the global `EVER_JOBS_CRAWL_CALLER_OVERRIDES`
+     * tightened by a site owner's lock (plugin manifest or builtin host policy), or
+     * an operator per-site / per-host value (Spec 1714 FR-3). Equal to
+     * `globalCallerOverrides` for every source without a lock.
+     */
+    callerOverrides: CallerOverridePolicy;
+    /** The layer that decided `callerOverrides` (Spec 1714 FR-3). */
+    callerOverridesProvenance: CallerOverridesSource;
+    /** `EVER_JOBS_CRAWL_CALLER_OVERRIDES` (or its default `any`). */
+    globalCallerOverrides: CallerOverridePolicy;
+    /** Builtin host policy patterns applied (e.g. `["*.softy.pro"]`), least specific first (Spec 1714 FR-8). */
+    builtinHostPatterns: string[];
+    /**
+     * `EVER_JOBS_CRAWL_FLEET_SIZE`: processes sharing one egress; this process
+     * multiplies `minIntervalMs` and `minGapMs` by it (Spec 1714 FR-11). The
+     * top-level policy shows the per-policy values, not the multiplied ones.
+     */
+    fleetSize: number;
     abortOnDeadline: boolean;
     /** How many proxies the env supplies (the list itself may carry credentials). */
     envProxyCount: number;
@@ -303,8 +325,14 @@ export class SourcesHealthController {
    * - `host` (optional): a hostname or URL; selects the builtin-host and
    *   operator-host layers. Without it the site-level policy is returned.
    * - `crawl` (optional): a JSON caller override to preview, e.g.
-   *   `{"maxConcurrentPerHost":1}`; fields refused by
-   *   `EVER_JOBS_CRAWL_CALLER_OVERRIDES` are listed in `meta.caller.rejected`.
+   *   `{"maxConcurrentPerHost":1}`; fields refused by the effective
+   *   caller-override mode are listed in `meta.caller.rejected`.
+   *
+   * Spec 1714: `meta.callerOverrides` is the EFFECTIVE mode (a site owner's lock
+   * — Softy's `stricter` — can tighten the global
+   * `EVER_JOBS_CRAWL_CALLER_OVERRIDES`; an operator per-site/host value replaces
+   * it), with `meta.callerOverridesProvenance`, `meta.globalCallerOverrides`,
+   * `meta.builtinHostPatterns` and `meta.fleetSize`.
    *
    * 404 for a site that is neither a known `Site`, a registered plugin, nor a
    * crawl pseudo-site (`liveness-http`, or a `sites` key of the operator policy);
@@ -316,7 +344,11 @@ export class SourcesHealthController {
     description:
       'Returns the effective crawl policy (identity, pacing, proxy rotation, retries, robots.txt, ' +
       'egress guard, discovery) for the source, and optionally one host, with the layer that set ' +
-      "each field (`provenance`), the plugin's UA reason, and configuration warnings (Spec 1690).",
+      "each field (`provenance`), the plugin's UA reason, and configuration warnings (Spec 1690). " +
+      '`meta.callerOverrides` is the effective caller-override mode: a site owner can lock what a ' +
+      'search caller may change (e.g. Softy: `stricter`, callers may only make its traffic more polite), ' +
+      'and an operator per-site/host `callerOverrides` replaces it; `meta.callerOverridesProvenance` ' +
+      'names the deciding layer, `meta.fleetSize` the EVER_JOBS_CRAWL_FLEET_SIZE multiplier (Spec 1714).',
   })
   @ApiParam({ name: 'site', description: 'Source key, e.g. "softy"' })
   @ApiQuery({
@@ -387,6 +419,10 @@ export class SourcesHealthController {
       meta: {
         preset: explanation.preset,
         callerOverrides: explanation.callerOverrides,
+        callerOverridesProvenance: explanation.callerOverridesSource,
+        globalCallerOverrides: explanation.globalCallerOverrides,
+        builtinHostPatterns: explanation.builtinHostPatterns,
+        fleetSize: crawlFleetSize(env),
         abortOnDeadline: env.abortOnDeadline,
         envProxyCount: env.proxies.length,
         plugin: plugin ?? null,

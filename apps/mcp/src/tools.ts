@@ -132,7 +132,8 @@ export const CRAWL_POLICY_INPUT_SCHEMA = {
   description:
     'Optional per-request crawl policy (Spec 1690), sent to the API as `crawl` with camelCase keys, ' +
     'e.g. {"maxConcurrentPerHost":1,"minIntervalMs":1000,"discovery":"sitemap"}. ' +
-    'The operator may restrict what a caller can change (EVER_JOBS_CRAWL_CALLER_OVERRIDES); ' +
+    'The operator may restrict what a caller can change (EVER_JOBS_CRAWL_CALLER_OVERRIDES), and a site owner ' +
+    'may lock its own sources (Spec 1714: e.g. Softy only accepts values that make its traffic more polite); ' +
     'the preset (EVER_JOBS_CRAWL_PRESET) is server-wide and cannot be chosen here.',
   additionalProperties: false,
   properties: {
@@ -147,6 +148,12 @@ export const CRAWL_POLICY_INPUT_SCHEMA = {
     jitterMs: nonNegativeInt('Random extra 0..jitterMs per gap, ms.'),
     maxQueueWaitMs: nonNegativeInt('Longest wait for a slot before failing fast, ms. 0 = no limit.'),
     adaptiveThrottle: { type: 'boolean' },
+    minGapMs: nonNegativeInt(
+      'Minimum idle time after a request of the bucket completes before the next one starts, ms, on top of minIntervalMs. 0 = off (Spec 1714).',
+    ),
+    serverErrorCooldownMs: nonNegativeInt(
+      'Whole-bucket cool-down after a 500/502/504, a timeout or a connection reset, ms. 0 = off (Spec 1714).',
+    ),
     retries: {
       ...nonNegativeInt(`Retries per request on a retryable status, 0-${MCP_MAX_CRAWL_RETRIES}.`),
       maximum: MCP_MAX_CRAWL_RETRIES,

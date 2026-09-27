@@ -1,5 +1,6 @@
-import { readCrawlPolicyEnv, resolveCrawlPolicy } from '@ever-jobs/common';
+import { crawlFleetSize, crawlStricterRules, readCrawlPolicyEnv, resolveCrawlPolicy } from '@ever-jobs/common';
 import { CircuitBreakerService } from '@ever-jobs/plugin';
+import { livenessTrustFreshFetch, searchStopOn503 } from '../jobs/crawl-policy.mapping';
 
 /**
  * Central configuration factory.
@@ -130,6 +131,10 @@ export default () => {
         policies: env.policies,
         /** Count only — proxy URLs may carry credentials. */
         proxyCount: env.proxies.length,
+        /** EVER_JOBS_CRAWL_FLEET_SIZE — processes sharing one egress (Spec 1714; 1 = pre-1714). */
+        fleetSize: crawlFleetSize(env),
+        /** EVER_JOBS_CRAWL_STRICTER_RULES — `stricter` comparators (Spec 1714; `1690` = pre-1714). */
+        stricterRules: crawlStricterRules(env),
         warnings: env.warnings,
         /** The policy a request gets before plugin, host and caller layers apply. */
         effective: resolveCrawlPolicy({}, env),
@@ -139,6 +144,20 @@ export default () => {
     // Circuit breaker (Spec 005; cap configurable since Spec 1690) — mirror.
     circuit: {
       maxSites: CircuitBreakerService.readMaxSites(process.env),
+      /**
+       * EVER_JOBS_BREAKER_COUNT_REFUSALS (Spec 1714): a resolved result with 0 jobs and a
+       * rate_limited / blocked diagnostic counts as a breaker failure. `false` = pre-1714.
+       */
+      countRefusals: CircuitBreakerService.readCountRefusals(process.env),
+    },
+
+    // Spec 1714 API switches — READ-ONLY mirrors; the code reads the env variables
+    // directly per search (JobsService / JobsController), so set those to change them.
+    searchSwitches: {
+      /** EVER_JOBS_SEARCH_STOP_ON_503: a 503 stops a source's remaining locations (`false` = pre-1714). */
+      stopOn503: searchStopOn503(process.env),
+      /** EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH: ?liveness=true skips freshly fetched pages (`false` = pre-1714). */
+      livenessTrustFreshFetch: livenessTrustFreshFetch(process.env),
     },
 
     // GraphQL

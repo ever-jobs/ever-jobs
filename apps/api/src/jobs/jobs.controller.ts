@@ -29,6 +29,7 @@ import {
   type ILivenessChecker,
   type ILegitimacyChecker,
   type LegitimacyInput,
+  JOB_LIVENESS_REASON_FRESH_FETCH,
 } from '@ever-jobs/models';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -37,7 +38,7 @@ import {
   hasExclusionInput,
   runWithScrapeContext,
 } from '@ever-jobs/common';
-import { LIVENESS_CRAWL_SITE, livenessDeadlineMs } from './crawl-policy.mapping';
+import { LIVENESS_CRAWL_SITE, livenessDeadlineMs, livenessTrustFreshFetch } from './crawl-policy.mapping';
 import { JobsService, readMaxSearchLocations } from './jobs.service';
 import { AggregateResult, JobsAggregator } from './jobs.aggregator';
 import { AnalyticsService } from '@ever-jobs/analytics';
@@ -190,6 +191,11 @@ export class JobsController {
       return 'off';
     };
 
+    // Spec 1714 FR-16 — taken BEFORE the cache lookup: a job whose plugin fetched
+    // its `jobUrl` at or after this instant (`jobUrlFetchedAt`) was read during
+    // this very request, so `?liveness=true` need not probe it again.
+    const requestStartedAt = Date.now();
+
     // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
     // Spec 1700: exclusion fields never reach the key (they filter after the
     // cache) and `locations` keys case-insensitively in the caller's order
@@ -270,7 +276,8 @@ export class JobsController {
     // Order matters: legitimacy folds in liveness's off-platform redirect
     // signal (`job.liveness?.state === 'expired'`), so liveness runs first.
     if (parseBool(livenessRaw) && this.livenessChecker) {
-      await this.enrichLiveness(outputJobs);
+      // A search-cache hit ran no plugin, so nothing in it counts as fresh.
+      await this.enrichLiveness(outputJobs, fromCache ? undefined : requestStartedAt);
     }
     if (parseBool(legitimacyRaw) && this.legitimacyChecker) {
       this.enrichLegitimacy(outputJobs);
@@ -402,10 +409,23 @@ export class JobsController {
 
   /**
    * Attach per-posting liveness (active/expired/uncertain) by probing each result URL via the
-   * `ILivenessChecker` (Spec 721). Best-effort: any failure degrades the whole batch to
+   * `ILivenessChecker` (Spec 721). Best-effort: any failure degrades the probed jobs to
    * `uncertain` and never aborts the request.
+   *
+   * The probes run in a `liveness-http` scrape context, so they obey the crawl policy of each
+   * probed HOST — including a builtin host policy such as `*.softy.pro` (Spec 1714 FR-8).
+   *
+   * `trustSince` (Spec 1714 FR-16; the request start, `undefined` on a search-cache hit): a job
+   * whose `jobUrlFetchedAt` is not older than it — its plugin fetched and parsed `jobUrl` during
+   * this very request — is marked `{ state: 'active', checkedAt: jobUrlFetchedAt, reason:
+   * 'fresh-fetch' }` and NOT probed again. `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false` probes every
+   * URL (the pre-1714 behaviour). Probe verdicts keep their pre-1714 shape (no `reason`).
    */
-  private async enrichLiveness(jobs: JobPostDto[]): Promise<void> {
+  private async enrichLiveness(jobs: JobPostDto[], trustSince?: number): Promise<void> {
+    const toProbe = this.markFreshlyFetched(jobs, trustSince);
+    // Every job was freshly fetched: nothing left to probe. (With nothing trusted,
+    // `toProbe` is `jobs` itself and the batch runs exactly as before, even when empty.)
+    if (toProbe !== jobs && toProbe.length === 0) return;
     try {
       // Bounded (Spec 1690): probes queued behind a paced or cooling-down host are
       // aborted at the deadline (the checker reports them `uncertain`) instead of
@@ -413,9 +433,9 @@ export class JobsController {
       const deadlineMs = livenessDeadlineMs();
       const signal = deadlineMs > 0 ? AbortSignal.timeout(deadlineMs) : undefined;
       const verdicts = await runWithScrapeContext({ site: LIVENESS_CRAWL_SITE, ...(signal ? { signal } : {}) }, () =>
-        this.livenessChecker!.checkBatch(jobs.map((j) => j.jobUrl)),
+        this.livenessChecker!.checkBatch(toProbe.map((j) => j.jobUrl)),
       );
-      jobs.forEach((job, i) => {
+      toProbe.forEach((job, i) => {
         const v = verdicts[i];
         job.liveness = v
           ? { state: v.result, checkedAt: v.checkedAt }
@@ -425,8 +445,39 @@ export class JobsController {
       this.logger.warn(
         `Liveness enrichment failed; defaulting to uncertain: ${err instanceof Error ? err.message : err}`,
       );
-      for (const job of jobs) job.liveness = { state: 'uncertain' };
+      for (const job of toProbe) job.liveness = { state: 'uncertain' };
     }
+  }
+
+  /**
+   * Spec 1714 FR-16 — mark the jobs whose plugin fetched `jobUrl` at or after `trustSince` as
+   * live (`reason: 'fresh-fetch'`) and return the ones that still need a probe, in order. Returns
+   * `jobs` itself when nothing is trusted (no `trustSince`, or the switch is off).
+   */
+  private markFreshlyFetched(jobs: JobPostDto[], trustSince: number | undefined): JobPostDto[] {
+    if (trustSince === undefined || !livenessTrustFreshFetch()) return jobs;
+    const toProbe: JobPostDto[] = [];
+    let trusted = 0;
+    for (const job of jobs) {
+      const fetchedAt = typeof job.jobUrlFetchedAt === 'string' ? Date.parse(job.jobUrlFetchedAt) : Number.NaN;
+      if (Number.isFinite(fetchedAt) && fetchedAt >= trustSince) {
+        job.liveness = {
+          state: 'active',
+          checkedAt: job.jobUrlFetchedAt as string,
+          reason: JOB_LIVENESS_REASON_FRESH_FETCH,
+        };
+        trusted++;
+      } else {
+        toProbe.push(job);
+      }
+    }
+    if (trusted > 0) {
+      this.logger.log(
+        `Liveness: ${trusted} job(s) fetched by their source during this request marked active without a probe ` +
+          `(EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false probes them anyway)`,
+      );
+    }
+    return trusted > 0 ? toProbe : jobs;
   }
 
   /**

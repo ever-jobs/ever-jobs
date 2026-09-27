@@ -56,6 +56,13 @@ describe('MCP crawl schema (Spec 1690)', () => {
     expect(CRAWL_POLICY_INPUT_SCHEMA.type).toBe('object');
     expect(CRAWL_POLICY_INPUT_SCHEMA.additionalProperties).toBe(false);
   });
+
+  it('Spec 1714: minGapMs and serverErrorCooldownMs are non-negative integers; a caller cannot send callerOverrides', () => {
+    const props = CRAWL_POLICY_INPUT_SCHEMA.properties as Record<string, { type?: string; minimum?: number }>;
+    expect(props.minGapMs).toMatchObject({ type: 'integer', minimum: 0 });
+    expect(props.serverErrorCooldownMs).toMatchObject({ type: 'integer', minimum: 0 });
+    expect(props).not.toHaveProperty('callerOverrides');
+  });
 });
 
 describe('normalizeMcpCrawl', () => {

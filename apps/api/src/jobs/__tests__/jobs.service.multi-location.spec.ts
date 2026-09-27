@@ -33,6 +33,7 @@ import {
   readMaxSearchLocations,
 } from '../jobs.service';
 import { searchCacheParams } from '../search-cache-params';
+import { SEARCH_STOP_ON_503_ENV, searchStopOn503 } from '../crawl-policy.mapping';
 import {
   AUSTIN,
   CHICAGO,
@@ -366,12 +367,13 @@ describe('JobsService — multi-location search (Spec 1700)', () => {
       expect(muse.scrape).toHaveBeenCalledTimes(1);
     });
 
-    it('does not stop on a non-refusal (404, 5xx, empty)', async () => {
+    it('does not stop on a non-refusal (404, a plain 5xx, empty)', async () => {
       const notFound = scraperOf(async () => {
         throw axiosLike(404);
       });
+      // A 503 is a refusal since Spec 1714 (see the describe block below); 502 is not.
       const serverError = scraperOf(
-        async () => new JobResponseDto([], new ScrapeDiagnostics('fetch_error', 'HTTP 503')),
+        async () => new JobResponseDto([], new ScrapeDiagnostics('fetch_error', 'HTTP 502')),
       );
       const { service } = createService([[Site.THEMUSE, notFound], [Site.DICE, serverError]]);
 
@@ -642,6 +644,146 @@ describe('JobsService — multi-location search (Spec 1700)', () => {
 
       expect(Date.now() - started).toBeLessThan(1_000);
     });
+  });
+});
+
+/**
+ * Spec 1714 FR-14 (audit G17) — a 503 "Service Unavailable" is a refusal too, so a
+ * struggling source is not asked again for every location.
+ * `EVER_JOBS_SEARCH_STOP_ON_503=false` restores the pre-1714 behaviour.
+ *
+ * Red control of the key test: set {@link STOP_ON_503_FOR_KEY_TEST} to `'false'`
+ * → locations 2–3 are attempted (test goes red).
+ */
+const STOP_ON_503_FOR_KEY_TEST: string | undefined = undefined;
+
+describe('JobsService — multi-location stop on 503 (Spec 1714 FR-14)', () => {
+  const saved = process.env[SEARCH_STOP_ON_503_ENV];
+  const setStop = (value: string | undefined) => {
+    if (value === undefined) delete process.env[SEARCH_STOP_ON_503_ENV];
+    else process.env[SEARCH_STOP_ON_503_ENV] = value;
+  };
+  afterEach(() => setStop(saved));
+
+  const LOCATIONS = [NEW_YORK, CHICAGO, AUSTIN];
+  const search = (service: JobsService) =>
+    service.searchJobsWithDiagnostics(new ScraperInputDto({ siteType: [Site.THEMUSE], locations: LOCATIONS }));
+
+  it('a resolved fetch_error "…status code 503" stops the remaining locations (key test)', async () => {
+    setStop(STOP_ON_503_FOR_KEY_TEST);
+    const muse = scraperOf(
+      async () => new JobResponseDto([], new ScrapeDiagnostics('fetch_error', 'Request failed with status code 503')),
+    );
+    const { service, warn } = createService([[Site.THEMUSE, muse]]);
+
+    const out = await search(service);
+
+    expect(muse.scrape).toHaveBeenCalledTimes(1);
+    const rows = rowsFor(out.perSource, Site.THEMUSE);
+    expect(rows.map((r) => [r.location, r.reason])).toEqual([
+      [NEW_YORK, 'fetch_error'],
+      [CHICAGO, 'fetch_error'],
+      [AUSTIN, 'fetch_error'],
+    ]);
+    expect(rows[1].detail).toBe(`not attempted: ${Site.THEMUSE} refused the search for "${NEW_YORK}"`);
+    expect(rows[2].detail).toMatch(/^not attempted: /);
+    expect(warn.mock.calls.map(([m]) => String(m)).join('\n')).toContain('not asking it for the remaining locations');
+  });
+
+  it('a "Service Unavailable" diagnostic detail counts too', async () => {
+    const muse = scraperOf(async () => new JobResponseDto([], new ScrapeDiagnostics('fetch_error', 'Service Unavailable')));
+    const { service } = createService([[Site.THEMUSE, muse]]);
+    await search(service);
+    expect(muse.scrape).toHaveBeenCalledTimes(1);
+  });
+
+  it('a thrown 503 stops the remaining locations', async () => {
+    const muse = scraperOf(async () => {
+      throw axiosLike(503);
+    });
+    const { service } = createService([[Site.THEMUSE, muse]]);
+
+    const out = await search(service);
+
+    expect(muse.scrape).toHaveBeenCalledTimes(1);
+    expect(rowsFor(out.perSource, Site.THEMUSE).map((r) => r.reason)).toEqual(['fetch_error', 'fetch_error', 'fetch_error']);
+  });
+
+  it('a thrown error naming 503 without a response object stops too', async () => {
+    const muse = scraperOf(async () => {
+      throw new Error('softy: sitemap answered HTTP 503');
+    });
+    const { service } = createService([[Site.THEMUSE, muse]]);
+    await search(service);
+    expect(muse.scrape).toHaveBeenCalledTimes(1);
+  });
+
+  it('a rate_limited diagnostic after an earlier location’s plain 502 stops the rest', async () => {
+    const muse = scraperOf(async (input) =>
+      input.location === NEW_YORK
+        ? new JobResponseDto([], new ScrapeDiagnostics('fetch_error', 'Request failed with status code 502'))
+        : new JobResponseDto([], new ScrapeDiagnostics('rate_limited', 'acme.softy.pro asked us to wait 300 s')),
+    );
+    const { service } = createService([[Site.THEMUSE, muse]]);
+
+    const out = await search(service);
+
+    expect(muse.scrape).toHaveBeenCalledTimes(2);
+    expect(rowsFor(out.perSource, Site.THEMUSE).map((r) => [r.location, r.reason])).toEqual([
+      [NEW_YORK, 'fetch_error'],
+      [CHICAGO, 'rate_limited'],
+      [AUSTIN, 'rate_limited'],
+    ]);
+  });
+
+  it('rate_limited and blocked diagnostics still stop, 429 too (unchanged)', async () => {
+    for (const diag of [
+      new ScrapeDiagnostics('rate_limited', 'cooling down'),
+      new ScrapeDiagnostics('blocked', '403'),
+      new ScrapeDiagnostics('fetch_error', 'HTTP 429'),
+    ]) {
+      const muse = scraperOf(async () => new JobResponseDto([], diag));
+      const { service } = createService([[Site.THEMUSE, muse]]);
+      await search(service);
+      expect(muse.scrape).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('a plain 500 / 502 / 504 does not stop the loop', async () => {
+    for (const status of [500, 502, 504]) {
+      const muse = scraperOf(async () => {
+        throw axiosLike(status);
+      });
+      const { service } = createService([[Site.THEMUSE, muse]]);
+      await search(service);
+      expect(muse.scrape).toHaveBeenCalledTimes(3);
+    }
+  });
+
+  it('EVER_JOBS_SEARCH_STOP_ON_503=false restores the pre-1714 behaviour: every location is asked', async () => {
+    setStop('false');
+    const resolved = scraperOf(
+      async () => new JobResponseDto([], new ScrapeDiagnostics('fetch_error', 'Request failed with status code 503')),
+    );
+    const thrown = scraperOf(async () => {
+      throw axiosLike(503);
+    });
+    const { service } = createService([[Site.THEMUSE, resolved], [Site.DICE, thrown]]);
+
+    await service.searchJobsWithDiagnostics(
+      new ScraperInputDto({ siteType: [Site.THEMUSE, Site.DICE], locations: LOCATIONS }),
+    );
+
+    expect(resolved.scrape).toHaveBeenCalledTimes(3);
+    expect(thrown.scrape).toHaveBeenCalledTimes(3);
+  });
+
+  it('searchStopOn503 parses the switch (default true; invalid → true)', () => {
+    expect(searchStopOn503({})).toBe(true);
+    expect(searchStopOn503({ [SEARCH_STOP_ON_503_ENV]: 'false' })).toBe(false);
+    expect(searchStopOn503({ [SEARCH_STOP_ON_503_ENV]: '0' })).toBe(false);
+    expect(searchStopOn503({ [SEARCH_STOP_ON_503_ENV]: 'TRUE' })).toBe(true);
+    expect(searchStopOn503({ [SEARCH_STOP_ON_503_ENV]: 'maybe' })).toBe(true);
   });
 });
 

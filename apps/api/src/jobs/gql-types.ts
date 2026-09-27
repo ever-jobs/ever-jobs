@@ -55,7 +55,7 @@ const oneOf = (values: readonly string[]): string => values.join(' | ');
  */
 @InputType('CrawlPolicyInput', {
   description:
-    'Per-request crawl policy (Spec 1690): identity, pacing, proxy rotation, retries, robots.txt and discovery. Every field optional; subject to EVER_JOBS_CRAWL_CALLER_OVERRIDES.',
+    'Per-request crawl policy (Spec 1690): identity, pacing, proxy rotation, retries, robots.txt and discovery. Every field optional; subject to EVER_JOBS_CRAWL_CALLER_OVERRIDES and to a site owner lock (Spec 1714: e.g. Softy only accepts values that make its traffic more polite).',
 })
 export class CrawlPolicyGqlInput extends CrawlPolicyDto {
   @Field(() => String, { nullable: true, description: 'User-Agent to send (keywords default | browser are expanded).' })
@@ -90,6 +90,20 @@ export class CrawlPolicyGqlInput extends CrawlPolicyDto {
 
   @Field(() => Boolean, { nullable: true })
   adaptiveThrottle?: boolean;
+
+  @Field(() => Int, {
+    nullable: true,
+    description:
+      'Minimum idle time after a request of the bucket completes before the next one starts, ms, on top of minIntervalMs. 0 = off (Spec 1714).',
+  })
+  minGapMs?: number;
+
+  @Field(() => Int, {
+    nullable: true,
+    description:
+      'Whole-bucket cool-down after a 500/502/504, a timeout or a connection reset, ms. 0 = off (Spec 1714).',
+  })
+  serverErrorCooldownMs?: number;
 
   @Field(() => Int, {
     nullable: true,

@@ -3,6 +3,7 @@ import {
   CrawlPolicyDto,
   IScraper,
   JobResponseDto,
+  ScrapeDiagnostics,
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
@@ -123,7 +124,15 @@ function createService(entries: [Site, IScraper][], opts: ServiceOptions = {}) {
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-const ENV_KEYS = [CRAWL_ENV.ABORT_ON_DEADLINE, CRAWL_ENV.CALLER_OVERRIDES, CRAWL_EXTRA_ENV.CALLER_PROXIES];
+const ENV_KEYS = [
+  CRAWL_ENV.ABORT_ON_DEADLINE,
+  CRAWL_ENV.CALLER_OVERRIDES,
+  CRAWL_EXTRA_ENV.CALLER_PROXIES,
+  // Spec 1714
+  CRAWL_ENV.POLICIES,
+  CRAWL_EXTRA_ENV.STRICTER_RULES,
+  CRAWL_EXTRA_ENV.PLUGIN_MANIFESTS,
+];
 let savedEnv: Record<string, string | undefined>;
 beforeEach(() => {
   savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
@@ -329,6 +338,190 @@ describe('JobsService — scrape context (Spec 1690 §4.1/§4.6)', () => {
     const line = service.spies.logger.log.mock.calls.map(([m]: [string]) => String(m)).find((m) => m.startsWith('Starting search for'))!;
     expect(line).toContain(`retries=${POLITE_CRAWL_POLICY.retries}, backoff=${POLITE_CRAWL_POLICY.retryBackoff}`);
     expect(line).not.toContain('retries=3, backoff=linear');
+  });
+});
+
+/**
+ * Spec 1714 FR-5 / FR-7 (audit G9, G29, K3) — `scrapeOne` resolves each source's
+ * effective caller-override mode (`resolveCallerOverrides({ site, plugin })`) and
+ * gates the caller's `proxies` and `requestTimeout` with it. REST, GraphQL, MCP
+ * (through REST) and the CLI all reach this one place.
+ *
+ * Red controls of the key test ("Softy lock"):
+ *   - set {@link KEY_TEST_STRICTER_RULES} to `'1690'` → `0.2` reaches Softy (red);
+ *   - an operator `sites.softy.callerOverrides: "any"` → the proxies are kept
+ *     (covered by its own test below, which asserts the opposite outcome).
+ */
+const KEY_TEST_STRICTER_RULES: string | undefined = undefined;
+
+describe('JobsService — caller lock on proxies and requestTimeout (Spec 1714)', () => {
+  const CALLER_PROXIES = ['http://p1.example.net:8080'];
+  const SOFTY_LOCK: PluginCrawlPolicy = { rateLimitScope: 'domain', maxConcurrentPerHost: 1, callerOverrides: 'stricter' };
+
+  async function run(
+    site: Site,
+    input: Partial<ScraperInputDto>,
+    pluginCrawl: Partial<Record<Site, PluginCrawlPolicy>> = { [Site.SOFTY]: SOFTY_LOCK },
+  ) {
+    const { scraper, seen } = capturingScraper();
+    const service = createService([[site, scraper]], { pluginCrawl });
+    await service.searchJobs(new ScraperInputDto({ siteType: [site], ...input }));
+    return { seen, service };
+  }
+
+  const setEnv = (vars: Record<string, string | undefined>) => {
+    for (const [k, v] of Object.entries(vars)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    resetCrawlPolicyEnvCache();
+  };
+
+  it('Softy lock: requestTimeout 0.2 reaches the plugin as 60, caller proxies reach neither the DTO nor the context (key test)', async () => {
+    setEnv({ [CRAWL_EXTRA_ENV.STRICTER_RULES]: KEY_TEST_STRICTER_RULES });
+    const { seen, service } = await run(Site.SOFTY, { requestTimeout: 0.2, proxies: CALLER_PROXIES });
+
+    expect(seen.input!.requestTimeout).toBe(60);
+    expect(seen.input!.proxies).toBeUndefined();
+    expect(seen.ctx!.proxies).toBeUndefined();
+    const warnings = service.spies.logger.warn.mock.calls.map(([m]: [string]) => String(m));
+    expect(warnings.filter((m) => m.startsWith('Search proxies ignored for softy'))).toHaveLength(1);
+    expect(service.spies.logger.debug.mock.calls.map(([m]: [string]) => String(m)).join('\n')).toContain(
+      'softy: requestTimeout 0.2s is shorter than the default 60s',
+    );
+  });
+
+  it('Softy lock: a longer requestTimeout (a stricter value) is kept', async () => {
+    const { seen } = await run(Site.SOFTY, { requestTimeout: 120 });
+    expect(seen.input!.requestTimeout).toBe(120);
+  });
+
+  it('a source without a lock under the default "any" gets exactly the caller values (pre-1714)', async () => {
+    const { seen, service } = await run(Site.LINKEDIN, { requestTimeout: 0.2, proxies: CALLER_PROXIES });
+
+    expect(seen.input!.requestTimeout).toBe(0.2);
+    expect(seen.input!.proxies).toEqual(CALLER_PROXIES);
+    expect(seen.ctx!.proxies).toEqual(CALLER_PROXIES);
+    const warnings = service.spies.logger.warn.mock.calls.map(([m]: [string]) => String(m));
+    expect(warnings.filter((m) => m.startsWith('Search proxies ignored'))).toHaveLength(0);
+  });
+
+  it('a search over both keeps the proxies for the unlocked source only, with one warning naming softy', async () => {
+    const softy = capturingScraper();
+    const linkedin = capturingScraper();
+    const service = createService(
+      [
+        [Site.SOFTY, softy.scraper],
+        [Site.LINKEDIN, linkedin.scraper],
+      ],
+      { pluginCrawl: { [Site.SOFTY]: SOFTY_LOCK } },
+    );
+    await service.searchJobs(
+      new ScraperInputDto({ siteType: [Site.SOFTY, Site.LINKEDIN], proxies: CALLER_PROXIES, requestTimeout: 1 }),
+    );
+
+    expect(softy.seen.input!.proxies).toBeUndefined();
+    expect(softy.seen.input!.requestTimeout).toBe(60);
+    expect(linkedin.seen.input!.proxies).toEqual(CALLER_PROXIES);
+    expect(linkedin.seen.input!.requestTimeout).toBe(1);
+    const warnings = service.spies.logger.warn.mock.calls.map(([m]: [string]) => String(m));
+    expect(warnings.filter((m) => m.startsWith('Search proxies ignored'))).toEqual([
+      expect.stringContaining('Search proxies ignored for softy:'),
+    ]);
+  });
+
+  it('global "none": requestTimeout is ignored for every source', async () => {
+    setEnv({ [CRAWL_ENV.CALLER_OVERRIDES]: 'none' });
+    expect((await run(Site.LINKEDIN, { requestTimeout: 0.2 })).seen.input!.requestTimeout).toBe(60);
+    expect((await run(Site.LINKEDIN, { requestTimeout: 120 })).seen.input!.requestTimeout).toBe(60);
+    expect((await run(Site.SOFTY, { requestTimeout: 120 })).seen.input!.requestTimeout).toBe(60);
+  });
+
+  it('global "stricter": only a timeout of at least 60 s is accepted, for every source', async () => {
+    setEnv({ [CRAWL_ENV.CALLER_OVERRIDES]: 'stricter' });
+    expect((await run(Site.LINKEDIN, { requestTimeout: 0.2 })).seen.input!.requestTimeout).toBe(60);
+    expect((await run(Site.LINKEDIN, { requestTimeout: 90 })).seen.input!.requestTimeout).toBe(90);
+  });
+
+  it('a caller that sends no requestTimeout keeps the DTO default (MCP sends none; GraphQL has no such input)', async () => {
+    expect((await run(Site.SOFTY, {})).seen.input!.requestTimeout).toBe(60);
+    expect((await run(Site.LINKEDIN, {})).seen.input!.requestTimeout).toBe(60);
+  });
+
+  it('EVER_JOBS_CRAWL_STRICTER_RULES=1690 leaves requestTimeout ungated (pre-1714): 0.2 reaches Softy', async () => {
+    setEnv({ [CRAWL_EXTRA_ENV.STRICTER_RULES]: '1690' });
+    const { seen } = await run(Site.SOFTY, { requestTimeout: 0.2 });
+    expect(seen.input!.requestTimeout).toBe(0.2);
+  });
+
+  it('an operator sites.softy.callerOverrides "any" undoes the lock: proxies and requestTimeout are kept', async () => {
+    setEnv({ [CRAWL_ENV.POLICIES]: JSON.stringify({ sites: { softy: { callerOverrides: 'any' } } }) });
+    const { seen, service } = await run(Site.SOFTY, { requestTimeout: 0.2, proxies: CALLER_PROXIES });
+
+    expect(seen.input!.proxies).toEqual(CALLER_PROXIES);
+    expect(seen.ctx!.proxies).toEqual(CALLER_PROXIES);
+    expect(seen.input!.requestTimeout).toBe(0.2);
+    const warnings = service.spies.logger.warn.mock.calls.map(([m]: [string]) => String(m));
+    expect(warnings.filter((m) => m.startsWith('Search proxies ignored'))).toHaveLength(0);
+  });
+
+  it('an operator sites.linkedin.callerOverrides "stricter" locks a source the plugin did not lock', async () => {
+    setEnv({ [CRAWL_ENV.POLICIES]: JSON.stringify({ sites: { linkedin: { callerOverrides: 'stricter' } } }) });
+    const { seen } = await run(Site.LINKEDIN, { requestTimeout: 0.2, proxies: CALLER_PROXIES });
+
+    expect(seen.input!.proxies).toBeUndefined();
+    expect(seen.input!.requestTimeout).toBe(60);
+  });
+
+  it('EVER_JOBS_CRAWL_PLUGIN_MANIFESTS=false switches the plugin lock off with the rest of the manifest', async () => {
+    setEnv({ [CRAWL_EXTRA_ENV.PLUGIN_MANIFESTS]: 'false' });
+    const { seen } = await run(Site.SOFTY, { requestTimeout: 0.2, proxies: CALLER_PROXIES });
+
+    expect(seen.input!.proxies).toEqual(CALLER_PROXIES);
+    expect(seen.input!.requestTimeout).toBe(0.2);
+  });
+});
+
+describe('JobsService — circuit breaker sees refused empty results (Spec 1714 FR-15, audit K2)', () => {
+  const saved = process.env[CircuitBreakerService.COUNT_REFUSALS_ENV_VAR];
+  afterEach(() => {
+    if (saved === undefined) delete process.env[CircuitBreakerService.COUNT_REFUSALS_ENV_VAR];
+    else process.env[CircuitBreakerService.COUNT_REFUSALS_ENV_VAR] = saved;
+  });
+
+  /** A Softy-like plugin: every failure is swallowed into jobs [] + a rate_limited diagnostic. */
+  const refusingScraper = (): IScraper & { scrape: jest.Mock } => ({
+    scrape: jest.fn(async () => new JobResponseDto([], new ScrapeDiagnostics('rate_limited', 'acme.softy.pro: 429'))),
+  });
+
+  async function searchFiveTimesThenOnce(breaker: CircuitBreakerService, scraper: IScraper) {
+    const interceptor = new CircuitBreakerInterceptor(breaker, breaker);
+    for (let i = 0; i < 5; i++) {
+      const service = createService([[Site.SOFTY, scraper]], { circuitBreaker: interceptor });
+      await service.searchJobsWithDiagnostics(new ScraperInputDto({ siteType: [Site.SOFTY] }));
+    }
+    const service = createService([[Site.SOFTY, scraper]], { circuitBreaker: interceptor });
+    return service.searchJobsWithDiagnostics(new ScraperInputDto({ siteType: [Site.SOFTY] }));
+  }
+
+  it('five refused searches open the breaker; the sixth never reaches the plugin', async () => {
+    delete process.env[CircuitBreakerService.COUNT_REFUSALS_ENV_VAR];
+    const scraper = refusingScraper();
+
+    const sixth = await searchFiveTimesThenOnce(new CircuitBreakerService(), scraper);
+
+    expect(scraper.scrape).toHaveBeenCalledTimes(5);
+    expect(sixth.perSource.map((r) => r.reason)).toEqual(['circuit_open']);
+  });
+
+  it('EVER_JOBS_BREAKER_COUNT_REFUSALS=false: every search reaches the plugin (pre-1714)', async () => {
+    process.env[CircuitBreakerService.COUNT_REFUSALS_ENV_VAR] = 'false';
+    const scraper = refusingScraper();
+
+    const sixth = await searchFiveTimesThenOnce(new CircuitBreakerService(), scraper);
+
+    expect(scraper.scrape).toHaveBeenCalledTimes(6);
+    expect(sixth.perSource.map((r) => r.reason)).toEqual(['rate_limited']);
   });
 });
 

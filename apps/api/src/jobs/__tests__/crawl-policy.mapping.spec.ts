@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { CrawlPolicyDto, ScraperInputDto } from '@ever-jobs/models';
-import { buildCallerCrawlOverride, legacyCrawlOverride } from '../crawl-policy.mapping';
+import { CrawlPolicyEnvConfig, DEFAULT_REQUEST_TIMEOUT_SECONDS } from '@ever-jobs/common';
+import { buildCallerCrawlOverride, callerRequestTimeout, legacyCrawlOverride } from '../crawl-policy.mapping';
 
 /**
  * Spec 1690 §4.1 — the caller layer is built ONLY from what the caller sent:
@@ -118,5 +119,45 @@ describe('buildCallerCrawlOverride (Spec 1690 §4.1)', () => {
     const { override, warnings } = buildCallerCrawlOverride({ crawl: 'polite' as unknown as CrawlPolicyDto });
     expect(override).toBeUndefined();
     expect(warnings).toEqual(['ignored crawl: expected an object']);
+  });
+});
+
+/**
+ * Spec 1714 FR-7 (audit K3) — `callerRequestTimeout` gates the flat `requestTimeout`
+ * (seconds) with a source's effective caller-override mode through the common helper.
+ */
+describe('callerRequestTimeout (Spec 1714)', () => {
+  const env = (stricterRules?: '1714' | '1690') =>
+    ({ preset: 'polite', callerOverrides: 'any', ...(stricterRules ? { stricterRules } : {}) }) as unknown as CrawlPolicyEnvConfig;
+
+  it.each([
+    // mode, requested, expected value, accepted
+    ['any', 0.2, 0.2, true],
+    ['any', undefined, undefined, true],
+    ['stricter', 0.2, 60, false],
+    ['stricter', 60, 60, true],
+    ['stricter', 120, 120, true],
+    ['stricter', Number.NaN, 60, false],
+    ['stricter', undefined, 60, true],
+    ['none', 0.2, 60, false],
+    ['none', 120, 60, false],
+    ['none', 60, 60, true],
+  ] as const)('%s: %p → %p (accepted %p)', (mode, requested, value, accepted) => {
+    const decision = callerRequestTimeout({ requestTimeout: requested }, { mode }, env());
+    expect(decision.value).toBe(value);
+    expect(decision.accepted).toBe(accepted);
+  });
+
+  it('EVER_JOBS_CRAWL_STRICTER_RULES=1690 passes every value through (pre-1714)', () => {
+    expect(callerRequestTimeout({ requestTimeout: 0.2 }, { mode: 'stricter' }, env('1690'))).toEqual({
+      value: 0.2,
+      accepted: true,
+    });
+    expect(callerRequestTimeout({ requestTimeout: 0.2 }, { mode: 'none' }, env('1690')).value).toBe(0.2);
+  });
+
+  it('uses the common default of 60 s', () => {
+    expect(DEFAULT_REQUEST_TIMEOUT_SECONDS).toBe(60);
+    expect(new ScraperInputDto().requestTimeout).toBe(DEFAULT_REQUEST_TIMEOUT_SECONDS);
   });
 });

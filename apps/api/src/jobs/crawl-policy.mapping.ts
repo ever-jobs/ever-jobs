@@ -1,4 +1,15 @@
-import { CrawlPolicy, CrawlPolicyOverride, normalizeCrawlOverride } from '@ever-jobs/common';
+import {
+  CallerOverridesResolution,
+  CallerRequestTimeoutDecision,
+  CrawlPolicy,
+  CrawlPolicyEnvConfig,
+  CrawlPolicyOverride,
+  DEFAULT_REQUEST_TIMEOUT_SECONDS,
+  crawlStricterRules,
+  gateCallerRequestTimeout,
+  normalizeCrawlOverride,
+  readCrawlPolicyEnv,
+} from '@ever-jobs/common';
 import { CrawlPolicyDto, ScraperInputDto } from '@ever-jobs/models';
 
 // ── Compile-time contract checks (Spec 1690 §5.2) ─────────────────────────
@@ -201,4 +212,73 @@ export function livenessDeadlineMs(env: NodeJS.ProcessEnv = process.env): number
   if (raw === undefined || raw.trim() === '') return DEFAULT_LIVENESS_DEADLINE_MS;
   const value = Number(raw.trim());
   return Number.isInteger(value) && value >= 0 ? value : DEFAULT_LIVENESS_DEADLINE_MS;
+}
+
+// ── Spec 1714 API switches ──────────────────────────────────────────────────
+
+/**
+ * A boolean switch: `true` / `1` / `yes` / `on` → true, `false` / `0` / `no` /
+ * `off` → false (case-insensitive); unset, empty or anything else → `fallback`
+ * (never throws, like every crawl env value).
+ */
+function boolEnv(env: NodeJS.ProcessEnv, name: string, fallback: boolean): boolean {
+  const raw = env[name];
+  if (raw === undefined) return fallback;
+  const value = raw.trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(value)) return true;
+  if (['false', '0', 'no', 'off'].includes(value)) return false;
+  return fallback;
+}
+
+/**
+ * Environment variable: in a multi-location search, a source answering 503
+ * (thrown, or a resolved `fetch_error` diagnostic whose detail names 503 /
+ * "Service Unavailable") is a refusal, so its remaining locations are not
+ * attempted (Spec 1714 FR-14, audit G17). Default `true`. **`false` restores the
+ * pre-1714 behaviour** (only 429, `rate_limited`, `blocked` and an open circuit
+ * stop the loop; a 503 source is asked again for every location).
+ */
+export const SEARCH_STOP_ON_503_ENV = 'EVER_JOBS_SEARCH_STOP_ON_503';
+
+/** `EVER_JOBS_SEARCH_STOP_ON_503` (default `true`; `false` = pre-1714). */
+export function searchStopOn503(env: NodeJS.ProcessEnv = process.env): boolean {
+  return boolEnv(env, SEARCH_STOP_ON_503_ENV, true);
+}
+
+/**
+ * Environment variable: `?liveness=true` trusts a fresh plugin fetch (Spec 1714
+ * FR-16, audit G4/G28). A job whose `jobUrlFetchedAt` is not older than the start
+ * of this request — the plugin itself fetched and parsed its `jobUrl` during this
+ * very search — is marked `liveness: { state: 'active', reason: 'fresh-fetch' }`
+ * instead of being probed again (a second GET of the same page moments later,
+ * outside the source's own pacing). A search-cache hit never counts as fresh.
+ * Default `true`. **`false` restores the pre-1714 behaviour** (every URL probed).
+ */
+export const LIVENESS_TRUST_FRESH_FETCH_ENV = 'EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH';
+
+/** `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH` (default `true`; `false` = pre-1714). */
+export function livenessTrustFreshFetch(env: NodeJS.ProcessEnv = process.env): boolean {
+  return boolEnv(env, LIVENESS_TRUST_FRESH_FETCH_ENV, true);
+}
+
+/**
+ * The `requestTimeout` (seconds) one source gets, gated by that source's
+ * effective caller-override mode (Spec 1714 FR-7, audit K3):
+ *
+ * - `any` → the caller's value unchanged (pre-1714);
+ * - `stricter` → the caller's value only when it is ≥ the default
+ *   ({@link DEFAULT_REQUEST_TIMEOUT_SECONDS}, 60 s), else the default — a tiny
+ *   timeout abandons a request client-side while the server is still rendering
+ *   it, so the next paced request overlaps it on the server;
+ * - `none` → the default (the caller's value is ignored).
+ *
+ * `EVER_JOBS_CRAWL_STRICTER_RULES=1690` leaves `requestTimeout` ungated (the
+ * pre-1714 behaviour). `lock` is `resolveCallerOverrides({ site, plugin })`.
+ */
+export function callerRequestTimeout(
+  input: Pick<ScraperInputDto, 'requestTimeout'>,
+  lock: Pick<CallerOverridesResolution, 'mode'>,
+  env: CrawlPolicyEnvConfig = readCrawlPolicyEnv(),
+): CallerRequestTimeoutDecision {
+  return gateCallerRequestTimeout(input.requestTimeout, lock.mode, DEFAULT_REQUEST_TIMEOUT_SECONDS, crawlStricterRules(env));
 }

@@ -158,7 +158,7 @@
       "proxies": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "Proxy URLs for rotation. Which proxy a request uses follows crawl.proxyRotation (default: one stable proxy per host); the operator may refuse caller proxies (EVER_JOBS_CRAWL_CALLER_PROXIES=none)."
+        "description": "Proxy URLs for rotation. Which proxy a request uses follows crawl.proxyRotation (default: one stable proxy per host); the operator may refuse caller proxies (EVER_JOBS_CRAWL_CALLER_PROXIES=none), and a source or host with a site owner's lock ignores them (Spec 1714: e.g. Softy; the operator's own proxies still apply)."
       },
       "userAgent": {
         "type": "string",
@@ -166,7 +166,7 @@
       },
       "crawl": {
         "type": "object",
-        "description": "Per-request crawl policy (Spec 1690): identity, pacing, proxy rotation, retries, robots.txt, egress guard and discovery. Every field optional; the highest-precedence layer, subject to the operator setting EVER_JOBS_CRAWL_CALLER_OVERRIDES (any | stricter | none). The preset (EVER_JOBS_CRAWL_PRESET) is process-wide. Defaults below are the polite preset; plugins and operators may set others. See docs/CRAWL_POLICY.md.",
+        "description": "Per-request crawl policy (Spec 1690): identity, pacing, proxy rotation, retries, robots.txt, egress guard and discovery. Every field optional; the highest-precedence layer, subject to the operator setting EVER_JOBS_CRAWL_CALLER_OVERRIDES (any | stricter | none) and to a site owner's lock (Spec 1714: a plugin or builtin host policy may set callerOverrides, e.g. Softy is 'stricter', so a caller can only make its traffic more polite; GET /api/sources/{site}/crawl-policy shows the effective mode). The preset (EVER_JOBS_CRAWL_PRESET) is process-wide. Defaults below are the polite preset; plugins and operators may set others. See docs/CRAWL_POLICY.md.",
         "additionalProperties": false,
         "properties": {
           "userAgent": {
@@ -238,6 +238,18 @@
             "type": "boolean",
             "default": true,
             "description": "Slow a bucket down after 429/503 and recover on success."
+          },
+          "minGapMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Minimum idle time after a request of the bucket completes before the next one starts, ms, on top of minIntervalMs (start to start); 0 = off (Spec 1714).",
+            "default": 0
+          },
+          "serverErrorCooldownMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Whole-bucket cool-down after a 500/502/504, a timeout or a connection reset, ms; 0 = off (Spec 1714).",
+            "default": 0
           },
           "retries": {
             "type": "integer",
@@ -399,7 +411,12 @@
                 "currency": { "type": "string" }
               }
             },
-            "emails": { "type": "array", "items": { "type": "string" } }
+            "emails": { "type": "array", "items": { "type": "string" } },
+            "jobUrlFetchedAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "ISO-8601 UTC instant at which the source plugin itself fetched jobUrl and parsed a 2xx page during the scrape that produced this record (Spec 1714). Absent when the page came from a plugin cache, was not fetched, or failed."
+            }
           }
         }
       }

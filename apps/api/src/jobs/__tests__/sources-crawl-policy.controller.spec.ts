@@ -2,9 +2,12 @@ import 'reflect-metadata';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { IScraper, JobResponseDto, Site } from '@ever-jobs/models';
 import {
+  BUILTIN_SOFTY_HOST_POLICY,
   CRAWL_ENV,
+  CRAWL_EXTRA_ENV,
   EVER_JOBS_DEFAULT_USER_AGENT,
   POLITE_CRAWL_POLICY,
+  PluginCrawlPolicy,
   resetCrawlPolicyEnvCache,
 } from '@ever-jobs/common';
 import { PluginRegistry } from '@ever-jobs/plugin';
@@ -44,7 +47,15 @@ function registryWith(): PluginRegistry {
   return registry;
 }
 
-const ENV_KEYS = [CRAWL_ENV.CALLER_OVERRIDES, CRAWL_ENV.POLICIES, CRAWL_ENV.PRESET, CRAWL_ENV.PROXIES];
+const ENV_KEYS = [
+  CRAWL_ENV.CALLER_OVERRIDES,
+  CRAWL_ENV.POLICIES,
+  CRAWL_ENV.PRESET,
+  CRAWL_ENV.PROXIES,
+  // Spec 1714
+  CRAWL_EXTRA_ENV.FLEET_SIZE,
+  CRAWL_EXTRA_ENV.BUILTIN_HOSTS,
+];
 let saved: Record<string, string | undefined>;
 beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
@@ -191,6 +202,139 @@ describe('SourcesHealthController.crawlPolicy (Spec 1690 §5.4)', () => {
     expect(Date.now() - started).toBeLessThan(200);
     const note = res.warnings.find((w) => w.includes('unknown crawl-policy field'))!;
     expect(note.length).toBeLessThan(200);
+  });
+});
+
+/**
+ * Spec 1714 FR-3 — the policy API shows the EFFECTIVE caller-override mode, the layer that
+ * decided it, the global mode, the builtin host patterns applied and the fleet size.
+ */
+describe('SourcesHealthController.crawlPolicy — caller lock and fleet size (Spec 1714)', () => {
+  /** The Softy manifest as Spec 1715 ships it (the lock is the part under test). */
+  const SOFTY_MANIFEST: PluginCrawlPolicy = {
+    rateLimitScope: 'domain',
+    maxConcurrentPerHost: 1,
+    minIntervalMs: 1000,
+    minGapMs: 500,
+    callerOverrides: 'stricter',
+  };
+
+  function lockedController(): SourcesHealthController {
+    const registry = new PluginRegistry();
+    registry.register({ site: Site.SOFTY, name: 'Softy', category: 'ats', isAts: true, crawl: SOFTY_MANIFEST }, scraper);
+    return new SourcesHealthController(undefined, registry);
+  }
+
+  it('softy: the plugin lock tightens the global "any" to "stricter"', () => {
+    const res = lockedController().crawlPolicy(Site.SOFTY);
+    expect(res.meta).toMatchObject({
+      callerOverrides: 'stricter',
+      callerOverridesProvenance: 'plugin',
+      globalCallerOverrides: 'any',
+      builtinHostPatterns: [],
+      fleetSize: 1,
+    });
+    // The lock is not a policy field.
+    expect(res).not.toHaveProperty('callerOverrides');
+    expect(res.minGapMs).toBe(500);
+    expect(res.provenance.minGapMs).toBe('plugin');
+  });
+
+  it('softy?host=acme.softy.pro: the builtin *.softy.pro pattern applies too; the plugin (higher layer) is the source on the tie', () => {
+    const res = lockedController().crawlPolicy(Site.SOFTY, 'acme.softy.pro');
+    expect(res.meta).toMatchObject({
+      callerOverrides: 'stricter',
+      callerOverridesProvenance: 'plugin',
+      builtinHostPatterns: ['*.softy.pro'],
+      builtinHost: 'acme.softy.pro',
+    });
+    expect(res.serverErrorCooldownMs).toBe(BUILTIN_SOFTY_HOST_POLICY.serverErrorCooldownMs);
+    expect(res.provenance.serverErrorCooldownMs).toBe('builtin-host');
+  });
+
+  it('liveness-http?host=acme.softy.pro: the builtin host policy locks the pseudo-site and paces it like Softy', () => {
+    const res = new SourcesHealthController().crawlPolicy(LIVENESS_CRAWL_SITE, 'acme.softy.pro');
+    expect(res.meta).toMatchObject({
+      callerOverrides: 'stricter',
+      callerOverridesProvenance: 'builtin-host',
+      globalCallerOverrides: 'any',
+      builtinHostPatterns: ['*.softy.pro'],
+    });
+    expect(res).toMatchObject({
+      rateLimitScope: 'domain',
+      maxConcurrentPerHost: 1,
+      minIntervalMs: 1000,
+      minGapMs: 500,
+      serverErrorCooldownMs: 30000,
+    });
+    expect(res.provenance.minGapMs).toBe('builtin-host');
+  });
+
+  it('the bare apex softy.pro gets the builtin policy too', () => {
+    const res = new SourcesHealthController().crawlPolicy(LIVENESS_CRAWL_SITE, 'softy.pro');
+    expect(res.meta.builtinHostPatterns).toEqual(['softy.pro']);
+    expect(res.meta.callerOverrides).toBe('stricter');
+  });
+
+  it('linkedin: no lock → the global default "any", source "default"; new fields at their 0 defaults', () => {
+    const res = new SourcesHealthController().crawlPolicy(Site.LINKEDIN);
+    expect(res.meta).toMatchObject({
+      callerOverrides: 'any',
+      callerOverridesProvenance: 'default',
+      globalCallerOverrides: 'any',
+      builtinHostPatterns: [],
+      fleetSize: 1,
+    });
+    expect(res.minGapMs).toBe(0);
+    expect(res.serverErrorCooldownMs).toBe(0);
+  });
+
+  it('an explicit global mode is reported as env-global', () => {
+    process.env[CRAWL_ENV.CALLER_OVERRIDES] = 'none';
+    resetCrawlPolicyEnvCache();
+    const res = lockedController().crawlPolicy(Site.SOFTY);
+    expect(res.meta).toMatchObject({
+      callerOverrides: 'none',
+      callerOverridesProvenance: 'env-global',
+      globalCallerOverrides: 'none',
+    });
+  });
+
+  it('an operator sites.softy.callerOverrides "any" replaces the lock (operator-site)', () => {
+    process.env[CRAWL_ENV.POLICIES] = JSON.stringify({ sites: { softy: { callerOverrides: 'any' } } });
+    resetCrawlPolicyEnvCache();
+    const res = lockedController().crawlPolicy(Site.SOFTY, undefined, '{"proxyRotation":"per-request"}');
+    expect(res.meta).toMatchObject({ callerOverrides: 'any', callerOverridesProvenance: 'operator-site' });
+    expect(res.meta.caller).toEqual({ rejected: [] });
+    expect(res.proxyRotation).toBe('per-request');
+  });
+
+  it('?crawl= on softy: less polite fields are refused by the lock, more polite ones accepted', () => {
+    const res = lockedController().crawlPolicy(
+      Site.SOFTY,
+      undefined,
+      '{"proxyRotation":"per-request","discovery":"listing","minIntervalMs":2000,"callerOverrides":"any"}',
+    );
+    expect(res.meta.caller!.rejected.sort()).toEqual(['callerOverrides', 'discovery', 'proxyRotation']);
+    expect(res.minIntervalMs).toBe(2000);
+    expect(res.provenance.minIntervalMs).toBe('caller');
+    expect(res.meta.callerOverrides).toBe('stricter');
+  });
+
+  it(`meta.fleetSize reports ${CRAWL_EXTRA_ENV.FLEET_SIZE} (the policy values stay per process)`, () => {
+    process.env[CRAWL_EXTRA_ENV.FLEET_SIZE] = '3';
+    resetCrawlPolicyEnvCache();
+    const res = lockedController().crawlPolicy(Site.SOFTY);
+    expect(res.meta.fleetSize).toBe(3);
+    expect(res.minIntervalMs).toBe(1000);
+  });
+
+  it(`${CRAWL_EXTRA_ENV.BUILTIN_HOSTS}=false removes the builtin host lock (liveness-http back to "any")`, () => {
+    process.env[CRAWL_EXTRA_ENV.BUILTIN_HOSTS] = 'false';
+    resetCrawlPolicyEnvCache();
+    const res = new SourcesHealthController().crawlPolicy(LIVENESS_CRAWL_SITE, 'acme.softy.pro');
+    expect(res.meta).toMatchObject({ callerOverrides: 'any', callerOverridesProvenance: 'default', builtinHostPatterns: [] });
+    expect(res.maxConcurrentPerHost).toBe(POLITE_CRAWL_POLICY.maxConcurrentPerHost);
   });
 });
 

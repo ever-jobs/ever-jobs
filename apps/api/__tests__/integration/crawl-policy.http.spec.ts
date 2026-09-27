@@ -153,4 +153,74 @@ describe('Integration — crawl policy over HTTP (Spec 1690)', () => {
       await request(app.getHttpServer()).get('/api/sources/health').expect(200);
     });
   });
+
+  describe('Spec 1714 — new fields and the caller lock', () => {
+    it('POST delivers minGapMs / serverErrorCooldownMs and strips a caller callerOverrides (not a DTO field)', async () => {
+      await request(app.getHttpServer())
+        .post('/api/jobs/search')
+        .send({
+          searchTerm: 'engineer',
+          siteType: ['softy'],
+          crawl: { minGapMs: 500, serverErrorCooldownMs: 30000, callerOverrides: 'any' },
+        })
+        .expect(201);
+
+      const input = searchJobsWithDiagnostics.mock.calls[0][0] as ScraperInputDto;
+      expect({ ...input.crawl }).toEqual({ minGapMs: 500, serverErrorCooldownMs: 30000 });
+    });
+
+    it('POST rejects a negative or fractional minGapMs / serverErrorCooldownMs with 400', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/jobs/search')
+        .send({ searchTerm: 'engineer', crawl: { minGapMs: -1, serverErrorCooldownMs: 1.5 } })
+        .expect(400);
+      expect(JSON.stringify(res.body)).toContain('minGapMs');
+      expect(JSON.stringify(res.body)).toContain('serverErrorCooldownMs');
+      expect(searchJobsWithDiagnostics).not.toHaveBeenCalled();
+    });
+
+    it('GET softy?host=acme.softy.pro shows the builtin *.softy.pro lock and pacing', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/sources/softy/crawl-policy')
+        .query({ host: 'acme.softy.pro' })
+        .expect(200);
+
+      expect(res.body).toMatchObject({
+        minGapMs: 500,
+        serverErrorCooldownMs: 30000,
+        provenance: { minGapMs: 'builtin-host', serverErrorCooldownMs: 'builtin-host' },
+        meta: {
+          callerOverrides: 'stricter',
+          callerOverridesProvenance: 'builtin-host',
+          globalCallerOverrides: 'any',
+          builtinHostPatterns: ['*.softy.pro'],
+          builtinHost: 'acme.softy.pro',
+          fleetSize: 1,
+        },
+      });
+      expect(res.body).not.toHaveProperty('callerOverrides');
+    });
+
+    it('GET softy?host=…&crawl= refuses less polite caller fields under the lock', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/sources/softy/crawl-policy')
+        .query({ host: 'acme.softy.pro', crawl: JSON.stringify({ proxyRotation: 'per-request', discovery: 'listing' }) })
+        .expect(200);
+      expect(res.body.meta.caller.rejected.sort()).toEqual(['discovery', 'proxyRotation']);
+      expect(res.body.proxyRotation).toBe('per-host');
+    });
+
+    it('GET linkedin: no lock, the global default "any"', async () => {
+      const res = await request(app.getHttpServer()).get('/api/sources/linkedin/crawl-policy').expect(200);
+      expect(res.body.meta).toMatchObject({
+        callerOverrides: 'any',
+        callerOverridesProvenance: 'default',
+        globalCallerOverrides: 'any',
+        builtinHostPatterns: [],
+        fleetSize: 1,
+      });
+      expect(res.body.minGapMs).toBe(0);
+      expect(res.body.serverErrorCooldownMs).toBe(0);
+    });
+  });
 });

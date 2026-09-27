@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { GraphQLSchemaBuilderModule, GraphQLSchemaFactory } from '@nestjs/graphql';
 import { printSchema } from 'graphql';
+import { getMetadataStorage } from 'class-validator';
 import { CrawlPolicyDto, JobPostDto, Site } from '@ever-jobs/models';
 import { JobsResolver, toCrawlPolicyDto } from '../jobs.resolver';
 import { CrawlPolicyGqlInput, SearchJobsInput } from '../gql-types';
@@ -104,6 +105,25 @@ describe('GraphQL schema (Spec 1690)', () => {
     // No field is non-null (every knob optional); only list ITEMS are.
     expect(crawlBlock).not.toMatch(/!\s*\n/);
   });
+
+  it('CrawlPolicyInput declares exactly the CrawlPolicyDto fields — the Spec 1714 ones included, no callerOverrides', async () => {
+    const moduleRef = await Test.createTestingModule({ imports: [GraphQLSchemaBuilderModule] }).compile();
+    const schema = await moduleRef.get(GraphQLSchemaFactory).create([JobsResolver]);
+    const crawlBlock = /input CrawlPolicyInput \{([^}]*)\}/.exec(printSchema(schema))?.[1] ?? '';
+    const gqlFields = [...crawlBlock.matchAll(/^\s+(\w+):/gm)].map((m) => m[1]).sort();
+    const dtoFields = [
+      ...new Set(
+        getMetadataStorage()
+          .getTargetValidationMetadatas(CrawlPolicyDto, '', true, false)
+          .map((m) => m.propertyName),
+      ),
+    ].sort();
+
+    expect(gqlFields).toEqual(dtoFields);
+    expect(gqlFields).toEqual(Object.keys(CRAWL_POLICY_FIELD_TYPES).sort());
+    expect(gqlFields).toEqual(expect.arrayContaining(['minGapMs', 'serverErrorCooldownMs']));
+    expect(gqlFields).not.toContain('callerOverrides');
+  });
 });
 
 /** Expected GraphQL type of every crawl field (`Int` for counts/ms, not `Float`). */
@@ -119,6 +139,9 @@ const CRAWL_POLICY_FIELD_TYPES: Record<string, string> = {
   jitterMs: 'Int',
   maxQueueWaitMs: 'Int',
   adaptiveThrottle: 'Boolean',
+  // Spec 1714
+  minGapMs: 'Int',
+  serverErrorCooldownMs: 'Int',
   retries: 'Int',
   retryStatuses: '[Int!]',
   retryBackoff: 'String',

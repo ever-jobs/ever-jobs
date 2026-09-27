@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DatePostedBasis, DatePostedPrecision, JobType } from '@ever-jobs/models';
+import 'reflect-metadata';
+import { getMetadataStorage } from 'class-validator';
+import { CrawlPolicyDto, DatePostedBasis, DatePostedPrecision, JobType } from '@ever-jobs/models';
 
 /**
  * The published tool manifest must advertise what the API accepts: every job
@@ -30,5 +32,32 @@ describe('tool_manifest.json', () => {
     expect(job.datePostedAt).toMatchObject({ type: 'string', format: 'date-time' });
     expect(job.datePostedPrecision.enum).toEqual(Object.values(DatePostedPrecision));
     expect(job.datePostedBasis.enum).toEqual(Object.values(DatePostedBasis));
+  });
+
+  describe('crawl (Spec 1690 / 1714)', () => {
+    const crawl = manifest.input_schema.properties.crawl as unknown as { properties: Record<string, SchemaNode & { minimum?: number }> };
+
+    it('declares exactly the CrawlPolicyDto fields, so a new knob cannot be forgotten here', () => {
+      const dtoFields = [
+        ...new Set(
+          getMetadataStorage()
+            .getTargetValidationMetadatas(CrawlPolicyDto, '', true, false)
+            .map((m) => m.propertyName),
+        ),
+      ].sort();
+      expect(Object.keys(crawl.properties).sort()).toEqual(dtoFields);
+    });
+
+    it('advertises minGapMs and serverErrorCooldownMs as non-negative integers, and no callerOverrides', () => {
+      for (const field of ['minGapMs', 'serverErrorCooldownMs']) {
+        expect(crawl.properties[field]).toMatchObject({ type: 'integer', minimum: 0 });
+      }
+      expect(crawl.properties).not.toHaveProperty('callerOverrides');
+    });
+
+    it('advertises the optional jobUrlFetchedAt output field (Spec 1714)', () => {
+      const job = manifest.output_schema.properties.jobs.items.properties;
+      expect(job.jobUrlFetchedAt).toMatchObject({ type: 'string', format: 'date-time' });
+    });
   });
 });

@@ -9,12 +9,14 @@ import {
   postProcessCompensation, postedSortKey, siteFromDomain, deriveSiteToken, resolveCompanyUrl,
   resolveSearchLocations, clampMaxLocations, runWithHttpMemo, httpMemoMethodsFromEnv,
   runWithScrapeContext, readCrawlPolicyEnv, getEffectiveCrawlPolicy, crawlCallerProxiesAllowed,
+  crawlCallerProxiesAllowedFor, resolveCallerOverrides,
+  type CallerOverridesResolution, type CrawlPolicyEnvConfig,
   type CrawlPolicyOverride, type PluginCrawlPolicy, type ScrapeContext,
 } from '@ever-jobs/common';
 import { ConfigService } from '@nestjs/config';
 import { PluginRegistry, CircuitBreakerInterceptor, CircuitBreakerService } from '@ever-jobs/plugin';
 import { MetricsService } from '../metrics/metrics.service';
-import { buildCallerCrawlOverride } from './crawl-policy.mapping';
+import { buildCallerCrawlOverride, callerRequestTimeout, searchStopOn503 } from './crawl-policy.mapping';
 
 /**
  * Default ceiling on simultaneously-dispatched sources (Spec 5026).
@@ -258,35 +260,48 @@ interface LocationOutcome {
 
 const RATE_LIMIT_TEXT = /\b429\b|too many requests|rate[ -]?limit/i;
 
+/** A 503 in an error message or a `fetch_error` diagnostic's detail (Spec 1714 FR-14). */
+const SERVICE_UNAVAILABLE_TEXT = /\b503\b|service unavailable/i;
+
 /**
  * Did this thrown error show the source refusing us (Spec 1700)? A 429, an
  * open circuit breaker, anything `classifyScrapeError` calls `blocked`
  * (401/403/407, captcha, challenge, a robots.txt refusal under the crawl
  * policy) or `rate_limited` (Spec 1690: the host asked us to back off longer
- * than we wait, or its rate-limit bucket gave no slot in time). Timeouts, 5xx
- * and 404s are not refusals: the next location may well succeed.
+ * than we wait, or its rate-limit bucket gave no slot in time), and — since
+ * Spec 1714 (audit G17) — a 503 "Service Unavailable" unless `stopOn503` is off
+ * (`EVER_JOBS_SEARCH_STOP_ON_503=false`, the pre-1714 behaviour). Timeouts,
+ * other 5xx and 404s are not refusals: the next location may well succeed.
  */
-function refusalFromError(err: unknown): ScrapeReason | undefined {
+function refusalFromError(err: unknown, stopOn503 = true): ScrapeReason | undefined {
   const e = err as { code?: unknown; response?: { status?: unknown } } | null | undefined;
   if (e?.code === ERR_SOURCE_CIRCUIT_OPEN) return 'circuit_open';
   if (e?.response?.status === 429) return 'fetch_error';
+  if (stopOn503 && e?.response?.status === 503) return 'fetch_error';
   const diag = classifyScrapeError(err);
   if (diag.reason === 'blocked') return 'blocked';
   if (diag.reason === 'rate_limited') return 'rate_limited';
   if (diag.reason === 'fetch_error' && RATE_LIMIT_TEXT.test(diag.detail ?? '')) return 'fetch_error';
+  if (stopOn503 && diag.reason === 'fetch_error' && SERVICE_UNAVAILABLE_TEXT.test(diag.detail ?? '')) {
+    return 'fetch_error';
+  }
   return undefined;
 }
 
 /**
  * The same test for a plugin that swallowed its error and resolved with a
- * diagnostic instead.
+ * diagnostic instead: `rate_limited`, `blocked`, `circuit_open`, a 429
+ * `fetch_error` and — unless `stopOn503` is off — a 503 `fetch_error` (Spec 1714).
  */
-function refusalFromDiagnostics(diag: ScrapeDiagnostics | undefined): ScrapeReason | undefined {
+function refusalFromDiagnostics(diag: ScrapeDiagnostics | undefined, stopOn503 = true): ScrapeReason | undefined {
   if (!diag) return undefined;
   if (diag.reason === 'blocked' || diag.reason === 'circuit_open' || diag.reason === 'rate_limited') {
     return diag.reason;
   }
   if (diag.reason === 'fetch_error' && RATE_LIMIT_TEXT.test(diag.detail ?? '')) return 'fetch_error';
+  if (stopOn503 && diag.reason === 'fetch_error' && SERVICE_UNAVAILABLE_TEXT.test(diag.detail ?? '')) {
+    return 'fetch_error';
+  }
   return undefined;
 }
 
@@ -528,6 +543,15 @@ export class JobsService implements OnModuleInit {
         `Search proxies ignored (${input.proxies.length} supplied): EVER_JOBS_CRAWL_CALLER_PROXIES=none ` +
           `(the default unless EVER_JOBS_CRAWL_CALLER_OVERRIDES=any)`,
       );
+    } else {
+      // Spec 1714 FR-5 — allowed globally, but a source's own lock refuses them.
+      const locked = this.sitesRefusingCallerProxies(input, selectedScrapers.map((s) => s.site));
+      if (locked.length > 0) {
+        this.logger.warn(
+          `Search proxies ignored for ${locked.join(', ')}: the source's caller-override lock refuses ` +
+            `caller proxies (an operator EVER_JOBS_CRAWL_POLICIES sites.<site>.callerOverrides="any" allows them)`,
+        );
+      }
     }
 
     const results: PromiseSettledResult<JobResponseDto>[] = new Array(
@@ -743,9 +767,10 @@ export class JobsService implements OnModuleInit {
    *   and `locations` removed; `offset` and `resultsWanted` are the caller's,
    *   never advanced by an earlier location.
    * - A failing location does not affect the others.
-   * - Once a call shows the source refusing us (429, blocked, circuit open),
-   *   the remaining locations are NOT attempted — continuing would hammer a
-   *   host that has already said stop.
+   * - Once a call shows the source refusing us (429, `rate_limited`, blocked,
+   *   circuit open and, since Spec 1714, 503 — `EVER_JOBS_SEARCH_STOP_ON_503=false`
+   *   restores the pre-1714 list), the remaining locations are NOT attempted —
+   *   continuing would hammer a host that has already said stop.
    * - The search deadline is checked before every location and raced during
    *   each call, exactly like the single-location pool.
    * - Consecutive attempted calls are {@link locationPauseMs} apart: the
@@ -807,6 +832,8 @@ export class JobsService implements OnModuleInit {
     const out: LocationOutcome[] = [];
     let refusal: LocationRefusal | undefined;
     let attempted = false;
+    // Spec 1714 FR-14 — a 503 is a refusal too (EVER_JOBS_SEARCH_STOP_ON_503=false: pre-1714).
+    const stopOn503 = searchStopOn503();
     for (const location of locations) {
       if (refusal) {
         this.metrics.scraperRequestsTotal.inc({ site, status: 'location_skipped' });
@@ -842,11 +869,11 @@ export class JobsService implements OnModuleInit {
           },
         );
         out.push({ location, settled: { status: 'fulfilled', value } });
-        const reason = refusalFromDiagnostics(value.diagnostics);
+        const reason = refusalFromDiagnostics(value.diagnostics, stopOn503);
         if (reason) refusal = { reason, trigger: location };
       } catch (err) {
         out.push({ location, settled: { status: 'rejected', reason: err }, deadlineAborted });
-        const reason = refusalFromError(err);
+        const reason = refusalFromError(err, stopOn503);
         if (reason) refusal = { reason, trigger: location };
       }
       if (refusal) {
@@ -946,15 +973,34 @@ export class JobsService implements OnModuleInit {
     const globalRetry = this.configService.get('retry');
     const perSourceRetry = globalRetry.perSource?.[site] || {};
 
+    // Spec 1714 FR-2/FR-5/FR-7 — the source's effective caller-override mode:
+    // the global EVER_JOBS_CRAWL_CALLER_OVERRIDES tightened by the plugin's own
+    // lock (`@SourcePlugin({ crawl: { callerOverrides } })`, e.g. Softy's
+    // `stricter`), or replaced by an operator `sites[<site>].callerOverrides`.
+    // Site level: host locks are applied per request inside HttpClient.
+    const crawlEnv = readCrawlPolicyEnv();
+    const lock = resolveCallerOverrides({ site, plugin: this.pluginCrawlPolicy(site) }, crawlEnv);
+
     // Spec 1690 §4.4: a caller's proxies reach every plugin client through the
     // scrape context — unless the operator refuses them
     // (EVER_JOBS_CRAWL_CALLER_PROXIES=none; the default whenever caller
-    // overrides are not `any`). Refused proxies reach neither the context nor the
-    // DTO a plugin could forward to createHttpClient.
-    const proxies = this.callerProxies(input);
+    // overrides are not `any`) or, since Spec 1714, the source's lock does
+    // (`crawlCallerProxiesAllowedFor`). Refused proxies reach neither the context
+    // nor the DTO a plugin could forward to createHttpClient.
+    const proxies = this.callerProxies(input, lock, crawlEnv);
+    // Spec 1714 FR-7 (audit K3) — requestTimeout gated by the same mode: under
+    // `stricter` only ≥ 60 s, under `none` ignored; `any` (every source without a
+    // lock on a default install) passes it through unchanged.
+    // EVER_JOBS_CRAWL_STRICTER_RULES=1690 leaves it ungated (pre-1714).
+    const timeout = callerRequestTimeout(input, lock, crawlEnv);
+    if (!timeout.accepted) {
+      this.logger.debug(`${site}: ${timeout.note ?? 'requestTimeout replaced by the default'}`);
+    }
     const scraperInput = new ScraperInputDto({
       ...input,
       proxies,
+      // Only when the gate changed it, so an ungated source gets exactly today's DTO.
+      ...(timeout.value !== input.requestTimeout ? { requestTimeout: timeout.value } : {}),
       retries: input.retries ?? perSourceRetry.retries ?? globalRetry.defaultRetries,
       retryDelay: input.retryDelay ?? perSourceRetry.delayMs ?? globalRetry.defaultDelayMs,
       retryBackoff: input.retryBackoff ?? perSourceRetry.backoff ?? globalRetry.defaultBackoff,
@@ -1048,10 +1094,36 @@ export class JobsService implements OnModuleInit {
   /**
    * The caller's `proxies`, when the operator lets callers supply them
    * (`EVER_JOBS_CRAWL_CALLER_PROXIES`, Spec 1690 §4.4); otherwise `undefined`.
+   *
+   * With a source's `lock` (Spec 1714 FR-5, `crawlCallerProxiesAllowedFor`): a
+   * site owner's lock (`plugin` / `builtin-host` source) keeps them only when the
+   * effective mode is `any` and the operator allows caller proxies; an operator
+   * per-site value keeps them exactly when it is `any`; no lock (`default` /
+   * `env-global`) decides exactly as before.
    */
-  private callerProxies(input: ScraperInputDto): string[] | undefined {
+  private callerProxies(
+    input: ScraperInputDto,
+    lock?: CallerOverridesResolution,
+    env: CrawlPolicyEnvConfig = readCrawlPolicyEnv(),
+  ): string[] | undefined {
     if (!input.proxies?.length) return input.proxies;
-    return crawlCallerProxiesAllowed(readCrawlPolicyEnv()) ? input.proxies : undefined;
+    const allowed = lock ? crawlCallerProxiesAllowedFor(lock, env) : crawlCallerProxiesAllowed(env);
+    return allowed ? input.proxies : undefined;
+  }
+
+  /**
+   * Sites of this search whose caller-override lock refuses the caller's
+   * `proxies` although the global setting allows them (Spec 1714 FR-5), for one
+   * warning per search. Empty when no proxies were sent or none is refused.
+   */
+  private sitesRefusingCallerProxies(input: ScraperInputDto, sites: readonly Site[]): string[] {
+    if (!input.proxies?.length) return [];
+    const env = readCrawlPolicyEnv();
+    if (!crawlCallerProxiesAllowed(env)) return [];
+    return sites.filter((site) => {
+      const lock = resolveCallerOverrides({ site, plugin: this.pluginCrawlPolicy(site) }, env);
+      return !crawlCallerProxiesAllowedFor(lock, env);
+    });
   }
 
   /**
