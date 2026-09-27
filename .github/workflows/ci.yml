@@ -5,6 +5,12 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  # Spec 1715 (FR-19, Q-123): the live Softy e2e sends real requests to a Softy tenant,
+  # so it runs only on this weekly schedule and on a manual dispatch (or when the
+  # EVER_JOBS_LIVE_SOFTY repository variable is 1) — never on a push or pull request.
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * 1'
 
 jobs:
   docs-lint:
@@ -329,10 +335,26 @@ jobs:
           export npm_config_nodedir="$(dirname "$(dirname "$(command -v node)")")"
           npm ci
 
+      # Spec 1715 (FR-19, audit G26/G30): the live Softy e2e is gated on
+      # EVER_JOBS_LIVE_SOFTY=1 — set on schedule / workflow_dispatch (or through the
+      # EVER_JOBS_LIVE_SOFTY repository variable). Otherwise the spec skips its live
+      # tests with a visible reason; this notice says so in the run summary.
+      - name: Live Softy e2e gate
+        if: ${{ matrix.shard == 1 }}
+        env:
+          EVER_JOBS_LIVE_SOFTY: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '1' || vars.EVER_JOBS_LIVE_SOFTY || '0' }}
+        run: |
+          if [ "$EVER_JOBS_LIVE_SOFTY" = "1" ]; then
+            echo "::notice title=Live Softy e2e::runs this time (EVER_JOBS_LIVE_SOFTY=1, event ${{ github.event_name }})"
+          else
+            echo "::notice title=Live Softy e2e skipped::EVER_JOBS_LIVE_SOFTY is not 1 on a ${{ github.event_name }} run; it runs on the weekly schedule, on workflow_dispatch, or with the EVER_JOBS_LIVE_SOFTY repository variable (Spec 1715)"
+          fi
+
       - name: Run source scraper e2e tests
         run: npx jest --testPathPatterns 'source-.*e2e-spec' --shard=${{ matrix.shard }}/6 --passWithNoTests --verbose --reporters=default --reporters=github-actions
         env:
           EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          EVER_JOBS_LIVE_SOFTY: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '1' || vars.EVER_JOBS_LIVE_SOFTY || '0' }}
 
   test-feature-plugins:
     name: Test (Feature Plugins)

@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import { htmlToPlainText } from '@ever-jobs/common';
+import { looksLikeChallenge } from '@ever-jobs/models';
 import {
   SOFTY_CONTRACT_BADGE_REGEX,
   SOFTY_DESCRIPTION_MAX_CHARS,
@@ -28,12 +29,70 @@ export function softyBaseUrl(tenant: string): string {
 
 /** Canonical detail URL: `https://{tenant}.softy.pro/offers/{ID}`. */
 export function softyOfferUrl(tenant: string, id: string): string {
-  return `${softyBaseUrl(tenant)}${SOFTY_DETAIL_PATH}${id}`;
+  return softyOfferUrlFrom(softyBaseUrl(tenant), id);
 }
 
 /** Listing page URL: `https://{tenant}.softy.pro/offers?page={page}`. */
 export function softyListingPageUrl(tenant: string, page: number): string {
-  return `${softyBaseUrl(tenant)}${SOFTY_LISTING_PATH}?${SOFTY_PAGE_PARAM}=${page}`;
+  return softyListingPageUrlFrom(softyBaseUrl(tenant), page);
+}
+
+/** Canonical detail URL on a tenant origin (`{origin}/offers/{ID}`; Spec 1715). */
+export function softyOfferUrlFrom(origin: string, id: string): string {
+  return `${trimOrigin(origin)}${SOFTY_DETAIL_PATH}${id}`;
+}
+
+/** Listing page URL on a tenant origin (`{origin}/offers?page={page}`; Spec 1715). */
+export function softyListingPageUrlFrom(origin: string, page: number): string {
+  return `${trimOrigin(origin)}${SOFTY_LISTING_PATH}?${SOFTY_PAGE_PARAM}=${page}`;
+}
+
+/**
+ * What a 2xx `/sitemap.xml` body is (Spec 1715 D1):
+ *
+ * - `sitemap`: it carries a `<urlset>` or `<sitemapindex>` element (any namespace
+ *   prefix) — a real sitemap, whatever it lists;
+ * - `challenge`: no sitemap element, and it looks like a bot wall
+ *   (`looksLikeSoftyChallenge`);
+ * - `unparseable`: anything else (a soft-404 HTML page, garbage) — "could not be
+ *   parsed", for which `auto` may fall back to list pages.
+ */
+export function softySitemapBodyKind(text: string): 'sitemap' | 'challenge' | 'unparseable' {
+  if (typeof text !== 'string' || !text) return 'unparseable';
+  if (/<(?:[A-Za-z_][\w.-]*:)?(?:urlset|sitemapindex)[\s>/]/i.test(text)) return 'sitemap';
+  return looksLikeSoftyChallenge(text) ? 'challenge' : 'unparseable';
+}
+
+/**
+ * True when a 2xx page is a bot wall / challenge rather than a Softy page (Spec 1715
+ * FR-6): it carries the shared bot-wall markers (`looksLikeChallenge`) AND none of the
+ * signals of a real Softy page (the `data-slot` design system, `.prose` sections, an
+ * `og:title`, an `/offers/{ID}` or legacy `/offre/{ID}-…` link). The second half
+ * matters because a CDN's bot-detection script (`/cdn-cgi/challenge-platform/…`) is
+ * injected into ordinary pages too; a page with real content is never a block.
+ */
+export function looksLikeSoftyChallenge(html: string): boolean {
+  if (typeof html !== 'string' || !html || !looksLikeChallenge(html)) return false;
+  const realPage =
+    looksLikeCurrentSoftyMarkup(html) ||
+    /class\s*=\s*["'][^"']*\bprose\b/i.test(html) ||
+    /property\s*=\s*["']og:title["']/i.test(html) ||
+    /\/offers\/\d+/.test(html) ||
+    hasLegacySoftyLinks(html);
+  return !realPage;
+}
+
+function trimOrigin(origin: string): string {
+  return origin.replace(/\/+$/, '');
+}
+
+/** The hostname of a tenant origin (no port), lower-cased; the origin itself when it does not parse. */
+function hostOfOrigin(origin: string): string {
+  try {
+    return new URL(origin).hostname.toLowerCase();
+  } catch {
+    return origin.toLowerCase();
+  }
 }
 
 /**
@@ -71,17 +130,20 @@ export function looksLikeCurrentSoftyMarkup(html: string): boolean {
 /**
  * Parse one listing page (`/offers?page=N`): the offer cards and every page number
  * the pagination links to. Cards are keyed on their `/offers/{ID}` anchor; fields
- * come from the `data-slot` elements inside the card.
+ * come from the `data-slot` elements inside the card. `origin` (default
+ * `https://{tenant}.softy.pro`) is the tenant's origin: links must be on its host,
+ * and card URLs are built on it.
  */
 export function parseSoftyListingPage(
   html: string,
   tenant: string,
+  origin: string = softyBaseUrl(tenant),
 ): { cards: SoftyCardJob[]; pages: number[] } {
   const cards: SoftyCardJob[] = [];
   const pages = new Set<number>();
   if (typeof html !== 'string' || !html) return { cards, pages: [] };
 
-  const host = `${tenant}.${SOFTY_ROOT_DOMAIN}`;
+  const host = hostOfOrigin(origin);
   const $ = cheerio.load(html);
 
   // Every anchor, grouped by offer id (a card can link to its offer more than once).
@@ -113,7 +175,7 @@ export function parseSoftyListingPage(
 
     cards.push({
       id,
-      url: softyOfferUrl(tenant, id),
+      url: softyOfferUrlFrom(origin, id),
       title,
       location: locations[0] ?? null,
       locations,

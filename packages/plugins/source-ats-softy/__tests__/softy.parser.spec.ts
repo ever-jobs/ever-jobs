@@ -4,20 +4,18 @@ import * as path from 'path';
 import {
   hasLegacySoftyLinks,
   looksLikeCurrentSoftyMarkup,
+  looksLikeSoftyChallenge,
   parseSoftyDetailPage,
   parseSoftyListingPage,
   softyListingPageUrl,
+  softyListingPageUrlFrom,
   softyOfferIdFromUrl,
   softyOfferUrl,
+  softyOfferUrlFrom,
+  softySitemapBodyKind,
 } from '../src/softy.parser';
 import { readSoftyConfig } from '../src/softy.config';
-import {
-  SOFTY_DESCRIPTION_MAX_CHARS,
-  SOFTY_DETAIL_CACHE_MAX,
-  SOFTY_DETAIL_CACHE_TTL_MS,
-  SOFTY_MAX_DETAIL_FETCHES,
-  SOFTY_MAX_LIST_PAGES,
-} from '../src/softy.constants';
+import { SOFTY_DESCRIPTION_MAX_CHARS } from '../src/softy.constants';
 import * as barrel from '../src';
 
 const fixture = (name: string) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
@@ -28,6 +26,53 @@ describe('Softy parsers (Spec 1691)', () => {
   it('builds canonical URLs', () => {
     expect(softyOfferUrl('acme', '1001')).toBe('https://acme.softy.pro/offers/1001');
     expect(softyListingPageUrl('acme', 3)).toBe('https://acme.softy.pro/offers?page=3');
+  });
+
+  it('builds URLs on a tenant origin (Spec 1715)', () => {
+    expect(softyOfferUrlFrom('https://acme.softy.pro', '1001')).toBe('https://acme.softy.pro/offers/1001');
+    expect(softyOfferUrlFrom('http://127.0.0.1:8080/', '7')).toBe('http://127.0.0.1:8080/offers/7');
+    expect(softyListingPageUrlFrom('http://127.0.0.1:8080', 2)).toBe('http://127.0.0.1:8080/offers?page=2');
+  });
+
+  describe('softySitemapBodyKind (Spec 1715 D1)', () => {
+    it.each([
+      [fixture('sitemap.xml'), 'sitemap'],
+      [fixture('sitemap-index.xml'), 'sitemap'],
+      ['<sm:urlset xmlns:sm="http://www.sitemaps.org/schemas/sitemap/0.9"></sm:urlset>', 'sitemap'],
+      ['<urlset/>', 'sitemap'],
+      [fixture('challenge.html'), 'challenge'],
+      ['<!doctype html><html><body>Page introuvable</body></html>', 'unparseable'],
+      ['garbage', 'unparseable'],
+      ['', 'unparseable'],
+    ])('%#: %s…', (body, kind) => {
+      expect(softySitemapBodyKind(body)).toBe(kind);
+    });
+
+    it('a sitemap that mentions a challenge path is still a sitemap', () => {
+      const body = '<urlset><url><loc>https://acme.softy.pro/offers/1?x=challenge-platform</loc></url></urlset>';
+      expect(softySitemapBodyKind(body)).toBe('sitemap');
+    });
+  });
+
+  describe('looksLikeSoftyChallenge (Spec 1715 FR-6)', () => {
+    const script = '<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>';
+
+    it('flags a bot wall without Softy content', () => {
+      expect(looksLikeSoftyChallenge(fixture('challenge.html'))).toBe(true);
+      expect(looksLikeSoftyChallenge('<html><title>Attention Required! | Cloudflare</title><h1>Sorry, you have been blocked</h1></html>')).toBe(true);
+    });
+
+    it('never flags a real Softy page, even one carrying a bot-detection script', () => {
+      expect(looksLikeSoftyChallenge(detailHtml('1', 'Titre').replace('</head>', script + '</head>'))).toBe(false);
+      expect(looksLikeSoftyChallenge(fixture('listing-page-1.html') + script)).toBe(false);
+      expect(looksLikeSoftyChallenge(fixture('legacy-offres.html') + script)).toBe(false);
+      expect(looksLikeSoftyChallenge(fixture('listing-empty.html') + script)).toBe(false);
+    });
+
+    it('does not flag pages without bot-wall markers', () => {
+      expect(looksLikeSoftyChallenge('<html><body>Page introuvable</body></html>')).toBe(false);
+      expect(looksLikeSoftyChallenge('')).toBe(false);
+    });
   });
 
   it('exports the parsers, config and constants from the package barrel', () => {
@@ -112,6 +157,16 @@ describe('Softy parsers (Spec 1691)', () => {
         ['1', 'Un'],
         ['2', 'Deux'],
       ]);
+    });
+
+    it('builds card URLs on the given origin and keeps only links on its host (Spec 1715)', () => {
+      const html = '<a href="/offers/7"><h3 data-slot="joboffer-title">A</h3></a>' +
+        '<a href="http://127.0.0.1:8080/offers/8"><h3 data-slot="joboffer-title">B</h3></a>' +
+        '<a href="https://acme.softy.pro/offers/9"><h3 data-slot="joboffer-title">C</h3></a>' +
+        '<a href="/offers?page=2">2</a>';
+      const { cards, pages } = parseSoftyListingPage(html, 'acme', 'http://127.0.0.1:8080');
+      expect(cards.map((c) => c.url)).toEqual(['http://127.0.0.1:8080/offers/7', 'http://127.0.0.1:8080/offers/8']);
+      expect(pages).toEqual([2]);
     });
 
     it('returns nothing for empty / foreign markup', () => {
@@ -214,20 +269,23 @@ describe('Softy parsers (Spec 1691)', () => {
   });
 });
 
-describe('readSoftyConfig (Spec 1691)', () => {
-  it('defaults to the constants', () => {
+describe('readSoftyConfig (Specs 1691, 1715)', () => {
+  it('defaults to the constants (Spec 1715 defaults)', () => {
     expect(readSoftyConfig({})).toEqual({
-      maxListPages: SOFTY_MAX_LIST_PAGES,
-      maxDetailFetches: SOFTY_MAX_DETAIL_FETCHES,
-      detailCacheMax: SOFTY_DETAIL_CACHE_MAX,
-      detailCacheTtlMs: SOFTY_DETAIL_CACHE_TTL_MS,
+      maxListPages: 50,
+      maxDetailFetches: 100,
+      detailCacheMax: 500,
+      detailCacheTtlMs: 0,
+      listingDetailCacheTtlMs: 6 * 60 * 60 * 1000,
       lastmodAsDatePosted: true,
-      maxConsecutiveDetailFailures: 3,
+      maxConsecutiveDetailFailures: 1,
+      sitemapFallback: 'empty',
+      unknownTenantTtlMs: 60 * 60 * 1000,
+      detailAttemptSlack: 5,
+      sitemapCacheTtlMs: 10 * 60 * 1000,
+      minIntervalFloorMs: 1000,
+      legacy: new Set(),
     });
-    expect(SOFTY_MAX_LIST_PAGES).toBe(50);
-    expect(SOFTY_MAX_DETAIL_FETCHES).toBe(100);
-    expect(SOFTY_DETAIL_CACHE_MAX).toBe(500);
-    expect(SOFTY_DETAIL_CACHE_TTL_MS).toBe(6 * 60 * 60 * 1000);
   });
 
   it('reads every override from the environment', () => {
@@ -239,14 +297,26 @@ describe('readSoftyConfig (Spec 1691)', () => {
         SOFTY_DETAIL_CACHE_TTL_MS: '0',
         SOFTY_LASTMOD_AS_DATE_POSTED: 'off',
         SOFTY_MAX_CONSECUTIVE_DETAIL_FAILURES: '0',
+        SOFTY_SITEMAP_FALLBACK: 'missing',
+        SOFTY_UNKNOWN_TENANT_TTL_MS: '0',
+        SOFTY_DETAIL_ATTEMPT_SLACK: '9',
+        SOFTY_SITEMAP_CACHE_TTL_MS: '0',
+        SOFTY_LEGACY: 'offres',
       }),
     ).toEqual({
       maxListPages: 7,
       maxDetailFetches: 0,
       detailCacheMax: 20,
       detailCacheTtlMs: 0,
+      listingDetailCacheTtlMs: 0,
       lastmodAsDatePosted: false,
       maxConsecutiveDetailFailures: 0,
+      sitemapFallback: 'missing',
+      unknownTenantTtlMs: 0,
+      detailAttemptSlack: 9,
+      sitemapCacheTtlMs: 0,
+      minIntervalFloorMs: 1000,
+      legacy: new Set(['offres']),
     });
   });
 
@@ -256,12 +326,17 @@ describe('readSoftyConfig (Spec 1691)', () => {
 
   it('ignores invalid values', () => {
     const cfg = readSoftyConfig({
-      SOFTY_MAX_LIST_PAGES: '0',
+      SOFTY_MAX_LIST_PAGES: '-1',
       SOFTY_MAX_DETAIL_FETCHES: '-1',
       SOFTY_DETAIL_CACHE_MAX: 'lots',
       SOFTY_DETAIL_CACHE_TTL_MS: '1.5',
       SOFTY_LASTMOD_AS_DATE_POSTED: 'maybe',
       SOFTY_MAX_CONSECUTIVE_DETAIL_FAILURES: '',
+      SOFTY_SITEMAP_FALLBACK: 'sometimes',
+      SOFTY_UNKNOWN_TENANT_TTL_MS: 'forever',
+      SOFTY_DETAIL_ATTEMPT_SLACK: '-2',
+      SOFTY_SITEMAP_CACHE_TTL_MS: '1e3',
+      SOFTY_LEGACY: 'nonsense',
     });
     expect(cfg).toEqual(readSoftyConfig({}));
   });

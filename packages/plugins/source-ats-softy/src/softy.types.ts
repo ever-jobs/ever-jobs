@@ -12,6 +12,8 @@
  * cross-tenant or future-layout drift never breaks the parser.
  */
 
+import type { SoftyLegacyToken, SoftySitemapFallback } from './softy.constants';
+
 /**
  * A single role as parsed out of the index HTML (or, in sitemap discovery, out of a
  * sitemap entry + its detail page). Current markup: an `/offers/{ID}` card with
@@ -80,18 +82,38 @@ export interface SoftyDetail {
 
 /** Effective per-scrape knobs (constants overridden by environment variables). */
 export interface SoftyConfig {
-  /** Listing pages read at most (>= 1). */
+  /** Listing pages read at most (>= 0; 0 disables list pages, Spec 1715 FR-11). */
   maxListPages: number;
   /** Detail pages fetched at most (>= 0; cache hits do not count). */
   maxDetailFetches: number;
   /** Detail-cache entries (0 disables the cache). */
   detailCacheMax: number;
-  /** Detail-cache TTL in ms (0 = no expiry). */
+  /**
+   * Detail-cache TTL in ms of sitemap entries (0 = no expiry): `SOFTY_DETAIL_CACHE_TTL_MS`
+   * when set, else `SOFTY_DETAIL_CACHE_TTL_MS` the constant (0, Spec 1715 FR-13).
+   */
   detailCacheTtlMs: number;
+  /**
+   * Detail-cache TTL in ms of listing entries (derived, Spec 1715 FR-13): the env value
+   * when `SOFTY_DETAIL_CACHE_TTL_MS` is set, else `SOFTY_LISTING_DETAIL_CACHE_TTL_MS` (6 h).
+   */
+  listingDetailCacheTtlMs: number;
   /** Use the sitemap `<lastmod>` date as `datePosted` when the page has none. */
   lastmodAsDatePosted: boolean;
-  /** Stop fetching details after this many consecutive failures (0 = never). */
+  /** Stop after this many consecutive failed detail fetches (0 = never). */
   maxConsecutiveDetailFailures: number;
+  /** When `auto` may fall back from the sitemap to list pages (Spec 1715 FR-4). */
+  sitemapFallback: SoftySitemapFallback;
+  /** Negative-cache TTL of an unknown tenant, ms (0 disables; Spec 1715 FR-5). */
+  unknownTenantTtlMs: number;
+  /** Detail GETs are capped at `resultsWanted + detailAttemptSlack` (Spec 1715 FR-7). */
+  detailAttemptSlack: number;
+  /** Per-tenant sitemap cache TTL, ms (0 disables; Spec 1715 FR-12). */
+  sitemapCacheTtlMs: number;
+  /** `minIntervalFloorMs` of the Softy client: 1000, or 0 with `SOFTY_LEGACY=no-interval-floor` (derived). */
+  minIntervalFloorMs: number;
+  /** The `SOFTY_LEGACY` tokens in force (Spec 1715 FR-17). */
+  legacy: ReadonlySet<SoftyLegacyToken>;
 }
 
 /**

@@ -187,3 +187,48 @@ describe('test:core coverage (Spec 1689)', () => {
     expect(specs.filter((s) => !include.test(s))).toEqual([]);
   });
 });
+
+describe('ci.yml live Softy e2e gate (Spec 1715 FR-19)', () => {
+  const LIVE_ENV =
+    "EVER_JOBS_LIVE_SOFTY: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '1' || vars.EVER_JOBS_LIVE_SOFTY || '0' }}";
+  const onBlock = (() => {
+    const lines = ciConfigOnly.split('\n');
+    const start = lines.findIndex((l) => /^on:\s*$/.test(l));
+    const end = lines.findIndex((l, i) => i > start && /^\S/.test(l));
+    return lines.slice(start + 1, end).join('\n');
+  })();
+  const e2e = jobs.get('test-source-e2e') ?? '';
+
+  it('keeps the push / pull_request triggers and adds a weekly schedule plus a manual dispatch', () => {
+    expect(onBlock).toMatch(/^ {2}push:\n {4}branches: \[main, develop\]$/m);
+    expect(onBlock).toMatch(/^ {2}pull_request:\n {4}branches: \[main, develop\]$/m);
+    expect(onBlock).toMatch(/^ {2}workflow_dispatch:\s*$/m);
+    expect(onBlock).toMatch(/^ {2}schedule:\n {4}- cron: '23 4 \* \* 1'$/m);
+  });
+
+  it('passes EVER_JOBS_LIVE_SOFTY to the source e2e step: 1 on schedule / dispatch, else the repo variable, else 0', () => {
+    const step = e2e.slice(e2e.indexOf('- name: Run source scraper e2e tests'));
+    expect(step).toContain(LIVE_ENV);
+    expect(step).toContain('EXA_API_KEY: ${{ secrets.EXA_API_KEY }}');
+  });
+
+  it('writes a notice naming the skip reason before the e2e step', () => {
+    const gate = e2e.indexOf('- name: Live Softy e2e gate');
+    expect(gate).toBeGreaterThan(-1);
+    expect(gate).toBeLessThan(e2e.indexOf('- name: Run source scraper e2e tests'));
+    const block = e2e.slice(gate, e2e.indexOf('- name: Run source scraper e2e tests'));
+    expect(block).toContain(LIVE_ENV);
+    expect(block).toContain('::notice title=Live Softy e2e skipped::');
+    expect(block).toContain('EVER_JOBS_LIVE_SOFTY');
+  });
+
+  it('the Softy e2e spec is gated on the same variable (skipped with a visible reason otherwise)', () => {
+    const spec = fs.readFileSync(
+      path.join(REPO_ROOT, 'packages', 'plugins', 'source-ats-softy', '__tests__', 'softy.e2e-spec.ts'),
+      'utf8',
+    );
+    expect(spec).toContain("const LIVE_SOFTY_ENV = 'EVER_JOBS_LIVE_SOFTY'");
+    expect(spec).toContain("process.env[LIVE_SOFTY_ENV] === '1'");
+    expect(spec).toContain('describe.skip');
+  });
+});
