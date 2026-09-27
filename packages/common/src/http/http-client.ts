@@ -16,7 +16,15 @@ import {
   getGuardedAgents,
   isEgressAllowListed,
 } from './crawl/egress-guard';
-import { crawlPluginManifestsEnabled, expandUserAgent, readCrawlPolicyEnv } from './crawl/env';
+import {
+  crawlCallerProxiesAllowedFor,
+  crawlFleetSize,
+  crawlPluginManifestsEnabled,
+  crawlProxyPinScope,
+  crawlRobotsBackoffEnabled,
+  expandUserAgent,
+  readCrawlPolicyEnv,
+} from './crawl/env';
 import { CrawlPolicyError, HostCoolingDownError, RobotsDisallowedError } from './crawl/errors';
 import {
   HostLimiter,
@@ -29,11 +37,18 @@ import { sanitizeHeaderValue } from './crawl/policy-schema';
 import {
   ProxyRotationState,
   createProxyRotationState,
+  proxyPinKeyFor,
   scrapeProxyRotationState,
   selectProxy,
 } from './crawl/proxy-selector';
 import { RobotsFetcher, RobotsTxtCache, getRobotsTxtCache } from './crawl/robots';
-import { getEffectiveCrawlPolicy, getEffectiveProxies, getScrapeContext, runWithScrapeContext } from './crawl/scrape-context';
+import {
+  EffectiveCrawlResolution,
+  getEffectiveCrawlResolution,
+  getEffectiveProxies,
+  getScrapeContext,
+  runWithScrapeContext,
+} from './crawl/scrape-context';
 import { CrawlPolicy, CrawlPolicyOverride, HostLimiterAcquireOptions, ResolvedCrawlPolicy, ScrapeContext } from './crawl/types';
 
 /**
@@ -163,6 +178,15 @@ export function redirectPinGuard(
 
 export interface HttpClientOptions {
   proxies?: string[];
+  /**
+   * `proxies` came from a search caller (Spec 1714 FR-5): set by
+   * `clientOptionsFromScraperInput` (the DTO branch of `createHttpClient`, where a
+   * plugin hands over the caller's `ScraperInputDto`). Such proxies are dropped for
+   * a request to a host whose effective caller-override lock refuses caller
+   * proxies (`crawlCallerProxiesAllowedFor`); the operator's env proxies apply
+   * instead. A plugin's own proxy list (without this marker) is never dropped.
+   */
+  proxiesFromCaller?: boolean;
   caCert?: string;
   /**
    * A User-Agent this client's plugin *declares* (Spec 1690 §4.2) — recorded
@@ -270,6 +294,8 @@ interface WireIdentity {
 interface RequestPlan {
   target: URL | null;
   policy: ResolvedCrawlPolicy;
+  /** The effective caller-override mode and the pre-caller scope (Spec 1714). */
+  resolution: EffectiveCrawlResolution;
   site: string | undefined;
   bucket: string | undefined;
   signal: AbortSignal | undefined;
@@ -386,6 +412,7 @@ export function isScraperInputDto(value: unknown): boolean {
 /** Keys `createHttpClient` copies from whatever object it is given. */
 const CLIENT_OPTION_KEYS: readonly (keyof HttpClientOptions)[] = [
   'proxies',
+  'proxiesFromCaller',
   'caCert',
   'userAgent',
   'retries',
@@ -438,6 +465,9 @@ export function clientOptionsFromScraperInput(source: Record<string, any>): Http
     if (source[key] !== undefined) record[key] = source[key];
   }
   if (options.timeout === undefined && source.requestTimeout !== undefined) options.timeout = source.requestTimeout;
+  // Spec 1714 FR-5: proxies handed over through the DTO branch are the search
+  // caller's (`ScraperInputDto.proxies`) unless the object says otherwise.
+  if (options.proxies !== undefined && options.proxiesFromCaller === undefined) options.proxiesFromCaller = true;
   if (isScraperInputDto(source) && getScrapeContext() !== undefined) {
     for (const key of DTO_CALLER_FIELDS) delete record[key];
   }
@@ -587,16 +617,62 @@ export interface AnswerOutcome {
   giveUpAfterMs?: number;
   /** Set when the (paced) bucket backs off this long after a 429/503. */
   backOffMs?: number;
+  /** Set when a 500/502/504 cooled the bucket for this long (`serverErrorCooldownMs`, Spec 1714 FR-10). */
+  serverErrorCooldownMs?: number;
+}
+
+/**
+ * Answers that mean the server is struggling (Spec 1714 FR-10): with
+ * `serverErrorCooldownMs` > 0 they cool the whole bucket. 503 is not here: it is a
+ * throttle answer (`THROTTLE_STATUSES`) with its own back-off.
+ */
+export const SERVER_ERROR_STATUSES: ReadonlySet<number> = new Set([500, 502, 504]);
+
+/** Transport failures that mean a slow or overloaded server: timeouts and connection resets. */
+const STRUGGLING_NETWORK_CODES: ReadonlySet<string> = new Set([
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'ESOCKETTIMEDOUT',
+  'ERR_SOCKET_CONNECTION_TIMEOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'ECONNRESET',
+  'UND_ERR_SOCKET',
+]);
+
+/**
+ * Whether an answer (`status`) or a failure without one (`err`) says the server
+ * is struggling (Spec 1714 FR-10): a 500/502/504, or — with no HTTP answer — a
+ * timeout (`ECONNABORTED`, `ETIMEDOUT`, `ESOCKETTIMEDOUT`,
+ * `ERR_SOCKET_CONNECTION_TIMEOUT`, `UND_ERR_CONNECT_TIMEOUT`) or a connection reset
+ * (`ECONNRESET`, `UND_ERR_SOCKET`, "socket hang up"). Never our own abort
+ * (`ERR_CANCELED` / `AbortError`), a crawl-policy refusal, or a DNS failure.
+ */
+export function isServerStruggling(status: number | undefined, err?: unknown): boolean {
+  if (typeof status === 'number') return SERVER_ERROR_STATUSES.has(status);
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { response?: unknown; code?: unknown; name?: unknown; message?: unknown; cause?: { code?: unknown } };
+  if (e.response) {
+    const answered = statusOf(err);
+    return answered !== undefined && SERVER_ERROR_STATUSES.has(answered);
+  }
+  if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError' || e.name === 'AbortError') return false;
+  if (findCrawlPolicyError(err)) return false;
+  const code = typeof e.code === 'string' ? e.code : typeof e.cause?.code === 'string' ? e.cause.code : undefined;
+  if (code !== undefined && STRUGGLING_NETWORK_CODES.has(code)) return true;
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return false;
+  return typeof e.message === 'string' && /socket hang up/i.test(e.message);
 }
 
 /**
  * Feed an answer that is handed back to its caller rather than retried — an
- * axios response accepted through `validateStatus`, or a browser navigation
- * (`BrowserPool.navigate`) — to the limiter (Spec 1690 §4.5): a 429/503 counts
- * as throttling (adaptive slow-down) and backs the bucket off — the full
- * `Retry-After` when it exceeds `maxRetryAfterMs` under `give-up`, else the
- * back-off (never less than the throttle floor) when the bucket is paced
- * (`penalizesBucket`); any other status is an `ok` outcome.
+ * axios response accepted through `validateStatus`, a browser navigation
+ * (`BrowserPool.navigate`) or a robots.txt answer (Spec 1714 FR-12) — to the
+ * limiter (Spec 1690 §4.5): a 429/503 counts as throttling (adaptive slow-down)
+ * and backs the bucket off — the full `Retry-After` when it exceeds
+ * `maxRetryAfterMs` under `give-up`, else the back-off (never less than the
+ * throttle floor) when the bucket is paced (`penalizesBucket`); any other status
+ * is an `ok` outcome, and a 500/502/504 additionally cools the bucket for
+ * `serverErrorCooldownMs` when that is on (Spec 1714 FR-10).
  */
 export function recordAnswerOutcome(
   limiter: HostLimiter,
@@ -608,6 +684,11 @@ export function recordAnswerOutcome(
 ): AnswerOutcome {
   if (status === undefined || !THROTTLE_STATUSES.has(status)) {
     limiter.recordOutcome(bucket, 'ok');
+    const cooldown = serverErrorCooldownOf(policy);
+    if (cooldown > 0 && isServerStruggling(status)) {
+      limiter.penalize(bucket, cooldown);
+      return { throttled: false, serverErrorCooldownMs: cooldown };
+    }
     return { throttled: false };
   }
   limiter.recordOutcome(bucket, 'throttled');
@@ -631,21 +712,37 @@ export function recordAnswerOutcome(
  * With no `maxQueueWaitMs`, a request still never waits out a bucket cool-down
  * longer than `maxRetryAfterMs` — the most it would ever wait for the server
  * itself — and fails fast with `HostCoolingDownError` instead.
+ *
+ * Spec 1714: `minGapMs` (the idle gap after completion) is passed when set, and
+ * both the start-to-start spacing (`max(minIntervalMs, crawlDelayMs)`) and the
+ * gap are multiplied by `fleetSize` (`EVER_JOBS_CRAWL_FLEET_SIZE`, default 1 =
+ * unchanged), so N processes sharing one egress stay within one policy. Jitter,
+ * cool-downs and concurrency are not multiplied.
  */
 export function crawlAcquireOptions(
   policy: CrawlPolicy,
   signal?: AbortSignal,
   crawlDelayMs = 0,
+  fleetSize: number = crawlFleetSize(readCrawlPolicyEnv()),
 ): HostLimiterAcquireOptions & HostLimiterAcquireExtraOptions {
+  const fleet = typeof fleetSize === 'number' && Number.isFinite(fleetSize) && fleetSize > 1 ? Math.floor(fleetSize) : 1;
+  const minGapMs = typeof policy.minGapMs === 'number' && policy.minGapMs > 0 ? policy.minGapMs * fleet : 0;
   return {
     maxConcurrent: policy.maxConcurrentPerHost,
-    minIntervalMs: Math.max(policy.minIntervalMs, crawlDelayMs),
+    minIntervalMs: Math.max(policy.minIntervalMs, crawlDelayMs) * fleet,
     jitterMs: policy.jitterMs,
     maxWaitMs: policy.maxQueueWaitMs,
     adaptive: policy.adaptiveThrottle,
     maxCoolDownWaitMs: policy.maxQueueWaitMs > 0 ? 0 : Math.max(1, policy.maxRetryAfterMs),
+    ...(minGapMs > 0 ? { minGapMs } : {}),
     ...(signal ? { signal } : {}),
   };
+}
+
+/** `policy.serverErrorCooldownMs` as a usable number (0 when off or absent on a hand-built policy). */
+function serverErrorCooldownOf(policy: Partial<Pick<CrawlPolicy, 'serverErrorCooldownMs'>>): number {
+  const value = policy.serverErrorCooldownMs;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 /**
@@ -783,6 +880,8 @@ export class HttpClient {
   private readonly client: AxiosInstance;
   /** Proxies this client was given; empty = the scrape context's, else the env's (`getEffectiveProxies`). */
   private readonly proxies: string[];
+  /** `proxies` came from the search caller (the DTO branch, Spec 1714 FR-5). */
+  private readonly proxiesFromCaller: boolean;
   /**
    * Per-client rotation state: `per-request` round-robin, and the `per-scrape`
    * pin when no scrape context is in scope (inside one, the context's
@@ -832,6 +931,7 @@ export class HttpClient {
       : options ?? {};
 
     this.proxies = opts.proxies ?? [];
+    this.proxiesFromCaller = opts.proxiesFromCaller === true;
     this.maxRetries = opts.retries ?? 3;
     this.retryDelay = opts.retryDelay ?? 1000;
     this.retryBackoff = opts.retryBackoff ?? 'linear';
@@ -999,7 +1099,8 @@ export class HttpClient {
     const { crawl: requestCrawl, ...axiosConfig } = config as CrawlRequestConfig;
     const ctx = getScrapeContext();
     const target = resolveTargetUrl(axiosConfig);
-    const policy = this.resolvePolicy(target?.hostname, ctx, requestCrawl);
+    const resolution = this.resolveCrawl(target?.hostname, ctx, requestCrawl);
+    const policy = resolution.policy;
     const site = ctx?.site ?? this.site;
     const bucket = target ? bucketKeyFor(target.href, policy.rateLimitScope, site) : undefined;
     // The caller's own signal and the scrape's deadline signal both cancel the
@@ -1013,7 +1114,7 @@ export class HttpClient {
 
     if (target && policy.blockPrivateNetworks) assertPublicHostname(target.hostname, this.egressOptions);
 
-    const plan: RequestPlan = { target, policy, site, bucket, signal, axiosSignal, identity };
+    const plan: RequestPlan = { target, policy, resolution, site, bucket, signal, axiosSignal, identity };
     if (!this.memoable(axiosConfig)) return this.sendUnderPolicy<T>(axiosConfig, plan);
     // An aborted scrape gets no answer, not even from the memo — the same error
     // the limiter would have rejected a real request with.
@@ -1068,7 +1169,7 @@ export class HttpClient {
 
   /** Everything after the memo (Spec 1690): proxy, robots.txt, limiter, retries. */
   private async sendUnderPolicy<T = any>(axiosConfig: AxiosRequestConfig, plan: RequestPlan): Promise<AxiosResponse<T>> {
-    const { target, policy, site, bucket, signal, axiosSignal, identity } = plan;
+    const { target, policy, resolution, site, bucket, signal, axiosSignal, identity } = plan;
 
     // Chosen once per request, so retries reuse it (as before Spec 1690). Under
     // `per-scrape` the pin lives in the scrape context, so every client of one
@@ -1076,10 +1177,22 @@ export class HttpClient {
     // any scrape context it is per client, as before. (A memo hit never gets
     // here, so it consumes no pick.)
     const ctx = getScrapeContext();
-    const proxies = getEffectiveProxies(this.proxies);
+    const env = readCrawlPolicyEnv();
+    // Spec 1714 FR-5: a host whose lock refuses caller proxies (e.g. `*.softy.pro`,
+    // reached by any plugin) gets neither the scrape context's caller proxies nor a
+    // DTO-branch client's; the plugin's own list and the operator's env list apply.
+    const proxies = crawlCallerProxiesAllowedFor(resolution.callerOverrides, env)
+      ? getEffectiveProxies(this.proxies)
+      : getEffectiveProxies(this.proxiesFromCaller ? undefined : this.proxies, { ignoreCallerProxies: true });
     const rotation =
       policy.proxyRotation === 'per-scrape' && ctx?.proxyPin ? scrapeProxyRotationState(ctx.proxyPin, proxies) : this.rotation;
-    const proxy = selectProxy(proxies, policy.proxyRotation, rotation, bucket ?? '');
+    // Spec 1714 FR-6: `per-host` keys on the registrable domain when the scope
+    // resolved without the caller is `domain` (EVER_JOBS_CRAWL_PROXY_PIN_SCOPE=bucket
+    // restores the pre-1714 key: the request's bucket).
+    const pinKey = target
+      ? proxyPinKeyFor(target.href, policy.rateLimitScope, resolution.baseRateLimitScope, site, crawlProxyPinScope(env))
+      : '';
+    const proxy = selectProxy(proxies, policy.proxyRotation, rotation, pinKey);
     const transport = this.transportFor(proxy, policy, axiosConfig, target);
     const limiter = this.hostLimiter;
 
@@ -1124,6 +1237,17 @@ export class HttpClient {
       const status = statusOf(error);
       const throttled = status === 429 || status === 503;
       if (bucket) limiter.recordOutcome(bucket, throttled ? 'throttled' : status !== undefined && status < 500 ? 'ok' : 'error');
+      // Spec 1714 FR-10: a server that answers 500/502/504, times out or resets the
+      // connection cools the whole bucket (`serverErrorCooldownMs`; 0 = off), before
+      // any retry sleep — the retry then waits for the cool-down too.
+      const cooldown = serverErrorCooldownOf(policy);
+      if (bucket && cooldown > 0 && isServerStruggling(status, error)) {
+        limiter.penalize(bucket, cooldown);
+        this.logger.debug(
+          `${this.describeRequest(axiosConfig)} failed ${status ?? (error as { code?: unknown })?.code ?? 'network error'}; ` +
+            `${bucket} cools down ${cooldown}ms (serverErrorCooldownMs)`,
+        );
+      }
 
       const retryable =
         status !== undefined ? policy.retryStatuses.includes(status) : policy.retryOnNetworkError && isRetryableNetworkError(error);
@@ -1208,9 +1332,11 @@ export class HttpClient {
     signal: AbortSignal | undefined,
     crawlDelayMs = 0,
   ): HostLimiterAcquireOptions & HostLimiterAcquireExtraOptions {
-    const options = crawlAcquireOptions(policy, signal, crawlDelayMs);
-    // The client's floor (`minIntervalFloorMs`) bounds every layer, a caller's included.
-    return { ...options, minIntervalMs: Math.max(options.minIntervalMs, this.minIntervalFloorMs) };
+    const fleetSize = crawlFleetSize(readCrawlPolicyEnv());
+    const options = crawlAcquireOptions(policy, signal, crawlDelayMs, fleetSize);
+    // The client's floor (`minIntervalFloorMs`) bounds every layer, a caller's
+    // included; like the policy's interval it is multiplied by the fleet size (Spec 1714).
+    return { ...options, minIntervalMs: Math.max(options.minIntervalMs, this.minIntervalFloorMs * fleetSize) };
   }
 
   /**
@@ -1237,6 +1363,10 @@ export class HttpClient {
       );
     } else if (outcome.backOffMs !== undefined) {
       this.logger.debug(`${this.describeRequest(config)} answered ${status}; ${bucket} backs off ${outcome.backOffMs}ms`);
+    } else if (outcome.serverErrorCooldownMs !== undefined) {
+      this.logger.debug(
+        `${this.describeRequest(config)} answered ${status}; ${bucket} cools down ${outcome.serverErrorCooldownMs}ms (serverErrorCooldownMs)`,
+      );
     }
   }
 
@@ -1253,13 +1383,22 @@ export class HttpClient {
     ctx: ScrapeContext | undefined,
     requestCrawl?: CrawlPolicyOverride,
   ): ResolvedCrawlPolicy {
+    return this.resolveCrawl(hostname, ctx, requestCrawl).policy;
+  }
+
+  /** The policy of one request plus its effective caller-override mode and pre-caller scope (Spec 1714). */
+  private resolveCrawl(
+    hostname: string | undefined,
+    ctx: ScrapeContext | undefined,
+    requestCrawl?: CrawlPolicyOverride,
+  ): EffectiveCrawlResolution {
     const explicit =
       requestCrawl && typeof requestCrawl === 'object'
         ? { ...this.explicit, ...requestCrawl }
         : this.hasExplicit
           ? this.explicit
           : undefined;
-    const resolve = () => getEffectiveCrawlPolicy(hostname, explicit);
+    const resolve = () => getEffectiveCrawlResolution(hostname, explicit);
     return this.site && !ctx?.site ? runWithScrapeContext({ site: this.site }, resolve) : resolve();
   }
 
@@ -1435,6 +1574,13 @@ export class HttpClient {
    * robots.txt fetcher (Spec 1690 §4.7): straight through the axios instance
    * (not `request()`, so no robots recursion), with the configured UA, a slot
    * from the limiter, and the request's proxy / agents / redirect guard / signal.
+   *
+   * Spec 1714 FR-12 (`EVER_JOBS_CRAWL_ROBOTS_BACKOFF`, default on): the answer
+   * feeds the limiter like any request (`recordAnswerOutcome`) — a 429/503
+   * throttles and cools the bucket, so the page request waits; a `Retry-After`
+   * over `maxRetryAfterMs` (`give-up`) fails it with `HostCoolingDownError` (a
+   * local failure the robots cache does not store); a 500/502/504, a timeout or a
+   * reset applies `serverErrorCooldownMs`. `false` = the pre-1714 behaviour.
    */
   private async fetchRobotsTxt(
     robotsUrl: string,
@@ -1445,23 +1591,42 @@ export class HttpClient {
     axiosSignal: AxiosRequestConfig['signal'],
   ): Promise<{ status: number; body: string } | null> {
     const bucket = bucketKeyFor(robotsUrl, policy.rateLimitScope, site);
-    const release = await this.hostLimiter.acquire(bucket, this.acquireOptions(policy, signal));
+    const limiter = this.hostLimiter;
+    const backoff = crawlRobotsBackoffEnabled(readCrawlPolicyEnv());
+    const release = await limiter.acquire(bucket, this.acquireOptions(policy, signal));
     try {
       const identity: WireIdentity = { userAgent: policy.userAgent, stripClientHints: policy.stripClientHints };
       if (policy.from) identity.from = policy.from;
-      const response = await this.client.request({
-        url: robotsUrl,
-        method: 'GET',
-        headers: { Accept: 'text/plain, */*;q=0.5' },
-        responseType: 'text',
-        maxContentLength: ROBOTS_MAX_DOWNLOAD_BYTES,
-        validateStatus: () => true,
-        ...transport,
-        ...(axiosSignal ? { signal: axiosSignal } : {}),
-        [IDENTITY_KEY]: identity,
-      } as AxiosRequestConfig);
+      let response: AxiosResponse;
+      try {
+        response = await this.client.request({
+          url: robotsUrl,
+          method: 'GET',
+          headers: { Accept: 'text/plain, */*;q=0.5' },
+          responseType: 'text',
+          maxContentLength: ROBOTS_MAX_DOWNLOAD_BYTES,
+          validateStatus: () => true,
+          ...transport,
+          ...(axiosSignal ? { signal: axiosSignal } : {}),
+          [IDENTITY_KEY]: identity,
+        } as AxiosRequestConfig);
+      } catch (err) {
+        const cooldown = serverErrorCooldownOf(policy);
+        if (backoff && cooldown > 0 && isServerStruggling(undefined, err)) limiter.penalize(bucket, cooldown);
+        throw err;
+      }
       const body = typeof response.data === 'string' ? response.data : response.data == null ? '' : String(response.data);
       this.logger.debug(`robots.txt ${robotsUrl} → ${response.status}`);
+      if (backoff) {
+        const outcome = recordAnswerOutcome(limiter, bucket, policy, 0, response.status, response.headers);
+        if (outcome.giveUpAfterMs !== undefined) {
+          this.logger.warn(
+            `robots.txt ${robotsUrl} answered ${response.status}, Retry-After ${outcome.giveUpAfterMs}ms exceeds ` +
+              `maxRetryAfterMs ${policy.maxRetryAfterMs}ms; not requesting the page (${bucket} cooling down)`,
+          );
+          throw new HostCoolingDownError(bucket, outcome.giveUpAfterMs, response.status);
+        }
+      }
       return { status: response.status, body };
     } finally {
       release();

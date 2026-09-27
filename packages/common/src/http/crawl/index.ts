@@ -2,6 +2,7 @@ export * from './types';
 export * from './defaults';
 export * from './errors';
 export * from './env';
+export * from './caller-lock';
 export * from './resolve';
 export * from './scrape-context';
 export * from './host-limiter';

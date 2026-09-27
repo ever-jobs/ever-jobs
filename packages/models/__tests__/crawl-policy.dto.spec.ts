@@ -33,6 +33,8 @@ describe('CrawlPolicyDto (Spec 1690)', () => {
       jitterMs: 250,
       maxQueueWaitMs: 0,
       adaptiveThrottle: true,
+      minGapMs: 500,
+      serverErrorCooldownMs: 30000,
       retries: 0,
       retryStatuses: [429, 503],
       retryBackoff: 'exponential',
@@ -71,6 +73,9 @@ describe('CrawlPolicyDto (Spec 1690)', () => {
     'retryMaxDelayMs',
     'maxRetryAfterMs',
     'throttleRetryDelayMs',
+    // Spec 1714 FR-9 / FR-10.
+    'minGapMs',
+    'serverErrorCooldownMs',
   ])('%s: accepts 0 and positive integers, rejects negatives, fractions and strings', async (field) => {
     expect(await errorsFor({ [field]: 0 })).toEqual([]);
     expect(await errorsFor({ [field]: 5 })).toEqual([]);
@@ -143,6 +148,20 @@ describe('ScraperInputDto.crawl (Spec 1690)', () => {
       retryBackoff: 'exponential',
       retryMaxDelay: 5000,
     });
+  });
+
+  it('Spec 1714: keeps minGapMs / serverErrorCooldownMs and strips a caller-sent callerOverrides lock', async () => {
+    const input = (await pipe.transform(
+      { searchTerm: 'engineer', crawl: { minGapMs: 500, serverErrorCooldownMs: 30000, callerOverrides: 'any' } },
+      body,
+    )) as ScraperInputDto;
+    expect({ ...input.crawl }).toEqual({ minGapMs: 500, serverErrorCooldownMs: 30000 });
+    expect(input.crawl).not.toHaveProperty('callerOverrides');
+  });
+
+  it('Spec 1714: callerOverrides is not a CrawlPolicyDto property (a caller can never set a lock)', () => {
+    expect(Object.keys(new CrawlPolicyDto())).not.toContain('callerOverrides');
+    expect(CrawlPolicyDto.prototype).not.toHaveProperty('callerOverrides');
   });
 
   it('transforms crawl into a CrawlPolicyDto and strips unknown nested keys', async () => {

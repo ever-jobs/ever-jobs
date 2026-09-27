@@ -2,6 +2,7 @@ import {
   createProxyRotationState,
   createScrapeProxyPin,
   fnv1a32,
+  proxyPinKeyFor,
   resetProxyScrapeSeed,
   scrapeProxyRotationState,
   selectProxy,
@@ -189,5 +190,37 @@ describe('fnv1a32', () => {
       expect(h).toBeLessThan(2 ** 32);
     }
     expect(fnv1a32('host:bücher.example')).not.toBe(fnv1a32('host:bucher.example'));
+  });
+});
+
+describe('proxyPinKeyFor (Spec 1714 FR-6, audit G10)', () => {
+  const t1 = 'https://t1.softy.pro/offers/1';
+  const t2 = 'https://t2.softy.pro/sitemap.xml';
+
+  it('pins on the registrable domain when the base scope is domain, whatever scope the caller chose', () => {
+    expect(proxyPinKeyFor(t1, 'host', 'domain', 'softy')).toBe('domain:softy.pro');
+    expect(proxyPinKeyFor(t2, 'host', 'domain', 'softy')).toBe('domain:softy.pro');
+    expect(proxyPinKeyFor(t1, 'site', 'domain', 'softy')).toBe('domain:softy.pro');
+    expect(proxyPinKeyFor(t1, 'domain', 'domain', 'softy')).toBe('domain:softy.pro');
+  });
+
+  it('otherwise keys on the request bucket (unchanged from Spec 1690)', () => {
+    expect(proxyPinKeyFor(t1, 'host', 'host', 'softy')).toBe('host:t1.softy.pro');
+    expect(proxyPinKeyFor(t1, 'domain', 'host', 'softy')).toBe('domain:softy.pro');
+    expect(proxyPinKeyFor(t1, 'site', 'site', 'softy')).toBe('site:softy');
+    expect(proxyPinKeyFor(t1, 'host', undefined, undefined)).toBe('host:t1.softy.pro');
+  });
+
+  it("pinScope 'bucket' (EVER_JOBS_CRAWL_PROXY_PIN_SCOPE=bucket) restores the pre-1714 key: the request bucket", () => {
+    expect(proxyPinKeyFor(t1, 'host', 'domain', 'softy', 'bucket')).toBe('host:t1.softy.pro');
+    expect(proxyPinKeyFor(t2, 'host', 'domain', 'softy', 'bucket')).toBe('host:t2.softy.pro');
+  });
+
+  it('two tenants of one domain-scoped site get the same per-host proxy under the base pin, different ones under bucket', () => {
+    const proxies = ['http://p1:8080', 'http://p2:8080', 'http://p3:8080', 'http://p4:8080'];
+    const pick = (url: string, pin: 'base' | 'bucket') =>
+      selectProxy(proxies, 'per-host', createProxyRotationState(), proxyPinKeyFor(url, 'host', 'domain', 'softy', pin));
+    expect(pick(t1, 'base')).toBe(pick(t2, 'base'));
+    expect(pick(t1, 'bucket')).not.toBe(pick(t2, 'bucket'));
   });
 });

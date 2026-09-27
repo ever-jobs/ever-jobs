@@ -60,6 +60,11 @@ const SINGLE_HEADER_LINE = /^[^\r\n\0]*$/;
  * `none`). Omitted fields fall through to the operator, plugin, env and preset
  * layers. The preset itself (`EVER_JOBS_CRAWL_PRESET`) is process-wide and cannot
  * be chosen per request.
+ *
+ * A site owner's lock (`callerOverrides` on a plugin manifest or a builtin host
+ * policy, Spec 1714) can tighten the operator's mode for that source or host.
+ * The lock is deliberately NOT a field here: a caller can never set one (the
+ * REST whitelist strips it, and the resolver refuses it from any caller).
  */
 export class CrawlPolicyDto {
   // ── Identity ────────────────────────────────────────────────────────────
@@ -145,6 +150,26 @@ export class CrawlPolicyDto {
   @IsOptional()
   @IsBoolean()
   adaptiveThrottle?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Minimum idle time after a request of the bucket completes before the next one starts, ms, on top of minIntervalMs (start to start). 0 = off (the default; operator env EVER_JOBS_CRAWL_MIN_GAP_MS). Spec 1714.',
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  minGapMs?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Whole-bucket cool-down after a 500/502/504, a timeout or a connection reset, ms. 0 = off (the default; operator env EVER_JOBS_CRAWL_SERVER_ERROR_COOLDOWN_MS). Spec 1714.',
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  serverErrorCooldownMs?: number;
 
   // ── Retries ─────────────────────────────────────────────────────────────
 

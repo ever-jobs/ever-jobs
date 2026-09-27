@@ -4,6 +4,12 @@ import { LocationDto } from './location.dto';
 import { OfficeDto } from './office.dto';
 import { CompensationDto } from './compensation.dto';
 
+/**
+ * `liveness.reason` of a job marked `active` because its plugin fetched `jobUrl`
+ * during this very request (`jobUrlFetchedAt`), so it was not probed again (Spec 1714 FR-16).
+ */
+export const JOB_LIVENESS_REASON_FRESH_FETCH = 'fresh-fetch';
+
 export class JobPostDto {
   id?: string | null;
   title!: string;
@@ -97,11 +103,25 @@ export class JobPostDto {
   // Site identifier (filled in during aggregation)
   site?: string | null;
 
+  /**
+   * ISO-8601 UTC instant at which the source plugin itself fetched `jobUrl` and got
+   * a 2xx page it could parse, during the scrape that produced this record (Spec
+   * 1714 FR-16). Unset when the page came from a plugin cache, was not fetched, or
+   * failed. `?liveness=true` trusts a value not older than the request instead of
+   * probing the URL again (`EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false` probes it anyway).
+   */
+  jobUrlFetchedAt?: string | null;
+
   // Corpus signals (Spec 740) — opt-in via ?liveness=true / ?legitimacy=true; absent by default.
   // Shapes mirror what the Hust frontend already consumes (forward-compatible).
   liveness?: {
     state: 'active' | 'expired' | 'uncertain';
     checkedAt?: string;
+    /**
+     * Why the state was set without a probe, e.g. `JOB_LIVENESS_REASON_FRESH_FETCH`
+     * (the plugin fetched the page during this request, Spec 1714). Unset on a probe verdict.
+     */
+    reason?: string;
   } | null;
   legitimacy?: {
     state: 'verified' | 'likely' | 'uncertain';

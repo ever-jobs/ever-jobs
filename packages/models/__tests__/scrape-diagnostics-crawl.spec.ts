@@ -4,8 +4,10 @@ import {
   ScrapeDiagnostics,
   classifyScrapeError,
   isRefusalDiagnostics,
+  preferRefusalError,
   refusalFromScrapeError,
 } from '../src/dtos/scrape-diagnostics.dto';
+import * as models from '../src';
 // The real error classes, so a renamed `code` breaks this test instead of the mapping silently.
 import {
   CrawlQueueTimeoutError,
@@ -100,5 +102,58 @@ describe('refusalFromScrapeError / isRefusalDiagnostics (Specs 1700, 1690)', () 
     expect(isRefusalDiagnostics(new ScrapeDiagnostics('fetch_error', 'HTTP 429 Too Many Requests'))).toBe(true);
     expect(isRefusalDiagnostics(new ScrapeDiagnostics('fetch_error', 'HTTP 500'))).toBe(false);
     expect(isRefusalDiagnostics(null)).toBe(false);
+  });
+});
+
+/**
+ * Spec 1714 (audit G17): a scrape that met several errors reports the push-back
+ * one — a throttle or refusal wins over an earlier plain 5xx, so the multi-location
+ * loop and the diagnostics see `rate_limited` / `blocked`, not `fetch_error`.
+ * Red control: make `preferRefusalError` return `current` → the first two rows fail.
+ */
+describe('preferRefusalError (Spec 1714)', () => {
+  const e = (status: number) => httpError(status);
+
+  it('is exported from the models index', () => {
+    expect(models.preferRefusalError).toBe(preferRefusalError);
+  });
+
+  it.each<[string, () => [unknown, unknown], (a: unknown, b: unknown) => unknown]>([
+    ['502 then 429 → 429', () => [e(502), e(429)], (_a, b) => b],
+    ['502 then 403 → 403', () => [e(502), e(403)], (_a, b) => b],
+    ['429 then 502 → 429', () => [e(429), e(502)], (a) => a],
+    ['502 then 500 → 502 (the first plain error stays)', () => [e(502), e(500)], (a) => a],
+    ['500 then 503 → 503', () => [e(500), e(503)], (_a, b) => b],
+    ['429 then 403 → 429 (both refusals: the first stays)', () => [e(429), e(403)], (a) => a],
+    ['undefined then x → x', () => [undefined, e(500)], (_a, b) => b],
+    ['x then undefined → x', () => [e(500), undefined], (a) => a],
+    ['null then null → null', () => [null, null], (a) => a],
+  ])('%s', (_name, make, pick) => {
+    const [current, next] = make();
+    expect(preferRefusalError(current, next)).toBe(pick(current, next));
+  });
+
+  it('a crawl-policy HostCoolingDownError (rate_limited) wins over an earlier 5xx', () => {
+    const first = e(502);
+    const cooling = new HostCoolingDownError('domain:softy.pro', 300_000, 429);
+    expect(preferRefusalError(first, cooling)).toBe(cooling);
+  });
+
+  it('a challenge page / captcha message (blocked) wins over an earlier 5xx', () => {
+    const first = e(504);
+    const challenge = new Error('challenge page served instead of the sitemap (captcha)');
+    expect(preferRefusalError(first, challenge)).toBe(challenge);
+  });
+
+  it('a plain "503 Service Unavailable" message without a response counts as push-back', () => {
+    const first = new Error('boom');
+    const unavailable = new Error('HTTP 503 Service Unavailable');
+    expect(preferRefusalError(first, unavailable)).toBe(unavailable);
+  });
+
+  it('a timeout or a 404 never replaces an earlier error', () => {
+    const first = e(502);
+    expect(preferRefusalError(first, Object.assign(new Error('timeout of 60000ms exceeded'), { code: 'ECONNABORTED' }))).toBe(first);
+    expect(preferRefusalError(first, e(404))).toBe(first);
   });
 });

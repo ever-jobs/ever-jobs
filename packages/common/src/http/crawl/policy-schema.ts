@@ -62,6 +62,9 @@ export const CRAWL_POLICY_FIELD_SPECS: { readonly [K in keyof CrawlPolicy]-?: Cr
   jitterMs: { kind: 'int' },
   maxQueueWaitMs: { kind: 'int' },
   adaptiveThrottle: { kind: 'bool' },
+  // Spec 1714 FR-9 / FR-10.
+  minGapMs: { kind: 'int' },
+  serverErrorCooldownMs: { kind: 'int' },
 
   // `MAX_CRAWL_RETRIES` (10) bounds every layer: env, operator file, plugin, caller.
   retries: { kind: 'int', max: MAX_CRAWL_RETRIES },
@@ -252,6 +255,13 @@ export function coerceCrawlField(field: keyof CrawlPolicy, raw: unknown): Coerce
   }
 }
 
+/**
+ * The key of the caller-override lock on a layer (Spec 1714 FR-1). Not a policy
+ * field: `normalizeOverride` validates and keeps it, `applyLayer` never copies it
+ * into a resolved policy, and `filterCallerOverride` always refuses it from a caller.
+ */
+export const CALLER_OVERRIDES_KEY = 'callerOverrides';
+
 /** See `normalizeCrawlOverride` in `resolve.ts` (public name). */
 export function normalizeOverride(raw: unknown): { value: CrawlPolicyOverride; warnings: string[] } {
   const value: CrawlPolicyOverride = {};
@@ -267,6 +277,12 @@ export function normalizeOverride(raw: unknown): { value: CrawlPolicyOverride; w
     const item = (raw as Record<string, unknown>)[key];
     // `undefined`/`null` mean "not set at this layer" — e.g. an optional DTO field.
     if (item === undefined || item === null) continue;
+    if (key === CALLER_OVERRIDES_KEY) {
+      const lock = coerceEnum(item, CALLER_OVERRIDE_POLICIES);
+      if (lock.problem !== undefined) warnings.push(`${key}: ${lock.problem}; ignored`);
+      else record[key] = lock.value;
+      continue;
+    }
     if (!isCrawlPolicyField(key)) {
       // `userAgentReason` is plugin metadata, not a policy field. The key is
       // untrusted (an API body): quoted and cut to 80 characters in the warning.

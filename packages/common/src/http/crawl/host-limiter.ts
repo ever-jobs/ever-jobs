@@ -47,6 +47,13 @@ export interface HostLimiterAcquireExtraOptions {
    * would ever wait for the server itself.
    */
   maxCoolDownWaitMs?: number;
+  /**
+   * Minimum idle time after the granted request COMPLETES, ms (Spec 1714 FR-9,
+   * `minGapMs`): when its `release()` runs, the bucket's next start moves to at
+   * least now + this, on top of `minIntervalMs` (start to start). 0 / unset = no
+   * gap (the pre-1714 behaviour).
+   */
+  minGapMs?: number;
 }
 
 export const HOST_LIMITER_DEFAULTS = {
@@ -94,6 +101,8 @@ interface Limits {
   adaptive: boolean;
   /** 0 = no limit. */
   maxCoolDownWaitMs: number;
+  /** Idle time after completion, ms (0 = none). */
+  minGapMs: number;
 }
 
 interface Waiter {
@@ -140,6 +149,7 @@ function toLimits(options: HostLimiterAcquireOptions & HostLimiterAcquireExtraOp
     maxWaitMs: nonNegative(options.maxWaitMs),
     adaptive: options.adaptive === true,
     maxCoolDownWaitMs: nonNegative(options.maxCoolDownWaitMs),
+    minGapMs: nonNegative(options.minGapMs),
   };
 }
 
@@ -155,8 +165,10 @@ export function abortReasonOf(signal: AbortSignal): unknown {
  *
  * A request is granted a slot when (a) fewer than `maxConcurrent` requests of
  * its bucket are in flight (0 = unlimited), (b) `now >= nextStartAt`, where each
- * grant sets `nextStartAt = now + minIntervalMs × slowdown + random(0..jitterMs)`,
- * and (c) the bucket is not cooling down. Waiters are served FIFO per bucket; a
+ * grant sets `nextStartAt = now + minIntervalMs × slowdown + random(0..jitterMs)`
+ * and each release of a request that asked for an idle gap (`minGapMs`, Spec
+ * 1714) raises it to at least `release time + minGapMs`, and (c) the bucket is not
+ * cooling down. Waiters are served FIFO per bucket; a
  * single timer per bucket pumps the queue. Buckets are LRU-bounded.
  *
  * Timers are NOT unref'd: a timer only exists while a request waits for its slot,
@@ -412,11 +424,14 @@ export class HostLimiter {
     bucket.active++;
     bucket.nextStartAt = now + this.gapFor(bucket, waiter.limits);
 
+    const minGapMs = waiter.limits.minGapMs;
     let released = false;
     const release = (): void => {
       if (released) return;
       released = true;
       bucket.active = Math.max(0, bucket.active - 1);
+      // Spec 1714 FR-9: an idle gap after completion, on top of the start-to-start interval.
+      if (minGapMs > 0) bucket.nextStartAt = Math.max(bucket.nextStartAt, this.now() + minGapMs);
       this.pump(bucket);
     };
     waiter.resolve(release);

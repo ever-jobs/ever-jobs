@@ -15,10 +15,11 @@ import { assertPublicHostname, assertPublicProxy, assertPublicResolution } from 
 import {
   crawlBrowserNavigationEnabled,
   crawlPluginManifestsEnabled,
+  crawlRobotsBackoffEnabled,
   expandUserAgent,
   readCrawlPolicyEnv,
 } from '../http/crawl/env';
-import { EgressBlockedError, RobotsDisallowedError } from '../http/crawl/errors';
+import { EgressBlockedError, HostCoolingDownError, RobotsDisallowedError } from '../http/crawl/errors';
 import { abortReasonOf, bucketKeyFor, getHostLimiter } from '../http/crawl/host-limiter';
 import { sanitizeHeaderValue } from '../http/crawl/policy-schema';
 import { getRobotsTxtCache } from '../http/crawl/robots';
@@ -695,6 +696,11 @@ export class BrowserPool {
       this.logger.debug(
         `Navigation to ${describeUrlForLog(target.href)} answered ${status}; ${bucket} backs off ${outcome.backOffMs}ms`,
       );
+    } else if (outcome.serverErrorCooldownMs !== undefined) {
+      this.logger.debug(
+        `Navigation to ${describeUrlForLog(target.href)} answered ${status}; ${bucket} cools down ` +
+          `${outcome.serverErrorCooldownMs}ms (serverErrorCooldownMs)`,
+      );
     }
   }
 
@@ -705,6 +711,11 @@ export class BrowserPool {
    * identity (UA, `From`, no client hints) and the egress guard. Not through
    * `HttpClient.request()`: a robots.txt check there would wait on this very
    * fetch. Fetched directly, not through the page's proxy.
+   *
+   * Spec 1714 FR-12 (`EVER_JOBS_CRAWL_ROBOTS_BACKOFF`, default on): the answer
+   * feeds the limiter (`recordAnswerOutcome`) like `HttpClient`'s robots.txt
+   * fetch — a 429/503 cools the bucket, a `Retry-After` over `maxRetryAfterMs`
+   * fails the navigation with `HostCoolingDownError`.
    */
   private static async fetchRobotsTxt(
     robotsUrl: string,
@@ -713,7 +724,8 @@ export class BrowserPool {
     signal: AbortSignal | undefined,
   ): Promise<{ status: number; body: string }> {
     const bucket = bucketKeyFor(robotsUrl, policy.rateLimitScope, site);
-    const release = await getHostLimiter().acquire(bucket, crawlAcquireOptions(policy, signal));
+    const limiter = getHostLimiter();
+    const release = await limiter.acquire(bucket, crawlAcquireOptions(policy, signal));
     try {
       const response = await this.robotsHttpClient().getAxiosInstance().request({
         url: robotsUrl,
@@ -725,6 +737,12 @@ export class BrowserPool {
         ...(signal ? { signal } : {}),
       });
       const body = typeof response.data === 'string' ? response.data : response.data == null ? '' : String(response.data);
+      if (crawlRobotsBackoffEnabled(readCrawlPolicyEnv())) {
+        const outcome = recordAnswerOutcome(limiter, bucket, policy, 0, response.status, response.headers);
+        if (outcome.giveUpAfterMs !== undefined) {
+          throw new HostCoolingDownError(bucket, outcome.giveUpAfterMs, response.status);
+        }
+      }
       return { status: response.status, body };
     } finally {
       release();

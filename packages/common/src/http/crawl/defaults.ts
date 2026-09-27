@@ -55,6 +55,10 @@ export const POLITE_CRAWL_POLICY: CrawlPolicy = {
   jitterMs: 0,
   maxQueueWaitMs: 0,
   adaptiveThrottle: true,
+  // Spec 1714: no idle gap and no server-error cool-down by default (the pre-1714
+  // behaviour); EVER_JOBS_CRAWL_MIN_GAP_MS / _SERVER_ERROR_COOLDOWN_MS turn them on.
+  minGapMs: 0,
+  serverErrorCooldownMs: 0,
 
   retries: 2,
   retryStatuses: [429, 502, 503, 504],
@@ -93,6 +97,8 @@ export const LEGACY_CRAWL_POLICY: CrawlPolicy = {
   jitterMs: 0,
   maxQueueWaitMs: 0,
   adaptiveThrottle: false,
+  minGapMs: 0,
+  serverErrorCooldownMs: 0,
 
   retries: 3,
   retryStatuses: [429, 500, 502, 503, 504],
@@ -137,10 +143,54 @@ export const CRAWL_PRESETS: Record<CrawlPreset, CrawlPolicy> = {
 };
 
 /**
- * Hosts that serve hundreds of company plugins through one public, CDN-backed
- * API. A default search sends ~800 requests to Greenhouse alone, so the generic
- * per-host cap would push most of them past the search deadline. These limits
- * still bound bursts; operators can override any of them per host.
+ * The pace the operator of the Softy ATS asked for (`*.softy.pro`: ONE shared
+ * server for every client tenant) — Spec 1714 FR-8. One request at a time per
+ * registrable domain, at least 1 s between starts and 0.5 s of idle time after
+ * each answer, one stable proxy, one retry on 429/503 only, at least 10 s of
+ * back-off after a throttle and 30 s after a server error, `Retry-After` always
+ * honoured — and a caller lock (`callerOverrides: 'stricter'`) so an API caller
+ * can only make this traffic MORE polite.
+ *
+ * It applies to EVERY request to those hosts, whichever site makes it (the Softy
+ * plugin, liveness probes, the JSON-LD plugin…), because the builtin-host layer
+ * is resolved per request host. It must agree with the Softy manifest
+ * (`SOFTY_CRAWL_POLICY`, Spec 1715) on every pacing / retry / lock field; a parity
+ * test in the Softy suite guards that. No identity field on purpose (spec D6): a
+ * builtin `userAgentMode` could loosen an operator's env `strict`.
+ *
+ * Operator `sites` / `hosts` entries still override it, including the lock:
+ * `{"hosts":{"*.softy.pro":{"callerOverrides":"any"},"softy.pro":{"callerOverrides":"any"}}}`.
+ * `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false` switches the whole builtin layer off.
+ */
+export const BUILTIN_SOFTY_HOST_POLICY: CrawlPolicyOverride = {
+  rateLimitScope: 'domain',
+  maxConcurrentPerHost: 1,
+  minIntervalMs: 1000,
+  minGapMs: 500,
+  proxyRotation: 'per-host',
+  retries: 1,
+  retryStatuses: [429, 503],
+  throttleRetryDelayMs: 10000,
+  serverErrorCooldownMs: 30000,
+  respectRetryAfter: true,
+  retryAfterOverMax: 'give-up',
+  callerOverrides: 'stricter',
+};
+
+/**
+ * Builtin host policies (layer 3), keyed by host pattern with the operator `hosts`
+ * semantics (Spec 1714 FR-8): an exact host, or `*.suffix` for any subdomain (not
+ * the apex). Every matching pattern applies, least specific first, so the most
+ * specific one wins field by field. `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false` (the
+ * `legacy` preset's default) switches the layer off; operator `sites` / `hosts`
+ * entries override any of them.
+ *
+ * - Hosts that serve hundreds of company plugins through one public, CDN-backed
+ *   API. A default search sends ~800 requests to Greenhouse alone, so the generic
+ *   per-host cap would push most of them past the search deadline. These limits
+ *   still bound bursts.
+ * - Site-owner policies: `*.softy.pro` and the apex `softy.pro`
+ *   (`BUILTIN_SOFTY_HOST_POLICY`).
  */
 export const BUILTIN_HOST_POLICIES: Record<string, CrawlPolicyOverride> = {
   'api.greenhouse.io': { maxConcurrentPerHost: 16, minIntervalMs: 0 },
@@ -148,6 +198,8 @@ export const BUILTIN_HOST_POLICIES: Record<string, CrawlPolicyOverride> = {
   'api.lever.co': { maxConcurrentPerHost: 12, minIntervalMs: 0 },
   'api.ashbyhq.com': { maxConcurrentPerHost: 12, minIntervalMs: 0 },
   'api.smartrecruiters.com': { maxConcurrentPerHost: 12, minIntervalMs: 0 },
+  '*.softy.pro': BUILTIN_SOFTY_HOST_POLICY,
+  'softy.pro': BUILTIN_SOFTY_HOST_POLICY,
 };
 
 /**
@@ -169,6 +221,10 @@ export const CRAWL_ENV = {
   JITTER_MS: 'EVER_JOBS_CRAWL_JITTER_MS',
   MAX_QUEUE_WAIT_MS: 'EVER_JOBS_CRAWL_MAX_QUEUE_WAIT_MS',
   ADAPTIVE: 'EVER_JOBS_CRAWL_ADAPTIVE',
+  /** `minGapMs` (Spec 1714 FR-9). Default 0 = no idle gap, the pre-1714 behaviour. */
+  MIN_GAP_MS: 'EVER_JOBS_CRAWL_MIN_GAP_MS',
+  /** `serverErrorCooldownMs` (Spec 1714 FR-10). Default 0 = no cool-down, the pre-1714 behaviour. */
+  SERVER_ERROR_COOLDOWN_MS: 'EVER_JOBS_CRAWL_SERVER_ERROR_COOLDOWN_MS',
   RETRIES: 'EVER_JOBS_CRAWL_RETRIES',
   RETRY_STATUSES: 'EVER_JOBS_CRAWL_RETRY_STATUSES',
   RETRY_BACKOFF: 'EVER_JOBS_CRAWL_RETRY_BACKOFF',

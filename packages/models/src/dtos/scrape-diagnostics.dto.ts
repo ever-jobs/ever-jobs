@@ -311,6 +311,39 @@ export function refusalFromScrapeError(err: unknown): ScrapeDiagnostics | null {
   return diag.reason === 'blocked' ? diag : null;
 }
 
+/** A "service unavailable" answer in an error message (the server shedding load). */
+const SERVICE_UNAVAILABLE_TEXT = /\b503\b|service unavailable/i;
+
+/**
+ * Whether `err` is the host pushing back — a throttle or a refusal: HTTP 429 or
+ * 503, 401/403/407, a challenge / captcha page, a rate-limit message, or a
+ * crawl-policy `rate_limited` / `blocked` (`refusalFromScrapeError`, plus 503).
+ */
+function isPushBackError(err: unknown): boolean {
+  if (err === undefined || err === null) return false;
+  const status = (err as { response?: { status?: unknown } } | null | undefined)?.response?.status;
+  if (status === 503) return true;
+  if (refusalFromScrapeError(err) !== null) return true;
+  return typeof status !== 'number' && SERVICE_UNAVAILABLE_TEXT.test(messageOf(err));
+}
+
+/**
+ * The error a scrape should report when it met more than one (Spec 1714, audit
+ * G17): `next` replaces `current` when `next` is the host pushing back (429, 503,
+ * 401/403/407, a challenge, a crawl-policy `rate_limited` / `blocked`) and
+ * `current` is not; otherwise the first error stays. A plugin that keeps the first
+ * error of a scrape (a plain 502 on one detail page) would otherwise report
+ * `fetch_error` for a scrape that ended on a 429 — and the multi-location loop
+ * would not see the refusal.
+ *
+ * `undefined` / `null` `current` → `next`; `undefined` / `null` `next` → `current`.
+ */
+export function preferRefusalError(current: unknown, next: unknown): unknown {
+  if (current === undefined || current === null) return next;
+  if (next === undefined || next === null) return current;
+  return isPushBackError(next) && !isPushBackError(current) ? next : current;
+}
+
 /**
  * The same test for a diagnostic a plugin already built: `blocked`, an open
  * circuit breaker, a crawl-policy `rate_limited`, or a `fetch_error` whose

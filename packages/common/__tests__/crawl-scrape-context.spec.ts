@@ -7,6 +7,7 @@ import * as resolveModule from '../src/http/crawl/resolve';
 import {
   CRAWL_POLICY_MEMO_MAX,
   getEffectiveCrawlPolicy,
+  getEffectiveCrawlResolution,
   getEffectiveProxies,
   getScrapeContext,
   resetEffectiveCrawlPolicyCache,
@@ -352,6 +353,57 @@ describe('scrape context (Spec 1690)', () => {
       const out = getEffectiveProxies(list);
       out.push('x');
       expect(list).toEqual(['http://a:1']);
+    });
+
+    it('ignoreCallerProxies (Spec 1714 FR-5) skips the context caller proxies: explicit > env > none', () => {
+      runWithScrapeContext({ proxies: ['http://ctx:1'] }, () => {
+        expect(getEffectiveProxies(undefined, { ignoreCallerProxies: true })).toEqual([]);
+        expect(getEffectiveProxies(['http://explicit:1'], { ignoreCallerProxies: true })).toEqual(['http://explicit:1']);
+      });
+      process.env[CRAWL_ENV.PROXIES] = 'http://env:1';
+      resetCrawlPolicyEnvCache();
+      runWithScrapeContext({ proxies: ['http://ctx:1'] }, () => {
+        expect(getEffectiveProxies(null, { ignoreCallerProxies: true })).toEqual(['http://env:1']);
+        expect(getEffectiveProxies(null, { ignoreCallerProxies: false })).toEqual(['http://ctx:1']);
+      });
+    });
+  });
+
+  describe('getEffectiveCrawlResolution (Spec 1714)', () => {
+    const SOFTY: PluginCrawlPolicy = { rateLimitScope: 'domain', maxConcurrentPerHost: 1, callerOverrides: 'stricter' };
+
+    it('returns the policy, the effective caller-override mode and the pre-caller scope from one memo entry', () => {
+      const explain = explainCalls();
+      runWithScrapeContext({ site: 'softy', plugin: SOFTY, caller: { rateLimitScope: 'host', minIntervalMs: 5000 } }, () => {
+        const first = getEffectiveCrawlResolution('https://acme.softy.pro/offers/1');
+        const second = getEffectiveCrawlResolution('acme.softy.pro');
+        expect(first).toEqual(second);
+        expect(first.callerOverrides).toEqual({ mode: 'stricter', source: 'plugin', global: 'any' });
+        expect(first.baseRateLimitScope).toBe('domain');
+        expect(first.policy.rateLimitScope).toBe('domain'); // the caller's host scope was refused
+        expect(first.policy.minIntervalMs).toBe(5000); // a more polite caller value was accepted
+        expect(getEffectiveCrawlPolicy('acme.softy.pro')).toEqual(first.policy);
+      });
+      expect(explain).toHaveBeenCalledTimes(1);
+    });
+
+    it('each call returns fresh copies', () => {
+      runWithScrapeContext({ site: 'liveness-http' }, () => {
+        const a = getEffectiveCrawlResolution('a.softy.pro');
+        a.callerOverrides.mode = 'any';
+        a.policy.retryStatuses.push(599);
+        const b = getEffectiveCrawlResolution('a.softy.pro');
+        expect(b.callerOverrides).toEqual({ mode: 'stricter', source: 'builtin-host', global: 'any' });
+        expect(b.policy.retryStatuses).toEqual([429, 503]);
+      });
+    });
+
+    it('a source without a lock reports the global mode from the default layer', () => {
+      runWithScrapeContext({ site: 'linkedin' }, () => {
+        const resolution = getEffectiveCrawlResolution('www.linkedin.com');
+        expect(resolution.callerOverrides).toEqual({ mode: 'any', source: 'default', global: 'any' });
+        expect(resolution.baseRateLimitScope).toBe('host');
+      });
     });
   });
 });

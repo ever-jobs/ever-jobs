@@ -65,7 +65,15 @@ export interface IPluginMetadata {
    * A plugin that sets `userAgentMode: 'plugin'` must explain why in
    * `userAgentReason` (e.g. the API requires a registered e-mail as its UA).
    *
-   * @example { rateLimitScope: 'domain', maxConcurrentPerHost: 1, minIntervalMs: 1000 }
+   * `callerOverrides` (Spec 1714) is the site owner's LOCK: `'stricter'` means a
+   * search caller may only make this source's traffic more polite, `'none'` that
+   * a caller may change nothing — even when the operator's global
+   * `EVER_JOBS_CRAWL_CALLER_OVERRIDES` is `any`. It tightens, never loosens, the
+   * global mode; only the operator can loosen it again, with a per-site / per-host
+   * `callerOverrides` in `EVER_JOBS_CRAWL_POLICIES`. Use it only when the site's
+   * operator asked for a pace (e.g. Softy, Spec 1715).
+   *
+   * @example { rateLimitScope: 'domain', maxConcurrentPerHost: 1, minIntervalMs: 1000, callerOverrides: 'stricter' }
    */
   crawl?: PluginCrawlPolicy;
 }

@@ -9,13 +9,16 @@
  *   1. preset          — `polite` (built-in default), `legacy` or `strict`
  *                        (`EVER_JOBS_CRAWL_PRESET`)
  *   2. env-global      — `EVER_JOBS_CRAWL_*` variables
- *   3. builtin-host    — `BUILTIN_HOST_POLICIES` for known bulk APIs
+ *   3. builtin-host    — `BUILTIN_HOST_POLICIES` for known bulk APIs and
+ *                        site-owner policies (`*.softy.pro`, Spec 1714): exact
+ *                        hosts and `*.suffix` patterns, every match applies
  *   4. plugin          — `@SourcePlugin({ crawl })` defaults + options a plugin
  *                        passes to `createHttpClient` / `setHeaders`
  *   5. operator-site   — `EVER_JOBS_CRAWL_POLICIES` / `EVER_JOBS_CRAWL_POLICY_FILE`
  *                        `sites[<site>]`, then `hosts[<pattern>]`
  *   6. caller          — the search request's `crawl` object (and the legacy flat
  *                        DTO fields), subject to `EVER_JOBS_CRAWL_CALLER_OVERRIDES`
+ *                        and any site-owner lock (`callerOverrides`, Spec 1714)
  *
  * Nothing that existed before Spec 1690 was removed: the pre-1690 behaviour is
  * the `legacy` preset, and each individual knob can be set on its own at any
@@ -100,6 +103,20 @@ export interface CrawlPolicy {
   maxQueueWaitMs: number;
   /** Slow a bucket down on 429/503 and recover gradually on success. */
   adaptiveThrottle: boolean;
+  /**
+   * Minimum idle time, ms, after a request of the bucket COMPLETES before the next
+   * one starts — on top of `minIntervalMs` (start to start), so a slow server never
+   * gets back-to-back requests (Spec 1714 FR-9). 0 = none (the pre-1714 behaviour).
+   * Env `EVER_JOBS_CRAWL_MIN_GAP_MS`. Multiplied by `EVER_JOBS_CRAWL_FLEET_SIZE`.
+   */
+  minGapMs: number;
+  /**
+   * Whole-bucket cool-down, ms, after a request of the bucket ends in 500, 502 or
+   * 504, a timeout or a connection reset — like the 429/503 back-off, but for a
+   * server that is struggling (Spec 1714 FR-10). 0 = off (the pre-1714 behaviour).
+   * Env `EVER_JOBS_CRAWL_SERVER_ERROR_COOLDOWN_MS`.
+   */
+  serverErrorCooldownMs: number;
 
   // ── Retries ───────────────────────────────────────────────────────────────
   retries: number;
@@ -133,8 +150,44 @@ export interface CrawlPolicy {
   discovery: DiscoveryMode;
 }
 
-/** A partial policy — what every layer contributes. */
-export type CrawlPolicyOverride = Partial<CrawlPolicy>;
+/**
+ * A partial policy — what every layer contributes — plus the caller-override lock
+ * (Spec 1714 FR-1).
+ */
+export type CrawlPolicyOverride = Partial<CrawlPolicy> & {
+  /**
+   * What a search caller may change for the requests this layer covers: the
+   * site owner's lock. Valid in plugin manifests (`@SourcePlugin({ crawl })`),
+   * builtin host policies and operator `sites` / `hosts` entries; never accepted
+   * from a caller (always listed in `callerRejected`) and never part of the
+   * resolved `CrawlPolicy`.
+   *
+   * The effective mode of a request is the MOST restrictive of the global
+   * `EVER_JOBS_CRAWL_CALLER_OVERRIDES`, the plugin layer's and every matching
+   * builtin host pattern's — unless an operator `sites` / `hosts` entry sets it,
+   * in which case the operator value wins outright (looser or tighter).
+   */
+  callerOverrides?: CallerOverridePolicy;
+};
+
+/** Which layer decided the effective caller-override mode (Spec 1714 FR-3). */
+export type CallerOverridesSource =
+  | 'default'
+  | 'env-global'
+  | 'builtin-host'
+  | 'plugin'
+  | 'operator-site'
+  | 'operator-host';
+
+/** The caller-override mode in force for one request, and where it came from (Spec 1714). */
+export interface CallerOverridesResolution {
+  /** The effective mode the caller layer is filtered with. */
+  mode: CallerOverridePolicy;
+  /** The layer that decided `mode` (on a tie, the highest layer asking for it). */
+  source: CallerOverridesSource;
+  /** `EVER_JOBS_CRAWL_CALLER_OVERRIDES` (or its default `any`). */
+  global: CallerOverridePolicy;
+}
 
 /** What a plugin may declare in `@SourcePlugin({ crawl })`. */
 export interface PluginCrawlPolicy extends CrawlPolicyOverride {
@@ -235,7 +288,7 @@ export interface HostBucketSnapshot {
   queued: number;
   /** Current adaptive multiplier (1 = no slowdown). */
   slowdown: number;
-  /** Epoch ms until which the bucket is cooling down after a 429/503, if any. */
+  /** Epoch ms until which the bucket is cooling down after a 429/503 (or a server error, Spec 1714), if any. */
   coolingDownUntil?: number;
 }
 

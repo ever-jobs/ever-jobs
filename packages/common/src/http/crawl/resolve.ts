@@ -1,9 +1,12 @@
-import { BUILTIN_HOST_POLICIES, CRAWL_PRESETS } from './defaults';
+import { CALLER_OVERRIDES_RANK } from './caller-lock';
+import { BUILTIN_HOST_POLICIES, CRAWL_ENV, CRAWL_PRESETS } from './defaults';
 import {
   CRAWL_EXTRA_ENV,
+  CrawlStricterRules,
   ParsedCrawlPolicyEnv,
   crawlBuiltinHostsEnabled,
   crawlPluginManifestsEnabled,
+  crawlStricterRules,
   expandUserAgent,
   readCrawlPolicyEnv,
 } from './env';
@@ -19,6 +22,8 @@ import {
 } from './policy-schema';
 import {
   CallerOverridePolicy,
+  CallerOverridesResolution,
+  CallerOverridesSource,
   CrawlPolicy,
   CrawlPolicyEnvConfig,
   CrawlPolicyLayer,
@@ -26,6 +31,7 @@ import {
   CrawlPolicyResolveInput,
   CrawlPreset,
   PluginCrawlPolicy,
+  RateLimitScope,
   ResolvedCrawlPolicy,
 } from './types';
 
@@ -46,13 +52,27 @@ export type { CrawlPolicyFieldSpec } from './policy-schema';
 export interface CrawlPolicyExplanation {
   policy: ResolvedCrawlPolicy;
   preset: CrawlPreset;
+  /**
+   * The EFFECTIVE caller-override mode the caller layer was filtered with (Spec
+   * 1714): the global `EVER_JOBS_CRAWL_CALLER_OVERRIDES` tightened by a site
+   * owner's lock, or an operator's per-site / per-host value. Equal to the global
+   * mode for every source without a lock.
+   */
   callerOverrides: CallerOverridePolicy;
+  /** The layer that decided `callerOverrides` (Spec 1714 FR-3). */
+  callerOverridesSource: CallerOverridesSource;
+  /** `EVER_JOBS_CRAWL_CALLER_OVERRIDES` (or its default `any`). */
+  globalCallerOverrides: CallerOverridePolicy;
   /** The plugin's `userAgentReason`, when its `userAgentMode: 'plugin'` opt-in is in effect. */
   userAgentReason?: string;
-  /** Caller fields refused by `EVER_JOBS_CRAWL_CALLER_OVERRIDES` (or not policy fields). */
+  /** Caller fields refused by the effective caller-override mode (or not policy fields, e.g. `callerOverrides`). */
   callerRejected: string[];
-  /** Builtin host policy applied (the normalised host), if any. */
+  /** Builtin host policy applied (the normalised host), if any pattern matched. */
   builtinHost?: string;
+  /** Builtin host patterns applied (`BUILTIN_HOST_POLICIES` keys), least specific first (Spec 1714). */
+  builtinHostPatterns: string[];
+  /** `rateLimitScope` as resolved BEFORE the caller layer — the `per-host` proxy pin keys on it (Spec 1714 FR-6). */
+  baseRateLimitScope: RateLimitScope;
   /** Operator site key applied, if any. */
   operatorSite?: string;
   /** Operator host patterns applied, least specific first (the last one wins per field). */
@@ -70,8 +90,10 @@ export interface CrawlPolicyExplanation {
  * - Every layer is validated (`normalizeCrawlOverride`); `undefined` fields do not
  *   override. Any `userAgent` goes through `expandUserAgent` with the operator
  *   contact.
- * - builtin-host: `BUILTIN_HOST_POLICIES[host]` (exact host), unless
- *   `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false` (the `legacy` preset's default).
+ * - builtin-host: every `BUILTIN_HOST_POLICIES` pattern matching the host (an
+ *   exact host or `*.suffix`, the operator `hosts` semantics), least specific
+ *   first, unless `EVER_JOBS_CRAWL_BUILTIN_HOSTS=false` (the `legacy` preset's
+ *   default) — Spec 1714 FR-8.
  * - plugin: the manifest applies unless `EVER_JOBS_CRAWL_PLUGIN_MANIFESTS=false`
  *   (the `legacy` preset's default); the explicit options always apply. When the
  *   layers below pin `userAgentMode: 'strict'`, a plugin cannot relax it (Spec
@@ -83,9 +105,13 @@ export interface CrawlPolicyExplanation {
  * - operator-host: EVERY matching pattern applies, least specific first (`*` <
  *   shorter `*.suffix` < longer `*.suffix` < exact host), so the most specific
  *   pattern wins field by field.
- * - caller: filtered by `env.callerOverrides` against the policy resolved without
- *   the caller. A caller `userAgent` without a `userAgentMode` implies `strict`
- *   (their UA is what goes out).
+ * - caller: filtered against the policy resolved without the caller, with the
+ *   EFFECTIVE caller-override mode (Spec 1714 FR-2, `resolveCallerOverrides`):
+ *   the most restrictive of `env.callerOverrides`, the plugin layer's
+ *   `callerOverrides` and every applied builtin host pattern's — replaced
+ *   outright by an operator `sites` / `hosts` value when one is set — using the
+ *   `EVER_JOBS_CRAWL_STRICTER_RULES` comparators. A caller `userAgent` without a
+ *   `userAgentMode` implies `strict` (their UA is what goes out).
  *
  * `provenance` names the layer that set each field. Spec 1690 — lane B1.
  */
@@ -106,10 +132,12 @@ export function explainCrawlPolicy(input: CrawlPolicyResolveInput, env?: CrawlPo
   if (cfg.preset !== undefined && preset !== cfg.preset) {
     notes.push(`unknown preset ${JSON.stringify(cfg.preset)}; using "polite"`);
   }
-  const callerOverrides = effectiveCallerOverridePolicy(cfg.callerOverrides);
-  if (cfg.callerOverrides !== undefined && callerOverrides !== cfg.callerOverrides) {
+  const globalCallerOverrides = effectiveCallerOverridePolicy(cfg.callerOverrides);
+  if (cfg.callerOverrides !== undefined && globalCallerOverrides !== cfg.callerOverrides) {
     notes.push(`unknown callerOverrides ${JSON.stringify(cfg.callerOverrides)}; using "stricter"`);
   }
+  // Spec 1714: the caller-override locks met while walking the layers.
+  const locks: CallerOverrideLocks = { builtin: [], plugin: [], operatorHosts: [] };
 
   const policy: CrawlPolicy = clonePolicy(CRAWL_PRESETS[preset]);
   // Built in one go: an object grown by ~24 keyed stores drops to V8 dictionary
@@ -129,13 +157,21 @@ export function explainCrawlPolicy(input: CrawlPolicyResolveInput, env?: CrawlPo
   // 2. env-global
   applyLayer(policy, provenance, prepare(cfg.global, 'env-global'), 'env-global');
 
-  // 3. builtin-host (EVER_JOBS_CRAWL_BUILTIN_HOSTS; off under `legacy`, which had none).
+  // 3. builtin-host (EVER_JOBS_CRAWL_BUILTIN_HOSTS; off under `legacy`, which had
+  //    none): every matching pattern, least specific first (Spec 1714 FR-8).
   const host = normalizeHostName(input.host);
   let builtinHost: string | undefined;
-  if (host !== undefined && hasOwn(BUILTIN_HOST_POLICIES, host)) {
+  const builtinHostPatterns: string[] = [];
+  const builtinMatches = host !== undefined ? matchingHostPatterns(Object.keys(BUILTIN_HOST_POLICIES), host) : [];
+  if (host !== undefined && builtinMatches.length > 0) {
     if (crawlBuiltinHostsEnabled(cfg)) {
       builtinHost = host;
-      applyLayer(policy, provenance, prepare(BUILTIN_HOST_POLICIES[host], 'builtin-host'), 'builtin-host');
+      for (const pattern of builtinMatches) {
+        builtinHostPatterns.push(pattern);
+        const layer = prepare(BUILTIN_HOST_POLICIES[pattern], 'builtin-host');
+        applyLayer(policy, provenance, layer, 'builtin-host');
+        locks.builtin.push(layer.callerOverrides);
+      }
     } else {
       notes.push(`builtin host policy for ${host} not applied (${CRAWL_EXTRA_ENV.BUILTIN_HOSTS}=false)`);
     }
@@ -147,10 +183,11 @@ export function explainCrawlPolicy(input: CrawlPolicyResolveInput, env?: CrawlPo
   if (!manifestEnabled && input.plugin && Object.keys(input.plugin).length > 0) {
     notes.push(`plugin manifest crawl policy not applied (${CRAWL_EXTRA_ENV.PLUGIN_MANIFESTS}=false)`);
   }
-  const pluginLayer: CrawlPolicyOverride = {
-    ...(manifestEnabled ? prepare(input.plugin, 'plugin manifest') : {}),
-    ...prepare(input.explicit, 'plugin options'),
-  };
+  const manifestLayer = manifestEnabled ? prepare(input.plugin, 'plugin manifest') : {};
+  const explicitLayer = prepare(input.explicit, 'plugin options');
+  // The manifest's lock, then the client options' — each can only tighten (Spec 1714 FR-2).
+  locks.plugin.push(manifestLayer.callerOverrides, explicitLayer.callerOverrides);
+  const pluginLayer: CrawlPolicyOverride = { ...manifestLayer, ...explicitLayer };
   // A plugin's `userAgent` is a DECLARED UA (Spec 1690 §4.2), never the configured
   // one: it goes on the wire only when the resolved mode lets the plugin choose
   // (`plugin`, or `identify` with the plugin's opt-in) — see `HttpClient`.
@@ -188,26 +225,35 @@ export function explainCrawlPolicy(input: CrawlPolicyResolveInput, env?: CrawlPo
   if (input.site !== undefined && policies.sites) {
     operatorSite = findSiteKey(policies.sites, input.site);
     if (operatorSite !== undefined) {
-      applyLayer(policy, provenance, prepare(policies.sites[operatorSite], `operator site "${operatorSite}"`), 'operator-site');
+      const layer = prepare(policies.sites[operatorSite], `operator site "${operatorSite}"`);
+      applyLayer(policy, provenance, layer, 'operator-site');
+      locks.operatorSite = layer.callerOverrides;
     }
   }
 
   // 5b. operator-host: every matching pattern, least specific first.
   const operatorHostPatterns: string[] = [];
   if (host !== undefined && policies.hosts) {
-    const matches = Object.keys(policies.hosts)
-      .filter((pattern) => matchHostPattern(pattern, host))
-      .map((pattern, index) => ({ pattern, index, specificity: hostPatternSpecificity(pattern) }))
-      .sort((a, b) => a.specificity - b.specificity || a.index - b.index);
-    for (const { pattern } of matches) {
+    for (const pattern of matchingHostPatterns(Object.keys(policies.hosts), host)) {
       operatorHostPatterns.push(pattern);
-      applyLayer(policy, provenance, prepare(policies.hosts[pattern], `operator host "${pattern}"`), 'operator-host');
+      const layer = prepare(policies.hosts[pattern], `operator host "${pattern}"`);
+      applyLayer(policy, provenance, layer, 'operator-host');
+      locks.operatorHosts.push(layer.callerOverrides);
     }
   }
 
-  // 6. caller, filtered against the policy resolved without it.
+  // 6. caller, filtered against the policy resolved without it, with the
+  //    effective caller-override mode (Spec 1714 FR-2) and comparators (FR-4).
+  const lock = foldCallerOverrides(globalCallerOverrides, globalCallerOverridesSource(cfg), locks);
+  if (lock.mode !== globalCallerOverrides) {
+    notes.push(
+      `caller overrides "${lock.mode}" (set by ${lock.source}) instead of the global ` +
+        `${CRAWL_ENV.CALLER_OVERRIDES}="${globalCallerOverrides}"`,
+    );
+  }
+  const baseRateLimitScope = policy.rateLimitScope;
   const callerRaw = prepare(input.caller, 'caller');
-  const { accepted, rejected } = filterCallerOverride(callerRaw, policy, callerOverrides);
+  const { accepted, rejected } = filterCallerOverride(callerRaw, policy, lock.mode, { rules: crawlStricterRules(cfg) });
   if (accepted.userAgent !== undefined && callerRaw.userAgentMode === undefined && accepted.userAgentMode === undefined) {
     accepted.userAgentMode = 'strict';
   }
@@ -233,8 +279,12 @@ export function explainCrawlPolicy(input: CrawlPolicyResolveInput, env?: CrawlPo
   const explanation: CrawlPolicyExplanation = {
     policy: { ...policy, provenance },
     preset,
-    callerOverrides,
+    callerOverrides: lock.mode,
+    callerOverridesSource: lock.source,
+    globalCallerOverrides,
     callerRejected: rejected,
+    builtinHostPatterns,
+    baseRateLimitScope,
     operatorHostPatterns,
     notes,
   };
@@ -245,49 +295,99 @@ export function explainCrawlPolicy(input: CrawlPolicyResolveInput, env?: CrawlPo
 }
 
 /**
- * Apply `EVER_JOBS_CRAWL_CALLER_OVERRIDES` to what a search caller asked for:
- * `any` accepts everything, `none` nothing, `stricter` only values at least as
- * polite as `base` (per-field comparators).
+ * The effective caller-override mode for one request (Spec 1714 FR-2) — the
+ * same computation `explainCrawlPolicy` makes, without building a policy (what
+ * `JobsService` needs per source, where no host is known yet):
+ *
+ * 1. start at the global `EVER_JOBS_CRAWL_CALLER_OVERRIDES` (source `default`
+ *    when unset, else `env-global`);
+ * 2. fold in every applied builtin host pattern's `callerOverrides` (least
+ *    specific first), then the plugin layer's (the manifest when
+ *    `EVER_JOBS_CRAWL_PLUGIN_MANIFESTS` is on, then the plugin's client
+ *    options), each taken when it is at least as restrictive as the current mode
+ *    (`none` > `stricter` > `any`; on a tie the higher layer becomes the source);
+ * 3. an operator `sites[<site>].callerOverrides`, then every matching operator
+ *    `hosts` pattern's (least specific first), REPLACES the mode outright —
+ *    looser or tighter (the operator decides; the most specific setting wins).
+ */
+export function resolveCallerOverrides(
+  input: CrawlPolicyResolveInput,
+  env?: CrawlPolicyEnvConfig,
+): CallerOverridesResolution {
+  const cfg: CrawlPolicyEnvConfig = env ?? readCrawlPolicyEnv();
+  const contact = (cfg as Partial<ParsedCrawlPolicyEnv>).contact;
+  const lockOf = (raw: unknown): CallerOverridePolicy | undefined => normalizedLayer(raw, contact).value.callerOverrides;
+  const host = normalizeHostName(input.host);
+  const locks: CallerOverrideLocks = { builtin: [], plugin: [], operatorHosts: [] };
+
+  if (host !== undefined && crawlBuiltinHostsEnabled(cfg)) {
+    for (const pattern of matchingHostPatterns(Object.keys(BUILTIN_HOST_POLICIES), host)) {
+      locks.builtin.push(lockOf(BUILTIN_HOST_POLICIES[pattern]));
+    }
+  }
+  locks.plugin.push(crawlPluginManifestsEnabled(cfg) ? lockOf(input.plugin) : undefined, lockOf(input.explicit));
+
+  const policies = cfg.policies ?? {};
+  if (input.site !== undefined && policies.sites) {
+    const siteKey = findSiteKey(policies.sites, input.site);
+    if (siteKey !== undefined) locks.operatorSite = lockOf(policies.sites[siteKey]);
+  }
+  if (host !== undefined && policies.hosts) {
+    for (const pattern of matchingHostPatterns(Object.keys(policies.hosts), host)) {
+      locks.operatorHosts.push(lockOf(policies.hosts[pattern]));
+    }
+  }
+  return foldCallerOverrides(effectiveCallerOverridePolicy(cfg.callerOverrides), globalCallerOverridesSource(cfg), locks);
+}
+
+/**
+ * Apply a caller-override mode to what a search caller asked for: `any` accepts
+ * everything, `none` nothing, `stricter` only values at least as polite as `base`
+ * (per-field comparators). The mode is the EFFECTIVE one of the request
+ * (`resolveCallerOverrides`, Spec 1714), not only the global
+ * `EVER_JOBS_CRAWL_CALLER_OVERRIDES`.
  *
  * `stricter` comparators — a value is accepted when it is **at least as polite**
- * as `base` (equal is always accepted):
+ * as `base` (equal is always accepted). `options.rules` picks the column
+ * (`EVER_JOBS_CRAWL_STRICTER_RULES`; default `1714`, `1690` = pre-1714):
  *
- * | Field                  | Accepted when                                                      |
- * |------------------------|--------------------------------------------------------------------|
- * | userAgent, from        | unchanged — an identity change is never "stricter"                 |
- * | userAgentMode          | strict > identify > plugin                                         |
- * | stripClientHints       | true                                                               |
- * | proxyRotation          | off = per-host > per-scrape > per-request                          |
- * | rateLimitScope         | domain = site > host                                               |
- * | maxConcurrentPerHost   | lower; 0 means unlimited (least strict)                            |
- * | minIntervalMs, jitterMs, retryBaseDelayMs, retryMaxDelayMs | higher                         |
- * | throttleRetryDelayMs   | higher (0 = no floor = least strict)                               |
- * | maxQueueWaitMs         | any — pacing is enforced either way (not a politeness knob)        |
- * | adaptiveThrottle       | true                                                               |
- * | retries                | lower                                                              |
- * | retryStatuses          | a subset of base                                                   |
- * | retryBackoff           | exponential > linear > constant                                    |
- * | retryJitter            | true                                                               |
- * | retryOnNetworkError    | false                                                              |
- * | respectRetryAfter      | true                                                               |
- * | retryAfterOverMax      | give-up > cap                                                      |
- * | maxRetryAfterMs        | any under `give-up` (we never retry early); higher under `cap`     |
- * | robotsTxt              | respect > crawl-delay > off                                        |
- * | blockPrivateNetworks   | true                                                               |
- * | discovery              | any — not a politeness knob                                        |
+ * | Field                  | Rules `1714` (default)                                  | Rules `1690`                        |
+ * |------------------------|---------------------------------------------------------|-------------------------------------|
+ * | userAgent, from        | never — an identity change is never "stricter"          | same                                |
+ * | userAgentMode          | strict > identify > plugin                              | same                                |
+ * | stripClientHints       | true                                                    | same                                |
+ * | proxyRotation          | off < per-host < per-scrape < per-request; accept ≤ base | off = per-host > per-scrape > per-request |
+ * | rateLimitScope         | equal, or `host` → `domain` (no parallel bucket)        | domain = site > host                |
+ * | maxConcurrentPerHost   | lower; 0 means unlimited (refused unless base is 0)     | same                                |
+ * | minIntervalMs, jitterMs, retryBaseDelayMs, retryMaxDelayMs, minGapMs, serverErrorCooldownMs | higher | same |
+ * | throttleRetryDelayMs   | higher (0 = no floor = least strict)                    | same                                |
+ * | maxQueueWaitMs         | any — pacing is enforced either way                     | same                                |
+ * | adaptiveThrottle       | true                                                    | same                                |
+ * | retries                | lower                                                   | same                                |
+ * | retryStatuses          | keeps every 429/503 of base; may drop others; may add only 429/503 | a subset of base          |
+ * | retryBackoff           | exponential > linear > constant                         | same                                |
+ * | retryJitter            | true                                                    | same                                |
+ * | retryOnNetworkError    | false                                                   | same                                |
+ * | respectRetryAfter      | true                                                    | same                                |
+ * | retryAfterOverMax      | give-up > cap                                           | same                                |
+ * | maxRetryAfterMs        | any under `give-up` (we never retry early); higher under `cap` | same                      |
+ * | robotsTxt              | respect > crawl-delay > off                             | same                                |
+ * | blockPrivateNetworks   | true                                                    | same                                |
+ * | discovery              | equal, or `sitemap`                                     | any                                 |
  *
  * `blockPrivateNetworks` is a security boundary (SSRF guard), not a politeness
  * knob: a caller may turn it ON in every mode but may never turn it OFF — not
  * even under `any`. Operators disable it with env / operator policy.
  *
- * Fields that are not `CrawlPolicy` fields are rejected. A missing `mode` means
- * `any` (the documented default); an unknown one is treated as `stricter` (fail
- * safe).
+ * Fields that are not `CrawlPolicy` fields — including the `callerOverrides`
+ * lock itself — are rejected. A missing `mode` means `any` (the documented
+ * default); an unknown one is treated as `stricter` (fail safe).
  */
 export function filterCallerOverride(
   caller: CrawlPolicyOverride | undefined,
   base: CrawlPolicy,
   mode: CallerOverridePolicy,
+  options: { rules?: CrawlStricterRules } = {},
 ): { accepted: CrawlPolicyOverride; rejected: string[] } {
   const accepted: CrawlPolicyOverride = {};
   const acceptedRecord = accepted as Record<string, unknown>;
@@ -295,6 +395,7 @@ export function filterCallerOverride(
   if (!caller) return { accepted, rejected };
 
   const effectiveMode = effectiveCallerOverridePolicy(mode);
+  const rules: CrawlStricterRules = options.rules === '1690' ? '1690' : '1714';
   const callerRecord = caller as Record<string, unknown>;
 
   // `maxRetryAfterMs` is judged against the Retry-After mode that will be in force.
@@ -303,7 +404,7 @@ export function filterCallerOverride(
   if (
     callerOverMax !== undefined &&
     (effectiveMode === 'any' ||
-      (effectiveMode === 'stricter' && isAtLeastAsStrict('retryAfterOverMax', callerOverMax, base, overMax)))
+      (effectiveMode === 'stricter' && isAtLeastAsStrict('retryAfterOverMax', callerOverMax, base, overMax, rules)))
   ) {
     overMax = callerOverMax as CrawlPolicy['retryAfterOverMax'];
   }
@@ -317,7 +418,7 @@ export function filterCallerOverride(
     }
     const ok =
       CRAWL_CALLER_SECURITY_FIELDS.includes(key) || effectiveMode === 'stricter'
-        ? isAtLeastAsStrict(key, value, base, overMax)
+        ? isAtLeastAsStrict(key, value, base, overMax, rules)
         : true;
     if (ok) acceptedRecord[key] = Array.isArray(value) ? [...value] : value;
     else rejected.push(key);
@@ -364,9 +465,71 @@ function effectiveCallerOverridePolicy(mode: CallerOverridePolicy | undefined): 
   return CALLER_OVERRIDE_POLICIES.includes(mode) ? mode : 'stricter';
 }
 
+/** Source of the global mode: `env-global` when the operator set it, else `default`. */
+function globalCallerOverridesSource(cfg: CrawlPolicyEnvConfig): CallerOverridesSource {
+  const fromEnv = (cfg as Partial<ParsedCrawlPolicyEnv>).callerOverridesFromEnv;
+  if (fromEnv === true) return 'env-global';
+  return cfg.callerOverrides !== undefined && cfg.callerOverrides !== 'any' ? 'env-global' : 'default';
+}
+
+/** The `callerOverrides` locks met while walking the layers of one request (Spec 1714). */
+interface CallerOverrideLocks {
+  /** Applied builtin host patterns' locks, least specific first. */
+  builtin: Array<CallerOverridePolicy | undefined>;
+  /** The plugin manifest's lock, then the plugin's client options'. */
+  plugin: Array<CallerOverridePolicy | undefined>;
+  /** The operator `sites[<site>]` entry's lock. */
+  operatorSite?: CallerOverridePolicy;
+  /** Matching operator `hosts` patterns' locks, least specific first. */
+  operatorHosts: Array<CallerOverridePolicy | undefined>;
+}
+
+/** Spec 1714 FR-2: see `resolveCallerOverrides`. */
+function foldCallerOverrides(
+  global: CallerOverridePolicy,
+  globalSource: CallerOverridesSource,
+  locks: CallerOverrideLocks,
+): CallerOverridesResolution {
+  let mode = global;
+  let source = globalSource;
+  const tighten = (candidate: CallerOverridePolicy | undefined, from: CallerOverridesSource): void => {
+    if (candidate === undefined || !hasOwn(CALLER_OVERRIDES_RANK, candidate)) return;
+    if (CALLER_OVERRIDES_RANK[candidate] >= CALLER_OVERRIDES_RANK[mode]) {
+      mode = candidate;
+      source = from;
+    }
+  };
+  for (const candidate of locks.builtin) tighten(candidate, 'builtin-host');
+  for (const candidate of locks.plugin) tighten(candidate, 'plugin');
+  // An operator value replaces the mode outright: the operator can loosen a lock too.
+  const replace = (candidate: CallerOverridePolicy | undefined, from: CallerOverridesSource): void => {
+    if (candidate === undefined || !hasOwn(CALLER_OVERRIDES_RANK, candidate)) return;
+    mode = candidate;
+    source = from;
+  };
+  replace(locks.operatorSite, 'operator-site');
+  for (const candidate of locks.operatorHosts) replace(candidate, 'operator-host');
+  return { mode, source, global };
+}
+
+/** `patterns` matching `host`, least specific first (ties in the given order). */
+function matchingHostPatterns(patterns: readonly string[], host: string): string[] {
+  return patterns
+    .filter((pattern) => matchHostPattern(pattern, host))
+    .map((pattern, index) => ({ pattern, index, specificity: hostPatternSpecificity(pattern) }))
+    .sort((a, b) => a.specificity - b.specificity || a.index - b.index)
+    .map((match) => match.pattern);
+}
+
 const USER_AGENT_MODE_RANK: Record<string, number> = { plugin: 1, identify: 2, strict: 3 };
-const PROXY_ROTATION_RANK: Record<string, number> = { 'per-request': 1, 'per-scrape': 2, 'per-host': 3, off: 3 };
+/** Rules `1690`: `off` and `per-host` equal. */
+const PROXY_ROTATION_RANK_1690: Record<string, number> = { 'per-request': 1, 'per-scrape': 2, 'per-host': 3, off: 3 };
+/** Rules `1714`: off < per-host < per-scrape < per-request (by how many origins a site sees). */
+const PROXY_ROTATION_RANK_1714: Record<string, number> = { 'per-request': 1, 'per-scrape': 2, 'per-host': 3, off: 4 };
+/** Rules `1690` only (rules `1714` accept equal, or `host` → `domain`). */
 const RATE_SCOPE_RANK: Record<string, number> = { host: 1, domain: 2, site: 2 };
+/** Statuses a caller may never drop from, and may always add to, `retryStatuses` (rules `1714`). */
+const THROTTLE_RETRY_STATUSES: readonly number[] = [429, 503];
 const RETRY_BACKOFF_RANK: Record<string, number> = { constant: 1, linear: 2, exponential: 3 };
 const OVER_MAX_RANK: Record<string, number> = { cap: 1, 'give-up': 2 };
 const ROBOTS_RANK: Record<string, number> = { off: 1, 'crawl-delay': 2, respect: 3 };
@@ -380,12 +543,16 @@ function rankAtLeast(ranks: Record<string, number>, candidate: unknown, base: un
 
 const num = (v: unknown): number => (typeof v === 'number' ? v : NaN);
 
-/** Whether `candidate` for `field` is at least as polite as `base[field]`. */
+/**
+ * Whether `candidate` for `field` is at least as polite as `base[field]` under
+ * `rules` (see the table on `filterCallerOverride`).
+ */
 function isAtLeastAsStrict(
   field: keyof CrawlPolicy,
   candidate: unknown,
   base: CrawlPolicy,
   overMax: CrawlPolicy['retryAfterOverMax'],
+  rules: CrawlStricterRules = '1714',
 ): boolean {
   const current: unknown = base[field];
   if (candidate === current) return true;
@@ -396,9 +563,12 @@ function isAtLeastAsStrict(
     case 'userAgentMode':
       return rankAtLeast(USER_AGENT_MODE_RANK, candidate, current);
     case 'proxyRotation':
-      return rankAtLeast(PROXY_ROTATION_RANK, candidate, current);
+      return rankAtLeast(rules === '1690' ? PROXY_ROTATION_RANK_1690 : PROXY_ROTATION_RANK_1714, candidate, current);
     case 'rateLimitScope':
-      return rankAtLeast(RATE_SCOPE_RANK, candidate, current);
+      // 1714: the caller's bucket must CONTAIN the base bucket — `host` → `domain`
+      // only; `site` next to `domain` would be a second, parallel bucket (G5).
+      if (rules === '1690') return rankAtLeast(RATE_SCOPE_RANK, candidate, current);
+      return current === 'host' && candidate === 'domain';
     case 'retryBackoff':
       return rankAtLeast(RETRY_BACKOFF_RANK, candidate, current);
     case 'retryAfterOverMax':
@@ -414,17 +584,23 @@ function isAtLeastAsStrict(
     case 'retryBaseDelayMs':
     case 'retryMaxDelayMs':
     case 'throttleRetryDelayMs':
+    case 'minGapMs':
+    case 'serverErrorCooldownMs':
       return num(candidate) >= num(current);
     case 'retries':
       return num(candidate) <= num(current);
     case 'maxRetryAfterMs':
       return overMax === 'give-up' || num(candidate) >= num(current);
-    case 'retryStatuses':
+    case 'retryStatuses': {
+      if (!Array.isArray(candidate) || !Array.isArray(current)) return false;
+      const baseStatuses = current as unknown[];
+      if (rules === '1690') return candidate.every((status) => baseStatuses.includes(status));
+      // 1714: never drop the base's 429/503 handling; drop anything else; add only 429/503.
       return (
-        Array.isArray(candidate) &&
-        Array.isArray(current) &&
-        candidate.every((status) => (current as unknown[]).includes(status))
+        THROTTLE_RETRY_STATUSES.every((status) => !baseStatuses.includes(status) || candidate.includes(status)) &&
+        candidate.every((status) => baseStatuses.includes(status) || THROTTLE_RETRY_STATUSES.includes(status as number))
       );
+    }
     case 'stripClientHints':
     case 'adaptiveThrottle':
     case 'retryJitter':
@@ -434,8 +610,10 @@ function isAtLeastAsStrict(
     case 'retryOnNetworkError':
       return candidate === false;
     case 'maxQueueWaitMs':
-    case 'discovery':
       return true;
+    case 'discovery':
+      // 1714: towards the sitemap only (list pages cost a shared server more, G22).
+      return rules === '1690' || candidate === 'sitemap';
   }
 }
 

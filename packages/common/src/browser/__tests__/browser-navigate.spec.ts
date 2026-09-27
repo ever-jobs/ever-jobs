@@ -91,13 +91,15 @@ function stubDns(addresses: Array<{ address: string; family: number }>): jest.Sp
 }
 
 /** Route the robots.txt client's requests to `answer`; returns the configs it saw. */
-function stubRobots(answer: (url: string) => { status: number; data: string }): InternalAxiosRequestConfig[] {
+function stubRobots(
+  answer: (url: string) => { status: number; data: string; headers?: Record<string, string> },
+): InternalAxiosRequestConfig[] {
   const seen: InternalAxiosRequestConfig[] = [];
   const client = (BrowserPool as unknown as { robotsHttpClient(): HttpClient }).robotsHttpClient();
   client.getAxiosInstance().defaults.adapter = async (config: InternalAxiosRequestConfig) => {
     seen.push(config);
-    const { status, data } = answer(String(config.url));
-    return { data, status, statusText: String(status), headers: new AxiosHeaders(), config, request: {} };
+    const { status, data, headers } = answer(String(config.url));
+    return { data, status, statusText: String(status), headers: new AxiosHeaders(headers ?? {}), config, request: {} };
   };
   return seen;
 }
@@ -369,6 +371,29 @@ describe('BrowserPool.navigate (Spec 1690)', () => {
       expect(acquire.mock.calls[1][1]).toMatchObject({ minIntervalMs: 300 });
     });
 
+    it('Spec 1714 FR-12: a robots.txt 429 with a long Retry-After fails the navigation with HostCoolingDownError', async () => {
+      setEnv({ [CRAWL_ENV.ROBOTS_TXT]: 'respect' });
+      stubRobots(() => ({ status: 429, data: '', headers: { 'retry-after': '3600' } }));
+      const page = fakePage();
+
+      const err = await BrowserPool.navigate(page as never, 'https://shop.example.com/jobs').catch((e: Error) => e);
+
+      expect(err).toBeInstanceOf(HostCoolingDownError);
+      expect(page.goto).not.toHaveBeenCalled();
+      expect((bucketOf('host:shop.example.com')?.coolingDownUntil ?? 0) - Date.now()).toBeGreaterThan(3_500_000);
+    });
+
+    it('Spec 1714 FR-12: EVER_JOBS_CRAWL_ROBOTS_BACKOFF=false navigates as before', async () => {
+      setEnv({ [CRAWL_ENV.ROBOTS_TXT]: 'respect', [CRAWL_EXTRA_ENV.ROBOTS_BACKOFF]: 'false' });
+      stubRobots(() => ({ status: 429, data: '', headers: { 'retry-after': '3600' } }));
+      const page = fakePage();
+
+      await BrowserPool.navigate(page as never, 'https://shop.example.com/jobs');
+
+      expect(page.goto).toHaveBeenCalledTimes(1);
+      expect(bucketOf('host:shop.example.com')?.coolingDownUntil).toBeUndefined();
+    });
+
     it('off (the default): robots.txt is never fetched', async () => {
       const fetched = stubRobots(() => ({ status: 200, data: 'User-agent: *\nDisallow: /\n' }));
       const page = fakePage();
@@ -456,6 +481,21 @@ describe('BrowserPool.navigate (Spec 1690)', () => {
 
       expect(recordOutcome).toHaveBeenCalledWith('host:jobs.example.com', 'throttled');
       expect(penalize.mock.calls).toEqual([['host:jobs.example.com', 5000]]);
+    });
+
+    it('Spec 1714 FR-10: a 502 navigation cools the bucket for serverErrorCooldownMs (and not without it)', async () => {
+      const page = fakePage(() => response(502));
+
+      await BrowserPool.navigate(page as never, 'https://jobs.example.com/');
+      expect(bucketOf('host:jobs.example.com')?.coolingDownUntil).toBeUndefined(); // default 0 = pre-1714
+
+      setEnv({ [CRAWL_ENV.SERVER_ERROR_COOLDOWN_MS]: '30000' });
+      const penalize = jest.spyOn(limiter, 'penalize');
+      await BrowserPool.navigate(page as never, 'https://other.example.com/');
+
+      expect(penalize.mock.calls).toEqual([['host:other.example.com', 30000]]);
+      const cooling = (bucketOf('host:other.example.com')?.coolingDownUntil ?? 0) - Date.now();
+      expect(cooling).toBeGreaterThan(29_000);
     });
 
     it('a 200 is an ok outcome; a null response (same-document navigation) records nothing', async () => {

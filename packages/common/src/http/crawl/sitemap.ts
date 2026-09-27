@@ -1,6 +1,7 @@
 import { gunzipSync } from 'zlib';
 import { getDomain } from 'tldts';
 
+import { CrawlPolicyError } from './errors';
 import { SitemapEntry } from './types';
 
 /** Minimal HTTP surface needed (an `HttpClient` satisfies it). */
@@ -56,9 +57,24 @@ export interface FetchSitemapOptions {
   maxBytes?: number;
   /**
    * Called when a *nested* sitemap cannot be fetched or decoded; it is skipped and the
-   * walk continues. Errors on the root document are thrown to the caller instead.
+   * walk continues — except for push-back under `nestedErrors: 'stop-on-throttle'`
+   * (see there). Errors on the root document are thrown to the caller instead.
    */
   onError?: (url: string, error: unknown) => void;
+  /**
+   * What a nested sitemap's push-back does to the walk (Spec 1714 FR-13, audit G16):
+   *
+   * - `stop-on-throttle` (default): an answer of 429 or 503, or a crawl-policy
+   *   refusal (`HostCoolingDownError`, `CrawlQueueTimeoutError`,
+   *   `EgressBlockedError`, `RobotsDisallowedError` — `isSitemapStopError`), stops
+   *   the walk and the error is rethrown: a server that said "slow down" is not
+   *   asked for the next child document.
+   * - `skip`: report it to `onError` and continue with the next document — the
+   *   pre-1714 behaviour.
+   *
+   * Other nested errors (404, a size cap, bad gzip…) always go to `onError`.
+   */
+  nestedErrors?: 'stop-on-throttle' | 'skip';
   /** Extra request config merged into every GET (e.g. `headers`, `timeout`). */
   requestConfig?: Record<string, any>;
   /** Nested sitemaps followed (default `same-domain`; see `NestedSitemapScope`). */
@@ -384,8 +400,10 @@ export function decodeSitemapBody(data: unknown, maxBytes: number = SITEMAP_DEFA
  *   dropped (keeping the newest `lastmod`).
  * - A plain-text sitemap (one URL per line) is accepted too.
  * - An error on the root document (HTTP status, size cap, bad gzip) is thrown; errors
- *   on nested documents are reported to `onError` and skipped. Unparseable content is
- *   not an error: it contributes no entries.
+ *   on nested documents are reported to `onError` and skipped — except push-back
+ *   (429 / 503 / a crawl-policy refusal), which stops the walk and is thrown
+ *   (`nestedErrors`, default `stop-on-throttle`; `skip` = pre-1714). Unparseable
+ *   content is not an error: it contributes no entries.
  */
 export async function fetchSitemap(
   http: SitemapHttp,
@@ -398,6 +416,7 @@ export async function fetchSitemap(
   const maxBytes = positiveInt(options.maxBytes, SITEMAP_DEFAULT_MAX_BYTES);
   const nestedScope: NestedSitemapScope =
     options.nestedScope === 'same-host' || options.nestedScope === 'any' ? options.nestedScope : 'same-domain';
+  const stopOnThrottle = options.nestedErrors !== 'skip';
 
   const out: SitemapEntry[] = [];
   const positions = new Map<string, number>();
@@ -422,6 +441,7 @@ export async function fetchSitemap(
       text = decodeSitemapBody(response?.data, maxBytes);
     } catch (err) {
       if (next.depth === 0) throw err;
+      if (stopOnThrottle && isSitemapStopError(err)) throw err;
       options.onError?.(next.url, err);
       continue;
     }
@@ -462,6 +482,27 @@ export async function fetchSitemap(
   }
 
   return options.sortByLastmod ? sortSitemapEntriesByLastmod(out) : out;
+}
+
+/** HTTP answers that mean "slow down" (the crawl policy's throttle statuses). */
+const SITEMAP_STOP_STATUSES: ReadonlySet<number> = new Set([429, 503]);
+
+/**
+ * Whether a nested sitemap's error is push-back that must stop a sitemap walk
+ * (Spec 1714 FR-13): an HTTP 429 or 503 (`err.response.status`), or a
+ * `CrawlPolicyError` (`HostCoolingDownError`, `CrawlQueueTimeoutError`,
+ * `EgressBlockedError`, `RobotsDisallowedError`) — on `err` or up to five
+ * `cause` links down.
+ */
+export function isSitemapStopError(err: unknown): boolean {
+  let current: unknown = err;
+  for (let depth = 0; depth < 6 && current && typeof current === 'object'; depth++) {
+    if (current instanceof CrawlPolicyError) return true;
+    const status = (current as { response?: { status?: unknown } }).response?.status;
+    if (typeof status === 'number' && SITEMAP_STOP_STATUSES.has(status)) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────

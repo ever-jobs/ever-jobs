@@ -9,7 +9,7 @@ import {
   POLITE_CRAWL_POLICY,
   STRICT_CRAWL_POLICY,
 } from '../src/http/crawl/defaults';
-import { readCrawlPolicyEnv, resetCrawlPolicyEnvCache } from '../src/http/crawl/env';
+import { CrawlStricterRules, crawlStricterRules, readCrawlPolicyEnv, resetCrawlPolicyEnvCache } from '../src/http/crawl/env';
 import {
   CRAWL_CALLER_SECURITY_FIELDS,
   CRAWL_POLICY_FIELDS,
@@ -98,7 +98,13 @@ describe('resolveCrawlPolicy (Spec 1690)', () => {
         legacy(),
       );
       expect(explained.policy).toMatchObject({ maxConcurrentPerHost: 0, minIntervalMs: 0, rateLimitScope: 'host', retries: 1 });
-      expect(explained.notes).toEqual([expect.stringContaining('EVER_JOBS_CRAWL_PLUGIN_MANIFESTS=false')]);
+      // Spec 1714: acme.softy.pro also has a builtin host policy (*.softy.pro), off under legacy.
+      expect(explained.notes).toEqual([
+        expect.stringContaining('EVER_JOBS_CRAWL_BUILTIN_HOSTS=false'),
+        expect.stringContaining('EVER_JOBS_CRAWL_PLUGIN_MANIFESTS=false'),
+      ]);
+      expect(explained.builtinHostPatterns).toEqual([]);
+      expect(explained.callerOverrides).toBe('any');
     });
 
     it('both layers can be switched back on under legacy, and off under polite', () => {
@@ -552,11 +558,25 @@ describe('resolveCrawlPolicy (Spec 1690)', () => {
   });
 });
 
-describe('filterCallerOverride (Spec 1690)', () => {
-  const base: CrawlPolicy = { ...POLITE_CRAWL_POLICY, from: 'ops@x' };
-  const stricter = (caller: CrawlPolicyOverride, b: CrawlPolicy = base) => filterCallerOverride(caller, b, 'stricter');
-  const acceptedIn = (caller: CrawlPolicyOverride, b: CrawlPolicy = base) =>
-    Object.keys(stricter(caller, b).accepted).length === 1;
+describe('filterCallerOverride (Spec 1690, comparators revised by Spec 1714)', () => {
+  // The polite preset, plus a contact and non-zero Spec 1714 knobs so "lower" is testable.
+  const base: CrawlPolicy = { ...POLITE_CRAWL_POLICY, from: 'ops@x', minGapMs: 500, serverErrorCooldownMs: 30000 };
+  /**
+   * The rule set the `1714` table runs under: `EVER_JOBS_CRAWL_STRICTER_RULES` from the
+   * test process (unset = `1714`). Red control: `EVER_JOBS_CRAWL_STRICTER_RULES=1690`
+   * makes the rows Spec 1714 changed (scope, rotation, statuses, discovery) fail.
+   */
+  const rules1714Table: CrawlStricterRules = crawlStricterRules(readCrawlPolicyEnv({ ...process.env }));
+  const stricterUnder = (rules: CrawlStricterRules) => (caller: CrawlPolicyOverride, b: CrawlPolicy = base) =>
+    filterCallerOverride(caller, b, 'stricter', { rules });
+  const stricter = stricterUnder(rules1714Table);
+  const stricter1690 = stricterUnder('1690');
+  const acceptedUnder =
+    (rules: CrawlStricterRules) =>
+    (caller: CrawlPolicyOverride, b: CrawlPolicy = base): boolean =>
+      Object.keys(stricterUnder(rules)(caller, b).accepted).length === 1;
+  const acceptedIn = acceptedUnder(rules1714Table);
+  const acceptedIn1690 = acceptedUnder('1690');
 
   it('passes undefined through as nothing', () => {
     expect(filterCallerOverride(undefined, base, 'any')).toEqual({ accepted: {}, rejected: [] });
@@ -566,6 +586,12 @@ describe('filterCallerOverride (Spec 1690)', () => {
   it('rejects non-policy fields in every mode', () => {
     const caller = { retries: 1, bogus: 1 } as unknown as CrawlPolicyOverride;
     expect(filterCallerOverride(caller, base, 'any')).toEqual({ accepted: { retries: 1 }, rejected: ['bogus'] });
+  });
+
+  it.each(['any', 'stricter', 'none'] as const)('refuses a caller-sent callerOverrides lock under %s (Spec 1714)', (mode) => {
+    const result = filterCallerOverride({ callerOverrides: 'any', retries: 1 }, base, mode);
+    expect(result.rejected).toContain('callerOverrides');
+    expect(result.accepted).not.toHaveProperty('callerOverrides');
   });
 
   it('treats a missing mode as "any" (the documented default)', () => {
@@ -586,21 +612,31 @@ describe('filterCallerOverride (Spec 1690)', () => {
     expect(accepted.retryStatuses).toEqual([429]);
   });
 
-  // [field, accepted value(s), rejected value(s)] relative to the polite preset (+ from: ops@x).
-  const TABLE: Array<[keyof CrawlPolicy, unknown[], unknown[]]> = [
+  it('"any" accepts every field under both rule sets (except turning blockPrivateNetworks off)', () => {
+    const caller: CrawlPolicyOverride = { rateLimitScope: 'site', proxyRotation: 'per-request', retryStatuses: [500], discovery: 'listing' };
+    for (const rules of ['1714', '1690'] as const) {
+      expect(filterCallerOverride(caller, base, 'any', { rules })).toEqual({ accepted: caller, rejected: [] });
+    }
+  });
+
+  // [field, accepted value(s), rejected value(s)] relative to `base` — rules 1714 (the default).
+  const TABLE_1714: Array<[keyof CrawlPolicy, unknown[], unknown[]]> = [
     ['userAgent', [POLITE_CRAWL_POLICY.userAgent], ['Other/1.0']],
     ['from', ['ops@x'], ['other@x']],
     ['userAgentMode', ['identify', 'strict'], ['plugin']],
     ['stripClientHints', [true], [false]],
     ['proxyRotation', ['per-host', 'off'], ['per-scrape', 'per-request']],
-    ['rateLimitScope', ['host', 'domain', 'site'], []],
+    ['rateLimitScope', ['host', 'domain'], ['site']], // 1714: no parallel bucket (G5)
     ['maxConcurrentPerHost', [4, 1], [5, 0]],
     ['minIntervalMs', [100, 1000], [99, 0]],
     ['jitterMs', [0, 50], []],
     ['maxQueueWaitMs', [0, 1, 999999], []],
     ['adaptiveThrottle', [true], [false]],
+    ['minGapMs', [500, 1000], [499, 0]],
+    ['serverErrorCooldownMs', [30000, 60000], [29999, 0]],
     ['retries', [2, 0], [3]],
-    ['retryStatuses', [[429], [], [429, 502, 503, 504]], [[429, 500]]],
+    // 1714: keep the base's 429/503; drop anything else; add only 429/503 (G12).
+    ['retryStatuses', [[429, 503], [429, 502, 503], [429, 502, 503, 504], [503, 429]], [[], [429], [503], [429, 500], [429, 500, 503]]],
     ['retryBackoff', ['exponential'], ['linear', 'constant']],
     ['retryBaseDelayMs', [1000, 5000], [999]],
     ['retryMaxDelayMs', [30000, 60000], [1000]],
@@ -612,30 +648,71 @@ describe('filterCallerOverride (Spec 1690)', () => {
     ['throttleRetryDelayMs', [5000, 30000], [4999, 0]], // higher is stricter; 0 = no floor
     ['robotsTxt', ['off', 'crawl-delay', 'respect'], []],
     ['blockPrivateNetworks', [true], [false]],
-    ['discovery', ['auto', 'sitemap', 'listing'], []],
+    ['discovery', ['auto', 'sitemap'], ['listing']], // 1714: towards the sitemap only (G22)
   ];
 
-  it('the table covers every CrawlPolicy field', () => {
-    expect(TABLE.map(([field]) => field).sort()).toEqual([...CRAWL_POLICY_FIELDS].sort());
+  // The Spec 1690 comparators (EVER_JOBS_CRAWL_STRICTER_RULES=1690, the pre-1714 behaviour).
+  const TABLE_1690: Array<[keyof CrawlPolicy, unknown[], unknown[]]> = TABLE_1714.map(([field, ok, bad]) => {
+    switch (field) {
+      case 'rateLimitScope':
+        return [field, ['host', 'domain', 'site'], []];
+      case 'retryStatuses':
+        return [field, [[429], [], [429, 502, 503, 504]], [[429, 500]]];
+      case 'discovery':
+        return [field, ['auto', 'sitemap', 'listing'], []];
+      default:
+        return [field, ok, bad];
+    }
   });
 
-  describe.each(TABLE)('stricter: %s', (field, ok, bad) => {
+  it.each([
+    ['1714', TABLE_1714],
+    ['1690', TABLE_1690],
+  ] as const)('the rules %s table covers every CrawlPolicy field', (_rules, table) => {
+    expect(table.map(([field]) => field).sort()).toEqual([...CRAWL_POLICY_FIELDS].sort());
+  });
+
+  describe.each(TABLE_1714)('stricter, rules 1714: %s', (field, ok, bad) => {
+    const run = stricterUnder(rules1714Table);
     if (ok.length > 0) {
       it.each(ok.map((v) => [v]))('accepts %j', (value) => {
-        expect(acceptedIn({ [field]: value })).toBe(true);
+        expect(Object.keys(run({ [field]: value }).accepted)).toEqual([field]);
       });
     }
     if (bad.length > 0) {
       it.each(bad.map((v) => [v]))('rejects %j', (value) => {
-        expect(stricter({ [field]: value }).rejected).toEqual([field]);
+        expect(run({ [field]: value }).rejected).toEqual([field]);
       });
     }
   });
 
-  it('rateLimitScope: host is looser than domain/site', () => {
+  describe.each(TABLE_1690)('stricter, rules 1690: %s', (field, ok, bad) => {
+    if (ok.length > 0) {
+      it.each(ok.map((v) => [v]))('accepts %j', (value) => {
+        expect(acceptedIn1690({ [field]: value })).toBe(true);
+      });
+    }
+    if (bad.length > 0) {
+      it.each(bad.map((v) => [v]))('rejects %j', (value) => {
+        expect(stricter1690({ [field]: value }).rejected).toEqual([field]);
+      });
+    }
+  });
+
+  it('rateLimitScope (1714): the new bucket must contain the base one — host → domain only', () => {
     const domainBase = { ...base, rateLimitScope: 'domain' as const };
-    expect(acceptedIn({ rateLimitScope: 'site' }, domainBase)).toBe(true);
+    expect(acceptedIn({ rateLimitScope: 'site' }, domainBase)).toBe(false); // a parallel bucket next to domain (G5)
     expect(acceptedIn({ rateLimitScope: 'host' }, domainBase)).toBe(false);
+    expect(acceptedIn({ rateLimitScope: 'domain' }, domainBase)).toBe(true);
+    const siteBase = { ...base, rateLimitScope: 'site' as const };
+    expect(acceptedIn({ rateLimitScope: 'domain' }, siteBase)).toBe(false);
+    expect(acceptedIn({ rateLimitScope: 'host' }, siteBase)).toBe(false);
+  });
+
+  it('rateLimitScope (1690): host is looser than domain/site', () => {
+    const domainBase = { ...base, rateLimitScope: 'domain' as const };
+    expect(acceptedIn1690({ rateLimitScope: 'site' }, domainBase)).toBe(true);
+    expect(acceptedIn1690({ rateLimitScope: 'host' }, domainBase)).toBe(false);
   });
 
   it('maxConcurrentPerHost: an unlimited (0) base accepts any cap', () => {
@@ -663,10 +740,32 @@ describe('filterCallerOverride (Spec 1690)', () => {
     expect(acceptedIn({ userAgentMode: 'strict' }, pluginBase)).toBe(true);
   });
 
-  it('proxyRotation: per-request base accepts per-scrape; off and per-host are interchangeable', () => {
+  it('proxyRotation (1714): off < per-host < per-scrape < per-request, accept ≤ base', () => {
     const perRequest = { ...base, proxyRotation: 'per-request' as const };
-    expect(acceptedIn({ proxyRotation: 'per-scrape' }, perRequest)).toBe(true);
-    expect(acceptedIn({ proxyRotation: 'per-host' }, { ...base, proxyRotation: 'off' })).toBe(true);
+    for (const rotation of ['per-scrape', 'per-host', 'off'] as const) {
+      expect(acceptedIn({ proxyRotation: rotation }, perRequest)).toBe(true);
+    }
+    expect(acceptedIn({ proxyRotation: 'per-host' }, { ...base, proxyRotation: 'off' })).toBe(false);
+    expect(acceptedIn({ proxyRotation: 'off' }, { ...base, proxyRotation: 'off' })).toBe(true);
+  });
+
+  it('proxyRotation (1690): per-request base accepts per-scrape; off and per-host are interchangeable', () => {
+    const perRequest = { ...base, proxyRotation: 'per-request' as const };
+    expect(acceptedIn1690({ proxyRotation: 'per-scrape' }, perRequest)).toBe(true);
+    expect(acceptedIn1690({ proxyRotation: 'per-host' }, { ...base, proxyRotation: 'off' })).toBe(true);
+  });
+
+  it('retryStatuses (1714): a base without 429/503 accepts adding them and nothing else', () => {
+    const noThrottle = { ...base, retryStatuses: [502, 504] };
+    expect(acceptedIn({ retryStatuses: [429, 502] }, noThrottle)).toBe(true);
+    expect(acceptedIn({ retryStatuses: [] }, noThrottle)).toBe(true);
+    expect(acceptedIn({ retryStatuses: [500] }, noThrottle)).toBe(false);
+  });
+
+  it('discovery (1714): a listing base may move to the sitemap; a sitemap base cannot move to auto', () => {
+    expect(acceptedIn({ discovery: 'sitemap' }, { ...base, discovery: 'listing' })).toBe(true);
+    expect(acceptedIn({ discovery: 'auto' }, { ...base, discovery: 'sitemap' })).toBe(false);
+    expect(acceptedIn1690({ discovery: 'auto' }, { ...base, discovery: 'sitemap' })).toBe(true);
   });
 
   it('retryBackoff: exponential > linear > constant', () => {

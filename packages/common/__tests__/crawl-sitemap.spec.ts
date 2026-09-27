@@ -1,8 +1,10 @@
 import { gzipSync } from 'zlib';
 
+import { CrawlQueueTimeoutError, HostCoolingDownError, RobotsDisallowedError } from '../src/http/crawl/errors';
 import {
   decodeSitemapBody,
   fetchSitemap,
+  isSitemapStopError,
   parseLastmod,
   parseSitemapText,
   parseSitemapXml,
@@ -533,6 +535,76 @@ describe('crawl sitemap toolkit (Spec 1691)', () => {
       expect(onError.mock.calls[1][1]).toBe(boom);
       // Without onError it still skips quietly.
       await expect(fetchSitemap(http, ROOT)).resolves.toHaveLength(1);
+    });
+
+    describe('push-back from a nested sitemap stops the walk (Spec 1714 FR-13, audit G16)', () => {
+      /** The option under test. Red control: 'skip' (the pre-1714 behaviour) → children 2-3 are requested. */
+      const NESTED_ERRORS: 'stop-on-throttle' | 'skip' = 'stop-on-throttle';
+      const children = ['https://a.example/c1.xml', 'https://a.example/c2.xml', 'https://a.example/c3.xml'];
+      const statusError = (status: number) =>
+        Object.assign(new Error(`Request failed with status code ${status}`), { response: { status } });
+      const routesWith = (child1: Error) => ({
+        [ROOT]: sitemapIndex(...children),
+        [children[0]]: child1,
+        [children[1]]: urlset(['https://a.example/2']),
+        [children[2]]: urlset(['https://a.example/3']),
+      });
+
+      it.each([429, 503])('a child answering %d rejects with that error; children 2-3 are never requested', async (status) => {
+        const err = statusError(status);
+        const { http, calls } = fakeHttp(routesWith(err));
+        const onError = jest.fn();
+        await expect(fetchSitemap(http, ROOT, { onError, nestedErrors: NESTED_ERRORS })).rejects.toBe(err);
+        expect(calls.map((c) => c.url)).toEqual([ROOT, children[0]]);
+        expect(onError).not.toHaveBeenCalled();
+      });
+
+      it('a crawl-policy refusal (HostCoolingDownError) stops the walk too — the default, no option needed', async () => {
+        const err = new HostCoolingDownError('domain:a.example', 120_000, 429);
+        const { http, calls } = fakeHttp(routesWith(err));
+        await expect(fetchSitemap(http, ROOT)).rejects.toBe(err);
+        expect(calls.map((c) => c.url)).toEqual([ROOT, children[0]]);
+      });
+
+      it('a crawl-policy refusal wrapped as a cause stops the walk', async () => {
+        const wrapped = Object.assign(new Error('wrapped'), { cause: new CrawlQueueTimeoutError('domain:a.example', 5000) });
+        const { http } = fakeHttp(routesWith(wrapped));
+        await expect(fetchSitemap(http, ROOT)).rejects.toBe(wrapped);
+      });
+
+      it('a 404 child is still skipped (reported to onError) and the walk continues', async () => {
+        const { http, calls } = fakeHttp(routesWith(statusError(404)));
+        const onError = jest.fn();
+        const entries = await fetchSitemap(http, ROOT, { onError, nestedErrors: NESTED_ERRORS });
+        expect(entries.map((e) => e.loc)).toEqual(['https://a.example/2', 'https://a.example/3']);
+        expect(calls.map((c) => c.url)).toEqual([ROOT, ...children]);
+        expect(onError).toHaveBeenCalledTimes(1);
+      });
+
+      it("nestedErrors: 'skip' restores the pre-1714 walk: the 429 child is reported and children 2-3 requested", async () => {
+        const err = statusError(429);
+        const { http, calls } = fakeHttp(routesWith(err));
+        const onError = jest.fn();
+        const entries = await fetchSitemap(http, ROOT, { onError, nestedErrors: 'skip' });
+        expect(entries.map((e) => e.loc)).toEqual(['https://a.example/2', 'https://a.example/3']);
+        expect(calls.map((c) => c.url)).toEqual([ROOT, ...children]);
+        expect(onError).toHaveBeenCalledWith(children[0], err);
+      });
+
+      it.each<[string, unknown, boolean]>([
+        ['429', statusError(429), true],
+        ['503', statusError(503), true],
+        ['502', statusError(502), false],
+        ['404', statusError(404), false],
+        ['HostCoolingDownError', new HostCoolingDownError('b', 1), true],
+        ['RobotsDisallowedError', new RobotsDisallowedError('https://a.example/x'), true],
+        ['a 429 two causes down', { cause: { cause: statusError(429) } }, true],
+        ['a plain Error', new Error('socket hang up'), false],
+        ['undefined', undefined, false],
+        ['a string', '429', false],
+      ])('isSitemapStopError(%s) → %s', (_name, err, expected) => {
+        expect(isSitemapStopError(err)).toBe(expected);
+      });
     });
 
     describe('nested sitemaps outside the root\'s scope', () => {

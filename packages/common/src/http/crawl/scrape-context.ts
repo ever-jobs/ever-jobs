@@ -5,7 +5,25 @@ import { readCrawlPolicyEnv } from './env';
 import { normalizeHostName } from './policy-schema';
 import { createScrapeProxyPin } from './proxy-selector';
 import { explainCrawlPolicy, resetCrawlPolicyLayerCache } from './resolve';
-import { CrawlPolicyEnvConfig, CrawlPolicyOverride, ResolvedCrawlPolicy, ScrapeContext } from './types';
+import {
+  CallerOverridesResolution,
+  CrawlPolicyEnvConfig,
+  CrawlPolicyOverride,
+  RateLimitScope,
+  ResolvedCrawlPolicy,
+  ScrapeContext,
+} from './types';
+
+/**
+ * The policy of one request plus what the resolver decided about the caller
+ * (Spec 1714): the effective caller-override mode and the rate-limit scope before
+ * the caller layer (the `per-host` proxy pin keys on it).
+ */
+export interface EffectiveCrawlResolution {
+  policy: ResolvedCrawlPolicy;
+  callerOverrides: CallerOverridesResolution;
+  baseRateLimitScope: RateLimitScope;
+}
 
 const logger = new Logger('CrawlPolicy');
 
@@ -47,6 +65,15 @@ export function getScrapeContext(): ScrapeContext | undefined {
  * each call returns a fresh copy, so callers may mutate what they get.
  */
 export function getEffectiveCrawlPolicy(host?: string, explicit?: CrawlPolicyOverride): ResolvedCrawlPolicy {
+  return getEffectiveCrawlResolution(host, explicit).policy;
+}
+
+/**
+ * `getEffectiveCrawlPolicy` plus the effective caller-override mode of the
+ * request and its pre-caller rate-limit scope (Spec 1714), from the same memo.
+ * Each call returns fresh copies.
+ */
+export function getEffectiveCrawlResolution(host?: string, explicit?: CrawlPolicyOverride): EffectiveCrawlResolution {
   const ctx = getScrapeContext();
   const env = readCrawlPolicyEnv();
   const leaf = memoLeaf(env, ctx?.plugin, ctx?.caller);
@@ -61,7 +88,15 @@ export function getEffectiveCrawlPolicy(host?: string, explicit?: CrawlPolicyOve
       env,
     );
     for (const note of explanation.notes) logNoteOnce(note);
-    resolved = explanation.policy;
+    resolved = {
+      policy: explanation.policy,
+      callerOverrides: {
+        mode: explanation.callerOverrides,
+        source: explanation.callerOverridesSource,
+        global: explanation.globalCallerOverrides,
+      },
+      baseRateLimitScope: explanation.baseRateLimitScope,
+    };
     if (key !== undefined) {
       // LRU: evict the least recently used entry, not the whole leaf — a default
       // search spans ~1,850 sites × their hosts under ONE (plugin-less, caller-less) leaf.
@@ -75,7 +110,11 @@ export function getEffectiveCrawlPolicy(host?: string, explicit?: CrawlPolicyOve
     leaf.delete(key);
     leaf.set(key, resolved);
   }
-  return copyResolved(resolved);
+  return {
+    policy: copyResolved(resolved.policy),
+    callerOverrides: { ...resolved.callerOverrides },
+    baseRateLimitScope: resolved.baseRateLimitScope,
+  };
 }
 
 /**
@@ -90,11 +129,20 @@ export function getEffectiveCrawlPolicy(host?: string, explicit?: CrawlPolicyOve
  * `proxies` before they reach the context when `EVER_JOBS_CRAWL_CALLER_PROXIES`
  * is `none`; and `HttpClient` egress-checks every proxy that is not one of the
  * operator's env proxies.
+ *
+ * `options.ignoreCallerProxies` (Spec 1714 FR-5): skip the scrape context's
+ * (caller) proxies — `HttpClient` sets it for a request to a host whose lock
+ * refuses caller proxies; `explicit`, then the env list, apply as before.
  */
-export function getEffectiveProxies(explicit?: readonly string[] | null): string[] {
+export function getEffectiveProxies(
+  explicit?: readonly string[] | null,
+  options: { ignoreCallerProxies?: boolean } = {},
+): string[] {
   if (explicit && explicit.length > 0) return [...explicit];
-  const fromContext = getScrapeContext()?.proxies;
-  if (fromContext && fromContext.length > 0) return [...fromContext];
+  if (!options.ignoreCallerProxies) {
+    const fromContext = getScrapeContext()?.proxies;
+    if (fromContext && fromContext.length > 0) return [...fromContext];
+  }
   return [...readCrawlPolicyEnv().proxies];
 }
 
@@ -116,7 +164,7 @@ const NONE: object = Object.freeze({});
 export const CRAWL_POLICY_MEMO_MAX = 8192;
 const MEMO_LEAF_MAX = CRAWL_POLICY_MEMO_MAX;
 
-type MemoLeaf = Map<string, ResolvedCrawlPolicy>;
+type MemoLeaf = Map<string, EffectiveCrawlResolution>;
 let memo = new WeakMap<CrawlPolicyEnvConfig, WeakMap<object, WeakMap<object, MemoLeaf>>>();
 
 function memoLeaf(env: CrawlPolicyEnvConfig, plugin: object | undefined, caller: object | undefined): MemoLeaf {

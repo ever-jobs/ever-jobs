@@ -9,6 +9,7 @@ import {
   coerceBoolean,
   coerceCrawlField,
   coerceEnum,
+  coerceNonNegativeInt,
   describeValue,
   expandUserAgentValue,
   hasOwn,
@@ -19,7 +20,13 @@ import {
   sanitizeContact,
   sanitizeHeaderValue,
 } from './policy-schema';
-import { CrawlPolicy, CrawlPolicyEnvConfig, CrawlPolicyFile, CrawlPolicyOverride } from './types';
+import {
+  CallerOverridesResolution,
+  CrawlPolicy,
+  CrawlPolicyEnvConfig,
+  CrawlPolicyFile,
+  CrawlPolicyOverride,
+} from './types';
 
 const logger = new Logger('CrawlPolicy');
 
@@ -80,12 +87,56 @@ export const CRAWL_EXTRA_ENV = {
    * (pre-1690 pages navigated with a plain `page.goto`, which `false` restores).
    */
   BROWSER_NAVIGATION: 'EVER_JOBS_CRAWL_BROWSER_NAVIGATION',
+  /**
+   * Number of processes (replicas, workers, other installs…) sharing one egress
+   * IP, an integer 1..1000 (Spec 1714 FR-11). Each process multiplies its
+   * start-to-start spacing (`minIntervalMs`, a robots.txt `Crawl-delay`, a
+   * client's `minIntervalFloorMs`) and its `minGapMs` by it, so N processes
+   * together stay within one policy. Default `1` = the pre-1714 behaviour.
+   */
+  FLEET_SIZE: 'EVER_JOBS_CRAWL_FLEET_SIZE',
+  /**
+   * Which `stricter` comparators judge a caller's override (Spec 1714 FR-4):
+   * `1714` (default) — no parallel rate-limit bucket, a strict proxy-rotation
+   * order, 429/503 kept in `retryStatuses`, `discovery` only towards `sitemap`,
+   * and `requestTimeout` gated; `1690` restores the Spec 1690 comparators (and
+   * leaves `requestTimeout` ungated) — the pre-1714 behaviour.
+   */
+  STRICTER_RULES: 'EVER_JOBS_CRAWL_STRICTER_RULES',
+  /**
+   * What the `per-host` proxy pick keys on (Spec 1714 FR-6): `base` (default) —
+   * the registrable domain whenever the scope resolved WITHOUT the caller is
+   * `domain`, so a caller setting can never split one site's tenants across
+   * proxies; `bucket` — the request's rate-limit bucket, the pre-1714 behaviour.
+   */
+  PROXY_PIN_SCOPE: 'EVER_JOBS_CRAWL_PROXY_PIN_SCOPE',
+  /**
+   * Feed robots.txt answers to the host limiter like any request (Spec 1714
+   * FR-12): a 429/503 throttles and cools the bucket, a `Retry-After` over
+   * `maxRetryAfterMs` fails the page request with `HostCoolingDownError`, a 5xx
+   * applies `serverErrorCooldownMs`. Default `true`; `false` = the pre-1714
+   * behaviour (the robots.txt answer never touches the limiter).
+   */
+  ROBOTS_BACKOFF: 'EVER_JOBS_CRAWL_ROBOTS_BACKOFF',
 } as const;
 
 /** Values of `EVER_JOBS_CRAWL_CALLER_PROXIES`. */
 export type CallerProxiesPolicy = 'any' | 'none';
 
 const CALLER_PROXIES_POLICIES: readonly CallerProxiesPolicy[] = ['any', 'none'];
+
+/** Values of `EVER_JOBS_CRAWL_STRICTER_RULES` (Spec 1714 FR-4). `1690` = the pre-1714 comparators. */
+export type CrawlStricterRules = '1714' | '1690';
+
+/** Values of `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE` (Spec 1714 FR-6). `bucket` = the pre-1714 pick. */
+export type CrawlProxyPinScope = 'base' | 'bucket';
+
+const STRICTER_RULES: readonly CrawlStricterRules[] = ['1714', '1690'];
+const PROXY_PIN_SCOPES: readonly CrawlProxyPinScope[] = ['base', 'bucket'];
+
+/** Bounds of `EVER_JOBS_CRAWL_FLEET_SIZE` (Spec 1714 FR-11). */
+export const CRAWL_FLEET_SIZE_MIN = 1;
+export const CRAWL_FLEET_SIZE_MAX = 1000;
 
 /**
  * What `readCrawlPolicyEnv` returns: the contract shape plus the operator contact,
@@ -103,6 +154,20 @@ export interface ParsedCrawlPolicyEnv extends CrawlPolicyEnvConfig {
   callerProxies?: CallerProxiesPolicy;
   /** `EVER_JOBS_CRAWL_BROWSER_NAVIGATION` (missing on a hand-built config = `true`, except under `legacy`). */
   browserNavigation?: boolean;
+  /**
+   * Whether `EVER_JOBS_CRAWL_CALLER_OVERRIDES` was set (to a valid value): the
+   * global mode's source is then `env-global`, else `default` (Spec 1714 FR-3).
+   * Missing on a hand-built config = set when `callerOverrides` is.
+   */
+  callerOverridesFromEnv?: boolean;
+  /** `EVER_JOBS_CRAWL_FLEET_SIZE` (missing = 1). */
+  fleetSize?: number;
+  /** `EVER_JOBS_CRAWL_STRICTER_RULES` (missing = `1714`). */
+  stricterRules?: CrawlStricterRules;
+  /** `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE` (missing = `base`). */
+  proxyPinScope?: CrawlProxyPinScope;
+  /** `EVER_JOBS_CRAWL_ROBOTS_BACKOFF` (missing = `true`). */
+  robotsBackoff?: boolean;
 }
 
 /**
@@ -145,6 +210,69 @@ export function crawlCallerProxiesAllowed(env: CrawlPolicyEnvConfig): boolean {
 }
 
 /**
+ * Number of processes sharing one egress (`EVER_JOBS_CRAWL_FLEET_SIZE`, Spec 1714
+ * FR-11): an integer 1..1000; missing or invalid on a hand-built config = 1 (the
+ * pre-1714 behaviour).
+ */
+export function crawlFleetSize(env: CrawlPolicyEnvConfig): number {
+  const value = (env as ParsedCrawlPolicyEnv).fleetSize;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return CRAWL_FLEET_SIZE_MIN;
+  return Math.min(CRAWL_FLEET_SIZE_MAX, Math.max(CRAWL_FLEET_SIZE_MIN, Math.floor(value)));
+}
+
+/**
+ * Which `stricter` comparators apply (`EVER_JOBS_CRAWL_STRICTER_RULES`, Spec 1714
+ * FR-4): `1714` by default; `1690` restores the pre-1714 comparators.
+ */
+export function crawlStricterRules(env: CrawlPolicyEnvConfig): CrawlStricterRules {
+  return (env as ParsedCrawlPolicyEnv).stricterRules === '1690' ? '1690' : '1714';
+}
+
+/**
+ * What the `per-host` proxy pick keys on (`EVER_JOBS_CRAWL_PROXY_PIN_SCOPE`, Spec
+ * 1714 FR-6): `base` by default; `bucket` restores the pre-1714 pick.
+ */
+export function crawlProxyPinScope(env: CrawlPolicyEnvConfig): CrawlProxyPinScope {
+  return (env as ParsedCrawlPolicyEnv).proxyPinScope === 'bucket' ? 'bucket' : 'base';
+}
+
+/**
+ * Whether robots.txt answers feed the host limiter (`EVER_JOBS_CRAWL_ROBOTS_BACKOFF`,
+ * Spec 1714 FR-12): on by default; `false` restores the pre-1714 behaviour.
+ */
+export function crawlRobotsBackoffEnabled(env: CrawlPolicyEnvConfig): boolean {
+  return (env as ParsedCrawlPolicyEnv).robotsBackoff !== false;
+}
+
+/**
+ * Whether a search caller's `proxies` may be used for requests under `lock` (the
+ * effective caller-override mode of a site or host, `resolveCallerOverrides`) —
+ * Spec 1714 FR-5:
+ *
+ * - source `default` / `env-global` (no lock, no operator entry): exactly
+ *   `crawlCallerProxiesAllowed(env)`, as before Spec 1714;
+ * - source `plugin` / `builtin-host` (a site owner's lock): only when the mode is
+ *   `any` AND `EVER_JOBS_CRAWL_CALLER_PROXIES` allows it — a lock never loosens
+ *   the operator's proxy setting;
+ * - source `operator-site` / `operator-host` (the operator set `callerOverrides`
+ *   for that site or host): exactly when the operator's value is `any`.
+ *
+ * Operator env proxies (`EVER_JOBS_CRAWL_PROXIES`) are never affected.
+ */
+export function crawlCallerProxiesAllowedFor(lock: CallerOverridesResolution, env: CrawlPolicyEnvConfig): boolean {
+  switch (lock?.source) {
+    case 'plugin':
+    case 'builtin-host':
+      return lock.mode === 'any' && crawlCallerProxiesAllowed(env);
+    case 'operator-site':
+    case 'operator-host':
+      return lock.mode === 'any';
+    default:
+      return crawlCallerProxiesAllowed(env);
+  }
+}
+
+/**
  * Plain `EVER_JOBS_CRAWL_*` variable → policy field. `userAgent` is handled
  * separately (keyword expansion + contact).
  */
@@ -159,6 +287,8 @@ const ENV_FIELDS: ReadonlyArray<readonly [string, keyof CrawlPolicy]> = [
   [CRAWL_ENV.JITTER_MS, 'jitterMs'],
   [CRAWL_ENV.MAX_QUEUE_WAIT_MS, 'maxQueueWaitMs'],
   [CRAWL_ENV.ADAPTIVE, 'adaptiveThrottle'],
+  [CRAWL_ENV.MIN_GAP_MS, 'minGapMs'],
+  [CRAWL_ENV.SERVER_ERROR_COOLDOWN_MS, 'serverErrorCooldownMs'],
   [CRAWL_ENV.RETRIES, 'retries'],
   [CRAWL_ENV.RETRY_STATUSES, 'retryStatuses'],
   [CRAWL_ENV.RETRY_BACKOFF, 'retryBackoff'],
@@ -360,11 +490,16 @@ function parseCrawlPolicyEnv(env: NodeJS.ProcessEnv): ParsedCrawlPolicyEnv {
 
   // Caller override policy.
   let callerOverrides = CALLER_OVERRIDE_POLICIES[0];
+  let callerOverridesFromEnv = false;
   const rawCaller = readVar(env, CRAWL_ENV.CALLER_OVERRIDES);
   if (rawCaller !== undefined) {
     const result = coerceEnum(rawCaller, CALLER_OVERRIDE_POLICIES);
-    if (result.value !== undefined) callerOverrides = result.value;
-    else warnings.push(`${CRAWL_ENV.CALLER_OVERRIDES}: ${result.problem}; using "${callerOverrides}"`);
+    if (result.value !== undefined) {
+      callerOverrides = result.value;
+      callerOverridesFromEnv = true;
+    } else {
+      warnings.push(`${CRAWL_ENV.CALLER_OVERRIDES}: ${result.problem}; using "${callerOverrides}"`);
+    }
   }
 
   // Deadline abort.
@@ -382,6 +517,12 @@ function parseCrawlPolicyEnv(env: NodeJS.ProcessEnv): ParsedCrawlPolicyEnv {
   const pluginManifests = readBooleanSwitch(env, CRAWL_EXTRA_ENV.PLUGIN_MANIFESTS, !legacy, warnings);
   const defaultProxiesFallback = readBooleanSwitch(env, CRAWL_EXTRA_ENV.DEFAULT_PROXIES_FALLBACK, !legacy, warnings);
   const browserNavigation = readBooleanSwitch(env, CRAWL_EXTRA_ENV.BROWSER_NAVIGATION, !legacy, warnings);
+  // Spec 1714 switches: each default is the new behaviour; the value that
+  // restores the pre-1714 one is named on each variable (CRAWL_EXTRA_ENV).
+  const fleetSize = readFleetSize(env, warnings);
+  const stricterRules = readEnumSwitch(env, CRAWL_EXTRA_ENV.STRICTER_RULES, STRICTER_RULES, '1714', warnings);
+  const proxyPinScope = readEnumSwitch(env, CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE, PROXY_PIN_SCOPES, 'base', warnings);
+  const robotsBackoff = readBooleanSwitch(env, CRAWL_EXTRA_ENV.ROBOTS_BACKOFF, true, warnings);
   let callerProxies: CallerProxiesPolicy = callerOverrides === 'any' ? 'any' : 'none';
   const rawCallerProxies = readVar(env, CRAWL_EXTRA_ENV.CALLER_PROXIES);
   if (rawCallerProxies !== undefined) {
@@ -425,6 +566,11 @@ function parseCrawlPolicyEnv(env: NodeJS.ProcessEnv): ParsedCrawlPolicyEnv {
     pluginManifests,
     callerProxies,
     browserNavigation,
+    callerOverridesFromEnv,
+    fleetSize,
+    stricterRules,
+    proxyPinScope,
+    robotsBackoff,
   };
   if (contact !== undefined) config.contact = contact;
   return config;
@@ -438,6 +584,44 @@ function readBooleanSwitch(env: NodeJS.ProcessEnv, name: string, fallback: boole
   if (result.value !== undefined) return result.value;
   warnings.push(`${name}: ${result.problem}; using ${fallback}`);
   return fallback;
+}
+
+/** An enum switch: unset → `fallback`; invalid → `fallback` with a warning. */
+function readEnumSwitch<T extends string>(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  values: readonly T[],
+  fallback: T,
+  warnings: string[],
+): T {
+  const raw = readVar(env, name);
+  if (raw === undefined) return fallback;
+  const result = coerceEnum(raw, values);
+  if (result.value !== undefined) return result.value;
+  warnings.push(`${name}: ${result.problem}; using "${fallback}"`);
+  return fallback;
+}
+
+/**
+ * `EVER_JOBS_CRAWL_FLEET_SIZE`: unset → 1; a fraction is rounded down; a value
+ * outside 1..1000 is clamped with a warning; anything else → 1 with a warning.
+ */
+function readFleetSize(env: NodeJS.ProcessEnv, warnings: string[]): number {
+  const name = CRAWL_EXTRA_ENV.FLEET_SIZE;
+  const raw = readVar(env, name);
+  if (raw === undefined) return CRAWL_FLEET_SIZE_MIN;
+  const result = coerceNonNegativeInt(raw);
+  if (result.value === undefined) {
+    warnings.push(`${name}: ${result.problem}; using ${CRAWL_FLEET_SIZE_MIN}`);
+    return CRAWL_FLEET_SIZE_MIN;
+  }
+  if (result.value < CRAWL_FLEET_SIZE_MIN || result.value > CRAWL_FLEET_SIZE_MAX) {
+    const clamped = Math.min(CRAWL_FLEET_SIZE_MAX, Math.max(CRAWL_FLEET_SIZE_MIN, result.value));
+    warnings.push(`${name}: ${describeValue(raw)} clamped to ${clamped} (expected ${CRAWL_FLEET_SIZE_MIN}..${CRAWL_FLEET_SIZE_MAX})`);
+    return clamped;
+  }
+  if (result.note !== undefined) warnings.push(`${name}: ${result.note}`);
+  return result.value;
 }
 
 /** Whether `ua` (a keyword or string) is the Ever Jobs default, i.e. the contact is inserted into it. */

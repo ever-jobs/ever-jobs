@@ -113,6 +113,77 @@ describe('HostLimiter — Spec 1690 §4.3', () => {
     });
   });
 
+  describe('minGapMs — idle time after completion (Spec 1714 FR-9, audit G7)', () => {
+    /** The gap under test. Red control: set it to 0 (the pre-1714 behaviour) → the 2000 ms row fails at 1500. */
+    const GAP_MS = 500;
+
+    /** 1 in flight, 1000 ms start to start, GAP_MS idle: grant #1 at t=0, release it at `releaseAt`; when is #2 granted? */
+    async function secondGrantAfterRelease(releaseAt: number, gap = GAP_MS): Promise<number | undefined> {
+      const limiter = new HostLimiter();
+      const o = { ...opts({ maxConcurrent: 1, minIntervalMs: 1000 }), minGapMs: gap };
+      const first = await limiter.acquire('domain:softy.pro', o);
+      let secondAt: number | undefined;
+      void limiter.acquire('domain:softy.pro', o).then((release) => {
+        secondAt = Date.now() - T0;
+        release();
+      });
+      await jest.advanceTimersByTimeAsync(releaseAt);
+      first();
+      await jest.advanceTimersByTimeAsync(10_000);
+      return secondAt;
+    }
+
+    it('a slow answer (released at 1500 ms) is followed by 500 ms of idle time: next start at 2000 ms', async () => {
+      expect(await secondGrantAfterRelease(1500)).toBe(2000);
+    });
+
+    it('a fast answer (released at 200 ms): the start-to-start interval dominates, next start at 1000 ms', async () => {
+      expect(await secondGrantAfterRelease(200)).toBe(1000);
+    });
+
+    it('without a gap (0, the pre-1714 behaviour) the next request starts the moment a slow answer ends', async () => {
+      expect(await secondGrantAfterRelease(1500, 0)).toBe(1500);
+    });
+
+    it('a second release() call does not push the next start again (idempotent)', async () => {
+      const limiter = new HostLimiter();
+      const o = { ...opts({ maxConcurrent: 1, minIntervalMs: 0 }), minGapMs: GAP_MS };
+      const first = await limiter.acquire('k', o);
+      await jest.advanceTimersByTimeAsync(100);
+      first();
+      await jest.advanceTimersByTimeAsync(400);
+      first(); // no-op
+      const { starts } = track(limiter, 'k', o, 1);
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(100);
+      expect(starts).toEqual([600]);
+    });
+
+    it('a bucket inside its idle gap is not evicted by the LRU cap', async () => {
+      const limiter = new HostLimiter({ maxBuckets: 1 });
+      const o = { ...opts({ maxConcurrent: 1 }), minGapMs: 5000 };
+      const release = await limiter.acquire('a', o);
+      release();
+      await limiter.acquire('b', opts()).then((r) => r());
+      expect(limiter.snapshot().map((b) => b.key).sort()).toEqual(['a', 'b']);
+      const { starts } = track(limiter, 'a', o, 1);
+      await jest.advanceTimersByTimeAsync(4999);
+      expect(starts).toEqual([]);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(starts).toEqual([5000]);
+    });
+
+    it('only the request that asked for a gap applies it (a gap-less request sharing the bucket does not)', async () => {
+      const limiter = new HostLimiter();
+      const withoutGap = await limiter.acquire('k', opts({ maxConcurrent: 1 }));
+      await jest.advanceTimersByTimeAsync(100);
+      withoutGap();
+      const { starts } = track(limiter, 'k', { ...opts({ maxConcurrent: 1 }), minGapMs: GAP_MS } as never, 1);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(starts).toEqual([100]);
+    });
+  });
+
   describe('concurrency', () => {
     it('maxConcurrent 4 never has more than 4 in flight and serves everyone', async () => {
       const limiter = new HostLimiter();

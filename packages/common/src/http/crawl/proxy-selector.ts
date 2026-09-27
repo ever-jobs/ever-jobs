@@ -1,4 +1,30 @@
-import { ProxyRotation } from './types';
+import type { CrawlProxyPinScope } from './env';
+import { bucketKeyFor } from './host-limiter';
+import { ProxyRotation, RateLimitScope } from './types';
+
+/**
+ * The key a `per-host` proxy pick hashes for one request (Spec 1714 FR-6, audit
+ * G10/G11):
+ *
+ * - `pinScope: 'base'` (default): the registrable-domain key (`domain:softy.pro`)
+ *   whenever `baseScope` — the rate-limit scope resolved WITHOUT the search caller
+ *   — is `domain`, so two tenants of one multi-tenant site always exit through the
+ *   same proxy, whatever scope a caller picked; otherwise the request's bucket key.
+ * - `pinScope: 'bucket'` (`EVER_JOBS_CRAWL_PROXY_PIN_SCOPE=bucket`, the pre-1714
+ *   behaviour): the request's rate-limit bucket key (`bucketScope`).
+ *
+ * `url` is the request URL, `site` the scrape's site (for the `site` scope).
+ */
+export function proxyPinKeyFor(
+  url: string,
+  bucketScope: RateLimitScope,
+  baseScope: RateLimitScope | undefined,
+  site: string | undefined,
+  pinScope: CrawlProxyPinScope = 'base',
+): string {
+  const scope = pinScope !== 'bucket' && baseScope === 'domain' ? 'domain' : bucketScope;
+  return bucketKeyFor(url, scope, site);
+}
 
 /** Mutable per-client rotation state. */
 export interface ProxyRotationState {

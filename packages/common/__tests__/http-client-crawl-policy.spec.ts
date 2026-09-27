@@ -6,10 +6,13 @@ import { MAX_CRAWL_RETRIES, ScraperInputDto, classifyScrapeError } from '@ever-j
 import {
   HttpClient,
   MIN_RETRY_DELAY_MS,
+  SERVER_ERROR_STATUSES,
+  clientOptionsFromScraperInput,
   crawlAcquireOptions,
   createHttpClient,
   crawlOverrideFromClientOptions,
   isRetryableNetworkError,
+  isServerStruggling,
   parseRetryAfter,
   penalizesBucket,
   recordAnswerOutcome,
@@ -1931,5 +1934,386 @@ describe('helpers', () => {
     expect(selectWireUserAgent({ policy: { ...base, userAgentMode: 'strict' }, ...declared, pluginOptIn: true }).userAgent).toBe('Configured');
     expect(selectWireUserAgent({ policy: { ...base, userAgentMode: 'strict' }, setHeaders: 'Set', legacy: true }).userAgent).toBe('Configured');
     expect(selectWireUserAgent({ policy: { ...base, userAgentMode: 'strict' }, ...declared, legacy: true }).userAgent).toBe('Per');
+  });
+});
+
+// ── Spec 1714 ────────────────────────────────────────────────────────────────
+
+/**
+ * Spec 1714 in `HttpClient`: the per-host proxy pin keys on the base scope, a host
+ * lock refuses caller proxies, server errors cool the bucket, the fleet-size
+ * multiplier, and robots.txt back-off. Each key test names its red control: the
+ * constant (or env value) to flip to the pre-1714 value to see it fail.
+ */
+describe('Spec 1714 — HttpClient', () => {
+  const via = (s: Sent) => (s.config.httpsAgent as unknown as { proxy?: URL } | undefined)?.proxy?.host ?? 'direct';
+  const ENV_PROXIES = 'http://p1.example:8080,http://p2.example:8080,http://p3.example:8080,http://p4.example:8080';
+
+  describe('per-host proxy pin on the base scope (FR-6, audit G10)', () => {
+    /** Red control: 'bucket' (the pre-1714 pick) → the two tenants exit through p3 and p4. */
+    const PIN_SCOPE: string | undefined = undefined;
+
+    it('two tenants of a domain-scoped site use one proxy even when the caller picks host scope', async () => {
+      setEnv({
+        [CRAWL_ENV.PROXIES]: ENV_PROXIES,
+        [CRAWL_ENV.POLICIES]: JSON.stringify({ sites: { x: { rateLimitScope: 'domain', callerOverrides: 'any' } } }),
+        [CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE]: PIN_SCOPE,
+      });
+      const client = new HttpClient();
+      const h = attach(client);
+
+      await inScrape({ site: 'x', caller: { rateLimitScope: 'host' } }, () =>
+        settle(Promise.all([client.get('https://t1.x.example/a'), client.get('https://t2.x.example/b')])),
+      );
+
+      // FNV-1a("domain:x.example") % 4 = 3 → p4 for both tenants.
+      expect(h.sent.map(via)).toEqual(['p4.example:8080', 'p4.example:8080']);
+    });
+
+    it('EVER_JOBS_CRAWL_PROXY_PIN_SCOPE=bucket restores the pre-1714 pick (one proxy per tenant bucket)', async () => {
+      setEnv({
+        [CRAWL_ENV.PROXIES]: ENV_PROXIES,
+        [CRAWL_ENV.POLICIES]: JSON.stringify({ sites: { x: { rateLimitScope: 'domain' } } }),
+        [CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE]: 'bucket',
+      });
+      const client = new HttpClient();
+      const h = attach(client);
+
+      await inScrape({ site: 'x', caller: { rateLimitScope: 'host' } }, () =>
+        settle(Promise.all([client.get('https://t1.x.example/a'), client.get('https://t2.x.example/b')])),
+      );
+
+      expect(h.sent.map(via).sort()).toEqual(['p3.example:8080', 'p4.example:8080']);
+    });
+  });
+
+  describe('caller proxies under a host lock (FR-5, audit G9)', () => {
+    const CALLER_PROXY = 'http://proxy9.example.net:8080';
+
+    it('a DTO-branch client in a jsonld scrape: no caller proxy for acme.softy.pro, the caller proxy elsewhere', async () => {
+      const client = createHttpClient({ proxies: [CALLER_PROXY], requestTimeout: 60 });
+      const h = attach(client);
+
+      await inScrape({ site: 'jsonld' }, async () => {
+        await settle(client.get('https://acme.softy.pro/offers/1'));
+        await settle(client.get('https://example.com/jobs'));
+      });
+
+      expect(h.sent.map((s) => [new URL(s.url).host, via(s)])).toEqual([
+        ['acme.softy.pro', 'direct'],
+        ['example.com', 'proxy9.example.net:8080'],
+      ]);
+    });
+
+    it('the operator env proxies still apply to the locked host', async () => {
+      setEnv({ [CRAWL_ENV.PROXIES]: 'http://p1.example:8080' });
+      const client = createHttpClient({ proxies: [CALLER_PROXY], requestTimeout: 60 });
+      const h = attach(client);
+
+      await inScrape({ site: 'jsonld' }, () => settle(client.get('https://acme.softy.pro/offers/1')));
+
+      expect(h.sent.map(via)).toEqual(['p1.example:8080']);
+    });
+
+    it('the scrape context caller proxies are skipped for the locked host too', async () => {
+      const client = new HttpClient();
+      const h = attach(client);
+
+      await inScrape({ site: 'jsonld', proxies: [CALLER_PROXY] }, async () => {
+        await settle(client.get('https://acme.softy.pro/offers/1'));
+        await settle(client.get('https://example.com/jobs'));
+      });
+
+      expect(h.sent.map(via)).toEqual(['direct', 'proxy9.example.net:8080']);
+    });
+
+    it('a plugin own proxy list (no caller marker) is kept for the locked host', async () => {
+      const client = new HttpClient({ proxies: ['http://own.example.net:8080'] });
+      const h = attach(client);
+
+      await inScrape({ site: 'jsonld' }, () => settle(client.get('https://acme.softy.pro/offers/1')));
+
+      expect(h.sent.map(via)).toEqual(['own.example.net:8080']);
+    });
+
+    it('red control: EVER_JOBS_CRAWL_BUILTIN_HOSTS=false → the caller proxy is used for Softy (no lock)', async () => {
+      setEnv({ [CRAWL_EXTRA_ENV.BUILTIN_HOSTS]: 'false' });
+      const client = createHttpClient({ proxies: [CALLER_PROXY], requestTimeout: 60 });
+      const h = attach(client);
+
+      await inScrape({ site: 'jsonld' }, () => settle(client.get('https://acme.softy.pro/offers/1')));
+
+      expect(h.sent.map(via)).toEqual(['proxy9.example.net:8080']);
+    });
+
+    it('an operator "any" for the host gives the caller proxies back', async () => {
+      setEnv({ [CRAWL_ENV.POLICIES]: JSON.stringify({ hosts: { '*.softy.pro': { callerOverrides: 'any' } } }) });
+      const client = createHttpClient({ proxies: [CALLER_PROXY], requestTimeout: 60 });
+      const h = attach(client);
+
+      await inScrape({ site: 'jsonld' }, () => settle(client.get('https://acme.softy.pro/offers/1')));
+
+      expect(h.sent.map(via)).toEqual(['proxy9.example.net:8080']);
+    });
+
+    it('clientOptionsFromScraperInput marks DTO-branch proxies as the caller ones', () => {
+      expect(clientOptionsFromScraperInput({ proxies: ['http://a:1'], requestTimeout: 5 }).proxiesFromCaller).toBe(true);
+      expect(clientOptionsFromScraperInput({ proxies: ['http://a:1'], proxiesFromCaller: false }).proxiesFromCaller).toBe(false);
+      expect(clientOptionsFromScraperInput({ requestTimeout: 5 }).proxiesFromCaller).toBeUndefined();
+    });
+  });
+
+  describe('server-error cool-down (FR-10, audit G14)', () => {
+    /** Red control: 0 (the pre-1714 default) → no cool-down, the next request goes out at once. */
+    const COOLDOWN_MS = 30_000;
+    const BUCKET = 'host:acme.example.com';
+
+    const failThenOk = (failure: Reply) => (_c: InternalAxiosRequestConfig, i: number): Reply =>
+      i === 0 ? failure : { status: 200 };
+
+    it.each<[string, Reply]>([
+      ['a 502 answer', { status: 502 }],
+      ['a 500 answer', { status: 500 }],
+      ['a 504 answer', { status: 504 }],
+      ['a timeout (ECONNABORTED)', Object.assign(new Error('timeout of 60000ms exceeded'), { code: 'ECONNABORTED' })],
+      ['a connection reset (ECONNRESET)', Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })],
+      ['a socket hang up', new Error('socket hang up')],
+    ])('%s cools the whole bucket, and the next request to it waits', async (_name, failure) => {
+      setEnv({ [CRAWL_ENV.SERVER_ERROR_COOLDOWN_MS]: String(COOLDOWN_MS), [CRAWL_ENV.RETRIES]: '0' });
+      const client = new HttpClient();
+      const h = attach(client, failThenOk(failure));
+
+      const first = await settle(client.get(URL_A), 0);
+      expect(first).toBeInstanceOf(Error);
+      expect(getHostLimiter().coolingDownUntil(BUCKET) - Date.now()).toBe(30_000);
+
+      await settle(client.get(`${URL_A}/next`), 60_000);
+      expect(h.sent).toHaveLength(2);
+      expect(h.sent[1].startedAt - h.sent[0].startedAt).toBeGreaterThanOrEqual(30_000);
+    });
+
+    it('a 502 the caller accepts (validateStatus) cools the bucket too', async () => {
+      setEnv({ [CRAWL_ENV.SERVER_ERROR_COOLDOWN_MS]: String(COOLDOWN_MS) });
+      const client = new HttpClient();
+      attach(client, () => ({ status: 502 }));
+
+      const response = await settle(client.get(URL_A, { validateStatus: () => true }), 0);
+
+      expect((response as { status: number }).status).toBe(502);
+      expect(getHostLimiter().coolingDownUntil(BUCKET) - Date.now()).toBe(30_000);
+    });
+
+    it('a per-client crawl option (the plugin layer) sets it too', async () => {
+      const client = new HttpClient({ crawl: { serverErrorCooldownMs: COOLDOWN_MS, retries: 0 } });
+      const h = attach(client, failThenOk({ status: 502 }));
+
+      await settle(client.get(URL_A), 0);
+      await settle(client.get(`${URL_A}/next`), 60_000);
+
+      expect(h.sent[1].startedAt - h.sent[0].startedAt).toBeGreaterThanOrEqual(COOLDOWN_MS);
+    });
+
+    it('any request to *.softy.pro gets the builtin 30 s cool-down after a 502 (whichever site makes it)', async () => {
+      const client = new HttpClient();
+      attach(client, () => ({ status: 502 }));
+
+      await inScrape({ site: 'liveness-http' }, () => settle(client.get('https://acme.softy.pro/offers/1'), 0));
+
+      expect(getHostLimiter().coolingDownUntil('domain:softy.pro') - Date.now()).toBe(30_000);
+    });
+
+    it.each<[string, Reply]>([
+      ['a 404', { status: 404 }],
+      ['a 503 (a throttle answer, with its own back-off)', { status: 503 }],
+      ['a DNS failure (ENOTFOUND)', Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' })],
+    ])('%s does not start a server-error cool-down', async (_name, failure) => {
+      setEnv({ [CRAWL_ENV.SERVER_ERROR_COOLDOWN_MS]: String(COOLDOWN_MS), [CRAWL_ENV.RETRIES]: '0' });
+      const client = new HttpClient();
+      attach(client, failThenOk(failure));
+
+      await settle(client.get(URL_A), 0);
+
+      const cooling = getHostLimiter().coolingDownUntil(BUCKET);
+      expect(cooling === 0 || cooling - Date.now() < COOLDOWN_MS).toBe(true);
+    });
+
+    it('our own abort does not cool the bucket', async () => {
+      setEnv({ [CRAWL_ENV.SERVER_ERROR_COOLDOWN_MS]: String(COOLDOWN_MS) });
+      const client = new HttpClient();
+      attach(client, () => ({ status: 200, hang: true }));
+      const controller = new AbortController();
+
+      const pending = settle(client.get(URL_A, { signal: controller.signal }), 0);
+      await jest.advanceTimersByTimeAsync(10);
+      controller.abort();
+      expect(await pending).toBeInstanceOf(Error);
+
+      expect(getHostLimiter().coolingDownUntil(BUCKET)).toBe(0);
+    });
+
+    it('the pre-1714 default (0) never cools the bucket on a server error', async () => {
+      setEnv({ [CRAWL_ENV.RETRIES]: '0' });
+      const client = new HttpClient();
+      const h = attach(client, failThenOk({ status: 502 }));
+
+      await settle(client.get(URL_A), 0);
+      await settle(client.get(`${URL_A}/next`), 1000);
+
+      expect(getHostLimiter().coolingDownUntil(BUCKET)).toBe(0);
+      expect(h.sent[1].startedAt - h.sent[0].startedAt).toBeLessThan(1000);
+    });
+
+    it.each<[number | undefined, unknown, boolean]>([
+      [500, undefined, true],
+      [502, undefined, true],
+      [504, undefined, true],
+      [503, undefined, false],
+      [429, undefined, false],
+      [404, undefined, false],
+      [undefined, Object.assign(new Error('x'), { code: 'ETIMEDOUT' }), true],
+      [undefined, Object.assign(new Error('x'), { code: 'UND_ERR_CONNECT_TIMEOUT' }), true],
+      [undefined, Object.assign(new Error('x'), { cause: { code: 'ECONNRESET' } }), true],
+      [undefined, Object.assign(new Error('x'), { code: 'ENOTFOUND' }), false],
+      [undefined, Object.assign(new Error('socket hang up'), { code: 'EAI_AGAIN' }), false],
+      [undefined, new CanceledError(), false],
+      [undefined, Object.assign(new Error('aborted'), { name: 'AbortError', code: 'ECONNRESET' }), false],
+      [undefined, new HostCoolingDownError('b', 1, 502), false],
+      [undefined, Object.assign(new Error('Request failed'), { response: { status: 502 } }), true],
+      [undefined, undefined, false],
+    ])('isServerStruggling(%j, %p) → %s', (status, err, expected) => {
+      expect(isServerStruggling(status, err)).toBe(expected);
+    });
+
+    it('SERVER_ERROR_STATUSES is 500, 502, 504', () => {
+      expect([...SERVER_ERROR_STATUSES].sort()).toEqual([500, 502, 504]);
+    });
+  });
+
+  describe('EVER_JOBS_CRAWL_FLEET_SIZE (FR-11, audits G15/G27)', () => {
+    /** Red control: '1' (the pre-1714 default) → 1000 / 500 / the plain floor. */
+    const FLEET = '3';
+
+    it('multiplies the start-to-start spacing and the idle gap, not jitter or concurrency', async () => {
+      setEnv({
+        [CRAWL_EXTRA_ENV.FLEET_SIZE]: FLEET,
+        [CRAWL_ENV.MIN_INTERVAL_MS]: '1000',
+        [CRAWL_ENV.MIN_GAP_MS]: '500',
+        [CRAWL_ENV.JITTER_MS]: '100',
+      });
+      const limiter = new HostLimiter();
+      const acquire = jest.spyOn(limiter, 'acquire');
+      const client = new HttpClient({ hostLimiter: limiter });
+      attach(client);
+
+      await settle(client.get(URL_A), 0);
+
+      expect(acquire.mock.calls[0][1]).toMatchObject({ minIntervalMs: 3000, minGapMs: 1500, jitterMs: 100, maxConcurrent: 4 });
+    });
+
+    it('multiplies the client minIntervalFloorMs too', async () => {
+      setEnv({ [CRAWL_EXTRA_ENV.FLEET_SIZE]: FLEET });
+      const limiter = new HostLimiter();
+      const acquire = jest.spyOn(limiter, 'acquire');
+      const client = new HttpClient({ hostLimiter: limiter, minIntervalFloorMs: 2000 });
+      attach(client);
+
+      await settle(client.get(URL_A), 0);
+
+      expect(acquire.mock.calls[0][1].minIntervalMs).toBe(6000);
+    });
+
+    it('three processes sharing the egress: each spaces its own starts 3 s apart for a 1 s policy', async () => {
+      setEnv({ [CRAWL_EXTRA_ENV.FLEET_SIZE]: FLEET, [CRAWL_ENV.MIN_INTERVAL_MS]: '1000' });
+      const client = new HttpClient();
+      const h = attach(client);
+
+      await settle(Promise.all([1, 2, 3].map((i) => client.get(`${URL_A}/${i}`))), 20_000);
+
+      expect(h.sent).toHaveLength(3);
+      expect(Math.min(...gaps(h.sent))).toBeGreaterThanOrEqual(3000);
+    });
+
+    it('crawlAcquireOptions: explicit fleet size, and the default read from the env', () => {
+      const policy = { ...POLITE_CRAWL_POLICY, minIntervalMs: 1000, minGapMs: 500 };
+      expect(crawlAcquireOptions(policy, undefined, 0, 1)).toMatchObject({ minIntervalMs: 1000, minGapMs: 500 });
+      expect(crawlAcquireOptions(policy, undefined, 2000, 3)).toMatchObject({ minIntervalMs: 6000, minGapMs: 1500 });
+      setEnv({ [CRAWL_EXTRA_ENV.FLEET_SIZE]: '2' });
+      expect(crawlAcquireOptions(policy)).toMatchObject({ minIntervalMs: 2000, minGapMs: 1000 });
+      // A policy without a gap passes none (the pre-1714 options, byte for byte).
+      expect(crawlAcquireOptions(POLITE_CRAWL_POLICY, undefined, 0, 1)).not.toHaveProperty('minGapMs');
+    });
+  });
+
+  describe('minGapMs through HttpClient (FR-9, audit G7)', () => {
+    it('a slow server gets idle time after each answer on *.softy.pro (builtin 1 s interval + 0.5 s gap)', async () => {
+      const client = new HttpClient();
+      const h = attach(client, () => ({ status: 200, delayMs: 1500 }));
+
+      await inScrape({ site: 'liveness-http' }, () =>
+        settle(Promise.all([1, 2, 3].map((i) => client.get(`https://t${i}.softy.pro/offers/${i}`))), 20_000),
+      );
+
+      expect(h.maxInFlight()).toBe(1);
+      // Each start follows the previous answer (1.5 s) by the 0.5 s gap: 2 s apart, not 1.5 s.
+      expect(gaps(h.sent)).toEqual([2000, 2000]);
+    });
+  });
+
+  describe('robots.txt back-off (FR-12, audit G18)', () => {
+    /** Red control: 'false' (the pre-1714 behaviour) → the page request is sent at once. */
+    const ROBOTS_BACKOFF: string | undefined = undefined;
+    const robotsAnswer = (reply: Reply) => (c: InternalAxiosRequestConfig): Reply =>
+      String(c.url).endsWith('/robots.txt') ? reply : { status: 200 };
+
+    it('robots.txt 429 Retry-After: 3600 → 1 robots request, 0 page requests, HostCoolingDownError', async () => {
+      setEnv({ [CRAWL_ENV.ROBOTS_TXT]: 'respect', [CRAWL_EXTRA_ENV.ROBOTS_BACKOFF]: ROBOTS_BACKOFF });
+      const client = new HttpClient();
+      const h = attach(client, robotsAnswer({ status: 429, headers: { 'retry-after': '3600' } }));
+
+      const result = await settle(client.get(URL_A), 0);
+
+      expect(result).toBeInstanceOf(HostCoolingDownError);
+      expect((result as HostCoolingDownError).status).toBe(429);
+      expect(h.sent.map((s) => s.url)).toEqual(['https://acme.example.com/robots.txt']);
+      expect(getHostLimiter().coolingDownUntil('host:acme.example.com') - Date.now()).toBe(3_600_000);
+    });
+
+    it('robots.txt 429 without Retry-After → the bucket cools the throttle floor and the page waits', async () => {
+      setEnv({ [CRAWL_ENV.ROBOTS_TXT]: 'respect', [CRAWL_EXTRA_ENV.ROBOTS_BACKOFF]: ROBOTS_BACKOFF });
+      const client = new HttpClient();
+      const h = attach(client, robotsAnswer({ status: 429 }));
+
+      await settle(client.get(URL_A), 60_000);
+
+      expect(h.sent.map((s) => s.url)).toEqual(['https://acme.example.com/robots.txt', URL_A]);
+      expect(h.sent[1].startedAt - h.sent[0].startedAt).toBeGreaterThanOrEqual(POLITE_CRAWL_POLICY.throttleRetryDelayMs);
+    });
+
+    it('robots.txt 502 → serverErrorCooldownMs applies before the page', async () => {
+      setEnv({
+        [CRAWL_ENV.ROBOTS_TXT]: 'crawl-delay',
+        [CRAWL_ENV.SERVER_ERROR_COOLDOWN_MS]: '20000',
+        [CRAWL_EXTRA_ENV.ROBOTS_BACKOFF]: ROBOTS_BACKOFF,
+      });
+      const client = new HttpClient();
+      const h = attach(client, robotsAnswer({ status: 502 }));
+
+      await settle(client.get(URL_A), 60_000);
+
+      expect(h.sent).toHaveLength(2);
+      expect(h.sent[1].startedAt - h.sent[0].startedAt).toBeGreaterThanOrEqual(20_000);
+    });
+
+    it('EVER_JOBS_CRAWL_ROBOTS_BACKOFF=false restores pre-1714: the answer never touches the limiter', async () => {
+      setEnv({ [CRAWL_ENV.ROBOTS_TXT]: 'respect', [CRAWL_EXTRA_ENV.ROBOTS_BACKOFF]: 'false' });
+      const client = new HttpClient();
+      const h = attach(client, robotsAnswer({ status: 429, headers: { 'retry-after': '3600' } }));
+
+      const result = await settle(client.get(URL_A), 60_000);
+
+      expect(result).not.toBeInstanceOf(Error);
+      expect(h.sent.map((s) => s.url)).toEqual(['https://acme.example.com/robots.txt', URL_A]);
+      expect(h.sent[1].startedAt - h.sent[0].startedAt).toBeLessThan(POLITE_CRAWL_POLICY.throttleRetryDelayMs);
+    });
   });
 });

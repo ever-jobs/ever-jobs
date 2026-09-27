@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { JobPostDto, ScraperInputDto } from '../src';
+import { JOB_LIVENESS_REASON_FRESH_FETCH, JobPostDto, ScraperInputDto } from '../src';
 
 /**
  * Specs 1693 / 1701 — fields the board plugins already set are declared on
@@ -50,5 +50,29 @@ describe('JobPostDto board fields (Specs 1693 / 1701)', () => {
       applicantsCountBound: 'min',
       aiLevel: 3,
     });
+  });
+});
+
+describe('JobPostDto.jobUrlFetchedAt and liveness.reason (Spec 1714 FR-16)', () => {
+  it('are optional and unset by default', () => {
+    const job = new JobPostDto({ title: 't', jobUrl: 'https://acme.softy.pro/offers/1' });
+    expect(job.jobUrlFetchedAt).toBeUndefined();
+    expect(job.liveness).toBeUndefined();
+  });
+
+  it('carry the fresh-fetch signal and the reason a job was marked live without a probe', () => {
+    const fetchedAt = '2026-09-26T10:00:00.000Z';
+    const job = new JobPostDto({
+      title: 't',
+      jobUrl: 'https://acme.softy.pro/offers/1',
+      jobUrlFetchedAt: fetchedAt,
+      liveness: { state: 'active', checkedAt: fetchedAt, reason: JOB_LIVENESS_REASON_FRESH_FETCH },
+    });
+    expect(job.jobUrlFetchedAt).toBe(fetchedAt);
+    expect(job.liveness).toEqual({ state: 'active', checkedAt: fetchedAt, reason: 'fresh-fetch' });
+  });
+
+  it('JOB_LIVENESS_REASON_FRESH_FETCH is the documented wire value', () => {
+    expect(JOB_LIVENESS_REASON_FRESH_FETCH).toBe('fresh-fetch');
   });
 });
