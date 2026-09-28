@@ -2,11 +2,15 @@ import { CALLER_OVERRIDES_RANK } from './caller-lock';
 import { BUILTIN_HOST_POLICIES, CRAWL_ENV, CRAWL_PRESETS } from './defaults';
 import {
   CRAWL_EXTRA_ENV,
+  CrawlCallerProxyRotation,
+  CrawlProxyPinScope,
   CrawlStricterRules,
   ParsedCrawlPolicyEnv,
   crawlBuiltinHostsDisabled,
   crawlBuiltinHostsEnabled,
+  crawlCallerProxyRotation,
   crawlPluginManifestsEnabled,
+  crawlProxyPinScope,
   crawlStricterRules,
   expandUserAgent,
   readCrawlPolicyEnv,
@@ -272,7 +276,11 @@ export function explainCrawlPolicy(input: CrawlPolicyResolveInput, env?: CrawlPo
   }
   const baseRateLimitScope = policy.rateLimitScope;
   const callerRaw = prepare(input.caller, 'caller');
-  const { accepted, rejected } = filterCallerOverride(callerRaw, policy, lock.mode, { rules: crawlStricterRules(cfg) });
+  const { accepted, rejected } = filterCallerOverride(callerRaw, policy, lock.mode, {
+    rules: crawlStricterRules(cfg),
+    proxyRotation: crawlCallerProxyRotation(cfg),
+    proxiesConfigured: Array.isArray(cfg.proxies) && cfg.proxies.length > 0,
+  });
   if (accepted.userAgent !== undefined && callerRaw.userAgentMode === undefined && accepted.userAgentMode === undefined) {
     accepted.userAgentMode = 'strict';
   }
@@ -397,6 +405,52 @@ export function isPolicyOwnedHost(host: string | undefined, env?: CrawlPolicyEnv
 }
 
 /**
+ * Whether one of the applied builtin host patterns (`BUILTIN_HOST_POLICIES` keys, as
+ * `explainCrawlPolicy` reports them in `builtinHostPatterns`) carries a site owner's
+ * caller lock (`callerOverrides` `stricter` / `none`, e.g. `*.softy.pro`) — Spec
+ * 1715 audit C3. Unknown patterns do not count.
+ */
+export function builtinHostLockApplies(patterns: readonly string[]): boolean {
+  return patterns.some((pattern) => {
+    const lock = hasOwn(BUILTIN_HOST_POLICIES, pattern) ? BUILTIN_HOST_POLICIES[pattern].callerOverrides : undefined;
+    return lock === 'stricter' || lock === 'none';
+  });
+}
+
+/**
+ * Whether one request is under a lock (Spec 1715 audit C3; review of PR #105): its
+ * effective caller-override mode is not `any`, or one of its applied builtin host
+ * patterns carries a site owner's lock (`builtinHostLockApplies` — every request to
+ * `*.softy.pro`, even when an operator set `callerOverrides: 'any'` for it). What the
+ * `per-host` proxy pin (`effectiveProxyPinScope`) and
+ * `EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE=locked` key on; every other request keeps
+ * its pre-1714 behaviour (Spec 1714 rule 3).
+ */
+export function crawlLockApplies(resolution: {
+  callerOverrides: CallerOverridePolicy;
+  builtinHostPatterns: readonly string[];
+}): boolean {
+  return resolution.callerOverrides !== 'any' || builtinHostLockApplies(resolution.builtinHostPatterns);
+}
+
+/**
+ * What the `per-host` proxy pick of one request keys on — the rule `HttpClient`
+ * applies (Spec 1714 FR-6, Spec 1715 audit C3): `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE`
+ * (`base` by default, `bucket` under the `legacy` preset) when the request is under
+ * a caller lock (effective mode not `any`) or an applied builtin host pattern carries
+ * a site owner's lock; `bucket` — the pre-1714 key, byte for byte — for every other
+ * request. Under `base` the pin keys on the registrable domain when the scope resolved
+ * WITHOUT the caller is `domain` (`proxyPinKeyFor`).
+ */
+export function effectiveProxyPinScope(
+  resolution: { callerOverrides: CallerOverridePolicy; builtinHostPatterns: readonly string[] },
+  env?: CrawlPolicyEnvConfig,
+): CrawlProxyPinScope {
+  const cfg: CrawlPolicyEnvConfig = env ?? readCrawlPolicyEnv();
+  return crawlLockApplies(resolution) ? crawlProxyPinScope(cfg) : 'bucket';
+}
+
+/**
  * Apply a caller-override mode to what a search caller asked for: `any` accepts
  * everything, `none` nothing, `stricter` only values at least as polite as `base`
  * (per-field comparators). The mode is the EFFECTIVE one of the request
@@ -405,14 +459,18 @@ export function isPolicyOwnedHost(host: string | undefined, env?: CrawlPolicyEnv
  *
  * `stricter` comparators — a value is accepted when it is **at least as polite**
  * as `base` (equal is always accepted). `options.rules` picks the column
- * (`EVER_JOBS_CRAWL_STRICTER_RULES`; default `1714`, `1690` = pre-1714):
+ * (`EVER_JOBS_CRAWL_STRICTER_RULES`; default `1714`, `1690` = pre-1714).
+ * Under `1714`, `options.proxyRotation` (`EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION`;
+ * default `base`) and `options.proxiesConfigured` (a proxy list resolves —
+ * `EVER_JOBS_CRAWL_PROXIES` / `DEFAULT_PROXIES`; default false) decide
+ * `proxyRotation` (Spec 1715 review round 2):
  *
  * | Field                  | Rules `1714` (default)                                  | Rules `1690`                        |
  * |------------------------|---------------------------------------------------------|-------------------------------------|
  * | userAgent, from        | never — an identity change is never "stricter"          | same                                |
  * | userAgentMode          | strict > identify > plugin                              | same                                |
  * | stripClientHints       | true                                                    | same                                |
- * | proxyRotation          | off < per-host < per-scrape < per-request; accept ≤ base | off = per-host > per-scrape > per-request |
+ * | proxyRotation          | equal only — or `off` while no proxy list resolves (a caller never moves a locked host to another origin); `ranked`: off < per-host < per-scrape < per-request, accept ≤ base | off = per-host > per-scrape > per-request |
  * | rateLimitScope         | equal, or `host` → `domain` (no parallel bucket)        | domain = site > host                |
  * | maxConcurrentPerHost   | lower; 0 means unlimited (refused unless base is 0)     | same                                |
  * | minIntervalMs, jitterMs, retryBaseDelayMs, retryMaxDelayMs, minGapMs, serverErrorCooldownMs | higher | same |
@@ -443,7 +501,7 @@ export function filterCallerOverride(
   caller: CrawlPolicyOverride | undefined,
   base: CrawlPolicy,
   mode: CallerOverridePolicy,
-  options: { rules?: CrawlStricterRules } = {},
+  options: StricterOptions = {},
 ): { accepted: CrawlPolicyOverride; rejected: string[] } {
   const accepted: CrawlPolicyOverride = {};
   const acceptedRecord = accepted as Record<string, unknown>;
@@ -451,7 +509,11 @@ export function filterCallerOverride(
   if (!caller) return { accepted, rejected };
 
   const effectiveMode = effectiveCallerOverridePolicy(mode);
-  const rules: CrawlStricterRules = options.rules === '1690' ? '1690' : '1714';
+  const comparators: Required<StricterOptions> = {
+    rules: options.rules === '1690' ? '1690' : '1714',
+    proxyRotation: options.proxyRotation === 'ranked' ? 'ranked' : 'base',
+    proxiesConfigured: options.proxiesConfigured === true,
+  };
   const callerRecord = caller as Record<string, unknown>;
 
   // `maxRetryAfterMs` is judged against the Retry-After mode that will be in force.
@@ -460,7 +522,7 @@ export function filterCallerOverride(
   if (
     callerOverMax !== undefined &&
     (effectiveMode === 'any' ||
-      (effectiveMode === 'stricter' && isAtLeastAsStrict('retryAfterOverMax', callerOverMax, base, overMax, rules)))
+      (effectiveMode === 'stricter' && isAtLeastAsStrict('retryAfterOverMax', callerOverMax, base, overMax, comparators)))
   ) {
     overMax = callerOverMax as CrawlPolicy['retryAfterOverMax'];
   }
@@ -474,12 +536,30 @@ export function filterCallerOverride(
     }
     const ok =
       CRAWL_CALLER_SECURITY_FIELDS.includes(key) || effectiveMode === 'stricter'
-        ? isAtLeastAsStrict(key, value, base, overMax, rules)
+        ? isAtLeastAsStrict(key, value, base, overMax, comparators)
         : true;
     if (ok) acceptedRecord[key] = Array.isArray(value) ? [...value] : value;
     else rejected.push(key);
   }
   return { accepted, rejected };
+}
+
+/** Which `stricter` comparators `filterCallerOverride` applies (see its table). */
+export interface StricterOptions {
+  /** `EVER_JOBS_CRAWL_STRICTER_RULES`: `1714` (default) or `1690` (pre-1714). */
+  rules?: CrawlStricterRules;
+  /**
+   * `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION` (rules `1714` only): `base` (default) — a
+   * caller's `proxyRotation` must equal the base value, or be `off` while
+   * `proxiesConfigured` is false; `ranked` — the pre-fix order (accept ≤ base).
+   */
+  proxyRotation?: CrawlCallerProxyRotation;
+  /**
+   * A proxy list resolves for the request (the resolver passes
+   * `EVER_JOBS_CRAWL_PROXIES` / `DEFAULT_PROXIES` non-empty). Default false: `off`
+   * then changes nothing on the wire, so `base` accepts it.
+   */
+  proxiesConfigured?: boolean;
 }
 
 /**
@@ -601,15 +681,16 @@ const num = (v: unknown): number => (typeof v === 'number' ? v : NaN);
 
 /**
  * Whether `candidate` for `field` is at least as polite as `base[field]` under
- * `rules` (see the table on `filterCallerOverride`).
+ * `options` (see the table on `filterCallerOverride`).
  */
 function isAtLeastAsStrict(
   field: keyof CrawlPolicy,
   candidate: unknown,
   base: CrawlPolicy,
   overMax: CrawlPolicy['retryAfterOverMax'],
-  rules: CrawlStricterRules = '1714',
+  options: Required<StricterOptions>,
 ): boolean {
+  const rules = options.rules;
   const current: unknown = base[field];
   if (candidate === current) return true;
   switch (field) {
@@ -619,7 +700,13 @@ function isAtLeastAsStrict(
     case 'userAgentMode':
       return rankAtLeast(USER_AGENT_MODE_RANK, candidate, current);
     case 'proxyRotation':
-      return rankAtLeast(rules === '1690' ? PROXY_ROTATION_RANK_1690 : PROXY_ROTATION_RANK_1714, candidate, current);
+      if (rules === '1690') return rankAtLeast(PROXY_ROTATION_RANK_1690, candidate, current);
+      if (options.proxyRotation === 'ranked') return rankAtLeast(PROXY_ROTATION_RANK_1714, candidate, current);
+      // `base` (review round 2): a different rotation is a different origin for the
+      // host — `off` sends it from the server's own IP instead of the operator's
+      // pinned proxy (Softy's ask C: a stable origin). Only `off` without any proxy
+      // list is accepted: every rotation is then the same direct connection.
+      return candidate === 'off' && !options.proxiesConfigured;
     case 'rateLimitScope':
       // 1714: the caller's bucket must CONTAIN the base bucket — `host` → `domain`
       // only; `site` next to `domain` would be a second, parallel bucket (G5).

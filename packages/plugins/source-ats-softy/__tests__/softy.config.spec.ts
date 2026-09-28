@@ -70,6 +70,9 @@ describe('Softy configuration (Spec 1715)', () => {
       'caller-listing',
       'nested-skip',
       'legacy-detail-url',
+      'first-error',
+      'listing-no-listed-at',
+      'empty-board-uncached',
     ]);
     expect(SOFTY_ENV).toMatchObject({
       SITEMAP_FALLBACK: 'SOFTY_SITEMAP_FALLBACK',

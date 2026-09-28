@@ -448,7 +448,7 @@
             "jobUrlListedAt": {
               "type": "string",
               "format": "date-time",
-              "description": "ISO-8601 UTC instant at which the source's own index that lists this posting (e.g. a Softy tenant's /sitemap.xml) was fetched from the network, by this search or an earlier one whose answer the source still caches (Spec 1715). Says the posting was listed then, not that jobUrl itself was fetched. With liveness=true a value at most EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS old (default 10 min) marks the job active without a probe (liveness.reason 'listed'). Absent when the posting did not come from such an index."
+              "description": "ISO-8601 UTC instant at which the source's own index that lists this posting (e.g. a Softy tenant's /sitemap.xml, or the list page carrying its card) was fetched from the network, by this search or an earlier one whose answer the source still caches (Spec 1715). Says the posting was listed then, not that jobUrl itself was fetched. With liveness=true a value at most EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS old (default 10 min) marks the job active without a probe (liveness.reason 'listed'). Absent when the posting did not come from such an index."
             }
           }
         }

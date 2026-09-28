@@ -168,6 +168,77 @@ describe('host-owned policy: every request to *.softy.pro, whichever site makes 
   });
 });
 
+/**
+ * Review round 2 — under the Softy lock a caller could send `proxyRotation: 'off'`:
+ * the 1714 ranking called it the strictest value, so the lock accepted it, and
+ * `selectProxy` then sent that caller's Softy requests from the server's own IP
+ * while every other Softy request went through the operator's pinned proxy (two
+ * origins — Softy's ask C). `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION=base` (the
+ * default) accepts only the base value, or `off` while no proxy list resolves.
+ *
+ * Red control: `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION=ranked` (the pre-fix order) —
+ * the paired test shows the same request accepted with `off` from the caller layer.
+ */
+describe("a caller cannot move a locked host to another origin: proxyRotation (review round 2)", () => {
+  const TWO_PROXIES = { [CRAWL_ENV.PROXIES]: 'http://p1.example:8080,http://p2.example:8080' };
+  const REQUESTS: Array<[string, CrawlPolicyResolveInput, CallerOverridesSource]> = [
+    ['the Softy plugin', { site: 'softy', host: 'acme.softy.pro', plugin: SOFTY_MANIFEST }, 'plugin'],
+    ['the JSON-LD plugin on a Softy page', { site: 'jsonld', host: 'acme.softy.pro' }, 'builtin-host'],
+    ['a liveness probe of a Softy offer', { site: 'liveness-http', host: 'acme.softy.pro' }, 'builtin-host'],
+  ];
+
+  it.each(REQUESTS)("%s: a caller's 'off' is refused while env proxies are set", (_who, request, source) => {
+    const explained = explainCrawlPolicy({ ...request, caller: { proxyRotation: 'off' } }, envOf(TWO_PROXIES));
+    expect(explained.callerOverrides).toBe('stricter');
+    expect(explained.callerOverridesSource).toBe(source);
+    expect(explained.callerRejected).toEqual(['proxyRotation']);
+    expect(explained.policy.proxyRotation).toBe('per-host');
+    expect(explained.policy.provenance.proxyRotation).not.toBe('caller');
+  });
+
+  it.each(REQUESTS)('%s: per-scrape / per-request stay refused, per-host (the base) is accepted', (_who, request) => {
+    for (const [rotation, ok] of [['per-scrape', false], ['per-request', false], ['per-host', true]] as const) {
+      const explained = explainCrawlPolicy({ ...request, caller: { proxyRotation: rotation } }, envOf(TWO_PROXIES));
+      expect([rotation, explained.callerRejected]).toEqual([rotation, ok ? [] : ['proxyRotation']]);
+    }
+  });
+
+  it.each(REQUESTS)("%s: without any proxy list 'off' is accepted — the same direct connection", (_who, request) => {
+    const explained = explainCrawlPolicy({ ...request, caller: { proxyRotation: 'off' } }, envOf());
+    expect(explained.callerRejected).toEqual([]);
+    expect(explained.policy.proxyRotation).toBe('off');
+  });
+
+  it.each(REQUESTS)("red control — %s: EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION=ranked accepts 'off' (the pre-fix order)", (_who, request) => {
+    const explained = explainCrawlPolicy(
+      { ...request, caller: { proxyRotation: 'off' } },
+      envOf({ ...TWO_PROXIES, [CRAWL_EXTRA_ENV.CALLER_PROXY_ROTATION]: 'ranked' }),
+    );
+    expect(explained.callerOverrides).toBe('stricter');
+    expect(explained.callerRejected).toEqual([]);
+    expect(explained.policy.proxyRotation).toBe('off');
+    expect(explained.policy.provenance.proxyRotation).toBe('caller');
+  });
+
+  it('an unlocked source (global any) still takes any caller rotation, proxies or not (rule 3)', () => {
+    for (const vars of [{}, TWO_PROXIES]) {
+      const explained = explainCrawlPolicy({ site: 'linkedin', host: 'www.linkedin.com', caller: { proxyRotation: 'off' } }, envOf(vars));
+      expect(explained.callerOverrides).toBe('any');
+      expect(explained.callerRejected).toEqual([]);
+      expect(explained.policy.proxyRotation).toBe('off');
+    }
+  });
+
+  it('the legacy preset keeps the pre-fix order (with its 1690 comparators)', () => {
+    const explained = explainCrawlPolicy(
+      { site: 'softy', host: 'acme.softy.pro', plugin: SOFTY_MANIFEST, caller: { proxyRotation: 'off' } },
+      envOf({ ...TWO_PROXIES, [CRAWL_ENV.PRESET]: 'legacy', [CRAWL_EXTRA_ENV.PLUGIN_MANIFESTS]: 'true' }),
+    );
+    expect(explained.callerOverrides).toBe('stricter');
+    expect(explained.callerRejected).toEqual([]);
+  });
+});
+
 describe('EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE — drop only some builtin entries (Spec 1715 audit F3)', () => {
   const DISABLE_SOFTY = { [CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE]: '*.softy.pro,softy.pro' };
 

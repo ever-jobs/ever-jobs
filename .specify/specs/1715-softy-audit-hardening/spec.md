@@ -13,7 +13,7 @@
 | Plan / tasks | [plan.md](./plan.md) · [tasks.md](./tasks.md) |
 | Operator guide | [docs/CRAWL_POLICY.md](../../../docs/CRAWL_POLICY.md) (Softy section) |
 | Audit gaps closed | G1 (part), G3, G6, G13, G14, G16, G17, G19, G20, G21, G22, G23, G24 (part), G25, G26, G30, K0, K1 |
-| Review round 2 (2026-09-27) | plugin halves of findings A0 (legacy detail URLs), A1 (a caller's budget no longer reads list pages), A3 (`jobUrlListedAt`), A5 + F4 (nested sitemaps), C1 (timing proof), and the F4 wording fix: FR-21..FR-25, tasks T16..T22. Shared-layer halves: [Spec 1714](../1714-crawl-caller-lock-and-host-policies/spec.md) FR-19..FR-27 |
+| Review round 2 (2026-09-27) | plugin halves of findings A0 (legacy detail URLs), A1 (a caller's budget no longer reads list pages), A3 (`jobUrlListedAt`), A5 + F4 (nested sitemaps), C1 (timing proof), and the F4 wording fix: FR-21..FR-25, tasks T16..T22. Second pass: FR-26..FR-29, tasks T23..T26. Shared-layer halves: [Spec 1714](../1714-crawl-caller-lock-and-host-policies/spec.md) FR-19..FR-31 |
 
 ## 1. Problem Statement
 
@@ -112,7 +112,11 @@ the old behaviour behind the switch named.
 | FR-21 | **A caller's budget does not choose list pages.** In `auto`, "detail budget < `resultsWanted`" reads list pages only when the operator allows it: the `auto` came from an operator layer (`EVER_JOBS_CRAWL_DISCOVERY`, `sites.softy` / `hosts[…]` `discovery: 'auto'`), the effective caller-override mode is `any` (the operator lifted the lock), `SOFTY_MAX_DETAIL_FETCHES=0`, or `SOFTY_LEGACY=caller-listing`. Otherwise the sitemap path returns what the budget allows, with a `partial` note naming the mode, the layer that set it and the switches. The mode comes from `resolveCallerOverrides` (inside a scrape context: its site and plugin layer; outside: the Softy manifest) for the Softy host, builtin `*.softy.pro` entry and operator entries included; if the resolver throws, the manifest's `stricter`. `descriptionDepth: 'board'` still reads the listing (D5, kept). | A1 (G22) | must |
 | FR-22 | **Nested sitemaps.** `onNestedSitemapError` stops the scrape when a child answers 500/502/504, times out or resets (`isServerStruggling`, the classifier behind the server-error cool-down): diagnostic `fetch_error` / `timeout`, `run.stopped` set, as on the root sitemap. `fetchSitemap` gets `nestedErrors: 'skip'` when `SOFTY_SITEMAP_FALLBACK=any-error` or `SOFTY_LEGACY=nested-skip`; then every nested failure is skipped (429/503, cool-downs, 401/403/407, challenge pages, 5xx), as before Spec 1715. A 404/410, size cap, bad gzip or scope refusal is still skipped by default. | A5, F4 (G16) | must |
 | FR-23 | **Legacy detail URLs.** Legacy cards and `buildJobUrl` build `/offers/{ID}` (the target of the `/offre/{ID}-{slug}` 301), so each detail GET is one paced request (with Spec 1714 FR-19 a hop there would be paced anyway, at the cost of a second request). `SOFTY_LEGACY=legacy-detail-url` restores `/offre/{ID}-{slug}`. | A0 (G6) | must |
-| FR-24 | **`jobUrlListedAt`.** Every post taken from a sitemap carries `jobUrlListedAt` = when the ROOT sitemap's network answer arrived (for an index, the children answer later, so it never overstates freshness). The sitemap cache stores it (`CachedSitemap.listedAt`), so a cache hit carries the original network time, never the time of the hit. Posts from list pages do not carry it. The API trusts it for `?liveness=true` (Spec 1714 FR-25). | A3 (G28) | must |
+| FR-24 | **`jobUrlListedAt`.** Every post taken from a sitemap carries `jobUrlListedAt` = when the ROOT sitemap's network answer arrived (for an index, the children answer later, so it never overstates freshness). The sitemap cache stores it (`CachedSitemap.listedAt`), so a cache hit carries the original network time, never the time of the hit. Posts from list pages carry it too since the second pass (FR-26). The API trusts it for `?liveness=true` (Spec 1714 FR-25). | A3 (G28) | must |
+| FR-26 | **List pages are listings too** (second review pass). Every post taken from a list page or the legacy index carries `jobUrlListedAt` = when that page's network answer arrived (`SoftyCardJob.listedAt`; list pages are never cached, so it is always fresh). `descriptionDepth: 'board'` keeps the listing (D5), and with `?liveness=true` the controller now trusts those posts (`listed`) instead of probing up to `EVER_JOBS_LIVENESS_MAX_URLS` `/offers/{id}` pages right after the list pages that listed them — on every repeat, search-cache hits included. `SOFTY_LEGACY=listing-no-listed-at` = the pre-fix behaviour. | asks (second pass) | must |
+| FR-27 | **A tenant with no open offer is remembered** (second review pass). When the sitemap answered 2xx with no offer (`auto` then reads `/offers?page=1`, the `empty` rule) and that listing found no card either — no error, stop, note or abort — the tenant's origin is cached for `SOFTY_SITEMAP_CACHE_TTL_MS` (≤ 200 tenants); the next search in `auto` or `sitemap` returns `[]` with no request. `SOFTY_LEGACY=empty-board-uncached` (or `SOFTY_SITEMAP_CACHE_TTL_MS=0`) = the pre-fix behaviour (`/sitemap.xml` + `/offers?page=1` every search). `clearCaches()` clears it. | asks (second pass) | must |
+| FR-28 | **The pre-1715 diagnostics stay reachable** (second review pass). `SOFTY_LEGACY=first-error`: every `preferRefusalError(run.error, x)` becomes "keep the first error" (`keepError`), and `stopOnFatal` names no `rate_limited` / `blocked` reason for a 429 or a crawl-policy hold-back, so the response is `classifyScrapeError(run.error)` — a 502 then a 429 reads `fetch_error` naming the 502, as before 1715 (the requests sent are unchanged; the 429 still stops the scrape). Without it no switch undid FR-8's precedence, which also changes the multi-location loop and the breaker. | flexibility (second pass) | must |
+| FR-29 | **The effective client floor in the metadata** (second review pass): `@SourcePlugin` also sets `clientMinIntervalFloor: () => readSoftyConfig().minIntervalFloorMs` and `clientMinIntervalFloorSwitch: 'SOFTY_LEGACY=no-interval-floor'`, so the policy API reports `null` once the switch removed the floor (Spec 1714 FR-31). | flexibility (second pass) | should |
 | FR-25 | **Timing proof of the 1 s interval** (integration): a fast server (20 ms answers), where the 0.5 s idle gap alone would space starts ~0.5 s apart, shows starts ≥ 1 s apart; a control lowers only the interval (operator `sites.softy {minIntervalMs: 0}` + `SOFTY_LEGACY=no-interval-floor`, `minGapMs` kept) and shows starts < 975 ms apart; a second control keeps the client floor alone and still shows ≥ 1 s. | C1 | must |
 
 ## 6. Non-Functional Requirements
@@ -152,6 +156,7 @@ export const SOFTY_LEGACY_TOKENS = [
   'offset-budget', 'duplicate-ids', 'board-over-sitemap', 'offres',
   'block-as-missing', '503-as-failure', 'listing-failure-details', 'no-interval-floor',
   'caller-listing', 'nested-skip', 'legacy-detail-url',          // review round 2
+  'first-error', 'listing-no-listed-at', 'empty-board-uncached',  // review round 2, second pass
 ] as const;
 export type SoftyLegacyToken = (typeof SOFTY_LEGACY_TOKENS)[number];
 // SOFTY_ENV gains: SITEMAP_FALLBACK, UNKNOWN_TENANT_TTL_MS, DETAIL_ATTEMPT_SLACK,
@@ -208,6 +213,9 @@ clearCaches(): void;
 | `caller-listing` (round 2) | under a caller lock, a detail budget shorter than `resultsWanted` still reads list pages in `auto` | G22 (A1) |
 | `nested-skip` (round 2) | every nested-sitemap failure is skipped and the walk goes on (429/503, a crawl-policy refusal, 5xx / timeouts, 401/403/407, a challenge page) | G16 (A5, F4) |
 | `legacy-detail-url` (round 2) | legacy cards link `/offre/{ID}-{slug}` (a 301 hop) instead of its target `/offers/{ID}` | G6 (A0) |
+| `first-error` (round 2, second pass) | the pre-1715 diagnostics: the first error met, classified — a later 429 / robots.txt refusal no longer replaces an earlier 5xx; a 429 or a crawl-policy hold-back names no `rate_limited` / `blocked` itself (a 429 reads `fetch_error`) | G17 (FR-28) |
+| `listing-no-listed-at` (round 2, second pass) | posts from list pages / the legacy index carry no `jobUrlListedAt` (`?liveness=true` probes each) | FR-26 |
+| `empty-board-uncached` (round 2, second pass) | a tenant whose sitemap lists no offer and whose listing has no card is asked again on every search | G23 (FR-27) |
 
 The crawl policy side (manifest, builtin host entry, lock) is undone by operator policy
 (Spec 1714 §7.4): the lock with the `callerOverrides: "any"` JSON plus
@@ -319,9 +327,15 @@ nested failure (incl. 429/503 and 403) is skipped. FR-23: legacy cards link
 `/offers/{ID}`; `legacy-detail-url` restores `/offre/{ID}-{slug}`. FR-24: `jobUrlListedAt`
 set on every sitemap post at the sitemap's answer time (before any detail page); a
 sitemap-cache hit keeps the network time; `SOFTY_SITEMAP_CACHE_TTL_MS=0` carries a new
-time each scrape; for an index, the root's answer time; never on list-page posts. The
-round-2 tokens are read one by one, are part of `all` and are named by the unknown-token
-warning.
+time each scrape; for an index, the root's answer time. Second pass: FR-26 — list-page,
+detail-listing and legacy-index posts carry their page's answer time
+(`listing-no-listed-at` is the red control; the round-1 test "not set on the listing
+path" moved under it); FR-27 — a tenant with a sitemap without offers and an empty
+listing costs 0 requests on the next search (`empty-board-uncached` and
+`SOFTY_SITEMAP_CACHE_TTL_MS=0` are the red controls); FR-28 — `first-error` gives
+`fetch_error` for 502-then-429 and 502-then-robots (the default twins give
+`rate_limited` / `blocked`). The round-2 tokens are read one by one, are part of `all`
+and are named by the unknown-token warning.
 
 `softy.policy.spec.ts` (real resolver): the lock refuses a caller `discovery: 'listing'`
 outside and inside a scrape context and accepts `sitemap`; operator
@@ -423,6 +437,12 @@ values).
 - D10 **Legacy detail URLs point at the redirect target** (round 2, FR-23) rather than
   relying on Spec 1714's redirect pacing alone: pacing would make the `/offre/` hop a
   second, separately paced request; linking `/offers/{ID}` makes it no request at all.
+- D11 **A list page's answer time is a listing time** (second pass, FR-26): the page that
+  carried the card listed the offer at that instant, which is what `jobUrlListedAt`
+  means; list pages are never cached, so the value is never older than the scrape.
+- D12 **Only a doubly empty tenant is remembered** (second pass, FR-27): a sitemap with
+  no offer alone may be a soft failure, so the listing must agree before nothing is
+  asked for the TTL; a listing with cards, a failure or a stop caches nothing.
 
 ## 11. References
 

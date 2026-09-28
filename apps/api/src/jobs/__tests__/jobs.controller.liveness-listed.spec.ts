@@ -287,6 +287,48 @@ describe('JobsController — liveness trusts a recent listing (Spec 1715 review 
     expect(probed).toEqual([[url('ahead')]]);
   });
 
+  /**
+   * Review of PR #105 (G3): the fresh-fetch trust had a lower bound (the request start)
+   * but no upper one, so a `jobUrlFetchedAt` later than now — a plugin clock ahead of
+   * ours, or a bad value — was trusted as "fetched during this request". It gets the
+   * same `<= now` bound as `jobUrlListedAt`: probed. A fetch time up to now still counts.
+   * Red control: without the bound (`fetchedAt <= now` removed from
+   * `markFreshlyFetched`) the future one is marked `fresh-fetch` and not probed.
+   */
+  it.each<Format>(['json', 'ndjson'])('%s: a fetch time in the future is not trusted (probed); one up to now is', async (format) => {
+    const future = new Date(Date.now() + 60_000).toISOString();
+    let fetchedNow = '';
+    const { controller, probed } = createController({
+      produce: () => {
+        fetchedNow = new Date().toISOString();
+        return [makeJob('ahead', { jobUrlFetchedAt: future }), makeJob('fetched', { jobUrlFetchedAt: fetchedNow })];
+      },
+    });
+
+    const jobs = await searchWithLiveness(controller, format);
+
+    expect(probed).toEqual([[url('ahead')]]);
+    expect(livenessById(jobs)).toEqual({
+      ahead: { state: 'active', checkedAt: PROBE_CHECKED_AT },
+      fetched: { state: 'active', checkedAt: fetchedNow, reason: JOB_LIVENESS_REASON_FRESH_FETCH },
+    });
+  });
+
+  it.each<Format>(['json', 'ndjson'])(
+    '%s: a future fetch time does not hide a young listing of the same job (trusted as listed)',
+    async (format) => {
+      const listedAt = agoIso(60_000);
+      const { controller, probed } = createController({
+        produce: () => [makeJob('both', { jobUrlFetchedAt: new Date(Date.now() + 60_000).toISOString(), jobUrlListedAt: listedAt })],
+      });
+
+      const jobs = await searchWithLiveness(controller, format);
+
+      expect(probed).toEqual([]);
+      expect(livenessById(jobs).both).toEqual({ state: 'active', checkedAt: listedAt, reason: JOB_LIVENESS_REASON_LISTED });
+    },
+  );
+
   it.each<Format>(['json', 'ndjson'])('%s: an unparseable listing time is not trusted (probed)', async (format) => {
     const { controller, probed } = createController({ produce: () => [makeJob('junk', { jobUrlListedAt: 'yesterday-ish' })] });
 

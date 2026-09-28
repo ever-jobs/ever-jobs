@@ -70,9 +70,27 @@ export interface IPluginMetadata {
    * (`GET /api/sources/:site/crawl-policy`, `meta.clientMinIntervalFloorMs`) can
    * show it; the plugin's own client option is what enforces it, and the plugin's
    * own switch turns it off (Softy: `SOFTY_LEGACY=no-interval-floor`).
-   * Unset = the plugin sets no floor.
+   * Unset = the plugin sets no floor. This is the DECLARED default; when the
+   * plugin's switch can change it, also set `clientMinIntervalFloor`.
    */
   clientMinIntervalFloorMs?: number;
+
+  /**
+   * The floor the plugin's client uses NOW, ms (Spec 1715 review round 2): read
+   * from the plugin's own configuration each time it is called, so the crawl-policy
+   * API reports the EFFECTIVE floor — `0` after the plugin's switch removed it
+   * (Softy: `() => readSoftyConfig().minIntervalFloorMs`, `0` under
+   * `SOFTY_LEGACY=no-interval-floor`). Wins over `clientMinIntervalFloorMs` in the
+   * API. Must be cheap and must not throw (a throw falls back to the declared value).
+   */
+  clientMinIntervalFloor?: () => number;
+
+  /**
+   * The switch that removes the client floor, as an operator types it (e.g.
+   * `SOFTY_LEGACY=no-interval-floor`); shown by the crawl-policy API next to the
+   * floor (`meta.clientMinIntervalFloorSwitch`).
+   */
+  clientMinIntervalFloorSwitch?: string;
 
   /**
    * Optional description of the plugin's capabilities or limitations.

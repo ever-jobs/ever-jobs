@@ -885,8 +885,10 @@ export class JobsController {
    * still need a probe, in order. Returns `jobs` itself when nothing is trusted.
    *
    * - Spec 1714 FR-16 — `jobUrlFetchedAt` at or after `trustSince` (the plugin fetched `jobUrl`
-   *   during this request): `reason: 'fresh-fetch'`. Needs `trustSince` (none on a cache hit)
-   *   and `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH` (default on).
+   *   during this request) and not after NOW: `reason: 'fresh-fetch'`. Needs `trustSince` (none
+   *   on a cache hit) and `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH` (default on). A fetch time in
+   *   the future (a plugin clock ahead of ours, or a bad value) is not trusted: the job is
+   *   probed (review of PR #105, the same bound as `jobUrlListedAt`).
    * - Spec 1715 review A3 — otherwise, `jobUrlListedAt` at most
    *   `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` before NOW (default 10 min; `0` = off, the
    *   pre-fix behaviour): `reason: 'listed'`. Measured against now, not the request start, so a
@@ -905,7 +907,7 @@ export class JobsController {
     for (const job of jobs) {
       if (trustFetched) {
         const fetchedAt = typeof job.jobUrlFetchedAt === 'string' ? Date.parse(job.jobUrlFetchedAt) : Number.NaN;
-        if (Number.isFinite(fetchedAt) && fetchedAt >= (trustSince as number)) {
+        if (Number.isFinite(fetchedAt) && fetchedAt >= (trustSince as number) && fetchedAt <= now) {
           job.liveness = {
             state: 'active',
             checkedAt: job.jobUrlFetchedAt as string,

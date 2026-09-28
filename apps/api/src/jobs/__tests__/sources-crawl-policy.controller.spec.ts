@@ -10,9 +10,15 @@ import {
   PluginCrawlPolicy,
   resetCrawlPolicyEnvCache,
 } from '@ever-jobs/common';
-import { PluginRegistry } from '@ever-jobs/plugin';
+import { IPluginMetadata, PluginRegistry, SOURCE_PLUGIN_METADATA } from '@ever-jobs/plugin';
+import { SoftyService } from '@ever-jobs/source-ats-softy';
 import { LIVENESS_CRAWL_SITE } from '../crawl-policy.mapping';
-import { SourcesHealthController, clientMinIntervalFloorMs, redactCredentials } from '../health.controller';
+import {
+  SourcesHealthController,
+  clientMinIntervalFloorMs,
+  effectiveClientMinIntervalFloorMs,
+  redactCredentials,
+} from '../health.controller';
 
 /**
  * Spec 1690 §5.4 — `GET /api/sources/:site/crawl-policy?host=`: the resolved
@@ -57,6 +63,13 @@ const ENV_KEYS = [
   CRAWL_EXTRA_ENV.BUILTIN_HOSTS,
   // Spec 1715
   CRAWL_EXTRA_ENV.BUILTIN_HOSTS_DISABLE,
+  // Spec 1715 review round 2
+  CRAWL_EXTRA_ENV.STRICTER_RULES,
+  CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE,
+  CRAWL_EXTRA_ENV.ROBOTS_BACKOFF,
+  CRAWL_EXTRA_ENV.PACE_REDIRECTS,
+  CRAWL_EXTRA_ENV.CALLER_PROXY_ROTATION,
+  'SOFTY_LEGACY',
 ];
 let saved: Record<string, string | undefined>;
 beforeEach(() => {
@@ -395,12 +408,138 @@ describe('SourcesHealthController.crawlPolicy — disabled builtin hosts and the
     expect(new SourcesHealthController().crawlPolicy(LIVENESS_CRAWL_SITE).meta.clientMinIntervalFloorMs).toBeNull();
   });
 
+  describe('the EFFECTIVE client floor, from the real Softy plugin metadata (review round 2)', () => {
+    /**
+     * The API used to read only the declared `clientMinIntervalFloorMs`, so after the
+     * documented "undo the lock" / pre-1715 recipe (which needs SOFTY_LEGACY=no-interval-floor)
+     * it still said 1000 while the client had no floor. Red control: the round-1
+     * controller (declared value only) reports 1000 in the `no-interval-floor` tests.
+     */
+    const UNLOCK = JSON.stringify({
+      sites: { softy: { callerOverrides: 'any' } },
+      hosts: { '*.softy.pro': { callerOverrides: 'any' }, 'softy.pro': { callerOverrides: 'any' } },
+    });
+    function realSoftyController(): SourcesHealthController {
+      const meta = Reflect.getMetadata(SOURCE_PLUGIN_METADATA, SoftyService) as IPluginMetadata;
+      const registry = new PluginRegistry();
+      registry.register(meta, scraper);
+      return new SourcesHealthController(undefined, registry);
+    }
+
+    it('by default: 1000, and the switch that removes it', () => {
+      const res = realSoftyController().crawlPolicy(Site.SOFTY, 'acme.softy.pro');
+      expect(res.meta.clientMinIntervalFloorMs).toBe(1000);
+      expect(res.meta.clientMinIntervalFloorSwitch).toBe('SOFTY_LEGACY=no-interval-floor');
+    });
+
+    it('SOFTY_LEGACY=no-interval-floor + the unlock recipe + a caller minIntervalMs 0: null, and minIntervalMs 0', () => {
+      process.env.SOFTY_LEGACY = 'no-interval-floor';
+      process.env[CRAWL_ENV.POLICIES] = UNLOCK;
+      resetCrawlPolicyEnvCache();
+
+      const res = realSoftyController().crawlPolicy(Site.SOFTY, 'acme.softy.pro', '{"minIntervalMs":0}');
+
+      expect(res.minIntervalMs).toBe(0);
+      expect(res.meta.caller).toEqual({ rejected: [] });
+      expect(res.meta.clientMinIntervalFloorMs).toBeNull();
+    });
+
+    it('SOFTY_LEGACY=all removes it too', () => {
+      process.env.SOFTY_LEGACY = 'all';
+      expect(realSoftyController().crawlPolicy(Site.SOFTY).meta.clientMinIntervalFloorMs).toBeNull();
+    });
+
+    it('effectiveClientMinIntervalFloorMs(): the resolver wins; a throwing one falls back to the declared value', () => {
+      expect(effectiveClientMinIntervalFloorMs({ clientMinIntervalFloorMs: 1000, clientMinIntervalFloor: () => 0 })).toBeNull();
+      expect(effectiveClientMinIntervalFloorMs({ clientMinIntervalFloorMs: 1000, clientMinIntervalFloor: () => 2500 })).toBe(2500);
+      expect(
+        effectiveClientMinIntervalFloorMs({
+          clientMinIntervalFloorMs: 1000,
+          clientMinIntervalFloor: () => {
+            throw new Error('config unreadable');
+          },
+        }),
+      ).toBe(1000);
+      expect(effectiveClientMinIntervalFloorMs({ clientMinIntervalFloorMs: 1000 })).toBe(1000);
+      expect(effectiveClientMinIntervalFloorMs(undefined)).toBeNull();
+    });
+  });
+
   it('clientMinIntervalFloorMs() accepts only a finite, positive number', () => {
     expect(clientMinIntervalFloorMs(1000)).toBe(1000);
     expect(clientMinIntervalFloorMs(0.5)).toBe(0.5);
     for (const junk of [undefined, null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, '1000']) {
       expect(clientMinIntervalFloorMs(junk)).toBeNull();
     }
+  });
+});
+
+describe('SourcesHealthController.crawlPolicy — process-wide switches and the proxy pin (Spec 1715 review round 2)', () => {
+  /**
+   * After EVER_JOBS_CRAWL_PRESET=legacy (or an explicit restore value) an operator
+   * could not see through any endpoint whether the pin, robots and redirect switches
+   * took their pre-1714 value. `meta.switches` shows them; `meta.proxyPin` what the
+   * per-host pick of this request keys on (the rule HttpClient applies).
+   */
+  it('defaults: the new behaviour of every switch', () => {
+    const res = new SourcesHealthController().crawlPolicy(Site.LINKEDIN);
+    expect(res.meta.switches).toEqual({
+      stricterRules: '1714',
+      proxyPinScope: 'base',
+      robotsBackoff: true,
+      paceRedirects: true,
+      callerProxyRotation: 'base',
+      cooldownBeforeRelease: 'locked',
+    });
+  });
+
+  it('EVER_JOBS_CRAWL_PRESET=legacy: the pre-1714 value of every switch', () => {
+    process.env[CRAWL_ENV.PRESET] = 'legacy';
+    resetCrawlPolicyEnvCache();
+    expect(new SourcesHealthController().crawlPolicy(Site.LINKEDIN).meta.switches).toEqual({
+      stricterRules: '1690',
+      proxyPinScope: 'bucket',
+      robotsBackoff: false,
+      paceRedirects: false,
+      callerProxyRotation: 'ranked',
+      cooldownBeforeRelease: 'off',
+    });
+  });
+
+  it('an explicit value wins over the preset default', () => {
+    process.env[CRAWL_ENV.PRESET] = 'legacy';
+    process.env[CRAWL_EXTRA_ENV.PACE_REDIRECTS] = 'true';
+    process.env[CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE] = 'base';
+    resetCrawlPolicyEnvCache();
+    expect(new SourcesHealthController().crawlPolicy(Site.LINKEDIN).meta.switches).toMatchObject({
+      paceRedirects: true,
+      proxyPinScope: 'base',
+      stricterRules: '1690',
+    });
+  });
+
+  it('proxyPin: a locked Softy host pins its registrable domain; an unlocked source keeps the pre-1714 bucket pick', () => {
+    const softy = new SourcesHealthController().crawlPolicy(LIVENESS_CRAWL_SITE, 'acme.softy.pro');
+    expect(softy.meta.proxyPin).toEqual({ scope: 'base', keyedOn: 'domain' });
+    const linkedin = new SourcesHealthController().crawlPolicy(Site.LINKEDIN, 'www.linkedin.com');
+    expect(linkedin.meta.proxyPin).toEqual({ scope: 'bucket', keyedOn: 'host' });
+  });
+
+  it('proxyPin: EVER_JOBS_CRAWL_PROXY_PIN_SCOPE=bucket (the pre-1714 pick) shows on a locked host too', () => {
+    process.env[CRAWL_EXTRA_ENV.PROXY_PIN_SCOPE] = 'bucket';
+    resetCrawlPolicyEnvCache();
+    const res = new SourcesHealthController().crawlPolicy(LIVENESS_CRAWL_SITE, 'acme.softy.pro');
+    expect(res.meta.proxyPin.scope).toBe('bucket');
+    expect(res.meta.switches.proxyPinScope).toBe('bucket');
+  });
+
+  it('proxyPin: the builtin Softy lock pins the base domain even when an operator lifted it (Spec 1715 audit C3)', () => {
+    process.env[CRAWL_ENV.POLICIES] = JSON.stringify({ hosts: { '*.softy.pro': { callerOverrides: 'any' } } });
+    resetCrawlPolicyEnvCache();
+    const res = new SourcesHealthController().crawlPolicy('jsonld', 'acme.softy.pro', '{"rateLimitScope":"host"}');
+    expect(res.meta.callerOverrides).toBe('any');
+    expect(res.rateLimitScope).toBe('host');
+    expect(res.meta.proxyPin).toEqual({ scope: 'base', keyedOn: 'domain' });
   });
 });
 

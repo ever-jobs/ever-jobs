@@ -52,6 +52,12 @@ export interface SoftyCardJob {
 
   /** True when the card came from the legacy `/offres` markup parser. */
   legacy?: boolean;
+
+  /**
+   * When the list page (or legacy index) carrying this card answered, ISO-8601 UTC
+   * (listing discovery only; Spec 1715 review round 2) — its post's `jobUrlListedAt`.
+   */
+  listedAt?: string;
 }
 
 /**

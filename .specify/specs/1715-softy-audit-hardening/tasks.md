@@ -6,12 +6,11 @@ Spec: [spec.md](./spec.md) · Plan: [plan.md](./plan.md) · Shared layer:
 [Spec 1714 tasks](../1714-crawl-caller-lock-and-host-policies/tasks.md)
 
 **Status (2026-09-27, review round 2):** in progress. T01–T14 are done; review round 2
-(Phase 6, T16–T21) landed its code, tests and docs. Left: **T22** (open, found in the round-2
-docs pass: the plugin does not declare its 1 s client floor in `@SourcePlugin`, so the policy
-endpoint shows `meta.clientMinIntervalFloorMs: null` for Softy) and **T15** — the
-orchestrator's joint verification with Spec 1714 T20 (full Softy suite incl. the skip of the
-live e2e, typecheck, `test:core`, `lint:docs`, every red control reported, round 2
-included). The spec moves to `done` when both are ticked.
+(Phase 6, T16–T22) landed its code, tests and docs — T22 (the `@SourcePlugin` declaration
+of the 1 s client floor) in commit d235e9df — and its second pass (T23–T26) too. Left:
+**T15** — the orchestrator's joint verification with Spec 1714 T20 (full Softy suite incl.
+the skip of the live e2e, typecheck, `test:core`, `lint:docs`, every red control reported,
+round 2 included). The spec moves to `done` when it is ticked.
 
 All tasks below are the **SOFTY** lane unless marked otherwise (disjoint ownership,
 [Spec 1714 plan §3](../1714-crawl-caller-lock-and-host-policies/plan.md)). Each key test
@@ -259,7 +258,8 @@ and a red control the lane ran red, then green.
     `collectFromSitemap`, `buildPost`, `processJob`), `__tests__/softy.service.spec.ts`,
     `__tests__/softy.integration.spec.ts`
   - **Acceptance:** every sitemap post carries the root sitemap's network answer time, also
-    on a sitemap-cache hit; a new time with the cache off; none on list-page posts.
+    on a sitemap-cache hit; a new time with the cache off; none on list-page posts (until
+    the second pass: T23 sets it there too).
   - **Control:** `SOFTY_SITEMAP_CACHE_TTL_MS=0` → each scrape carries its own time (the
     cache-hit assertion tells the two apart); the API's own switch is Spec 1714 T28.
 
@@ -275,7 +275,7 @@ and a red control the lane ran red, then green.
     this spec and tasks
   - **Acceptance:** `npm run lint:docs` clean; no competitor named.
 
-- [ ] T22 — Declare the Softy client floor in the plugin metadata (finding F5 / F1 core; open)
+- [x] T22 — Declare the Softy client floor in the plugin metadata (finding F5 / F1 core; done in d235e9df)
   - **Found by:** the round-2 docs pass. Spec 1714 T29 added
     `IPluginMetadata.clientMinIntervalFloorMs` and `meta.clientMinIntervalFloorMs`, but
     `@SourcePlugin({ … })` in `src/softy.service.ts` does not set it, so the policy
@@ -287,6 +287,45 @@ and a red control the lane ran red, then green.
     `SOFTY_LEGACY=no-interval-floor` should make it `null` (the decorator is evaluated
     once, at load).
   - **Red control:** without the declaration → `null`.
+  - **Done** (d235e9df): `clientMinIntervalFloorMs: SOFTY_MIN_INTERVAL_FLOOR_MS` in the
+    decorator; the "null under `no-interval-floor`" question is answered by T26.
+
+## Phase 7 — Review round 2, second pass (2026-09-27)
+
+- [x] T23 — `jobUrlListedAt` on list-page posts (FR-26)
+  - **Files:** `src/softy.service.ts` (`collectFromListing`, `addLegacyCards`,
+    `emitCards`), `src/softy.types.ts` (`SoftyCardJob.listedAt`), `src/softy.constants.ts`,
+    `__tests__/softy.service.spec.ts`, `apps/api/src/jobs/__tests__/jobs.controller.liveness-softy-board.spec.ts`
+  - **Acceptance:** board and detail listing posts and legacy-index cards carry their
+    page's answer time; end to end (real plugin + `HttpClient` on loopback, real
+    controller) `descriptionDepth: 'board'` + `?liveness=true` sends one list page and no
+    probe, JSON and NDJSON, and a search-cache repeat none either.
+  - **Red control:** `SOFTY_LEGACY=listing-no-listed-at` → every card probed; with the
+    card's `listedAt` no longer passed to `buildPost` (the fix hunk reverted, then
+    restored byte for byte) 7 tests fail — the 3 plugin listing tests and the 4
+    controller tests that expect a trusted board.
+
+- [x] T24 — Remember a tenant with no open offer (FR-27)
+  - **Files:** `src/softy.service.ts` (`emptyTenants`, `isKnownEmptyTenant`,
+    `cacheEmptyTenant`, `collect`), `__tests__/softy.service.spec.ts`
+  - **Acceptance:** sitemap without offers + empty listing → the second search sends 0
+    requests (auto and explicit sitemap); asked again at the TTL, after `clearCaches()`,
+    after a failed listing page, and when the listing had cards.
+  - **Red control:** `SOFTY_LEGACY=empty-board-uncached` (and `SOFTY_SITEMAP_CACHE_TTL_MS=0`)
+    → `/sitemap.xml` + `/offers?page=1` again; with the `cacheEmptyTenant` call removed 3
+    tests fail (the repeat, the explicit-sitemap repeat, the TTL case).
+
+- [x] T25 — `SOFTY_LEGACY=first-error` (FR-28)
+  - **Files:** `src/softy.service.ts` (`keepError`, `stopOnFatal`), `__tests__/softy.service.spec.ts`
+  - **Acceptance:** under the token a 502 then a 429 → `fetch_error` naming the 502 (the
+    429 still stops); a 502 then a robots.txt refusal → `fetch_error` 502; a sitemap 429
+    → `fetch_error`; a crawl-policy cool-down → `rate_limited` (classified); part of `all`.
+  - **Red control:** the default twins (`rate_limited`, `blocked`); with the token's branch
+    removed from `keepError` and `stopOnFatal` the 4 token tests fail.
+
+- [x] T26 — The effective client floor in the metadata (FR-29, with Spec 1714 T36)
+  - **Files:** `src/softy.service.ts` (the decorator), `packages/plugin` metadata interface
+  - **Acceptance / red control:** see Spec 1714 T36.
 
 ## Gap coverage
 
@@ -320,7 +359,10 @@ Review round 2 (2026-09-27):
 | A3 | T19 (+ Spec 1714 T28) | |
 | A5, F4 | T17 | |
 | C1 | T20 (+ Spec 1714 T30) | |
-| F5 | T21, **T22 (open)** | recipe in the docs; floor declaration open |
+| F5 | T21, T22, T26 | recipe in the docs; floor declared (d235e9df) and reported as in force (T26) |
+| second pass: board + liveness probes every card | T23 | |
+| second pass: empty tenant asked every search | T24 | |
+| second pass: no switch for the pre-1715 diagnostics | T25 | |
 
 ## Notes
 

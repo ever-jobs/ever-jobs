@@ -453,7 +453,9 @@ All settings are configurable via environment variables. Copy `.env.example` to 
 | `EVER_JOBS_CRAWL_MIN_GAP_MS` | `0` | Idle time after an answer before the host's next request, on top of the interval (Softy: 500) |
 | `EVER_JOBS_CRAWL_SERVER_ERROR_COOLDOWN_MS` | `0` | Cool the whole host down this long after a `500`/`502`/`504`, timeout or reset (Softy: 30000) |
 | `EVER_JOBS_CRAWL_FLEET_SIZE` | `1` | Processes sharing one egress IP; each multiplies its spacing by it so together they keep one policy |
-| `EVER_JOBS_CRAWL_PACE_REDIRECTS` | `true` | A redirect hop to another host bucket, or to a host with its own policy (Softy), goes out as a request of its own under that host's pace, lock and robots.txt; `false` = follow every hop inside the first request's slot (pre-1715; the `legacy` default) |
+| `EVER_JOBS_CRAWL_PACE_REDIRECTS` | `true` | A redirect hop to a host with its own policy (Softy), or to another host bucket under a caller lock, goes out as a request of its own under that host's pace, lock and robots.txt (a source without a lock follows its hops as before); `false` = follow every hop inside the first request's slot (pre-1715; the `legacy` default) |
+| `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION` | `base` | Under a `stricter` lock (Softy) a caller's `proxyRotation` must equal the resolved one (`off` only when no proxy list is configured), so a caller never moves a locked site to another origin; `ranked` = the earlier order (the `legacy` default) |
+| `EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE` | `locked` | A failed request under a lock (Softy's hosts, or a caller lock) records its back-off or cool-down before it frees its slot, so no queued request starts inside it; `all` = every request, `off` = the earlier order (the `legacy` default) |
 | `EVER_JOBS_CRAWL_BUILTIN_HOSTS` | `true` | Builtin host policies: the Greenhouse / Lever / Ashby / SmartRecruiters API limits and the site-owner entries (`*.softy.pro`, `softy.pro`); `false` under `legacy` |
 | `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE` | (empty) | Comma list of builtin host patterns to skip, e.g. `*.softy.pro,softy.pro` (the others keep applying) |
 
@@ -771,8 +773,8 @@ curl -X POST http://localhost:3001/api/jobs/search \
 in-process `legitimacy: { state, reasons }`. Both are **off unless requested**. A job whose
 source already vouched for it is marked `active` without a probe and its `liveness` carries a
 `reason`: `fresh-fetch` (the source fetched `jobUrl` during this request, `jobUrlFetchedAt`) or
-`listed` (the source's own index, e.g. a Softy sitemap, listed it at most 10 minutes ago,
-`jobUrlListedAt` — also on a search-cache hit). The operator controls liveness server-side
+`listed` (the source's own index, e.g. a Softy sitemap or list page, listed it at most 10
+minutes ago, `jobUrlListedAt` — also on a search-cache hit). The operator controls liveness server-side
 (Specs 1723, 1714, 1715):
 
 | Variable | Default | Effect |
@@ -962,7 +964,7 @@ JobPost
 ├── employmentType               (ATS, Company scrapers)
 ├── applyUrl                     (ATS scrapers)
 ├── jobUrlFetchedAt              (Softy: when this search fetched jobUrl; ?liveness=true skips it)
-├── jobUrlListedAt               (Softy: when the sitemap listing the offer was fetched, also on a cache hit; ?liveness=true trusts it for 10 min)
+├── jobUrlListedAt               (Softy: when the sitemap or list page listing the offer was fetched, also on a cache hit; ?liveness=true trusts it for 10 min)
 │
 ├── jobLevel                     (LinkedIn)
 ├── jobFunction                  (LinkedIn)

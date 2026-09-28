@@ -106,7 +106,7 @@ With no configuration at all (preset `polite`):
 | Discovery (Softy) | `auto`: sitemap first; list pages only when the sitemap answered but held no offer (§21) |
 | Caller overrides | `any` globally (`EVER_JOBS_CRAWL_CALLER_OVERRIDES`), tightened to `stricter` for sources and hosts whose owner asked (Softy; §7.2) |
 | Replicas | each process paces on its own; `EVER_JOBS_CRAWL_FLEET_SIZE` (default 1) spreads one policy over N processes (§9) |
-| Redirects | a hop to another rate-limit bucket, or to a host with a host-owned policy (`*.softy.pro`), is sent as a request of its own under that host's policy; other hops are followed in the same slot (§9; `EVER_JOBS_CRAWL_PACE_REDIRECTS`) |
+| Redirects | a hop to a host with a host-owned policy (`*.softy.pro`), or to another rate-limit bucket while a caller lock applies, is sent as a request of its own under that host's policy; other hops — every hop of a source without a lock that stays off host-owned policies — are followed in the same slot, as before (§9; `EVER_JOBS_CRAWL_PACE_REDIRECTS`) |
 | Search deadline | abandoned sources have their queued and in-flight requests cancelled |
 | Browser pages | navigations through `BrowserPool.navigate` get the same egress guard, robots.txt, per-host pacing, deadline abort and `429`/`503` back-off (§20) |
 
@@ -157,10 +157,12 @@ above it.
 | `per-host` proxy pick, `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE` (§10) | `base` | **`bucket`** | `base` |
 | robots.txt answers feed the limiter, `EVER_JOBS_CRAWL_ROBOTS_BACKOFF` (§12) | on | **off** | on |
 | redirect hops paced on their own, `EVER_JOBS_CRAWL_PACE_REDIRECTS` (§9) | on | **off** | on |
+| a `stricter` caller's `proxyRotation`, `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION` (§7.2) | `base` | **`ranked`** | `base` |
+| a failed request's cool-down recorded before its slot is freed, `EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE` (§11) | `locked` | **`off`** | `locked` |
 | API: breaker counts refusals, a `503` stops locations, liveness trusts a fresh fetch or a recent listing (§15) | on | **off** | on |
 
 > **The Spec 1714 / 1715 switches follow the preset** (Spec 1715 review F7). The last
-> five rows are switches of their own (§5.2, §5.4; the API row stands for four); left
+> seven rows are switches of their own (§5.2, §5.4; the API row stands for four); left
 > unset, each takes the value in the preset's column, so `legacy` restores its pre-1714
 > behaviour too. An explicit value always wins over the preset.
 
@@ -300,7 +302,9 @@ the CLI run) after changing it. The `SOFTY_*` variables are read per scrape.
 | `EVER_JOBS_CRAWL_STRICTER_RULES` | `1714` \| `1690` — which `stricter` comparators judge a caller (§7.2); `1690` restores the pre-1714 ones and leaves `requestTimeout` ungated everywhere (in `JobsService` and, since Spec 1715, per host in `HttpClient`) | `1714` (`1690` under `legacy`) |
 | `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE` | `base` \| `bucket` — what a `per-host` proxy pick keys on under a lock (§10); `bucket` = pre-1714 | `base` (`bucket` under `legacy`) |
 | `EVER_JOBS_CRAWL_ROBOTS_BACKOFF` | bool — robots.txt answers feed the limiter like any request (§12); `false` = pre-1714 | `true` (`false` under `legacy`) |
-| `EVER_JOBS_CRAWL_PACE_REDIRECTS` | bool — a redirect hop to another rate-limit bucket, or to a host with a host-owned policy, is re-issued under its own policy instead of being followed in the request's slot (§9; Spec 1715 review A0); `false` = pre-fix | `true` (`false` under `legacy`) |
+| `EVER_JOBS_CRAWL_PACE_REDIRECTS` | bool — a redirect hop to a host with a host-owned policy, or to another rate-limit bucket while a caller lock applies, is re-issued under its own policy instead of being followed in the request's slot; a source without a lock keeps the in-slot follow (§9; Spec 1715 review A0, round 2); `false` = pre-fix | `true` (`false` under `legacy`) |
+| `EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE` | `locked` \| `all` \| `off` — when a FAILED attempt frees its limiter slot (§11; review of PR #105): `locked` records the failure's outcome and cool-down first for a request under a lock (a caller lock, or a site owner's builtin host lock: every request to `*.softy.pro`), so no queued request is granted inside that cool-down; every other request frees the slot first, as before; `all` = every request records first; `off` = the pre-fix order | `locked` (`off` under `legacy`) |
+| `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION` | `base` \| `ranked` — under `stricter` (rules `1714`), `base` accepts a caller's `proxyRotation` only when it equals the resolved value, or is `off` while no proxy list is configured; `ranked` = the round-1 order `off` < `per-host` < `per-scrape` < `per-request` (§7.2; Spec 1715 review round 2) | `base` (`ranked` under `legacy`) |
 
 ### 5.3 Mechanism tunables
 
@@ -451,6 +455,14 @@ builtin `userAgentMode` could loosen an operator's env `strict`, so the manifest
 carries `identify` instead. A tenant's own custom domain served by Softy cannot be
 known in advance; cover it with an operator `hosts` entry.
 
+**The lock keeps one origin** (Spec 1715 review round 2). Under it a caller cannot change
+`proxyRotation` at all while the operator configured proxies — not even to `off`, which
+would send that caller's Softy requests from the server's own IP while every other
+request to `*.softy.pro` (the Softy plugin, liveness probes, JSON-LD) goes through the one
+proxy pinned on `domain:softy.pro`. `off` is still accepted when no proxy list is
+configured (nothing changes on the wire). `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION=ranked`
+restores the round-1 order (§7.2).
+
 **A builtin host entry beats env-global values** (and the preset) for every plugin that
 reaches that host, because layer 3 sits above layer 2 (§4). That cuts both ways: an
 operator's *slower* global setting does not reach the host either. With
@@ -478,8 +490,10 @@ together with **`SOFTY_LEGACY=no-interval-floor`** gives search callers back eve
 field they could change before Spec 1714 (use it only with the site's agreement). The
 JSON alone lifts the lock, but the Softy plugin's own client keeps its 1 s spacing floor
 (§9, §21), which no policy layer shortens — so a caller's `minIntervalMs: 0` or
-`rateDelayMin: 0` would still leave Softy's own requests 1 s apart; the policy endpoint
-shows that floor as `meta.clientMinIntervalFloorMs` when the plugin declares it (§17).
+`rateDelayMin: 0` would still leave Softy's own requests 1 s apart. The policy endpoint
+shows the floor in force as `meta.clientMinIntervalFloorMs` (`1000`; `null` once
+`SOFTY_LEGACY=no-interval-floor` removed it, so the step can be confirmed) and the switch
+that removes it as `meta.clientMinIntervalFloorSwitch` (§17).
 
 Narrower and broader switches:
 
@@ -621,7 +635,7 @@ for operators who relied on it:
 | `userAgentMode` | `strict` > `identify` > `plugin` | same |
 | `stripClientHints`, `adaptiveThrottle`, `retryJitter`, `respectRetryAfter`, `blockPrivateNetworks` | `true` | same |
 | `retryOnNetworkError` | `false` | same |
-| `proxyRotation` | `off` < `per-host` < `per-scrape` < `per-request`; accept ≤ base | `off` = `per-host` > `per-scrape` > `per-request` |
+| `proxyRotation` | equal only — or `off` while no proxy list is configured (`EVER_JOBS_CRAWL_PROXIES` / `DEFAULT_PROXIES` empty: `off` then changes nothing on the wire). A different rotation is a different origin for the host, and under a site owner's lock the origin is not the caller's to change (below). `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION=ranked`: `off` < `per-host` < `per-scrape` < `per-request`, accept ≤ base (round 1) | `off` = `per-host` > `per-scrape` > `per-request` |
 | `rateLimitScope` | equal, or `host` → `domain` only (the new bucket must contain the base one; `site` next to `domain` would be a second, parallel bucket) | `domain` = `site` > `host` |
 | `maxConcurrentPerHost` | lower (`0` = unlimited = refused unless the base is `0`) | same |
 | `minIntervalMs`, `jitterMs`, `retryBaseDelayMs`, `retryMaxDelayMs`, `minGapMs`, `serverErrorCooldownMs` | higher | same |
@@ -635,6 +649,18 @@ for operators who relied on it:
 | `maxQueueWaitMs` | always (not a politeness knob) | same |
 | `discovery` | equal, or `sitemap` (list pages cost a shared server more) | always |
 | `callerOverrides` | never (a lock is not a caller's to set) | same |
+
+**`proxyRotation` never moves a locked host to another origin** (Spec 1715 review round 2).
+The round-1 order called `off` the strictest rotation, so under the Softy lock a caller
+could send `crawl: {"proxyRotation":"off"}` (directly, or through JSON-LD on a Softy page)
+and, with `EVER_JOBS_CRAWL_PROXIES` set, its Softy requests left from the server's own
+IP while every other Softy request used the operator's pinned proxy — two origins, against
+Softy's ask for a stable one. By default (`EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION=base`)
+a `stricter` caller may only repeat the resolved rotation; `off` is accepted only while
+no proxy list is configured (then every rotation is the same direct connection). `ranked`
+restores the round-1 order; `EVER_JOBS_CRAWL_STRICTER_RULES=1690` keeps the Spec 1690
+order whatever this says. A plugin's own proxy list is not seen by the resolver: only the
+operator's list counts as "configured".
 
 **Beyond the policy fields**, two request values follow the same effective mode:
 
@@ -810,11 +836,16 @@ first-in first-out. **Every attempt, retries included, holds a slot.**
   slot the first request was granted, so before this change an aggregator link that
   answered `302` to `https://acme.softy.pro/offers/123` reached Softy under the
   aggregator's bucket — no 1 s interval, no lock, the aggregator's proxy. Now a hop is
-  **re-issued as a request of its own** when its host falls in a different bucket than
-  the request, or carries a host-owned policy (a builtin or operator `hosts` entry with a
-  caller lock or `rateLimitScope: 'domain'`, e.g. `*.softy.pro` — so also a same-host
-  hop there, like `/offres` → `/offers`). The re-issued hop gets everything a request
-  gets: the memo check, robots.txt of its origin, the lock, its proxy pick, its own
+  **re-issued as a request of its own** when its host carries a host-owned policy (a
+  builtin or operator `hosts` entry with a caller lock or `rateLimitScope: 'domain'`,
+  e.g. `*.softy.pro` — so also a same-host hop there, like `/offres` → `/offers`), or
+  when it falls in a different bucket than the request **and** the request or the hop is
+  under a caller lock (effective mode `stricter` / `none`). A source without a lock
+  (the global `any`, no host-owned policy on the way) follows every hop inside its slot,
+  through its proxy, exactly as before Spec 1714 (review round 2: re-issuing its
+  cross-host hops gave the hop a second proxy pick — a new egress IP mid-chain, which
+  breaks sites that tie a session cookie set during the chain to the client IP). The re-issued hop gets everything a request
+  gets except the memo (below): robots.txt of its origin, the lock, its proxy pick, its own
   limiter slot, the cool-down check and its retries. The redirect answer itself is
   recorded as that slot's outcome. What follow-redirects would have changed is kept: a
   `301`/`302` `POST` or a `303` becomes a `GET` without a body, the headers it drops
@@ -822,11 +853,27 @@ first-in first-out. **Every attempt, retries included, holds a slot.**
   hop to another domain) stay dropped, axios `auth` is dropped on a hop to another
   origin, and the request's `crawl` override goes with the hop. The
   whole chain is capped at the request's `maxRedirects` (unset: 21, the follow-redirects
-  default axios uses), with the same `ERR_FR_TOO_MANY_REDIRECTS` past it. Other hops —
-  same bucket, ordinary host — are followed in the slot as before, and so is a
-  `307`/`308` hop whose body cannot be sent again (a stream); `maxRedirects: 0` is
-  untouched. The redirect pin and the egress guard still check every hop first (§13).
+  default axios uses), with the same `ERR_FR_TOO_MANY_REDIRECTS` past it. A re-issued
+  hop never answers from the multi-location memo (Spec 1700): the request that started
+  the chain holds the memo entry for the whole chain, and a loop (A → B → A, or a
+  same-URL bounce on a host-owned policy) would otherwise find its own ancestor's entry
+  pending and wait on itself until the search deadline. Other hops are followed in the
+  slot as before, and so is a `307`/`308` hop whose body cannot be sent again (a
+  stream); `maxRedirects: 0` is untouched. The redirect pin and the egress guard still check every hop first (§13).
   `false` (the `legacy` default) = the pre-fix in-slot follow.
+
+  **Known limitation — browser navigations** (review of PR #105). The switch covers
+  `HttpClient` only. `BrowserPool.navigate` (§20) resolves the policy of the URL it was
+  given and `page.goto` follows every redirect inside that one slot: a vanity careers URL
+  answering `302` to `https://acme.softy.pro/offers/123` reaches Softy under the first
+  host's bucket, lock and pacing, and a `429` / `503` / `5xx` of the page that finally
+  answered cools the first host's bucket, not `domain:softy.pro`. It is not fixed because
+  Playwright calls a `page.route` handler only for the first URL of a redirect chain, so a
+  hop cannot be held back; stopping at the `3xx` would mean fetching every navigation
+  outside the browser (`route.fetch` with `maxRedirects: 0`: another TLS / HTTP stack,
+  other cookie and cache handling — a change for every browser source, unlocked ones
+  included) or a Chromium-only CDP session. No Softy code path navigates a browser: the
+  Softy plugin, JSON-LD and liveness probes all go through `HttpClient`.
 
 ---
 
@@ -917,6 +964,21 @@ own `requestTimeout` below 60 s (Spec 1715 review C0, §7.2: the caller aborted,
 server did not struggle; a reset under such a timeout still counts). A `503` is a
 throttle answer and keeps the rules above. Softy runs with 30 s (§6.4); set it per host
 where a server's `5xx` means "too much load".
+
+**A failed request records its cool-down before it frees its slot** (review of PR #105,
+`EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE`, default `locked`). Freeing a slot lets the
+limiter grant the next queued request at once; a request that failed used to free its
+slot first and only then record the failure, so a request queued behind a `429`, a `503`
+or a struggling server could be granted — and sent — inside the very cool-down being set
+(the grant is never taken back). With `locked`, a request under a lock — a caller lock,
+or a site owner's builtin host lock such as `*.softy.pro`, whichever plugin sends it —
+records the outcome, the back-off, the `Retry-After` hold and `serverErrorCooldownMs`
+first, then frees its slot: the queued request waits for the cool-down, or fails with
+`HostCoolingDownError` when that is longer than it may wait. Every other request frees
+the slot first, as before (an unlocked source keeps its pacing byte for byte); `all`
+applies the order to every request, `off` (the `legacy` default) restores the old order
+everywhere. A bucket with an idle gap (`minGapMs`, Softy's 500 ms) was already safe: the
+next grant waits for the gap, and the limiter re-checks the cool-down when it wakes.
 
 ---
 
@@ -1041,7 +1103,8 @@ source (Softy) may only choose `sitemap` (§7.2); the operator may choose anythi
   policy run under **that host's** policy (e.g. `*.softy.pro`: one bucket for all
   tenants, 1 in flight, 1 s + 0.5 s idle, one proxy; §6.4), and a job whose plugin
   fetched its page during this request (`jobUrlFetchedAt`, not older than the request
-  start, never on a search-cache hit) is marked `active` with `reason: "fresh-fetch"`
+  start and not later than now — a future time is probed, like a future listing time;
+  never on a search-cache hit) is marked `active` with `reason: "fresh-fetch"`
   instead of being probed again (`EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false` probes
   every URL, as before).
 - **Liveness on every output path, and the probe cap.** The fresh-fetch trust applies
@@ -1067,7 +1130,12 @@ source (Softy) may only choose `sitemap` (§7.2); the operator may choose anythi
   is trusted as long as the listing is young enough (JSON, CSV and NDJSON alike). A fresh
   fetch still wins (`fresh-fetch`); a listing time in the future or unparseable is not
   trusted (the job is probed). `0` (the `legacy` default) turns it off; probing every URL
-  needs both `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false` and this at `0`.
+  needs both `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false` and this at `0`. A Softy list
+  page is an index too (review round 2): posts read from list pages or the legacy index
+  carry the instant that page answered (list pages are never cached), so
+  `descriptionDepth: "board"` — which keeps the listing (§21) — no longer costs a probe per
+  card right after the page that listed it (`SOFTY_LEGACY=listing-no-listed-at` = the
+  old behaviour).
   `EVER_JOBS_LIVENESS_ENABLED=false` still withholds every verdict.
 
 ---
@@ -1094,8 +1162,8 @@ What `legacy` restores by itself (the `legacy` column of §3):
 - **The Spec 1714 / 1715 switches, when unset** (Spec 1715 review F7):
   `EVER_JOBS_CRAWL_STRICTER_RULES=1690` (the Spec 1690 comparators, `requestTimeout`
   ungated in `JobsService` and `HttpClient`), `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE=bucket`,
-  `EVER_JOBS_CRAWL_ROBOTS_BACKOFF=false`, `EVER_JOBS_CRAWL_PACE_REDIRECTS=false`, and the
-  API switches `EVER_JOBS_BREAKER_COUNT_REFUSALS=false`, `EVER_JOBS_SEARCH_STOP_ON_503=false`,
+  `EVER_JOBS_CRAWL_ROBOTS_BACKOFF=false`, `EVER_JOBS_CRAWL_PACE_REDIRECTS=false`,
+  `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION=ranked`, `EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE=off`, and the API switches `EVER_JOBS_BREAKER_COUNT_REFUSALS=false`, `EVER_JOBS_SEARCH_STOP_ON_503=false`,
   `EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false`, `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS=0`.
   An explicit value of any of them still wins over the preset.
 
@@ -1135,7 +1203,9 @@ policy fields default to the old behaviour already):
 | the Spec 1690 `stricter` comparators (and an ungated `requestTimeout`, in `JobsService` and per host in `HttpClient`; a caller's short timeout counts as a struggling server again) | `EVER_JOBS_CRAWL_STRICTER_RULES=1690` |
 | `per-host` proxy pick by the request's bucket, even under a lock | `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE=bucket` |
 | robots.txt answers never touch the limiter | `EVER_JOBS_CRAWL_ROBOTS_BACKOFF=false` |
-| every redirect hop followed inside the first request's slot | `EVER_JOBS_CRAWL_PACE_REDIRECTS=false` |
+| every redirect hop followed inside the first request's slot (a source without a lock already is; this also covers host-owned policies and locked cross-bucket hops) | `EVER_JOBS_CRAWL_PACE_REDIRECTS=false` |
+| a `stricter` caller may pick any `proxyRotation` at least as far down the round-1 order (`off` < `per-host` < `per-scrape` < `per-request`), `off` included while proxies are configured | `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION=ranked` (Spec 1715 review round 2; with `EVER_JOBS_CRAWL_STRICTER_RULES=1690` the Spec 1690 order applies instead) |
+| a failed request frees its slot before its cool-down is recorded (a queued request may start inside it), under a lock too | `EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE=off` (review of PR #105; a source without a lock already does under the default `locked`) |
 | no idle gap / no server-error cool-down | `EVER_JOBS_CRAWL_MIN_GAP_MS=0`, `EVER_JOBS_CRAWL_SERVER_ERROR_COOLDOWN_MS=0` (the defaults; Softy's come from §6.4 and its manifest — see the recipe below) |
 | each process paces as if alone | `EVER_JOBS_CRAWL_FLEET_SIZE=1` (the default) |
 | a nested sitemap's `429`/`503` is skipped and the walk goes on | Softy: `SOFTY_LEGACY=nested-skip` (or `SOFTY_SITEMAP_FALLBACK=any-error`), which also skips a nested `5xx` / timeout (§21.1); another plugin: `fetchSitemap(…, { nestedErrors: 'skip' })` (plugin code) |
@@ -1229,6 +1299,10 @@ curl 'http://localhost:3001/api/sources/softy/crawl-policy?host=acme.softy.pro'
     "globalCallerOverrides": "any",
     "builtinHostPatterns": ["*.softy.pro"],
     "builtinHostsDisabled": [],
+    "clientMinIntervalFloorMs": 1000,
+    "clientMinIntervalFloorSwitch": "SOFTY_LEGACY=no-interval-floor",
+    "switches": { "stricterRules": "1714", "proxyPinScope": "base", "robotsBackoff": true, "paceRedirects": true, "callerProxyRotation": "base" },
+    "proxyPin": { "scope": "base", "keyedOn": "domain" },
     "fleetSize": 1,
     "abortOnDeadline": true,
     "envProxyCount": 0,
@@ -1250,11 +1324,25 @@ Spec 1715: `meta.builtinHostsDisabled` lists the builtin patterns
 `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE` switches off (whatever the host; a disabled
 pattern never appears in `builtinHostPatterns`, and `warnings` notes each one skipped for
 this host), and `meta.clientMinIntervalFloorMs` is the spacing floor, ms, that the
-plugin's own HTTP client enforces (`createHttpClient({ minIntervalFloorMs })`, §9) as the
-plugin declares it in its `@SourcePlugin` metadata (`clientMinIntervalFloorMs`), or
-`null` when it declares none. No policy layer shortens that floor, so the top-level
-`minIntervalMs` can read lower than what goes on the wire; only the plugin's own switch
-removes it, and like `minIntervalMs` it is multiplied by `fleetSize`. Try
+plugin's own HTTP client enforces NOW (`createHttpClient({ minIntervalFloorMs })`, §9):
+what the plugin's `clientMinIntervalFloor()` in its `@SourcePlugin` metadata reads from
+the plugin's own settings, else its declared `clientMinIntervalFloorMs`, or `null` when
+there is none (review round 2: Softy reports `1000`, and `null` once
+`SOFTY_LEGACY=no-interval-floor` removed it — the API used to show the declared `1000`
+either way). `meta.clientMinIntervalFloorSwitch` names that switch. No policy layer
+shortens that floor, so the top-level `minIntervalMs` can read lower than what goes on
+the wire; only the plugin's own switch removes it, and like `minIntervalMs` it is
+multiplied by `fleetSize`. Also since review round 2: `meta.switches` shows the
+process-wide restore switches as they are in force — `stricterRules`
+(`EVER_JOBS_CRAWL_STRICTER_RULES`), `proxyPinScope` (`_PROXY_PIN_SCOPE`), `robotsBackoff`
+(`_ROBOTS_BACKOFF`), `paceRedirects` (`_PACE_REDIRECTS`), `callerProxyRotation`
+(`_CALLER_PROXY_ROTATION`), `cooldownBeforeRelease` (`_COOLDOWN_BEFORE_RELEASE`), each at its
+preset's default unless set, so after
+`EVER_JOBS_CRAWL_PRESET=legacy` you can confirm each took its pre-1714 value — and
+`meta.proxyPin` what the `per-host` proxy pick of this request keys on: `scope` is
+`switches.proxyPinScope` under a caller lock or a site owner's builtin host lock, else
+`bucket` (the pre-1714 pick), and `keyedOn` the rate-limit scope of the key (§10). The
+boot-time config mirror (`crawl` in the app configuration) lists the same switches. Try
 `/api/sources/liveness-http/crawl-policy?host=acme.softy.pro` to see the Softy policy
 applied to another site (`callerOverridesProvenance: "builtin-host"`), and
 `?crawl={"proxyRotation":"per-request","discovery":"listing"}` on `softy` to see both
@@ -1432,7 +1520,9 @@ Limits of the browser path:
   effort: a record that changes between our lookup and the browser's is not caught
   (direct `HttpClient` connections are guarded on the address actually connected to).
   Redirects inside the browser, and sub-resources the page loads, are not checked or
-  paced — only the navigation itself.
+  paced — only the navigation itself: `EVER_JOBS_CRAWL_PACE_REDIRECTS` does not reach a
+  browser redirect, and a redirect into `*.softy.pro` runs under the first host's policy
+  (§9, "Known limitation"; Playwright routes only the first URL of a redirect chain).
 - **robots.txt of a proxied page** is fetched directly, not through the page's proxy.
 - **Pages `getPage` did not create** (a plugin test's fake page, or a page of a Chromium a
   plugin launched itself) get everything above except the DNS check: their proxy is
@@ -1459,7 +1549,7 @@ and [Spec 1715](../.specify/specs/1715-softy-audit-hardening/spec.md); shared la
 |---|---|
 | (A) an honest UA naming the project | the configured UA (`identify`, the manifest declares no own UA); a caller may only switch to `strict` |
 | (B) one request at a time, ~1 req/s per site | `domain` bucket for all tenants, 1 in flight, ≥ 1 s between starts **and** ≥ 0.5 s idle after each answer — for every request to `*.softy.pro`, whichever plugin makes it (§6.4), a redirect hop into it included (§9); the Softy client also has a 1 s `minIntervalFloorMs`; `EVER_JOBS_CRAWL_FLEET_SIZE` spreads it over replicas (§9) |
-| (C) no proxy rotation | `proxyRotation: per-host` keyed on `domain:softy.pro` (one origin for all tenants, §10); caller proxies refused under the lock |
+| (C) no proxy rotation | `proxyRotation: per-host` keyed on `domain:softy.pro` (one origin for all tenants, §10); caller proxies refused under the lock, and a caller cannot change `proxyRotation` there — not even to `off` while proxies are configured (§6.4, §7.2) |
 | (D) back off on `429`/`Retry-After`, and when the server struggles | 1 retry on `429`/`503` only, ≥ 10 s back-off, `Retry-After` always honoured (over 60 s → give up and cool the bucket); a `500`/`502`/`504` or timeout cools the whole bucket 30 s (§11); the plugin stops the scrape on any push-back (below) |
 | (E) discover offers from `/sitemap.xml`, not list pages | `auto` = sitemap first; list pages only when the sitemap answered but held no offer; a caller may only choose `sitemap`, and a caller's `resultsWanted` above the detail budget no longer steers the scrape to list pages (§21.3); a per-tenant sitemap cache (10 min) |
 
@@ -1492,6 +1582,15 @@ all (no wildcard DNS): the first request fails in DNS, the plugin stops, and the
 is remembered for `SOFTY_UNKNOWN_TENANT_TTL_MS` (1 h) so the next search sends nothing
 and gets the same `bad_input` diagnostic.
 
+**A tenant with no open offer** (review round 2): its sitemap answers `2xx` without an
+offer URL, so `auto` reads `/offers?page=1` (the `empty` rule above) — and when that
+page holds no card either, the tenant has nothing open. That answer is remembered for
+`SOFTY_SITEMAP_CACHE_TTL_MS` (10 min) like a sitemap, so a repeat search — an all-ATS
+`companySlug` search naming the tenant included — returns the same empty board with no
+request, instead of `/sitemap.xml` + `/offers?page=1` every time. A failure, a stop, a
+note, an abort or a listing with cards leaves nothing cached. `SOFTY_LEGACY=empty-board-uncached`
+(or `SOFTY_SITEMAP_CACHE_TTL_MS=0`) restores the old behaviour.
+
 **Nested sitemaps** (today's tenants serve a plain `<urlset>`, but an index is
 supported). A child sitemap that
 
@@ -1522,21 +1621,30 @@ tokens.
 | `404` / `410` / other `4xx` on a detail page | skip it; detail GETs are capped at `wanted + SOFTY_DETAIL_ATTEMPT_SLACK` | `SOFTY_DETAIL_ATTEMPT_SLACK` ≥ the budget |
 | `404` / `410` on list page 1 | the legacy index at `/offers` (the redirect target, so no redirect hop) | `SOFTY_LEGACY=offres` |
 | a legacy card's detail / apply link `/offre/{ID}-{slug}` (a `301` to `/offers/{ID}`) | the post's URL is built as `/offers/{ID}`, so each detail GET is one paced request (Spec 1715 review A0) | `SOFTY_LEGACY=legacy-detail-url` |
-| `429` | stop, `rate_limited` | — (stopped before too) |
+| `429` | stop, `rate_limited` | the stop is as before; its diagnostic, `fetch_error` of the first error, with `SOFTY_LEGACY=first-error` |
 | `503` | stop, `rate_limited` | `SOFTY_LEGACY=503-as-failure` |
 | `5xx` / timeout on a detail page | a failure; `SOFTY_MAX_CONSECUTIVE_DETAIL_FAILURES` (1) in a row stop the scrape with the partial result | `SOFTY_MAX_CONSECUTIVE_DETAIL_FAILURES=3` |
 | `5xx` / timeout on a list page | stop pagination and details; the cards read so far are returned without descriptions | `SOFTY_LEGACY=listing-failure-details` |
-| crawl-policy refusal, abort | stop | — |
+| crawl-policy refusal, abort | stop | the stop is as before; its diagnostic with `SOFTY_LEGACY=first-error` (below) |
 
 The scrape reports the most telling error (`preferRefusalError`), so a stop on push-back
 reaches the API as `rate_limited` / `blocked` — which stops a multi-location search and
-counts for the circuit breaker (§15). A post whose detail page was fetched from the
+counts for the circuit breaker (§15). `SOFTY_LEGACY=first-error` restores the pre-1715
+diagnostics (review round 2): the scrape keeps the FIRST error it met and reports
+`classifyScrapeError` of it, and a `429` or a crawl-policy hold-back no longer names
+`rate_limited` / `blocked` itself — so a `502` then a `429` reads `fetch_error` naming
+the `502` (as before Spec 1715), a multi-location search goes on to the next location,
+and a 0-job result does not count for the breaker. The requests sent do not change: the
+`429` still stops the scrape. A post whose detail page was fetched from the
 network in this scrape carries `jobUrlFetchedAt`, so `?liveness=true` does not fetch it
 again. Every post taken from a sitemap also carries `jobUrlListedAt` — when the root
 sitemap answered from the network, kept with the sitemap cache so a cache hit carries the
 original time — which `?liveness=true` trusts for up to
-`EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` (10 min, §15). Posts from list pages do not
-carry it.
+`EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` (10 min, §15). So does every post taken from
+a list page or the legacy index (review round 2): the instant that page answered — list
+pages are never cached, so it is always fresh, and `descriptionDepth: 'board'` with
+`?liveness=true` sends no probe for the board it just read. `SOFTY_LEGACY=listing-no-listed-at`
+leaves list-page posts without it (the old behaviour: each is probed).
 
 ### 21.3 Budget, dedupe, caches
 
@@ -1549,7 +1657,7 @@ carry it.
 
   | Request | Path | Why |
   |---|---|---|
-  | `descriptionDepth: 'board'` | list pages, unless an **operator** chose `sitemap` | Kept on purpose (Spec 1715 D5): a board-only result needs no detail page, and sitemap entries carry nothing but a URL, so the list pages are the only source of card data — and the cheaper one: one list page carries 21 offers, against the sitemap plus one detail page per offer. A caller's `discovery: 'sitemap'` does not change it. |
+  | `descriptionDepth: 'board'` | list pages, unless an **operator** chose `sitemap` | Kept on purpose (Spec 1715 D5): a board-only result needs no detail page, and sitemap entries carry nothing but a URL, so the list pages are the only source of card data — and the cheaper one: one list page carries 21 offers, against the sitemap plus one detail page per offer. A caller's `discovery: 'sitemap'` does not change it. With `?liveness=true` the posts carry `jobUrlListedAt` (the list page's answer time), so the premise holds there too: no probe per card (review round 2). |
   | detail budget (`detail-25`, `SOFTY_MAX_DETAIL_FETCHES`) smaller than `resultsWanted`, while the effective caller-override mode is `stricter` or `none` (the Softy lock on a default install; a global or operator `stricter` / `none` counts too) | sitemap, up to the budget, with a `partial` note naming the lock and the switches | `resultsWanted` (and a `detail-25` depth) are caller parameters; a caller must not be able to steer the scrape to list pages with them (ask E). Before review round 2 this read list pages and returned the rest board-only. |
   | the same, when the `auto` itself came from the operator (`EVER_JOBS_CRAWL_DISCOVERY=auto`, `sites.softy` / `hosts[…]` `discovery: "auto"`), the operator lifted the lock (`callerOverrides: "any"`), or `SOFTY_MAX_DETAIL_FETCHES=0` | list pages, board-only beyond the budget (as before) | the operator's choice |
   | anything else | sitemap | — |
@@ -1561,7 +1669,8 @@ carry it.
   disables list pages entirely.
 - Per-tenant sitemap cache (`SOFTY_SITEMAP_CACHE_TTL_MS`, 10 min, ≤ 200 tenants): Softy's
   sitemap is generated on every request (its `Last-Modified` is the request time, no
-  `ETag`), so a conditional GET saves nothing; a TTL cache does.
+  `ETag`), so a conditional GET saves nothing; a TTL cache does. The same TTL keeps a
+  tenant with no open offer (§21.1; `SOFTY_LEGACY=empty-board-uncached` = not kept).
 - Detail cache: sitemap entries are keyed by `url|lastmod`, so they never go stale and
   no longer expire by default (the LRU cap bounds memory); list-page entries keep 6 h.
 
@@ -1594,8 +1703,11 @@ carry it.
 | `caller-listing` | under a caller lock, a detail budget shorter than `resultsWanted` still reads list pages in `auto` (review A1) |
 | `nested-skip` | every nested-sitemap failure is skipped and the walk goes on — `429`/`503`, a crawl-policy refusal, `5xx`/timeouts, `401`/`403`/`407`, a challenge page (review A5 / F4) |
 | `legacy-detail-url` | legacy cards link `/offre/{ID}-{slug}` (a `301` hop) instead of its target `/offers/{ID}` (review A0) |
+| `first-error` | the pre-1715 diagnostics: the first error met, classified — a later `429` / robots.txt refusal no longer replaces an earlier `5xx`, and a `429` or a crawl-policy hold-back names no `rate_limited` / `blocked` itself (a `429` reads `fetch_error`) (review round 2, §21.2) |
+| `listing-no-listed-at` | posts from list pages / the legacy index carry no `jobUrlListedAt`, so `?liveness=true` probes each of them (review round 2) |
+| `empty-board-uncached` | a tenant whose sitemap lists no offer and whose listing has no card is asked again on every search (review round 2, §21.1) |
 
-`SOFTY_LEGACY=all` includes the three round-2 tokens; an unknown token is warned once and
+`SOFTY_LEGACY=all` includes every round-2 token; an unknown token is warned once and
 ignored.
 
 The crawl-policy side — the manifest's pace and retries, the `*.softy.pro` builtin host

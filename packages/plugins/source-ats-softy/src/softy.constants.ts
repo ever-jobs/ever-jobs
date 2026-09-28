@@ -213,8 +213,11 @@ export const SOFTY_UNKNOWN_TENANT_CACHE_MAX = 1000;
  * Per-tenant sitemap cache TTL, ms (Spec 1715 FR-12, audit G23): the offer entries of
  * a successful sitemap (≥ 1 offer) are kept this long, so a repeat search within the
  * window sends no sitemap request. Softy generates the sitemap per request
- * (`Last-Modified` = now, no `ETag`), so a conditional GET would save nothing. Env
- * `SOFTY_SITEMAP_CACHE_TTL_MS`; `0` disables the cache (the pre-1715 behaviour).
+ * (`Last-Modified` = now, no `ETag`), so a conditional GET would save nothing. The
+ * same TTL keeps a tenant with NO open offer — its sitemap listed none and the `auto`
+ * fallback listing found no card (review round 2) — so a repeat search sends nothing
+ * either (`SOFTY_LEGACY=empty-board-uncached` turns only that part off). Env
+ * `SOFTY_SITEMAP_CACHE_TTL_MS`; `0` disables both (the pre-1715 behaviour).
  */
 export const SOFTY_SITEMAP_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -246,6 +249,9 @@ export const SOFTY_MIN_INTERVAL_FLOOR_MS = 1000;
  * | `caller-listing` | under a caller lock, a caller-driven detail budget shorter than `resultsWanted` still reads list pages in `auto` | G22 (round 2, A1) |
  * | `nested-skip` | every nested-sitemap failure is skipped and the walk goes on (429/503, a crawl-policy refusal, 5xx/timeouts, 401/403/407, a challenge page) | G16 (round 2, A5/F4) |
  * | `legacy-detail-url` | legacy cards link `/offre/{ID}-{slug}` (a 301 hop) instead of its target `/offers/{ID}` | G6 (round 2, A0) |
+ * | `first-error` | the response's diagnostic is `classifyScrapeError` of the FIRST error met: a later 429 / robots.txt refusal no longer replaces an earlier 5xx, and a 429 or a crawl-policy hold-back no longer names `rate_limited` / `blocked` itself (a 429 reads `fetch_error`) | FR-8 (review round 2) |
+ * | `listing-no-listed-at` | posts from list pages / the legacy index carry no `jobUrlListedAt`, so `?liveness=true` probes each of them | FR-15 (review round 2) |
+ * | `empty-board-uncached` | a tenant whose sitemap lists no offer and whose listing has no card is asked again on every search (`/sitemap.xml` + `/offers?page=1`) | FR-12 (review round 2) |
  */
 export const SOFTY_LEGACY_TOKENS = [
   'offset-budget',
@@ -259,6 +265,9 @@ export const SOFTY_LEGACY_TOKENS = [
   'caller-listing',
   'nested-skip',
   'legacy-detail-url',
+  'first-error',
+  'listing-no-listed-at',
+  'empty-board-uncached',
 ] as const;
 
 export type SoftyLegacyToken = (typeof SOFTY_LEGACY_TOKENS)[number];

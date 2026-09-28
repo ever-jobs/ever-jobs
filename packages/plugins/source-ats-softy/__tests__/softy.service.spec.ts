@@ -1240,6 +1240,67 @@ describe('SoftyService (Specs 1691, 1715)', () => {
       expect(res.diagnostics?.reason).toBe('rate_limited');
     });
 
+    it('a 502 then a robots.txt refusal reports blocked, not the earlier 502 (FR-8); the walk goes on', async () => {
+      process.env.SOFTY_MAX_CONSECUTIVE_DETAIL_FAILURES = '3';
+      fake.set(OFFER(1005), { status: 502 }).set(OFFER(1001), new RobotsDisallowedError(OFFER(1001)));
+      const res = await sitemapScrape();
+      expect(res.jobs).toHaveLength(3);
+      expect(res.diagnostics?.reason).toBe('blocked');
+    });
+
+    /**
+     * Review round 2: the two FR-8 tests above have no switch of their own before —
+     * SOFTY_LEGACY=first-error restores the pre-1715 diagnostics: the FIRST error met,
+     * classified (`classifyScrapeError`), and a 429 / crawl-policy hold-back names no
+     * reason itself. The tests above are its red control (same routes, default env).
+     */
+    describe('SOFTY_LEGACY=first-error (the pre-1715 diagnostics)', () => {
+      beforeEach(() => {
+        process.env.SOFTY_MAX_CONSECUTIVE_DETAIL_FAILURES = '3';
+        process.env.SOFTY_LEGACY = 'first-error';
+      });
+
+      it('a 502 then a 429: fetch_error naming the 502 — and still nothing after the 429', async () => {
+        fake.set(OFFER(1005), { status: 502 }).set(OFFER(1001), { status: 429 });
+        const res = await sitemapScrape();
+        expect(fake.calls).toEqual([SITEMAP, OFFER(1005), OFFER(1001)]);
+        expect(res.jobs).toEqual([]);
+        expect(res.diagnostics?.reason).toBe('fetch_error');
+        expect(res.diagnostics?.detail).toContain('502');
+      });
+
+      it('a 502 then a robots.txt refusal: fetch_error naming the 502', async () => {
+        fake.set(OFFER(1005), { status: 502 }).set(OFFER(1001), new RobotsDisallowedError(OFFER(1001)));
+        const res = await sitemapScrape();
+        expect(res.jobs).toHaveLength(3);
+        expect(res.diagnostics?.reason).toBe('fetch_error');
+        expect(res.diagnostics?.detail).toContain('502');
+      });
+
+      it('a 429 on the sitemap still stops the scrape, reported as fetch_error (not rate_limited)', async () => {
+        fake.set(SITEMAP, { status: 429 });
+        const res = await service.scrape(input({ resultsWanted: 2 }));
+        expect(fake.calls).toEqual([SITEMAP]);
+        expect(res.diagnostics?.reason).toBe('fetch_error');
+        expect(res.diagnostics?.detail).toContain('429');
+      });
+
+      it("a crawl-policy cool-down is classified as it always was (classifyScrapeError → rate_limited)", async () => {
+        fake.set(SITEMAP, new HostCoolingDownError('domain:softy.pro', 120000, 429));
+        const res = await service.scrape(input({ resultsWanted: 2 }));
+        expect(fake.calls).toEqual([SITEMAP]);
+        expect(res.diagnostics?.reason).toBe('rate_limited');
+      });
+
+      it('is part of SOFTY_LEGACY=all', async () => {
+        process.env.SOFTY_LEGACY = 'all';
+        fake.set(OFFER(1005), { status: 502 }).set(OFFER(1001), { status: 429 });
+        const res = await sitemapScrape();
+        expect(res.diagnostics?.reason).toBe('fetch_error');
+        expect(res.diagnostics?.detail).toContain('502');
+      });
+    });
+
     it('a 502 on a detail page: the next one is not requested (default limit 1)', async () => {
       fake.set(OFFER(1005), { status: 502 });
       const res = await sitemapScrape();
@@ -1318,6 +1379,102 @@ describe('SoftyService (Specs 1691, 1715)', () => {
       now += 1;
       await service.scrape(input({ resultsWanted: 1 }));
       expect(fake.calls).toEqual([SITEMAP]);
+    });
+
+    /**
+     * Review round 2: a tenant with no open offer — its sitemap lists none, so `auto`
+     * falls back to the listing (the documented `empty` rule), which finds no card
+     * either. That answer is remembered for SOFTY_SITEMAP_CACHE_TTL_MS like a sitemap,
+     * so a repeat search (an all-ATS companySlug search naming it included) sends
+     * nothing instead of `/sitemap.xml` + `/offers?page=1` every time.
+     * Red control: SOFTY_LEGACY=empty-board-uncached (and SOFTY_SITEMAP_CACHE_TTL_MS=0).
+     */
+    describe('a tenant with no open offer (review round 2)', () => {
+      const EMPTY_URLSET = '<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>';
+      const emptyTenant = (): FakeSofty =>
+        useClient(new FakeSofty().set(SITEMAP, EMPTY_URLSET).set(PAGE(1), fixture('listing-empty.html')));
+      /** Two searches; the requests of the second one. */
+      async function twice(extra: Record<string, unknown> = {}): Promise<{ first: string[]; second: string[]; res: any }> {
+        const tenant = emptyTenant();
+        const firstRes = await service.scrape(input({ resultsWanted: 5, ...extra }));
+        expect(firstRes.jobs).toEqual([]);
+        expect(firstRes.diagnostics).toBeUndefined();
+        const first = [...tenant.calls];
+        tenant.calls.length = 0;
+        const res = await service.scrape(input({ resultsWanted: 5, ...extra }));
+        return { first, second: [...tenant.calls], res };
+      }
+
+      it('the second search sends nothing and returns the same empty board', async () => {
+        const { first, second, res } = await twice();
+        expect(first).toEqual([SITEMAP, PAGE(1)]);
+        expect(second).toEqual([]);
+        expect(res.jobs).toEqual([]);
+        expect(res.diagnostics).toBeUndefined();
+      });
+
+      it('explicit sitemap mode serves the remembered answer too (the sitemap had no offer)', async () => {
+        const tenant = emptyTenant();
+        await service.scrape(input({ resultsWanted: 5 }));
+        tenant.calls.length = 0;
+        const res = await service.scrape(input({ resultsWanted: 5, crawl: { discovery: 'sitemap' } }));
+        expect(tenant.calls).toEqual([]);
+        expect(res.jobs).toEqual([]);
+      });
+
+      it('red control: SOFTY_LEGACY=empty-board-uncached asks again on every search (pre-fix)', async () => {
+        process.env.SOFTY_LEGACY = 'empty-board-uncached';
+        const { second } = await twice();
+        expect(second).toEqual([SITEMAP, PAGE(1)]);
+      });
+
+      it('SOFTY_SITEMAP_CACHE_TTL_MS=0 asks again on every search (the cache is off)', async () => {
+        process.env.SOFTY_SITEMAP_CACHE_TTL_MS = '0';
+        const { second } = await twice();
+        expect(second).toEqual([SITEMAP, PAGE(1)]);
+      });
+
+      it('asks again once the answer is SOFTY_SITEMAP_CACHE_TTL_MS old', async () => {
+        let now = 1_000_000;
+        jest.spyOn(Date, 'now').mockImplementation(() => now);
+        const tenant = emptyTenant();
+        await service.scrape(input({ resultsWanted: 1 }));
+        tenant.calls.length = 0;
+        now += 599_999;
+        await service.scrape(input({ resultsWanted: 1 }));
+        expect(tenant.calls).toEqual([]);
+        now += 1;
+        await service.scrape(input({ resultsWanted: 1 }));
+        expect(tenant.calls).toEqual([SITEMAP, PAGE(1)]);
+      });
+
+      it('a listing that found cards is not remembered as empty', async () => {
+        const tenant = useClient(FakeSofty.acme().set(SITEMAP, EMPTY_URLSET));
+        const first = await service.scrape(input({ resultsWanted: 2 }));
+        expect(first.jobs).toHaveLength(2);
+        tenant.calls.length = 0;
+        await service.scrape(input({ resultsWanted: 2 }));
+        expect(tenant.calls[0]).toBe(SITEMAP);
+        expect(tenant.calls).toContain(PAGE(1));
+      });
+
+      it('a failed listing page is not remembered', async () => {
+        const tenant = useClient(new FakeSofty().set(SITEMAP, EMPTY_URLSET).set(PAGE(1), { status: 500 }));
+        const first = await service.scrape(input({ resultsWanted: 5 }));
+        expect(first.diagnostics?.reason).toBe('fetch_error');
+        tenant.calls.length = 0;
+        await service.scrape(input({ resultsWanted: 5 }));
+        expect(tenant.calls).toEqual([SITEMAP, PAGE(1)]);
+      });
+
+      it('clearCaches() forgets it', async () => {
+        const tenant = emptyTenant();
+        await service.scrape(input({ resultsWanted: 5 }));
+        service.clearCaches();
+        tenant.calls.length = 0;
+        await service.scrape(input({ resultsWanted: 5 }));
+        expect(tenant.calls).toEqual([SITEMAP, PAGE(1)]);
+      });
     });
 
     it('re-reads only the offer whose lastmod changed', async () => {
@@ -1521,10 +1678,57 @@ describe('SoftyService (Specs 1691, 1715)', () => {
       expect(listed).toBeLessThanOrEqual(requestedAt[`${BASE}/sitemap-offers.xml`]);
     });
 
-    it('is not set on the listing path (no sitemap listed the offer)', async () => {
+    /**
+     * Review round 2: listing-path posts carry it too — the instant the list page
+     * carrying the card answered (list pages are never cached, so it is always fresh).
+     * `?liveness=true` then trusts a board listed a moment ago instead of probing each
+     * card right after the list pages that just listed them (D5 keeps `board` on the
+     * listing). Red control: SOFTY_LEGACY=listing-no-listed-at (the test below).
+     */
+    it('is set on the listing path: when the list page carrying the card answered (board depth too)', async () => {
+      const requestedAt: Record<string, number> = {};
+      fake.onRequest = (url) => {
+        requestedAt[url] = Date.now();
+      };
+      const res = await service.scrape(input({ crawl: { discovery: 'listing' }, descriptionDepth: 'board', resultsWanted: 5 }));
+      expect(fake.calls).toEqual([PAGE(1), PAGE(2)]);
+      expect(res.jobs.map((j) => j.atsId)).toEqual(['1001', '1002', '1003', '1004', '1005']);
+      const listed = res.jobs.map((j) => Date.parse(j.jobUrlListedAt as string));
+      for (const job of res.jobs) expect(job.jobUrlListedAt).toMatch(ISO);
+      for (const at of listed.slice(0, 3)) {
+        expect(at).toBeGreaterThanOrEqual(requestedAt[PAGE(1)]);
+        expect(at).toBeLessThanOrEqual(requestedAt[PAGE(2)]);
+      }
+      for (const at of listed.slice(3)) expect(at).toBeGreaterThanOrEqual(requestedAt[PAGE(2)]);
+      for (const job of res.jobs) expect(job.jobUrlFetchedAt).toBeUndefined(); // board: no detail page
+    });
+
+    it('is set next to jobUrlFetchedAt when the detail pages are read too', async () => {
       const res = await service.scrape(input({ crawl: { discovery: 'listing' }, resultsWanted: 2 }));
       expect(res.jobs).toHaveLength(2);
+      for (const job of res.jobs) {
+        expect(job.jobUrlListedAt).toMatch(ISO);
+        expect(Date.parse(job.jobUrlFetchedAt as string)).toBeGreaterThanOrEqual(Date.parse(job.jobUrlListedAt as string));
+      }
+    });
+
+    it('is set on legacy-index cards: when the legacy index answered', async () => {
+      const LEGACY = 'https://legacy.softy.pro';
+      useClient(new FakeSofty().set(`${LEGACY}/offers`, fixture('legacy-offres.html')));
+      const res = await service.scrape(input({ companySlug: 'legacy', crawl: { discovery: 'listing' }, descriptionDepth: 'board', resultsWanted: 2 }));
+      expect(res.jobs).toHaveLength(2);
+      for (const job of res.jobs) expect(job.jobUrlListedAt).toMatch(ISO);
+    });
+
+    it('SOFTY_LEGACY=listing-no-listed-at: not set on the listing path (the pre-fix behaviour; red control)', async () => {
+      process.env.SOFTY_LEGACY = 'listing-no-listed-at';
+      const res = await service.scrape(input({ crawl: { discovery: 'listing' }, descriptionDepth: 'board', resultsWanted: 5 }));
+      expect(res.jobs).toHaveLength(5);
       for (const job of res.jobs) expect(job.jobUrlListedAt).toBeUndefined();
+      // The sitemap path is unaffected by the token.
+      service.clearCaches();
+      const sitemap = await service.scrape(input({ crawl: { discovery: 'sitemap' }, resultsWanted: 1 }));
+      expect(sitemap.jobs[0].jobUrlListedAt).toMatch(ISO);
     });
   });
 

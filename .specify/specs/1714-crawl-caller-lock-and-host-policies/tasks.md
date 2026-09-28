@@ -9,7 +9,8 @@ Spec: [spec.md](./spec.md) · Plan: [plan.md](./plan.md) · Operator guide:
 **Status (2026-09-27, review round 2):** in progress. T01–T19 are done (the docs pass checked the
 operator guide, changelog, README, index and questions against the landed code and added
 Q-126..Q-128). Review round 2 (Phase 4, T21–T32) landed its code, tests and docs,
-including **T26** (`JobsService` fills `ScrapeContext.callerRequestTimeout`). Left:
+including **T26** (`JobsService` fills `ScrapeContext.callerRequestTimeout`, d235e9df),
+and so did its second pass (Phase 5, T33–T37) and the PR #105 review (Phase 6, T38–T40). Left:
 **T20** — the orchestrator's joint verification of the three lanes, round 2
 included (typecheck, `test:core`, `test:sources` for Softy / liveness-http / every suite
 reaching `*.softy.pro`, `test:scripts`, `lint:docs`, every red control with command and
@@ -494,7 +495,8 @@ old code or under the legacy switch).
     `packages/plugin/src/interfaces/plugin-metadata.interface.ts`,
     `sources-crawl-policy.controller.spec.ts`
   - **Acceptance:** `[]` by default; the disabled list; the declared floor or `null`. The
-    Softy plugin's own declaration is Spec 1715 T22 (open).
+    Softy plugin's own declaration is Spec 1715 T22 (done in d235e9df); the effective
+    floor is T36.
 
 - [x] T30 — [API] Liveness timing test that needs the 1 s interval (FR-27, finding C1 — liveness half)
   - **Files:** `packages/plugins/liveness-http/__tests__/liveness-http.host-policy.spec.ts`
@@ -525,6 +527,93 @@ old code or under the legacy switch).
     builtin host entries over env-global; restore rows use
     `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE`; `npm run lint:docs` clean.
 
+## Phase 5 — Review round 2, second pass (2026-09-27)
+
+A second review of the round-2 work confirmed nine findings; each fix keeps the old
+behaviour behind a named switch (or is a bug fix of new code) and has a red control.
+
+- [x] T33 — [CORE] A re-issued redirect hop skips the memo (FR-29)
+  - **Files:** `packages/common/src/http/http-client.ts` (`send`),
+    `http-client-redirect-pacing.spec.ts` ("a redirect loop inside a multi-location memo scope")
+  - **Acceptance:** two loopback origins bouncing A → B → A under a caller lock, inside
+    `runWithHttpMemo`, reject with `ERR_FR_TOO_MANY_REDIRECTS` after 6 requests; a same-URL
+    bounce on an operator host with a lock, the same after 3.
+  - **Red control:** the round-1 `send()` (memo consulted for hops: the `|| redirectHops > 0`
+    of its first line removed, then restored byte for byte) — both memo loops settle as
+    `hung` (8 s guard); the loop outside a memo scope still fails fast.
+
+- [x] T34 — [CORE] Redirect pacing only under a lock or a host policy (FR-28)
+  - **Files:** `http-client.ts` (`pacedRedirectHook`), `crawl/resolve.ts`
+    (`builtinHostLockApplies`, `effectiveProxyPinScope`), `http-client-redirect-pacing.spec.ts`
+  - **Acceptance:** golden: 4 loopback CONNECT proxies in `EVER_JOBS_CRAWL_PROXIES`, the
+    default env, an A → B 302 across hosts → one limiter grant and both tunnels through
+    the same proxy (as with `PACE_REDIRECTS=false`); under `EVER_JOBS_CRAWL_CALLER_OVERRIDES=stricter`
+    the hop is re-issued (two grants); robots.txt of the target is checked only under the lock.
+  - **Red control:** the round-1 hook (every cross-bucket hop re-issued) swapped into
+    `pacedRedirectHook` → the unlocked golden, the unlocked robots twin, the
+    `http-client-redirects` twin and the egress-guard row fail (4 tests).
+
+- [x] T35 — [CORE] `proxyRotation` never another origin under `stricter` (FR-30)
+  - **Files:** `crawl/env.ts` (`CALLER_PROXY_ROTATION`, `crawlCallerProxyRotation`),
+    `crawl/resolve.ts` (`StricterOptions`), `crawl-resolve.spec.ts`,
+    `crawl-caller-lock.spec.ts`, `crawl-env.spec.ts`
+  - **Acceptance:** with env proxies, a caller's `off` is refused for the Softy plugin
+    (lock source `plugin`), JSON-LD and liveness on `acme.softy.pro` (`builtin-host`);
+    accepted without any proxy list; an unlocked source takes any value.
+  - **Red control:** `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION=ranked` → `off` accepted from
+    the caller layer (the review's scenario); the round-1 comparator swapped in → 9 tests fail.
+
+- [x] T36 — [API] Policy API: effective client floor, switches, proxy pin; config mirror (FR-31)
+  - **Files:** `apps/api/src/jobs/health.controller.ts`, `apps/api/src/config/configuration.ts`,
+    `packages/plugin/src/interfaces/plugin-metadata.interface.ts`,
+    `sources-crawl-policy.controller.spec.ts`, `apps/api/src/config/__tests__/crawl-mirror.spec.ts`
+  - **Acceptance:** with the real Softy metadata, `1000` by default and `null` under
+    `SOFTY_LEGACY=no-interval-floor` + the unlock JSON + a caller `minIntervalMs: 0`
+    (top-level `0`); `meta.switches` default / `legacy` / explicit; `meta.proxyPin`
+    `base`/`domain` on a Softy host, `bucket`/`host` on LinkedIn.
+  - **Red control:** the round-1 controller → `1000` under `no-interval-floor` and no
+    `switches` / `proxyPin`.
+
+- [x] T37 — [DOCS] Second-pass docs and the stale T26 / T22 notes
+  - **Files:** `docs/CRAWL_POLICY.md` (§2, §3, §5.2, §6.4, §7.2, §9, §15, §16, §17, §21),
+    `docs/API_CHANGELOG.md` (the stale "JobsService does not fill that field yet"),
+    this spec (FR-23 / FR-26 marked done, FR-28..FR-31, §7.3, §7.4, D12..D14) and tasks,
+    Spec 1715 spec and tasks (T22 ticked), `.env.example`, `docs/log.md`
+  - **Acceptance:** `npm run lint:docs` clean; no competitor named.
+
+## Phase 6 — Review of PR #105 (2026-09-27)
+
+Three review comments on the PR (G1–G3); each fix keeps the old behaviour behind a
+named switch or fixes new code, with a red control; G2 is a documented limitation.
+
+- [x] T38 — [CORE] A failed attempt records its cool-down before freeing its slot (FR-32, G1)
+  - **Files:** `packages/common/src/http/http-client.ts` (`sendUnderPolicy`,
+    `settleFailedAttempt`), `crawl/env.ts` (`COOLDOWN_BEFORE_RELEASE`,
+    `crawlCooldownBeforeRelease`), `crawl/resolve.ts` (`crawlLockApplies`, shared with
+    `effectiveProxyPinScope`), `apps/api/src/jobs/health.controller.ts` (`meta.switches`),
+    `apps/api/src/config/configuration.ts`; tests `http-client-cooldown-before-release.spec.ts`
+    (new), `crawl-env.spec.ts`, `sources-crawl-policy.controller.spec.ts`, `crawl-mirror.spec.ts`
+  - **Acceptance:** one slot, no interval, a request queued behind a `502` / `503` / `429`
+    under a lock starts exactly when the cool-down ends; behind a give-up `429` it is never
+    sent; the builtin Softy lock alone holds it (operator `minGapMs: 0`); an unlocked source
+    keeps the pre-fix order (rule 3), `all` extends the fix; `legacy` → `off`.
+  - **Red control:** the pre-fix order (`holdSlotOnFailure` forced false, then restored
+    byte for byte) → 6 tests fail; `EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE=off` → the
+    queued request starts the instant the failure came back.
+
+- [x] T39 — [API] Fresh-fetch trust bounded by now (FR-33, G3)
+  - **Files:** `apps/api/src/jobs/jobs.controller.ts` (`markFreshlyFetched`),
+    `jobs.controller.liveness-listed.spec.ts`
+  - **Acceptance:** JSON and NDJSON: a future `jobUrlFetchedAt` is probed, one up to now
+    is trusted (`fresh-fetch`), a young listing on a future-fetched job is trusted (`listed`).
+  - **Red control:** the `<= now` bound removed → 4 tests fail.
+
+- [x] T40 — [DOCS] Browser redirects: a documented limitation (FR-34, G2)
+  - **Files:** `docs/CRAWL_POLICY.md` §9 and §20, this spec (FR-34, D16)
+  - **Acceptance:** says that `EVER_JOBS_CRAWL_PACE_REDIRECTS` covers `HttpClient` only,
+    what a browser redirect into `*.softy.pro` does today, and why it is not fixed
+    (Playwright routes only the first URL of a chain; the alternatives are a redesign).
+
 ### Finding coverage (round 2)
 
 | Finding | Closed by | Note |
@@ -537,10 +626,19 @@ old code or under the legacy switch).
 | C1 | T30, Spec 1715 T20 | |
 | C3 | T27 | |
 | F3 | T22, T29 | |
-| F5 | T29, T32, **Spec 1715 T22 (open)** | recipe and §6.4 note; Softy's floor declaration open |
+| F5 | T29, T32, Spec 1715 T22, T36 | recipe and §6.4 note; Softy's floor declared (d235e9df), reported as in force (T36) |
 | F7 | T23, T32 | |
 | F8 | T24 | |
 | flaky timing test | T31 | |
+| second pass: re-issued hop waits on its own memo entry | T33 | |
+| second pass: redirect pacing changed unlocked sources' proxy pick | T34 | |
+| second pass: a caller's `proxyRotation: off` under the lock | T35 | |
+| second pass: `meta.clientMinIntervalFloorMs` declared, not effective; switches not visible | T36 | |
+| second pass: stale "T26 / T22 open" notes | T37 | |
+| second pass: Softy board liveness, empty-tenant cache, pre-1715 diagnostics | Spec 1715 T23..T25 | |
+| PR #105 G1: a queued request granted before a failure's cool-down | T38 | `EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE` |
+| PR #105 G2: browser redirects not paced by the destination policy | T40 | documented limitation (FR-34) |
+| PR #105 G3: fresh-fetch trust without an upper bound | T39 | |
 
 ## Gap coverage
 

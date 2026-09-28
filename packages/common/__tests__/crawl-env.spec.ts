@@ -20,6 +20,8 @@ import {
   crawlCallerProxiesAllowed,
   crawlCallerProxiesAllowedFor,
   crawlFleetSize,
+  crawlCallerProxyRotation,
+  crawlCooldownBeforeRelease,
   crawlPaceRedirectsEnabled,
   crawlPluginManifestsEnabled,
   crawlProxyPinScope,
@@ -59,6 +61,10 @@ describe('crawl policy env (Spec 1690)', () => {
         robotsBackoff: true,
         // Spec 1715 switches, each at its default.
         paceRedirects: true,
+        // Spec 1715 review round 2.
+        callerProxyRotation: 'base',
+        // Review of PR #105.
+        cooldownBeforeRelease: 'locked',
         builtinHostsDisable: [],
       });
     });
@@ -714,6 +720,10 @@ describe('crawl policy env (Spec 1690)', () => {
       it('legacy: STRICTER_RULES 1690, PROXY_PIN_SCOPE bucket, ROBOTS_BACKOFF false, PACE_REDIRECTS false', () => {
         const cfg = parse({ [CRAWL_ENV.PRESET]: 'legacy' });
         expect(cfg).toMatchObject({ stricterRules: '1690', proxyPinScope: 'bucket', robotsBackoff: false, paceRedirects: false });
+        expect(cfg.callerProxyRotation).toBe('ranked');
+        expect(crawlCallerProxyRotation(cfg)).toBe('ranked');
+        expect(cfg.cooldownBeforeRelease).toBe('off');
+        expect(crawlCooldownBeforeRelease(cfg)).toBe('off');
         expect(crawlStricterRules(cfg)).toBe('1690');
         expect(crawlProxyPinScope(cfg)).toBe('bucket');
         expect(crawlRobotsBackoffEnabled(cfg)).toBe(false);
@@ -765,6 +775,50 @@ describe('crawl policy env (Spec 1690)', () => {
         expect(crawlPaceRedirectsEnabled({ ...bare, preset: 'polite' } as never)).toBe(true);
         expect(crawlPaceRedirectsEnabled({ ...bare, paceRedirects: true } as never)).toBe(true);
         expect(crawlStricterRules({ ...bare, stricterRules: '1714' } as never)).toBe('1714');
+      });
+    });
+
+    describe('EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION (Spec 1715 review round 2)', () => {
+      it('is listed, named, defaults to base, and parses like every enum switch', () => {
+        expect(CRAWL_EXTRA_ENV.CALLER_PROXY_ROTATION).toBe('EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION');
+        expect(CRAWL_POLICY_ENV_VARS).toContain(CRAWL_EXTRA_ENV.CALLER_PROXY_ROTATION);
+        expect(parse({}).callerProxyRotation).toBe('base');
+        expect(parse({ [CRAWL_EXTRA_ENV.CALLER_PROXY_ROTATION]: 'RANKED' }).callerProxyRotation).toBe('ranked');
+        expect(parse({ [CRAWL_ENV.PRESET]: 'legacy', [CRAWL_EXTRA_ENV.CALLER_PROXY_ROTATION]: 'base' }).callerProxyRotation).toBe('base');
+        const bad = parse({ [CRAWL_EXTRA_ENV.CALLER_PROXY_ROTATION]: 'loose' });
+        expect(bad.callerProxyRotation).toBe('base');
+        expect(bad.warnings).toEqual([expect.stringContaining(`${CRAWL_EXTRA_ENV.CALLER_PROXY_ROTATION}: `)]);
+        expect(bad.warnings[0]).toContain('using "base"');
+      });
+
+      it('the accessor follows the preset on a hand-built config without the field', () => {
+        const bare = { preset: 'polite', global: {}, policies: {}, callerOverrides: 'any', proxies: [], abortOnDeadline: true, warnings: [] };
+        expect(crawlCallerProxyRotation(bare as never)).toBe('base');
+        expect(crawlCallerProxyRotation({ ...bare, preset: 'legacy' } as never)).toBe('ranked');
+        expect(crawlCallerProxyRotation({ ...bare, callerProxyRotation: 'ranked' } as never)).toBe('ranked');
+      });
+    });
+
+    describe('EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE (review of PR #105)', () => {
+      it('is listed, named, defaults to locked, and parses like every enum switch', () => {
+        expect(CRAWL_EXTRA_ENV.COOLDOWN_BEFORE_RELEASE).toBe('EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE');
+        expect(CRAWL_POLICY_ENV_VARS).toContain(CRAWL_EXTRA_ENV.COOLDOWN_BEFORE_RELEASE);
+        expect(parse({}).cooldownBeforeRelease).toBe('locked');
+        expect(parse({ [CRAWL_EXTRA_ENV.COOLDOWN_BEFORE_RELEASE]: 'ALL' }).cooldownBeforeRelease).toBe('all');
+        expect(parse({ [CRAWL_EXTRA_ENV.COOLDOWN_BEFORE_RELEASE]: 'off' }).cooldownBeforeRelease).toBe('off');
+        expect(parse({ [CRAWL_ENV.PRESET]: 'legacy' }).cooldownBeforeRelease).toBe('off');
+        expect(parse({ [CRAWL_ENV.PRESET]: 'legacy', [CRAWL_EXTRA_ENV.COOLDOWN_BEFORE_RELEASE]: 'locked' }).cooldownBeforeRelease).toBe('locked');
+        const bad = parse({ [CRAWL_EXTRA_ENV.COOLDOWN_BEFORE_RELEASE]: 'sometimes' });
+        expect(bad.cooldownBeforeRelease).toBe('locked');
+        expect(bad.warnings).toEqual([expect.stringContaining(`${CRAWL_EXTRA_ENV.COOLDOWN_BEFORE_RELEASE}: `)]);
+        expect(bad.warnings[0]).toContain('using "locked"');
+      });
+
+      it('the accessor follows the preset on a hand-built config without the field', () => {
+        const bare = { preset: 'polite', global: {}, policies: {}, callerOverrides: 'any', proxies: [], abortOnDeadline: true, warnings: [] };
+        expect(crawlCooldownBeforeRelease(bare as never)).toBe('locked');
+        expect(crawlCooldownBeforeRelease({ ...bare, preset: 'legacy' } as never)).toBe('off');
+        expect(crawlCooldownBeforeRelease({ ...bare, cooldownBeforeRelease: 'all' } as never)).toBe('all');
       });
     });
 

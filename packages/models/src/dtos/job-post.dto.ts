@@ -12,8 +12,8 @@ import type { CareerLevelVerdict } from '../interfaces/career-level-classifier.i
 export const JOB_LIVENESS_REASON_FRESH_FETCH = 'fresh-fetch';
 
 /**
- * `liveness.reason` of a job marked `active` because the source listed it in a
- * sitemap fetched from the network not long ago (`jobUrlListedAt`, within
+ * `liveness.reason` of a job marked `active` because the source listed it in an
+ * index (a sitemap, a list page) fetched from the network not long ago (`jobUrlListedAt`, within
  * `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` of now), so it was not probed again
  * (Spec 1715, audit A3). Applies to cache hits too: the age is measured against now.
  */
@@ -119,17 +119,20 @@ export class JobPostDto {
    * ISO-8601 UTC instant at which the source plugin itself fetched `jobUrl` and got
    * a 2xx page it could parse, during the scrape that produced this record (Spec
    * 1714 FR-16). Unset when the page came from a plugin cache, was not fetched, or
-   * failed. `?liveness=true` trusts a value not older than the request instead of
-   * probing the URL again (`EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false` probes it anyway).
+   * failed. `?liveness=true` trusts a value not older than the request (and not later
+   * than now) instead of probing the URL again (`EVER_JOBS_LIVENESS_TRUST_FRESH_FETCH=false`
+   * probes it anyway).
    */
   jobUrlFetchedAt?: string | null;
 
   /**
-   * ISO-8601 UTC instant at which the sitemap that listed this posting was fetched
-   * from the network (Spec 1715, audit A3): by this request, or by an earlier one
-   * whose answer the source still holds in its sitemap cache. It says the site
-   * LISTED the posting at that time, not that `jobUrl` itself was fetched. Unset
-   * when the posting did not come from a sitemap. `?liveness=true` trusts a value
+   * ISO-8601 UTC instant at which the source's own index that listed this posting —
+   * a sitemap, or (Softy, review round 2) the list page or legacy index carrying its
+   * card — was fetched from the network (Spec 1715, audit A3): by this request, or,
+   * for a sitemap, by an earlier one whose answer the source still holds in its cache
+   * (list pages are never cached). It says the site LISTED the posting at that time,
+   * not that `jobUrl` itself was fetched. Unset when the posting did not come from
+   * such an index. `?liveness=true` trusts a value
    * not older than `EVER_JOBS_LIVENESS_TRUST_LISTED_MAX_AGE_MS` (default 600000 =
    * 10 min; `0` = never, the pre-fix behaviour) and marks the job
    * `{ state: 'active', checkedAt: jobUrlListedAt, reason: JOB_LIVENESS_REASON_LISTED }`

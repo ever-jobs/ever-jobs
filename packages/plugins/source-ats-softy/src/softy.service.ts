@@ -147,8 +147,17 @@ interface SoftyRun {
   /** Network requests this scrape sent (or tried to): the first one may reveal an unknown tenant. */
   requests: number;
   signal?: AbortSignal;
-  /** The most telling failure (`preferRefusalError`); turned into the response's diagnostic. */
+  /**
+   * The most telling failure (`preferRefusalError`; the first one met under
+   * `SOFTY_LEGACY=first-error`); turned into the response's diagnostic.
+   */
   error?: unknown;
+  /**
+   * The sitemap answered 2xx but listed no offer, so `auto` fell back to the listing
+   * (round 2): if the listing finds no card either, the tenant has no open offer and
+   * that answer is cached (`SOFTY_SITEMAP_CACHE_TTL_MS`).
+   */
+  sitemapWithoutOffers: boolean;
   /** A diagnostic for a result that is short without any failure (used when `error` is unset). */
   note?: ScrapeDiagnostics;
   cache: BoundedTtlCache<SoftyDetail> | null;
@@ -169,6 +178,7 @@ type FetchOutcome =
 type SitemapStage =
   | { kind: 'entries'; entries: SitemapEntry[]; listedAt: string }
   | { kind: 'fallback' }
+  | { kind: 'known-empty' }
   | { kind: 'stop' };
 
 /** A detail page's fields, and when the network answered it (unset for a cache hit). */
@@ -282,9 +292,13 @@ class SoftySitemapDecodeError extends Error {
   category: 'ats',
   isAts: true,
   crawl: SOFTY_CRAWL_POLICY,
-  // Shown by GET /api/sources/softy/crawl-policy (meta.clientMinIntervalFloorMs);
-  // enforced by this plugin's client, off with SOFTY_LEGACY=no-interval-floor.
+  // Shown by GET /api/sources/softy/crawl-policy (meta.clientMinIntervalFloorMs): the
+  // declared default, and the floor in force now (read per call, so 0 once
+  // SOFTY_LEGACY=no-interval-floor removed it — review round 2). Enforced by this
+  // plugin's client (createHttpClient({ minIntervalFloorMs })).
   clientMinIntervalFloorMs: SOFTY_MIN_INTERVAL_FLOOR_MS,
+  clientMinIntervalFloor: () => readSoftyConfig().minIntervalFloorMs,
+  clientMinIntervalFloorSwitch: `${SOFTY_ENV.LEGACY}=no-interval-floor`,
 })
 @Injectable()
 export class SoftyService implements IScraper {
@@ -296,6 +310,13 @@ export class SoftyService implements IScraper {
 
   /** Per-tenant sitemap cache (Spec 1715 FR-12), keyed by origin. */
   private sitemapCache: BoundedTtlCache<CachedSitemap> | null = null;
+
+  /**
+   * Tenants with no open offer — the sitemap listed none AND the fallback listing
+   * found no card (round 2) — keyed by origin → when that was seen; kept
+   * `SOFTY_SITEMAP_CACHE_TTL_MS`, like a sitemap.
+   */
+  private emptyTenants: BoundedTtlCache<number> | null = null;
 
   /** Unknown tenants (host did not resolve), keyed by origin → when it was seen (FR-5). */
   private unknownTenants: BoundedTtlCache<number> | null = null;
@@ -400,6 +421,7 @@ export class SoftyService implements IScraper {
       consecutiveDetailFailures: 0,
       stopDetails: false,
       stopped: false,
+      sitemapWithoutOffers: false,
       requests: 0,
       signal: this.scrapeContext()?.signal,
       cache: this.getDetailCache(config),
@@ -455,10 +477,11 @@ export class SoftyService implements IScraper {
     this.detailCache?.clear();
   }
 
-  /** Drop the detail, sitemap and unknown-tenant caches (Spec 1715). */
+  /** Drop the detail, sitemap, empty-tenant and unknown-tenant caches (Spec 1715). */
   clearCaches(): void {
     this.detailCache?.clear();
     this.sitemapCache?.clear();
+    this.emptyTenants?.clear();
     this.unknownTenants?.clear();
   }
 
@@ -604,7 +627,7 @@ export class SoftyService implements IScraper {
         await this.collectFromSitemap(run, stage.entries, posts, stage.listedAt);
         return;
       }
-      if (stage.kind === 'stop' || run.stopped) return;
+      if (stage.kind === 'known-empty' || stage.kind === 'stop' || run.stopped) return;
       if (run.discovery === 'sitemap') {
         this.logger.log(`Softy: no usable sitemap for ${run.tenant} (discovery=sitemap, no listing fallback)`);
         return;
@@ -618,7 +641,23 @@ export class SoftyService implements IScraper {
       this.logger.log(`Softy: no usable sitemap for ${run.tenant}; falling back to the listing`);
     }
 
-    await this.collectFromListing(run, posts);
+    const cards = await this.collectFromListing(run, posts);
+    // Round 2: the sitemap listed no offer and the listing found no card — the tenant
+    // has none open. Remembered for SOFTY_SITEMAP_CACHE_TTL_MS, so the next search asks
+    // nothing (it used to re-read /sitemap.xml AND /offers?page=1 every time). A failure,
+    // a stop, a note or an abort leaves nothing cached.
+    // SOFTY_LEGACY=empty-board-uncached restores the pre-fix behaviour.
+    if (
+      !useListing &&
+      run.sitemapWithoutOffers &&
+      cards === 0 &&
+      run.error === undefined &&
+      run.note === undefined &&
+      !run.stopped &&
+      !this.isAborted(run)
+    ) {
+      this.cacheEmptyTenant(run);
+    }
   }
 
   // ── Sitemap stage (Spec 1715 §7.3) ──────────────────────────────────────────
@@ -636,6 +675,13 @@ export class SoftyService implements IScraper {
     if (cached) {
       this.logger.debug(`Softy: sitemap of ${run.tenant} served from the cache (${cached.entries.length} offer(s))`);
       return { kind: 'entries', entries: cached.entries, listedAt: cached.listedAt };
+    }
+    if (this.isKnownEmptyTenant(run)) {
+      this.logger.log(
+        `Softy: tenant "${run.tenant}" had no open offer (sitemap and listing) within ${SOFTY_ENV.SITEMAP_CACHE_TTL_MS}; ` +
+          'not asking again',
+      );
+      return { kind: 'known-empty' };
     }
     if (run.stopped || this.isAborted(run)) return { kind: 'stop' };
 
@@ -689,6 +735,7 @@ export class SoftyService implements IScraper {
     const offers = dedupe ? this.uniqueOffers(entries, run.host) : entries;
     if (offers.length === 0) {
       this.logger.log(`Softy sitemap of ${run.tenant} holds no offer (or could not be parsed)`);
+      run.sitemapWithoutOffers = true;
       return { kind: 'fallback' };
     }
     const listed = listedAt ?? new Date().toISOString();
@@ -751,7 +798,7 @@ export class SoftyService implements IScraper {
         this.logger.log(`Softy sitemap of ${run.tenant} is not a sitemap (${(err as Error).message})`);
         return { kind: 'fallback' };
       case 'fallback':
-        if (explicit) run.error = preferRefusalError(run.error, err);
+        if (explicit) this.keepError(run, err);
         if (this.isMissing(err)) {
           this.logger.log(`Softy sitemap not available (HTTP ${status ?? 'n/a'}) for ${run.tenant}`);
         } else {
@@ -935,9 +982,11 @@ export class SoftyService implements IScraper {
 
   /**
    * Listing discovery: `/offers?page=1..N`, then detail pages per `descriptionDepth`.
-   * Tenants still on the legacy markup are read from the legacy index instead.
+   * Tenants still on the legacy markup are read from the legacy index instead. Every
+   * card carries `listedAt`, when the page listing it answered (round 2: its post's
+   * `jobUrlListedAt`). Returns how many cards the pages held (before `offset`).
    */
-  private async collectFromListing(run: SoftyRun, posts: JobPostDto[]): Promise<void> {
+  private async collectFromListing(run: SoftyRun, posts: JobPostDto[]): Promise<number> {
     const needed = run.offset + run.wanted;
     const cards: SoftyCardJob[] = [];
     const seen = new Set<string>();
@@ -947,7 +996,7 @@ export class SoftyService implements IScraper {
       const outcome = await this.fetchPage(run, softyListingPageUrlFrom(run.origin, page), 'listing');
       if (outcome.kind === 'stop') break;
       if (outcome.kind === 'failed') {
-        run.error = preferRefusalError(run.error, outcome.error);
+        this.keepError(run, outcome.error);
         // A struggling server gets no detail requests either: the cards read so far are
         // returned board-only. SOFTY_LEGACY=listing-failure-details restores the
         // pre-1715 behaviour (details still fetched).
@@ -962,7 +1011,7 @@ export class SoftyService implements IScraper {
       const parsed = parseSoftyListingPage(outcome.html, run.tenant, run.origin);
       if (page === 1 && parsed.cards.length === 0) {
         if (hasLegacySoftyLinks(outcome.html)) {
-          this.addLegacyCards(run, outcome.html, cards, seen, needed);
+          this.addLegacyCards(run, outcome.html, cards, seen, needed, outcome.fetchedAt);
         } else if (!looksLikeCurrentSoftyMarkup(outcome.html)) {
           await this.collectLegacyIndex(run, cards, seen, needed);
         }
@@ -973,7 +1022,7 @@ export class SoftyService implements IScraper {
       for (const card of parsed.cards) {
         if (seen.has(card.id)) continue;
         seen.add(card.id);
-        cards.push(card);
+        cards.push({ ...card, listedAt: outcome.fetchedAt });
         added++;
       }
       if (added === 0 || cards.length >= needed) break;
@@ -982,6 +1031,7 @@ export class SoftyService implements IScraper {
     }
 
     await this.emitCards(run, cards.slice(run.offset, needed), posts);
+    return cards.length;
   }
 
   /**
@@ -998,38 +1048,54 @@ export class SoftyService implements IScraper {
     const path = run.config.legacy.has('offres') ? SOFTY_OFFERS_PATH : SOFTY_LEGACY_INDEX_PATH;
     const outcome = await this.fetchPage(run, `${run.origin}${path}`, 'legacy index');
     if (outcome.kind === 'failed') {
-      run.error = preferRefusalError(run.error, outcome.error);
+      this.keepError(run, outcome.error);
       return;
     }
     if (outcome.kind !== 'ok') return;
-    this.addLegacyCards(run, outcome.html, cards, seen, needed);
+    this.addLegacyCards(run, outcome.html, cards, seen, needed, outcome.fetchedAt);
   }
 
+  /** Legacy cards of an index page that answered at `listedAt` (ISO-8601 UTC). */
   private addLegacyCards(
     run: SoftyRun,
     html: string,
     cards: SoftyCardJob[],
     seen: Set<string>,
     needed: number,
+    listedAt: string,
   ): void {
     for (const card of this.parseIndex(html, run.origin, run.config.legacy.has('legacy-detail-url'))) {
       if (cards.length >= needed) break;
       const id = this.cleanText(card.id);
       if (!id || seen.has(id)) continue;
       seen.add(id);
-      cards.push({ ...card, legacy: true });
+      cards.push({ ...card, legacy: true, listedAt });
     }
   }
 
-  /** Build a post per card, reading detail pages one at a time within the budget. */
+  /**
+   * Build a post per card, reading detail pages one at a time within the budget. Each
+   * post carries `jobUrlListedAt` = when the page listing its card answered (round 2):
+   * list pages are never cached, so it is always fresh, and `?liveness=true` then
+   * trusts a board listed a moment ago instead of probing every card right after the
+   * list pages that just listed them. `SOFTY_LEGACY=listing-no-listed-at` leaves it
+   * unset (the pre-fix behaviour: every listing post is probed).
+   */
   private async emitCards(run: SoftyRun, cards: SoftyCardJob[], posts: JobPostDto[]): Promise<void> {
+    const withListedAt = !run.config.legacy.has('listing-no-listed-at');
     for (const card of cards) {
       if (this.isAborted(run)) break;
       const url = this.cleanText(card.url);
       const result: DetailResult =
         url && run.depth !== 'board' ? await this.getDetail(run, url, url, 'listing') : { detail: null };
       try {
-        const post = this.buildPost(card, run, result.detail, url ? { url, at: result.fetchedAt } : undefined);
+        const post = this.buildPost(
+          card,
+          run,
+          result.detail,
+          url ? { url, at: result.fetchedAt } : undefined,
+          withListedAt ? card.listedAt : undefined,
+        );
         if (post) posts.push(post);
       } catch (err: any) {
         this.logger.warn(`Error processing Softy role ${card.id}: ${err?.message ?? err}`);
@@ -1083,7 +1149,7 @@ export class SoftyService implements IScraper {
     }
     if (outcome.kind === 'stop') return { detail: null };
 
-    run.error = preferRefusalError(run.error, outcome.error);
+    this.keepError(run, outcome.error);
     run.consecutiveDetailFailures++;
     const max = run.config.maxConsecutiveDetailFailures;
     if (max > 0 && run.consecutiveDetailFailures >= max) {
@@ -1128,6 +1194,32 @@ export class SoftyService implements IScraper {
       this.sitemapCache = new BoundedTtlCache<CachedSitemap>(SOFTY_SITEMAP_CACHE_MAX, 0, () => Date.now());
     }
     this.sitemapCache.set(key, { entries, at: Date.now(), listedAt }, config.sitemapCacheTtlMs);
+  }
+
+  /**
+   * A tenant seen with no open offer — sitemap without offers, listing without cards —
+   * within `SOFTY_SITEMAP_CACHE_TTL_MS` (round 2). Never with the cache off (`0`) or
+   * `SOFTY_LEGACY=empty-board-uncached`.
+   */
+  private isKnownEmptyTenant(run: SoftyRun): boolean {
+    const ttl = run.config.sitemapCacheTtlMs;
+    if (ttl <= 0 || run.config.legacy.has('empty-board-uncached') || !this.emptyTenants) return false;
+    const seenAt = this.emptyTenants.get(run.origin);
+    if (seenAt === undefined) return false;
+    if (Date.now() - seenAt < ttl) return true;
+    this.emptyTenants.delete(run.origin);
+    return false;
+  }
+
+  /** Remember that the tenant has no open offer, for `SOFTY_SITEMAP_CACHE_TTL_MS` (round 2). */
+  private cacheEmptyTenant(run: SoftyRun): void {
+    const ttl = run.config.sitemapCacheTtlMs;
+    if (ttl <= 0 || run.config.legacy.has('empty-board-uncached')) return;
+    if (!this.emptyTenants) {
+      this.emptyTenants = new BoundedTtlCache<number>(SOFTY_SITEMAP_CACHE_MAX, 0, () => Date.now());
+    }
+    this.emptyTenants.set(run.origin, Date.now(), ttl);
+    this.logger.debug(`Softy: ${run.tenant} has no open offer; remembered for ${formatDuration(ttl)}`);
   }
 
   /** A tenant whose host did not resolve within `SOFTY_UNKNOWN_TENANT_TTL_MS` (not in `any-error` mode). */
@@ -1203,7 +1295,7 @@ export class SoftyService implements IScraper {
         return { kind: 'stop' };
       }
       if (this.isRobotsRefusal(err)) {
-        run.error = preferRefusalError(run.error, err);
+        this.keepError(run, err);
         this.logger.warn(`Softy: robots.txt disallows ${url}`);
         return { kind: 'missing' };
       }
@@ -1260,10 +1352,17 @@ export class SoftyService implements IScraper {
     return isCrawlPolicyError(err) && !this.isRobotsRefusal(err);
   }
 
-  /** Stop on a fatal error: a 429 or a crawl-policy hold-back is `rate_limited`. */
+  /**
+   * Stop on a fatal error: a 429 or a crawl-policy hold-back is `rate_limited` (a
+   * crawl-policy block `blocked`). `SOFTY_LEGACY=first-error` names no reason (the
+   * pre-1715 behaviour): the response is then `classifyScrapeError` of the FIRST
+   * error — a 429 reads `fetch_error`, as it did.
+   */
   private stopOnFatal(run: SoftyRun, err: any, stage: string): void {
     let reason: SoftyStopReason | undefined;
-    if (this.httpStatus(err) === 429) {
+    if (run.config.legacy.has('first-error')) {
+      reason = undefined;
+    } else if (this.httpStatus(err) === 429) {
       reason = 'rate_limited';
     } else if (isCrawlPolicyError(err)) {
       const classified = classifyScrapeError(err).reason;
@@ -1273,8 +1372,18 @@ export class SoftyService implements IScraper {
   }
 
   /**
+   * Record a failure as the scrape's error (FR-8): the most telling one so far —
+   * `preferRefusalError`, so a refusal (429, 401/403/407, a robots.txt refusal, a
+   * crawl-policy hold-back) beats an earlier 5xx. `SOFTY_LEGACY=first-error` keeps
+   * the FIRST error met instead (the pre-1715 behaviour, review round 2).
+   */
+  private keepError(run: SoftyRun, err: unknown): void {
+    run.error = run.config.legacy.has('first-error') ? (run.error ?? err) : preferRefusalError(run.error, err);
+  }
+
+  /**
    * Stop the whole scrape: no further request of any kind (Spec 1715 §7.3 / §7.4).
-   * `run.error` keeps the most telling error (`preferRefusalError`, FR-8); the stop's
+   * `run.error` keeps the most telling error (`keepError`, FR-8); the stop's
    * diagnostic — `diagnostics`, else `reason` with the error's message — wins over it.
    */
   private stopScrape(
@@ -1286,7 +1395,7 @@ export class SoftyService implements IScraper {
   ): void {
     run.stopped = true;
     run.stopDetails = true;
-    if (err !== undefined) run.error = preferRefusalError(run.error, err);
+    if (err !== undefined) this.keepError(run, err);
     if (!run.stopDiagnostics) {
       if (diagnostics) run.stopDiagnostics = diagnostics;
       else if (reason) run.stopDiagnostics = new ScrapeDiagnostics(reason, classifyScrapeError(err).detail ?? reason);

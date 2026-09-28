@@ -1329,11 +1329,15 @@ describe('egress guard (Spec 1690 §4.8)', () => {
 
   it.each([
     // EVER_JOBS_CRAWL_PACE_REDIRECTS: off = the hop is followed in the slot (the hook returns);
-    // on (default, Spec 1715 audit A0) = a hop to another bucket leaves through the deferral marker.
-    ['false', undefined],
-    [undefined, 'DeferredRedirect'],
-  ])('checks every redirect target (EVER_JOBS_CRAWL_PACE_REDIRECTS=%s)', async (pace, publicHopThrows) => {
-    setEnv({ [CRAWL_EXTRA_ENV.PACE_REDIRECTS]: pace });
+    // on (default, Spec 1715 audit A0) = a hop to another bucket leaves through the deferral
+    // marker when a caller lock applies (review round 2: an unlocked source follows it in
+    // the slot, as before Spec 1714). The egress check runs first in every case.
+    ['false', undefined, undefined],
+    ['false', 'stricter', undefined],
+    [undefined, undefined, undefined],
+    [undefined, 'stricter', 'DeferredRedirect'],
+  ])('checks every redirect target (EVER_JOBS_CRAWL_PACE_REDIRECTS=%s, caller overrides %s)', async (pace, lock, publicHopThrows) => {
+    setEnv({ [CRAWL_EXTRA_ENV.PACE_REDIRECTS]: pace, [CRAWL_ENV.CALLER_OVERRIDES]: lock });
     const client = new HttpClient();
     const h = attach(client);
     await settle(client.get(URL_A));

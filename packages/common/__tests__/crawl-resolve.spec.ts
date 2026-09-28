@@ -740,13 +740,69 @@ describe('filterCallerOverride (Spec 1690, comparators revised by Spec 1714)', (
     expect(acceptedIn({ userAgentMode: 'strict' }, pluginBase)).toBe(true);
   });
 
-  it('proxyRotation (1714): off < per-host < per-scrape < per-request, accept ≤ base', () => {
+  /** Rules 1714 with an explicit caller-proxy-rotation mode and proxy list (review round 2). */
+  const acceptedRotation = (
+    caller: CrawlPolicyOverride,
+    b: CrawlPolicy,
+    proxyRotation: 'base' | 'ranked',
+    proxiesConfigured: boolean,
+  ): boolean =>
+    Object.keys(filterCallerOverride(caller, b, 'stricter', { rules: '1714', proxyRotation, proxiesConfigured }).accepted)
+      .length === 1;
+
+  it('proxyRotation (1714, CALLER_PROXY_ROTATION=ranked — the pre-fix order): off < per-host < per-scrape < per-request, accept ≤ base', () => {
     const perRequest = { ...base, proxyRotation: 'per-request' as const };
-    for (const rotation of ['per-scrape', 'per-host', 'off'] as const) {
-      expect(acceptedIn({ proxyRotation: rotation }, perRequest)).toBe(true);
+    for (const proxies of [false, true]) {
+      for (const rotation of ['per-scrape', 'per-host', 'off'] as const) {
+        expect(acceptedRotation({ proxyRotation: rotation }, perRequest, 'ranked', proxies)).toBe(true);
+      }
+      expect(acceptedRotation({ proxyRotation: 'per-host' }, { ...base, proxyRotation: 'off' }, 'ranked', proxies)).toBe(false);
+      expect(acceptedRotation({ proxyRotation: 'off' }, { ...base, proxyRotation: 'off' }, 'ranked', proxies)).toBe(true);
+      // The review scenario: 'off' over a per-host base.
+      expect(acceptedRotation({ proxyRotation: 'off' }, base, 'ranked', proxies)).toBe(true);
     }
-    expect(acceptedIn({ proxyRotation: 'per-host' }, { ...base, proxyRotation: 'off' })).toBe(false);
-    expect(acceptedIn({ proxyRotation: 'off' }, { ...base, proxyRotation: 'off' })).toBe(true);
+  });
+
+  describe('proxyRotation (1714, CALLER_PROXY_ROTATION=base, the default — review round 2): never another origin', () => {
+    const ROTATIONS = ['off', 'per-host', 'per-scrape', 'per-request'] as const;
+
+    it.each(ROTATIONS)('a %s base accepts only itself while a proxy list resolves', (baseRotation) => {
+      const b = { ...base, proxyRotation: baseRotation };
+      for (const rotation of ROTATIONS) {
+        expect([rotation, acceptedRotation({ proxyRotation: rotation }, b, 'base', true)]).toEqual([
+          rotation,
+          rotation === baseRotation,
+        ]);
+      }
+    });
+
+    it.each(ROTATIONS)('a %s base also accepts off when no proxy list resolves (off is then the same direct connection)', (baseRotation) => {
+      const b = { ...base, proxyRotation: baseRotation };
+      for (const rotation of ROTATIONS) {
+        expect([rotation, acceptedRotation({ proxyRotation: rotation }, b, 'base', false)]).toEqual([
+          rotation,
+          rotation === baseRotation || rotation === 'off',
+        ]);
+      }
+    });
+
+    it('is the default of filterCallerOverride (options omitted → base, no proxy list)', () => {
+      const perRequest = { ...base, proxyRotation: 'per-request' as const };
+      expect(filterCallerOverride({ proxyRotation: 'per-host' }, perRequest, 'stricter').rejected).toEqual(['proxyRotation']);
+      expect(filterCallerOverride({ proxyRotation: 'off' }, perRequest, 'stricter').rejected).toEqual([]);
+      expect(filterCallerOverride({ proxyRotation: 'off' }, perRequest, 'stricter', { proxiesConfigured: true }).rejected).toEqual([
+        'proxyRotation',
+      ]);
+    });
+
+    it('does not touch the 1690 rules or the any / none modes', () => {
+      expect(acceptedIn1690({ proxyRotation: 'off' })).toBe(true);
+      for (const opts of [{ proxiesConfigured: true }, { proxiesConfigured: true, proxyRotation: 'base' as const }]) {
+        expect(filterCallerOverride({ proxyRotation: 'off' }, base, 'stricter', { rules: '1690', ...opts }).rejected).toEqual([]);
+        expect(filterCallerOverride({ proxyRotation: 'per-request' }, base, 'any', opts).rejected).toEqual([]);
+        expect(filterCallerOverride({ proxyRotation: 'per-host' }, base, 'none', opts).rejected).toEqual(['proxyRotation']);
+      }
+    });
   });
 
   it('proxyRotation (1690): per-request base accepts per-scrape; off and per-host are interchangeable', () => {

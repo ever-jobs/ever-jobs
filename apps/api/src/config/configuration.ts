@@ -8,7 +8,11 @@ import { resolvePersistSearch } from './store-config';
 import {
   crawlBuiltinHostsDisabled,
   crawlFleetSize,
+  crawlCallerProxyRotation,
+  crawlCooldownBeforeRelease,
   crawlPaceRedirectsEnabled,
+  crawlProxyPinScope,
+  crawlRobotsBackoffEnabled,
   crawlStricterRules,
   readCrawlPolicyEnv,
   resolveCrawlPolicy,
@@ -167,6 +171,20 @@ export default () => {
         stricterRules: crawlStricterRules(env),
         /** EVER_JOBS_CRAWL_PACE_REDIRECTS — redirect hops paced by the hop's own policy (Spec 1715; `false` = pre-fix). */
         paceRedirects: crawlPaceRedirectsEnabled(env),
+        /** EVER_JOBS_CRAWL_PROXY_PIN_SCOPE — what a locked request's per-host proxy pick keys on (Spec 1714; `bucket` = pre-1714). */
+        proxyPinScope: crawlProxyPinScope(env),
+        /** EVER_JOBS_CRAWL_ROBOTS_BACKOFF — robots.txt answers feed the host limiter (Spec 1714; `false` = pre-1714). */
+        robotsBackoff: crawlRobotsBackoffEnabled(env),
+        /**
+         * EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION — a `stricter` caller's proxyRotation (Spec 1715 review round 2;
+         * `ranked` = pre-fix).
+         */
+        callerProxyRotation: crawlCallerProxyRotation(env),
+        /**
+         * EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE — which failed requests record their cool-down before freeing
+         * their limiter slot (review of PR #105; `off` = pre-fix).
+         */
+        cooldownBeforeRelease: crawlCooldownBeforeRelease(env),
         /** EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE — builtin host patterns switched off (Spec 1715; `[]` = none). */
         builtinHostsDisabled: crawlBuiltinHostsDisabled(env),
         warnings: env.warnings,

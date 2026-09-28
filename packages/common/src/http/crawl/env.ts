@@ -140,15 +140,45 @@ export const CRAWL_EXTRA_ENV = {
   ROBOTS_BACKOFF: 'EVER_JOBS_CRAWL_ROBOTS_BACKOFF',
   /**
    * Pace redirect hops by the hop's own policy (Spec 1715, audit A0): a hop whose
-   * host falls in a DIFFERENT rate-limit bucket than the request, or whose host
-   * carries a builtin / operator host policy with a caller lock or a `domain`
-   * scope (e.g. `*.softy.pro`), is not followed inside the request's limiter slot:
-   * `HttpClient` re-issues it as a request of its own (its own paced slot, lock,
-   * cool-down check, robots.txt and proxy pin). Other hops are followed in the slot,
-   * as before. Default `true`; `false` = the pre-fix behaviour (every hop followed
-   * inside the first request's slot), and the default under the `legacy` preset.
+   * host carries a builtin / operator host policy with a caller lock or a `domain`
+   * scope (e.g. `*.softy.pro`), or a hop to a DIFFERENT rate-limit bucket while the
+   * request or the hop is under a caller lock (effective caller-override mode not
+   * `any`), is not followed inside the request's limiter slot: `HttpClient`
+   * re-issues it as a request of its own (its own paced slot, lock, cool-down check,
+   * robots.txt and proxy pin). Every other hop is followed in the slot, as before —
+   * so a source without a lock whose chain stays off host-owned policies keeps its
+   * pre-1714 slot, proxy and pacing (Spec 1714 rule 3; review round 2). Default
+   * `true`; `false` = the pre-fix behaviour (every hop followed inside the first
+   * request's slot), and the default under the `legacy` preset.
    */
   PACE_REDIRECTS: 'EVER_JOBS_CRAWL_PACE_REDIRECTS',
+  /**
+   * How a `stricter` caller-override mode judges a caller's `proxyRotation` under the
+   * `1714` comparators (Spec 1715 review round 2): `base` (default) — accepted only
+   * when it equals the value resolved WITHOUT the caller, or is `off` while no proxy
+   * list resolves (`EVER_JOBS_CRAWL_PROXIES` / `DEFAULT_PROXIES` empty, so `off`
+   * changes nothing on the wire): a caller can never move a locked host's requests
+   * to another origin (e.g. from the operator's pinned proxy to the server's own
+   * IP — Softy's ask C, a stable origin); `ranked` — the `1714` order (`off` <
+   * `per-host` < `per-scrape` < `per-request`, accept ≤ base), the behaviour before
+   * the fix, and the default under the `legacy` preset. `EVER_JOBS_CRAWL_STRICTER_RULES=1690`
+   * keeps the Spec 1690 order whatever this says. Under `any` every value is
+   * accepted and under `none` none, as before.
+   */
+  CALLER_PROXY_ROTATION: 'EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION',
+  /**
+   * When a FAILED attempt frees its limiter slot (review of PR #105): `locked`
+   * (default) — a request under a lock (effective caller-override mode not `any`, or
+   * a host whose builtin policy carries a site owner's lock: every request to
+   * `*.softy.pro`) records the failure's outcome and cool-down (the 429/503 back-off,
+   * a `Retry-After` over `maxRetryAfterMs`, `serverErrorCooldownMs`) BEFORE it frees
+   * its slot, so a request queued behind it is never granted in between and started
+   * inside that cool-down (Softy's ask D); every other request frees the slot first,
+   * as before (Spec 1714 rule 3: a source without a lock keeps its pre-1714 pacing
+   * byte for byte); `all` — every request records first; `off` — every request frees
+   * the slot first (the pre-fix order), and the default under the `legacy` preset.
+   */
+  COOLDOWN_BEFORE_RELEASE: 'EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE',
 } as const;
 
 /** Values of `EVER_JOBS_CRAWL_CALLER_PROXIES`. */
@@ -162,8 +192,22 @@ export type CrawlStricterRules = '1714' | '1690';
 /** Values of `EVER_JOBS_CRAWL_PROXY_PIN_SCOPE` (Spec 1714 FR-6). `bucket` = the pre-1714 pick. */
 export type CrawlProxyPinScope = 'base' | 'bucket';
 
+/**
+ * Values of `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION` (Spec 1715 review round 2). `ranked`
+ * = the rules-1714 order, the behaviour before the fix.
+ */
+export type CrawlCallerProxyRotation = 'base' | 'ranked';
+
+/**
+ * Values of `EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE` (review of PR #105): which failed
+ * requests record their cool-down before freeing their slot. `off` = the pre-fix order.
+ */
+export type CrawlCooldownBeforeRelease = 'locked' | 'all' | 'off';
+
 const STRICTER_RULES: readonly CrawlStricterRules[] = ['1714', '1690'];
 const PROXY_PIN_SCOPES: readonly CrawlProxyPinScope[] = ['base', 'bucket'];
+const CALLER_PROXY_ROTATIONS: readonly CrawlCallerProxyRotation[] = ['base', 'ranked'];
+const COOLDOWN_BEFORE_RELEASE_VALUES: readonly CrawlCooldownBeforeRelease[] = ['locked', 'all', 'off'];
 
 /** Bounds of `EVER_JOBS_CRAWL_FLEET_SIZE` (Spec 1714 FR-11). */
 export const CRAWL_FLEET_SIZE_MIN = 1;
@@ -201,6 +245,10 @@ export interface ParsedCrawlPolicyEnv extends CrawlPolicyEnvConfig {
   robotsBackoff?: boolean;
   /** `EVER_JOBS_CRAWL_PACE_REDIRECTS` (missing = `true`, `false` under `legacy`). */
   paceRedirects?: boolean;
+  /** `EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION` (missing = `base`, `ranked` under `legacy`). */
+  callerProxyRotation?: CrawlCallerProxyRotation;
+  /** `EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE` (missing = `locked`, `off` under `legacy`). */
+  cooldownBeforeRelease?: CrawlCooldownBeforeRelease;
   /**
    * `EVER_JOBS_CRAWL_BUILTIN_HOSTS_DISABLE`: builtin host patterns skipped, as
    * `BUILTIN_HOST_POLICIES` keys (missing = none).
@@ -300,6 +348,30 @@ export function crawlRobotsBackoffEnabled(env: CrawlPolicyEnvConfig): boolean {
 export function crawlPaceRedirectsEnabled(env: CrawlPolicyEnvConfig): boolean {
   const value = (env as ParsedCrawlPolicyEnv).paceRedirects;
   return typeof value === 'boolean' ? value : env.preset !== 'legacy';
+}
+
+/**
+ * How a `stricter` mode judges a caller's `proxyRotation` under the `1714`
+ * comparators (`EVER_JOBS_CRAWL_CALLER_PROXY_ROTATION`, Spec 1715 review round 2):
+ * `base` by default; `ranked` restores the pre-fix order. For a hand-built config
+ * without the field: `ranked` under `legacy`, else `base`.
+ */
+export function crawlCallerProxyRotation(env: CrawlPolicyEnvConfig): CrawlCallerProxyRotation {
+  const value = (env as ParsedCrawlPolicyEnv).callerProxyRotation;
+  if (value === 'base' || value === 'ranked') return value;
+  return env.preset === 'legacy' ? 'ranked' : 'base';
+}
+
+/**
+ * Which failed requests record their outcome and cool-down before freeing their limiter
+ * slot (`EVER_JOBS_CRAWL_COOLDOWN_BEFORE_RELEASE`, review of PR #105): `locked` by
+ * default; `off` restores the pre-fix order. For a hand-built config without the
+ * field: `off` under `legacy`, else `locked`.
+ */
+export function crawlCooldownBeforeRelease(env: CrawlPolicyEnvConfig): CrawlCooldownBeforeRelease {
+  const value = (env as ParsedCrawlPolicyEnv).cooldownBeforeRelease;
+  if (value === 'locked' || value === 'all' || value === 'off') return value;
+  return env.preset === 'legacy' ? 'off' : 'locked';
 }
 
 /**
@@ -607,6 +679,20 @@ function parseCrawlPolicyEnv(env: NodeJS.ProcessEnv): ParsedCrawlPolicyEnv {
   );
   const robotsBackoff = readBooleanSwitch(env, CRAWL_EXTRA_ENV.ROBOTS_BACKOFF, !legacy, warnings);
   const paceRedirects = readBooleanSwitch(env, CRAWL_EXTRA_ENV.PACE_REDIRECTS, !legacy, warnings);
+  const callerProxyRotation = readEnumSwitch(
+    env,
+    CRAWL_EXTRA_ENV.CALLER_PROXY_ROTATION,
+    CALLER_PROXY_ROTATIONS,
+    legacy ? 'ranked' : 'base',
+    warnings,
+  );
+  const cooldownBeforeRelease = readEnumSwitch(
+    env,
+    CRAWL_EXTRA_ENV.COOLDOWN_BEFORE_RELEASE,
+    COOLDOWN_BEFORE_RELEASE_VALUES,
+    legacy ? 'off' : 'locked',
+    warnings,
+  );
   const builtinHostsDisable = readBuiltinHostsDisable(env, warnings);
   let callerProxies: CallerProxiesPolicy = callerOverrides === 'any' ? 'any' : 'none';
   const rawCallerProxies = readVar(env, CRAWL_EXTRA_ENV.CALLER_PROXIES);
@@ -657,6 +743,8 @@ function parseCrawlPolicyEnv(env: NodeJS.ProcessEnv): ParsedCrawlPolicyEnv {
     proxyPinScope,
     robotsBackoff,
     paceRedirects,
+    callerProxyRotation,
+    cooldownBeforeRelease,
     builtinHostsDisable,
   };
   if (contact !== undefined) config.contact = contact;

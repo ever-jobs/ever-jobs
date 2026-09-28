@@ -208,9 +208,16 @@ describe('HttpClient redirect pinning (Spec 1689)', () => {
       expect(own).not.toHaveBeenCalled();
     });
 
-    describe('with redirect pacing on (the default, Spec 1715 audit A0)', () => {
+    describe('with redirect pacing on (the default, Spec 1715 audit A0) under a caller lock', () => {
+      // Review round 2: a cross-bucket hop is deferred only under a caller lock (or on a
+      // host-owned policy); EVER_JOBS_CRAWL_CALLER_OVERRIDES=stricter puts the request under one.
       beforeEach(() => {
         delete process.env[CRAWL_EXTRA_ENV.PACE_REDIRECTS];
+        process.env[CRAWL_ENV.CALLER_OVERRIDES] = 'stricter';
+        resetCrawlState();
+      });
+      afterEach(() => {
+        delete process.env[CRAWL_ENV.CALLER_OVERRIDES];
         resetCrawlState();
       });
 
@@ -248,6 +255,18 @@ describe('HttpClient redirect pinning (Spec 1689)', () => {
       it('a hop in the same bucket is followed in the slot (the hook returns)', async () => {
         const guard = await composedGuard(new HttpClient({ allowedRedirectHosts: ['acme.com'] }));
         expect(() => guard({ href: 'https://acme.com/jobs/1', hostname: 'acme.com' }, response, request)).not.toThrow();
+      });
+
+      it('without a lock (the default any) the same guards run, and a cross-bucket hop is followed in the slot', async () => {
+        delete process.env[CRAWL_ENV.CALLER_OVERRIDES];
+        resetCrawlState();
+        const own = jest.fn();
+        const guard = await composedGuard(new HttpClient({ allowedRedirectHosts: ['acme.com'] }), { beforeRedirect: own });
+
+        expect(() => guard({ href: 'https://evil.example/' }, response, request)).toThrow(/Refused redirect to evil\.example/);
+        expect(own).not.toHaveBeenCalled();
+        expect(() => guard({ href: 'https://jobs.acme.com/1', hostname: 'jobs.acme.com' }, response, request)).not.toThrow();
+        expect(own).toHaveBeenCalledTimes(1);
       });
     });
   });
