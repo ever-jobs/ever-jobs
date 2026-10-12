@@ -10,6 +10,39 @@
 
 ---
 
+## Q-129 — the root `overrides` pin `express → body-parser 1.20.5` now downgrades express 5's own dependency
+
+**Context:** the root `package.json` carries `"express": { "body-parser": "1.20.5" }`
+(added in `f7e32d26`, "fix all critical & high Dependabot alerts"). It was correct while
+`apps/mcp` still ran express 4, which declares `body-parser ~1.20.5`. Since
+`apps/mcp` moved to express 5 (2026-10-06) express 4 is gone from the tree, so the override
+has no remaining purpose — but it still applies to the one express 5 left and forces
+`node_modules/express/node_modules/body-parser@1.20.5` onto it, against express 5's own
+`body-parser ^2.2.1`. 1.20.5 is the version carrying GHSA-v422-hmwv-36x6 (`body-parser
+<=1.20.6`: an invalid `limit` value silently disables size enforcement), and `npm audit`
+reports it as `moderate`. `express.json()` works on it today (verified against the API's
+real request path), so this is a latent risk, not a live failure.
+
+**Options:**
+
+- **A. Delete `overrides.express["body-parser"]`** (and the inert
+  `overrides["@nestjs/platform-express"]["body-parser"]`, which matches no dependency
+  `@nestjs/platform-express@11.1.28` declares). express 5 then uses
+  `body-parser@2.3.0`, its tested pairing, and the advisory closes. Touches the API's
+  body-parsing path, so it wants the API suite + e2e run before it ships.
+- **B. Keep the override.** Zero behaviour change, but express 5 keeps running an
+  unpatched body-parser and the audit item stays open.
+- **C. Replace 1.20.5 with `^2.2.1`** in the override — pins the major express 5 wants
+  while keeping the Dependabot-alert belt-and-braces intent documented.
+
+**Default:** **B — proceeding** (no override change). The 2026-10-06 change was scoped to
+unbreaking the install; A or C is a deliberate API-path change and belongs in its own
+commit with the API lane's validation.
+
+**Resolution:** _(open — human owner's call)_
+
+---
+
 ## Q-128 — Softy's retry and back-off numbers (Specs 1714/1715)
 
 **Context:** Softy's operator asked us to back off on `429` / `Retry-After`, never to retry

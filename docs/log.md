@@ -5,13 +5,6 @@
 
 ---
 
-## 2026-10-08 — Spec 1753 — SIGTERM drains in-flight searches (`GET /ready`); CI run concurrency and the dedup event-loop budget; API changelog and upgrade notes for Specs 1720-1752; measured list-mode sizing in Spec 1720 FR-13
-
-**Change:** Homelab handover items EJ-6, EJ-5, I-3, EJ-4 and H-2 step 8. **Spec 1753 (new):** `main.ts` calls `installGracefulShutdown(app)`: an Express middleware counts in-flight requests (probes exempt) and, once draining, refuses new ones with 503 + `Retry-After: 1` + `Connection: close`; a one-shot SIGTERM listener (registered before Nest's) flips readiness; `app.enableShutdownHooks(['SIGTERM'], { useProcessExit: true })`. `ShutdownDrainService` sits in the ROOT `AppModule`, whose `onModuleDestroy` Nest runs first, and waits there for the in-flight requests (bounded by `EVER_JOBS_SHUTDOWN_DRAIN_TIMEOUT_MS`, default fan-out deadline + 30 s; connections still open at the timeout are closed) before any other module tears down. New `GET /ready` (503 while draining; `/health` stays 200). `useProcessExit` because the image runs node as PID 1, which ignores a re-raised SIGTERM. **CI:** top-level `concurrency` cancels superseded pull-request runs only (other events group by run id, so pushes to develop/main are never cancelled or queued); `DEDUP_LOOP_MAX_STALL_MS=1000` on Test (Feature Plugins), rationale beside the other perf overrides. **Docs:** `API_CHANGELOG.md` gains `[Unreleased]` sections for Spec 1753 and for Specs 1720-1752 (list mode, NDJSON and its end line, `dedupKey`, `careerLevel` / `careerLevels`, `siteCategories`, store selection, 84 company sources, Workday bounds, the keys-change-once table, restore switches, the image default); `UPGRADE_GUIDE.md` gains both sections with their env-var tables; `DEPLOYMENT.md` a graceful-shutdown section (probe paths, preStop, grace period); Spec 1720 FR-13 (d) records the measured ~36 KiB of heap per job (homelab, 2026-10-05/08) and that the job ceiling, not the deadline, binds a full run.
-
-**Files:** `apps/api/src/{main,app.module}.ts`, `apps/api/src/config/{configuration,shutdown-config}.ts`, `apps/api/src/shutdown/{shutdown-drain.service,readiness.controller,graceful-shutdown}.ts`, tests `apps/api/src/config/__tests__/shutdown-config.spec.ts`, `apps/api/src/shutdown/__tests__/{shutdown-drain.service,graceful-shutdown.integration}.spec.ts`, `apps/api/__tests__/health.e2e-spec.ts`; `.github/workflows/ci.yml`; `.env.example`; docs `docs/{API_CHANGELOG,UPGRADE_GUIDE,DEPLOYMENT,index,log}.md`, `.specify/specs/1753-graceful-shutdown-drain/{spec,plan,tasks}.md`, `.specify/specs/1720-list-mode-site-categories/spec.md`.
-
-**Validation:** see the PR: the new suites green (config, service, integration through Nest's own SIGTERM handler, health e2e on the full `AppModule`); removing the wait from `onModuleDestroy` fails 2 of the 3 integration cases; both `tsc` projects clean; `npm run lint:docs` clean.
 
 ## 2026-09-27 — Spec 1715 — review round 2: a caller's budget stays on the sitemap, nested sitemaps stop on a struggling server, legacy detail URLs at the redirect target, `jobUrlListedAt`, timing proof of the 1 s interval
 
@@ -37592,3 +37585,56 @@ Template for future entries:
 - …
 
 -->
+
+## 2026-10-08 — Spec 1753 — SIGTERM drains in-flight searches (`GET /ready`); CI run concurrency and the dedup event-loop budget; API changelog and upgrade notes for Specs 1720-1752; measured list-mode sizing in Spec 1720 FR-13
+
+**Change:** Homelab handover items EJ-6, EJ-5, I-3, EJ-4 and H-2 step 8. **Spec 1753 (new):** `main.ts` calls `installGracefulShutdown(app)`: an Express middleware counts in-flight requests (probes exempt) and, once draining, refuses new ones with 503 + `Retry-After: 1` + `Connection: close`; a one-shot SIGTERM listener (registered before Nest's) flips readiness; `app.enableShutdownHooks(['SIGTERM'], { useProcessExit: true })`. `ShutdownDrainService` sits in the ROOT `AppModule`, whose `onModuleDestroy` Nest runs first, and waits there for the in-flight requests (bounded by `EVER_JOBS_SHUTDOWN_DRAIN_TIMEOUT_MS`, default fan-out deadline + 30 s; connections still open at the timeout are closed) before any other module tears down. New `GET /ready` (503 while draining; `/health` stays 200). `useProcessExit` because the image runs node as PID 1, which ignores a re-raised SIGTERM. **CI:** top-level `concurrency` cancels superseded pull-request runs only (other events group by run id, so pushes to develop/main are never cancelled or queued); `DEDUP_LOOP_MAX_STALL_MS=1000` on Test (Feature Plugins), rationale beside the other perf overrides. **Docs:** `API_CHANGELOG.md` gains `[Unreleased]` sections for Spec 1753 and for Specs 1720-1752 (list mode, NDJSON and its end line, `dedupKey`, `careerLevel` / `careerLevels`, `siteCategories`, store selection, 84 company sources, Workday bounds, the keys-change-once table, restore switches, the image default); `UPGRADE_GUIDE.md` gains both sections with their env-var tables; `DEPLOYMENT.md` a graceful-shutdown section (probe paths, preStop, grace period); Spec 1720 FR-13 (d) records the measured ~36 KiB of heap per job (homelab, 2026-10-05/08) and that the job ceiling, not the deadline, binds a full run.
+
+**Files:** `apps/api/src/{main,app.module}.ts`, `apps/api/src/config/{configuration,shutdown-config}.ts`, `apps/api/src/shutdown/{shutdown-drain.service,readiness.controller,graceful-shutdown}.ts`, tests `apps/api/src/config/__tests__/shutdown-config.spec.ts`, `apps/api/src/shutdown/__tests__/{shutdown-drain.service,graceful-shutdown.integration}.spec.ts`, `apps/api/__tests__/health.e2e-spec.ts`; `.github/workflows/ci.yml`; `.env.example`; docs `docs/{API_CHANGELOG,UPGRADE_GUIDE,DEPLOYMENT,index,log}.md`, `.specify/specs/1753-graceful-shutdown-drain/{spec,plan,tasks}.md`, `.specify/specs/1720-list-mode-site-categories/spec.md`.
+
+**Validation:** see the PR: the new suites green (config, service, integration through Nest's own SIGTERM handler, health e2e on the full `AppModule`); removing the wait from `onModuleDestroy` fails 2 of the 3 integration cases; both `tsc` projects clean; `npm run lint:docs` clean.
+
+## 2026-10-06 — `apps/mcp` on express 5: the nested express-4 tree (and its missing `array-flatten`) is gone; one express for the monorepo
+
+**Change:** `apps/mcp/package.json` moves `express` `^4.21.2` → `^5.2.1` and
+`@types/express` `^4.17.21` → `^5.0.6` (the versions the root already pins, and the ones
+`@modelcontextprotocol/sdk@1.29.0` itself depends on). No source change: `src/index.ts`
+uses only `express()`, `express.json()`, `app.use/get/post/delete`, `app.listen` and the
+`express.Request` / `express.Response` types, all express-5-clean, so `tsc` passes
+unchanged. The lockfile loses the whole nested subtree — 300 lines, 27 entries, 2 inserted
+— and one `express@5.2.1` now serves the API, the MCP server and the SDK:
+
+- **What was broken.** `npm i && npm run build && npm start` in `apps/mcp` died with
+  `Error: Cannot find module 'array-flatten'` from
+  `apps/mcp/node_modules/express/lib/router/route.js`. Not an install-scripts problem:
+  `array-flatten@1.1.1` (and `utils-merge@1.0.1`) are plain JS with no `postinstall`, and
+  they were **absent from the tree and from `package-lock.json` entirely**, while the lock's
+  `apps/mcp/node_modules/express@4.22.2` entry declared them — so `npm i` reported
+  "up to date" and reified nothing. The breakage came from commit `43853b0d`
+  ("migrate minimatch/brace-expansion chains to safe majors", Spec 5072): its regenerated
+  lockfile dropped `node_modules/array-flatten` and `node_modules/utils-merge` when express
+  4 was pushed out of the root slot into `apps/mcp/node_modules/`, and wrote all 27
+  `apps/mcp/node_modules/*` entries **without `resolved` / `integrity`**. Root cause of the
+  drift: `apps/mcp` was the only workspace still on express 4 while everything else moved to
+  express 5, so two express majors were installed at once.
+- **Lockfile repair.** Regenerated from the corrected manifests: `array-flatten` /
+  `utils-merge` no longer appear (express 5 needs neither), every remaining entry carries
+  `resolved` + `integrity`, and `apps/mcp/node_modules/**` is empty (`@types` only).
+- **Still open (see Q-129).** The root `overrides` entry `"express": { "body-parser":
+  "1.20.5" }` predates express 5 and now downgrades express 5's own declared
+  `body-parser ^2.2.1` to the advisory-carrying 1.20.5
+  (`node_modules/express/node_modules/body-parser`). Not changed here: it is the production
+  API's body-parsing path, and dropping it is the human owner's call.
+
+**Files:** `apps/mcp/package.json`, `package-lock.json`; docs `docs/{log,questions}.md`.
+
+**Validation:** `npm run build` in `apps/mcp` green; `npx tsc --project apps/mcp/tsconfig.json
+--noEmit` and `npx tsc --project tsconfig.typecheck.json --noEmit` clean; HTTP transport
+`MCP_TRANSPORT=http PORT=3198 node dist/index.js` → `GET /health` 200
+`{"status":"healthy",…}`, `POST /mcp` `initialize` answers
+`serverInfo {"name":"ever-jobs","version":"0.1.0"}` over SSE, `GET /mcp` 405; stdio
+transport (default) `initialize` + `tools/list` → 6 tools, first `search_jobs`;
+`npx jest --testPathPatterns apps/mcp/__tests__` 6 suites / 84 tests green;
+`npx jest --testPathPatterns apps/api/__tests__/health` 2/2 green (boots the express-5 Nest
+app). `npm ls express --all` shows a single `express@5.2.1`; no express-4 directory remains
+in the tree.
