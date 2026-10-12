@@ -6,6 +6,93 @@
 ---
 
 
+## 2026-10-12 — MCP: `get_job_details` removed (it called a route that never existed), the fan-out is bounded, LinkedIn descriptions are fetched
+
+**Change:** Four fixes to the MCP server, found by a live scout run that produced eleven tool
+errors (three 404s, six timeouts, one missing-argument). **Removal:** `get_job_details` called
+`GET /api/jobs/details`, a route the API has never had — commit `df2f693f` (2026-02-19,
+"correct MCP API endpoints") renamed `/api/v1/jobs/details` to a second route that did not exist
+either, and Spec 1689 §3 listed the defect as a known pre-existing failure. It is removed from
+`src/index.ts`, `src/tools.ts`, both READMEs, the PRD and the tests; the API side is untouched.
+**Timeout:** the axios client was hardcoded to `60_000`, below the fan-out's own cost — measured
+**126 s** for one location and **125 s** across two on the homelab box — so every unscoped
+`search_jobs` failed with `MCP error -32001: Request timed out`, and `get_salary_insights`, which
+fans out internally with no source filter, could never succeed. Now
+`readRequestTimeoutMs()`, defaulting to 300 000 (above `EVER_JOBS_FANOUT_DEADLINE_MS`) and
+overridable with `EVER_JOBS_MCP_TIMEOUT_MS`. **Default sources:** omitting `source` sent no
+`siteType`, sweeping all **1,545** plugins — ~1,400 of them single-tenant `ats` / `company` career
+pages that cannot answer a keyword search without a slug — which returned 18,399 jobs in a **44 MB**
+body. `DEFAULT_SOURCE_IDS` is now every slugless `job_board` / `remote` / `aggregator` source (105),
+derived from the `SOURCES` table so it cannot drift; the same query answers in **60 s** with 148 jobs
+and a 764 KB body. A new `sources` array is unioned with `source`. **Page size:** `limit` maps to the
+API's per-source `resultsWanted`, so a multi-source search returned `limit × sources` rows and the
+MCP layer returned all of them; it now truncates to `limit` and `total` reports the page size.
+**LinkedIn descriptions:** `linkedinFetchDescription` defaults to `true` — a LinkedIn listing page
+carries a title, company and location but no body, so a LinkedIn search returned 0/20 descriptions
+without it and 138/148 with it, which is what the deleted `get_job_details` was being called for.
+
+**Files:** `apps/mcp/src/{tools,index}.ts`; tests `apps/mcp/__tests__/{tools-api-contract,tools-search-filters,tools-posted-time,crawl}.spec.ts`; docs `README.md`, `apps/mcp/README.md`, `docs/{PRD_NEW_JOB_SOURCES,API_CHANGELOG,log}.md`.
+
+**Validation:** `npx tsc --project apps/mcp/tsconfig.json --noEmit` clean;
+`npx jest --testPathPatterns apps/mcp/__tests__` 6 suites / 88 tests green; stdio transport
+`initialize` + `tools/list` → 5 tools. Live against the homelab API: a `search_jobs` with no source
+returns the default set in 60 s (was a 60 s client timeout against a 126 s fan-out), and a
+`source: "linkedin"` search returns descriptions.
+
+## 2026-10-08 — Spec 1753 — SIGTERM drains in-flight searches (`GET /ready`); CI run concurrency and the dedup event-loop budget; API changelog and upgrade notes for Specs 1720-1752; measured list-mode sizing in Spec 1720 FR-13
+
+**Change:** Homelab handover items EJ-6, EJ-5, I-3, EJ-4 and H-2 step 8. **Spec 1753 (new):** `main.ts` calls `installGracefulShutdown(app)`: an Express middleware counts in-flight requests (probes exempt) and, once draining, refuses new ones with 503 + `Retry-After: 1` + `Connection: close`; a one-shot SIGTERM listener (registered before Nest's) flips readiness; `app.enableShutdownHooks(['SIGTERM'], { useProcessExit: true })`. `ShutdownDrainService` sits in the ROOT `AppModule`, whose `onModuleDestroy` Nest runs first, and waits there for the in-flight requests (bounded by `EVER_JOBS_SHUTDOWN_DRAIN_TIMEOUT_MS`, default fan-out deadline + 30 s; connections still open at the timeout are closed) before any other module tears down. New `GET /ready` (503 while draining; `/health` stays 200). `useProcessExit` because the image runs node as PID 1, which ignores a re-raised SIGTERM. **CI:** top-level `concurrency` cancels superseded pull-request runs only (other events group by run id, so pushes to develop/main are never cancelled or queued); `DEDUP_LOOP_MAX_STALL_MS=1000` on Test (Feature Plugins), rationale beside the other perf overrides. **Docs:** `API_CHANGELOG.md` gains `[Unreleased]` sections for Spec 1753 and for Specs 1720-1752 (list mode, NDJSON and its end line, `dedupKey`, `careerLevel` / `careerLevels`, `siteCategories`, store selection, 84 company sources, Workday bounds, the keys-change-once table, restore switches, the image default); `UPGRADE_GUIDE.md` gains both sections with their env-var tables; `DEPLOYMENT.md` a graceful-shutdown section (probe paths, preStop, grace period); Spec 1720 FR-13 (d) records the measured ~36 KiB of heap per job (homelab, 2026-10-05/08) and that the job ceiling, not the deadline, binds a full run.
+
+**Files:** `apps/api/src/{main,app.module}.ts`, `apps/api/src/config/{configuration,shutdown-config}.ts`, `apps/api/src/shutdown/{shutdown-drain.service,readiness.controller,graceful-shutdown}.ts`, tests `apps/api/src/config/__tests__/shutdown-config.spec.ts`, `apps/api/src/shutdown/__tests__/{shutdown-drain.service,graceful-shutdown.integration}.spec.ts`, `apps/api/__tests__/health.e2e-spec.ts`; `.github/workflows/ci.yml`; `.env.example`; docs `docs/{API_CHANGELOG,UPGRADE_GUIDE,DEPLOYMENT,index,log}.md`, `.specify/specs/1753-graceful-shutdown-drain/{spec,plan,tasks}.md`, `.specify/specs/1720-list-mode-site-categories/spec.md`.
+
+**Validation:** see the PR: the new suites green (config, service, integration through Nest's own SIGTERM handler, health e2e on the full `AppModule`); removing the wait from `onModuleDestroy` fails 2 of the 3 integration cases; both `tsc` projects clean; `npm run lint:docs` clean.
+
+## 2026-10-06 — `apps/mcp` on express 5: the nested express-4 tree (and its missing `array-flatten`) is gone; one express for the monorepo
+
+**Change:** `apps/mcp/package.json` moves `express` `^4.21.2` → `^5.2.1` and
+`@types/express` `^4.17.21` → `^5.0.6` (the versions the root already pins, and the ones
+`@modelcontextprotocol/sdk@1.29.0` itself depends on). No source change: `src/index.ts`
+uses only `express()`, `express.json()`, `app.use/get/post/delete`, `app.listen` and the
+`express.Request` / `express.Response` types, all express-5-clean, so `tsc` passes
+unchanged. The lockfile loses the whole nested subtree — 300 lines, 27 entries, 2 inserted
+— and one `express@5.2.1` now serves the API, the MCP server and the SDK:
+
+- **What was broken.** `npm i && npm run build && npm start` in `apps/mcp` died with
+  `Error: Cannot find module 'array-flatten'` from
+  `apps/mcp/node_modules/express/lib/router/route.js`. Not an install-scripts problem:
+  `array-flatten@1.1.1` (and `utils-merge@1.0.1`) are plain JS with no `postinstall`, and
+  they were **absent from the tree and from `package-lock.json` entirely**, while the lock's
+  `apps/mcp/node_modules/express@4.22.2` entry declared them — so `npm i` reported
+  "up to date" and reified nothing. The breakage came from commit `43853b0d`
+  ("migrate minimatch/brace-expansion chains to safe majors", Spec 5072): its regenerated
+  lockfile dropped `node_modules/array-flatten` and `node_modules/utils-merge` when express
+  4 was pushed out of the root slot into `apps/mcp/node_modules/`, and wrote all 27
+  `apps/mcp/node_modules/*` entries **without `resolved` / `integrity`**. Root cause of the
+  drift: `apps/mcp` was the only workspace still on express 4 while everything else moved to
+  express 5, so two express majors were installed at once.
+- **Lockfile repair.** Regenerated from the corrected manifests: `array-flatten` /
+  `utils-merge` no longer appear (express 5 needs neither), every remaining entry carries
+  `resolved` + `integrity`, and `apps/mcp/node_modules/**` is empty (`@types` only).
+- **Still open (see Q-129).** The root `overrides` entry `"express": { "body-parser":
+  "1.20.5" }` predates express 5 and now downgrades express 5's own declared
+  `body-parser ^2.2.1` to the advisory-carrying 1.20.5
+  (`node_modules/express/node_modules/body-parser`). Not changed here: it is the production
+  API's body-parsing path, and dropping it is the human owner's call.
+
+**Files:** `apps/mcp/package.json`, `package-lock.json`; docs `docs/{log,questions}.md`.
+
+**Validation:** `npm run build` in `apps/mcp` green; `npx tsc --project apps/mcp/tsconfig.json
+--noEmit` and `npx tsc --project tsconfig.typecheck.json --noEmit` clean; HTTP transport
+`MCP_TRANSPORT=http PORT=3198 node dist/index.js` → `GET /health` 200
+`{"status":"healthy",…}`, `POST /mcp` `initialize` answers
+`serverInfo {"name":"ever-jobs","version":"0.1.0"}` over SSE, `GET /mcp` 405; stdio
+transport (default) `initialize` + `tools/list` → 6 tools, first `search_jobs`;
+`npx jest --testPathPatterns apps/mcp/__tests__` 6 suites / 84 tests green;
+`npx jest --testPathPatterns apps/api/__tests__/health` 2/2 green (boots the express-5 Nest
+app). `npm ls express --all` shows a single `express@5.2.1`; no express-4 directory remains
+in the tree.
+
+
 ## 2026-09-27 — Spec 1715 — review round 2: a caller's budget stays on the sitemap, nested sitemaps stop on a struggling server, legacy detail URLs at the redirect target, `jobUrlListedAt`, timing proof of the 1 s interval
 
 **Change:** The Softy plugin halves of the confirmed round-2 review findings (Spec 1715 FR-21..FR-25, tasks T16-T21). **A1:** in `auto`, a detail budget smaller than `resultsWanted` no longer reads `/offers?page=N` while the effective caller-override mode is `stricter` / `none` (the Softy lock by default; read through `resolveCallerOverrides`, fail-safe to the manifest's lock): the sitemap path returns what the budget allows with a `partial` note. An operator `auto` (env, `sites.softy` / `hosts`), a lifted lock, `SOFTY_MAX_DETAIL_FETCHES=0` or the new `SOFTY_LEGACY=caller-listing` keep the listing. `descriptionDepth: 'board'` still reads the listing on purpose (D5: one list page per 21 offers is fewer requests than the sitemap plus a detail page each), now explained in the `readSoftyConfig` path table and `CRAWL_POLICY.md` §21.3. **A5 + F4:** a nested sitemap answering 500/502/504, timing out or resetting stops the scrape with `fetch_error` / `timeout` and `run.stopped`, like the root sitemap; `SOFTY_SITEMAP_FALLBACK=any-error` or the new `SOFTY_LEGACY=nested-skip` pass `nestedErrors: 'skip'` and skip every nested failure, as before Spec 1715. The "`any-error` = the shipped stage exactly" wording is corrected (it restores the stage's decisions, not the manifest's crawl policy) in `softy.constants.ts`, the spec (FR-4, D2) and §21.1. **A0 (plugin half):** legacy cards and `buildJobUrl` link `/offers/{ID}`, the target of the `/offre/{ID}-{slug}` 301 (new `SOFTY_LEGACY=legacy-detail-url`). **A3 (plugin half):** every post taken from a sitemap carries `jobUrlListedAt`, the root sitemap's network answer time, stored with the sitemap cache so a hit keeps it; list-page posts do not. **C1:** integration S8 (20 ms answers: starts ≥ 1 s apart, which only the interval and the client floor can hold), S9 (a repeat search sends nothing and keeps `jobUrlListedAt`), S10 (a 502 child stops the walk), controls C3 (only the interval lowered → < 975 ms), C4 (the client floor alone holds 1 s) and C5 (`nested-skip` skips the 502 child). The three tokens are part of `SOFTY_LEGACY=all` and named by the unknown-token warning. **Docs:** `CRAWL_POLICY.md` §14, §16 (the pre-1715 Softy crawl-policy recipe), §21 (paths table, nested sitemaps, legacy detail URLs, `jobUrlListedAt`, tokens), README, `.env.example`, changelog, spec (header, FR-4/14/16 amended, FR-21..FR-25, §7.1-§7.4, §8.1/§8.2 rows, D2/D5 amended, D8-D10) and tasks (Phase 6). **Open (found in this docs pass):** T22 — the plugin does not declare `clientMinIntervalFloorMs` in `@SourcePlugin`, so `GET /api/sources/softy/crawl-policy` shows `meta.clientMinIntervalFloorMs: null` (closed in d235e9df; see the second pass in the Spec 1714 entry below). Nothing removed.
@@ -37586,55 +37673,3 @@ Template for future entries:
 
 -->
 
-## 2026-10-08 — Spec 1753 — SIGTERM drains in-flight searches (`GET /ready`); CI run concurrency and the dedup event-loop budget; API changelog and upgrade notes for Specs 1720-1752; measured list-mode sizing in Spec 1720 FR-13
-
-**Change:** Homelab handover items EJ-6, EJ-5, I-3, EJ-4 and H-2 step 8. **Spec 1753 (new):** `main.ts` calls `installGracefulShutdown(app)`: an Express middleware counts in-flight requests (probes exempt) and, once draining, refuses new ones with 503 + `Retry-After: 1` + `Connection: close`; a one-shot SIGTERM listener (registered before Nest's) flips readiness; `app.enableShutdownHooks(['SIGTERM'], { useProcessExit: true })`. `ShutdownDrainService` sits in the ROOT `AppModule`, whose `onModuleDestroy` Nest runs first, and waits there for the in-flight requests (bounded by `EVER_JOBS_SHUTDOWN_DRAIN_TIMEOUT_MS`, default fan-out deadline + 30 s; connections still open at the timeout are closed) before any other module tears down. New `GET /ready` (503 while draining; `/health` stays 200). `useProcessExit` because the image runs node as PID 1, which ignores a re-raised SIGTERM. **CI:** top-level `concurrency` cancels superseded pull-request runs only (other events group by run id, so pushes to develop/main are never cancelled or queued); `DEDUP_LOOP_MAX_STALL_MS=1000` on Test (Feature Plugins), rationale beside the other perf overrides. **Docs:** `API_CHANGELOG.md` gains `[Unreleased]` sections for Spec 1753 and for Specs 1720-1752 (list mode, NDJSON and its end line, `dedupKey`, `careerLevel` / `careerLevels`, `siteCategories`, store selection, 84 company sources, Workday bounds, the keys-change-once table, restore switches, the image default); `UPGRADE_GUIDE.md` gains both sections with their env-var tables; `DEPLOYMENT.md` a graceful-shutdown section (probe paths, preStop, grace period); Spec 1720 FR-13 (d) records the measured ~36 KiB of heap per job (homelab, 2026-10-05/08) and that the job ceiling, not the deadline, binds a full run.
-
-**Files:** `apps/api/src/{main,app.module}.ts`, `apps/api/src/config/{configuration,shutdown-config}.ts`, `apps/api/src/shutdown/{shutdown-drain.service,readiness.controller,graceful-shutdown}.ts`, tests `apps/api/src/config/__tests__/shutdown-config.spec.ts`, `apps/api/src/shutdown/__tests__/{shutdown-drain.service,graceful-shutdown.integration}.spec.ts`, `apps/api/__tests__/health.e2e-spec.ts`; `.github/workflows/ci.yml`; `.env.example`; docs `docs/{API_CHANGELOG,UPGRADE_GUIDE,DEPLOYMENT,index,log}.md`, `.specify/specs/1753-graceful-shutdown-drain/{spec,plan,tasks}.md`, `.specify/specs/1720-list-mode-site-categories/spec.md`.
-
-**Validation:** see the PR: the new suites green (config, service, integration through Nest's own SIGTERM handler, health e2e on the full `AppModule`); removing the wait from `onModuleDestroy` fails 2 of the 3 integration cases; both `tsc` projects clean; `npm run lint:docs` clean.
-
-## 2026-10-06 — `apps/mcp` on express 5: the nested express-4 tree (and its missing `array-flatten`) is gone; one express for the monorepo
-
-**Change:** `apps/mcp/package.json` moves `express` `^4.21.2` → `^5.2.1` and
-`@types/express` `^4.17.21` → `^5.0.6` (the versions the root already pins, and the ones
-`@modelcontextprotocol/sdk@1.29.0` itself depends on). No source change: `src/index.ts`
-uses only `express()`, `express.json()`, `app.use/get/post/delete`, `app.listen` and the
-`express.Request` / `express.Response` types, all express-5-clean, so `tsc` passes
-unchanged. The lockfile loses the whole nested subtree — 300 lines, 27 entries, 2 inserted
-— and one `express@5.2.1` now serves the API, the MCP server and the SDK:
-
-- **What was broken.** `npm i && npm run build && npm start` in `apps/mcp` died with
-  `Error: Cannot find module 'array-flatten'` from
-  `apps/mcp/node_modules/express/lib/router/route.js`. Not an install-scripts problem:
-  `array-flatten@1.1.1` (and `utils-merge@1.0.1`) are plain JS with no `postinstall`, and
-  they were **absent from the tree and from `package-lock.json` entirely**, while the lock's
-  `apps/mcp/node_modules/express@4.22.2` entry declared them — so `npm i` reported
-  "up to date" and reified nothing. The breakage came from commit `43853b0d`
-  ("migrate minimatch/brace-expansion chains to safe majors", Spec 5072): its regenerated
-  lockfile dropped `node_modules/array-flatten` and `node_modules/utils-merge` when express
-  4 was pushed out of the root slot into `apps/mcp/node_modules/`, and wrote all 27
-  `apps/mcp/node_modules/*` entries **without `resolved` / `integrity`**. Root cause of the
-  drift: `apps/mcp` was the only workspace still on express 4 while everything else moved to
-  express 5, so two express majors were installed at once.
-- **Lockfile repair.** Regenerated from the corrected manifests: `array-flatten` /
-  `utils-merge` no longer appear (express 5 needs neither), every remaining entry carries
-  `resolved` + `integrity`, and `apps/mcp/node_modules/**` is empty (`@types` only).
-- **Still open (see Q-129).** The root `overrides` entry `"express": { "body-parser":
-  "1.20.5" }` predates express 5 and now downgrades express 5's own declared
-  `body-parser ^2.2.1` to the advisory-carrying 1.20.5
-  (`node_modules/express/node_modules/body-parser`). Not changed here: it is the production
-  API's body-parsing path, and dropping it is the human owner's call.
-
-**Files:** `apps/mcp/package.json`, `package-lock.json`; docs `docs/{log,questions}.md`.
-
-**Validation:** `npm run build` in `apps/mcp` green; `npx tsc --project apps/mcp/tsconfig.json
---noEmit` and `npx tsc --project tsconfig.typecheck.json --noEmit` clean; HTTP transport
-`MCP_TRANSPORT=http PORT=3198 node dist/index.js` → `GET /health` 200
-`{"status":"healthy",…}`, `POST /mcp` `initialize` answers
-`serverInfo {"name":"ever-jobs","version":"0.1.0"}` over SSE, `GET /mcp` 405; stdio
-transport (default) `initialize` + `tools/list` → 6 tools, first `search_jobs`;
-`npx jest --testPathPatterns apps/mcp/__tests__` 6 suites / 84 tests green;
-`npx jest --testPathPatterns apps/api/__tests__/health` 2/2 green (boots the express-5 Nest
-app). `npm ls express --all` shows a single `express@5.2.1`; no express-4 directory remains
-in the tree.

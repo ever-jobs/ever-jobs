@@ -10,6 +10,7 @@ jest.mock('axios', () => ({
 
 import {
   CRAWL_POLICY_INPUT_SCHEMA,
+  DEFAULT_SOURCE_IDS,
   MCP_CRAWL_ENUMS,
   MCP_MAX_CRAWL_RETRIES,
   MCP_REQUEST_KEYS_ENV_VAR,
@@ -131,13 +132,19 @@ describe('searchJobs → POST /api/jobs/search (Spec 1690)', () => {
       siteType: ['softy'],
       companySlug: 'acme',
       resultsWanted: 5,
+      linkedinFetchDescription: true,
     });
     for (const key of ['search_term', 'site_type', 'company_slug', 'results_wanted']) expect(key in body).toBe(false);
   });
 
-  it('omits siteType/companySlug when not given (an empty search stays empty, not undefined keys)', async () => {
+  it('sends the default source set (never an absent siteType) and omits an absent companySlug', async () => {
     await searchJobs({ query: 'engineer' });
-    expect(Object.keys(mockPost.mock.calls[0][1]).sort()).toEqual(['location', 'resultsWanted', 'searchTerm']);
+    const body = mockPost.mock.calls[0][1];
+    expect(Object.keys(body).sort()).toEqual([
+      'linkedinFetchDescription', 'location', 'resultsWanted', 'searchTerm', 'siteType',
+    ]);
+    expect(body.siteType).toEqual(DEFAULT_SOURCE_IDS);
+    expect('companySlug' in body).toBe(false);
   });
 
   it('the posted body survives the API ValidationPipe({ whitelist: true }) — term, source and limit arrive', async () => {

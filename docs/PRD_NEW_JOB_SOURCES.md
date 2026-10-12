@@ -285,7 +285,6 @@ The MCP (Model Context Protocol) server (`apps/mcp/`) enables AI assistants to s
 | Tool              | Description                                                              |
 | ----------------- | ------------------------------------------------------------------------ |
 | `search_jobs`     | Search across 160+ sources with query, location, source, company filters |
-| `get_job_details` | Get full job description and application link                            |
 | `list_sources`    | Browse all available sources by type                                     |
 
 ### Resources

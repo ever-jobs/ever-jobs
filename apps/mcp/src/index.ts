@@ -10,7 +10,6 @@
  *
  * Tools:
  *   - search_jobs: Search for jobs across all sources
- *   - get_job_details: Get detailed information about a specific job
  *   - list_sources: List all available job sources
  *   - search_remote_jobs: Convenience tool for remote job search
  *   - get_salary_insights: Salary analysis for a given role
@@ -31,7 +30,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { searchJobs, getJobDetails, listSources, searchRemoteJobs, getSalaryInsights, compareSources, JobSearchParams, CRAWL_POLICY_INPUT_SCHEMA, normalizeMcpCrawl } from './tools';
+import { searchJobs, listSources, searchRemoteJobs, getSalaryInsights, compareSources, JobSearchParams, CRAWL_POLICY_INPUT_SCHEMA, normalizeMcpCrawl } from './tools';
 
 const SERVER_NAME = 'ever-jobs';
 const SERVER_VERSION = '0.1.0';
@@ -82,7 +81,15 @@ function createServer(): Server {
               type: 'string',
               description:
                 'Specific source to search (e.g. "linkedin", "indeed", "google_careers"). ' +
-                'Use list_sources to see all available sources. Omit to search all sources.',
+                'Unioned with `sources`. Omit both to search the default set (every slugless ' +
+                'job_board / remote / aggregator source).',
+            },
+            sources: {
+              type: 'array',
+              items: { type: 'string' },
+              description:
+                'Several source ids at once (e.g. ["linkedin", "indeed", "glassdoor"]). Unioned ' +
+                'with `source`. Omit both to search the default set — see the tool description.',
             },
             company: {
               type: 'string',
@@ -123,29 +130,16 @@ function createServer(): Server {
                 'Curated exclusion lists matched against title + description. security_clearance drops roles ' +
                 'that require (or ask the candidate to obtain) a security clearance or vetting.',
             },
+            linkedin_fetch_description: {
+              type: 'boolean',
+              description:
+                'Fetch full LinkedIn descriptions (default: true). LinkedIn listing pages carry no ' +
+                'body, so without this a LinkedIn search returns titles with empty descriptions. ' +
+                'Set false to skip the per-job detail fetches.',
+            },
             crawl: CRAWL_POLICY_INPUT_SCHEMA,
           },
           required: ['query'],
-        },
-      },
-      {
-        name: 'get_job_details',
-        description:
-          'Get detailed information about a specific job posting by its URL. ' +
-          'Returns the full job description, requirements, salary info, and application link.',
-        inputSchema: {
-          type: 'object' as const,
-          properties: {
-            job_url: {
-              type: 'string',
-              description: 'The full URL of the job posting to get details for',
-            },
-            job_id: {
-              type: 'string',
-              description: 'The Ever Jobs internal job ID (returned from search_jobs)',
-            },
-          },
-          required: [],
         },
       },
       {
@@ -239,24 +233,17 @@ function createServer(): Server {
             location: (args as any)?.location,
             locations: (args as any)?.locations,
             source: (args as any)?.source,
+            sources: (args as any)?.sources,
             company: (args as any)?.company,
             limit: (args as any)?.limit ?? 20,
             remoteOnly: (args as any)?.remote_only ?? false,
             excludeTitleTerms: (args as any)?.exclude_title_terms,
             excludeKeywords: (args as any)?.exclude_keywords,
             excludePresets: (args as any)?.exclude_presets,
+            linkedinFetchDescription: (args as any)?.linkedin_fetch_description,
             crawl: normalizeMcpCrawl((args as any)?.crawl),
           };
           const result = await searchJobs(params);
-          return {
-            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-          };
-        }
-
-        case 'get_job_details': {
-          const jobUrl = (args as any)?.job_url;
-          const jobId = (args as any)?.job_id;
-          const result = await getJobDetails({ jobUrl, jobId });
           return {
             content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
           };

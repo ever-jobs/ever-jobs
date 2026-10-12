@@ -1,5 +1,24 @@
 # API Changelog
 
+### [Unreleased] - 2026-10-12 (MCP: dead tool removed, fan-out bounded, descriptions fetched)
+
+The MCP server shipped a `get_job_details` tool that called `GET /api/jobs/details` — a route that has never existed on the API (commit `df2f693f`, 2026-02-19, "fixed" it by renaming `/api/v1/jobs/details`, which did not exist either). Every call answered `404`, and callers then reached for two other tools to work around the missing descriptions. Separately, an unscoped `search_jobs` fanned out over all 1,545 sources — 126 s and a 44 MB body on the homelab box — against an MCP client timeout of 60 s, so it could never succeed; `get_salary_insights`, which fans out internally with no source filter, was worse. These changes are MCP-only: no API route, DTO or env var changes.
+
+#### Removed
+
+- **`get_job_details` (MCP tool).** It called a non-existent endpoint and could not succeed for any input. Descriptions now come back from `search_jobs` itself: `linkedinFetchDescription` defaults to `true`, and LinkedIn listing pages carry no body, so a LinkedIn search returned 0/20 descriptions without it and 138/148 with it on the same query. Spec 1689 §3 already listed this defect as a known pre-existing failure; it is closed rather than deferred.
+
+#### Changed
+
+- **`search_jobs` defaults to a broad source set instead of the whole catalogue.** Omitting `source` used to send no `siteType` at all, so the API swept every plugin including ~1,400 single-tenant `ats` / `company` career pages that cannot answer a keyword search without a company slug. The new `DEFAULT_SOURCE_IDS` is every slugless `job_board` / `remote` / `aggregator` source (105 on this checkout), derived from the catalogue table so it cannot drift. Measured on "engineering manager" in Sydney at `resultsWanted: 10`: **126 s / 18,399 jobs / 44 MB → 60 s / 148 jobs / 764 KB**.
+- **`search_jobs` accepts `sources` (array)** alongside `source` (string); the two are unioned, blanks and duplicates dropped, caller order preserved.
+- **`search_jobs` truncates to `limit`.** `limit` maps to the API's `resultsWanted`, which is a **per-source** cap, so a multi-source search returned `limit × sources` rows and the MCP layer handed all of them back — a 44 MB body no agent can read. `total` now reports the page size, not the upstream row count.
+- **`linkedinFetchDescription` defaults to `true`** on `search_jobs` (opt out with `false`).
+
+#### Added
+
+- **`EVER_JOBS_MCP_TIMEOUT_MS`**: axios timeout for API calls. The default moves from a hardcoded `60_000` to `300_000` — above the API's own fan-out deadline — so an unscoped search no longer fails with `MCP error -32001: Request timed out`. A non-numeric or non-positive value falls back to the default rather than disabling the timeout.
+
 ### [Unreleased] - 2026-10-08 (Spec 1753)
 
 SIGTERM used to cut every open request: no shutdown hooks ran, and the image's `node` (PID 1, no init process) ignored the signal, so each rollout waited out the pod's grace period and was SIGKILLed with list-mode NDJSON crawls still streaming. The API now drains. Deployment guide: [`DEPLOYMENT.md`](./DEPLOYMENT.md#graceful-shutdown-spec-1753).

@@ -1,10 +1,10 @@
 import axios from 'axios';
 import {
+  DEFAULT_SOURCE_IDS,
   MCP_LOCATION_FORMAT_ENV_VAR,
   MCP_REQUEST_KEYS_ENV_VAR,
   buildSearchRequestBody,
   formatJobLocation,
-  getJobDetails,
   readLocationFormat,
   readSearchRequestKeyStyle,
   searchJobs,
@@ -154,6 +154,7 @@ describe('buildSearchRequestBody', () => {
       siteType: ['lever'],
       companySlug: 'acme',
       resultsWanted: 100,
+      linkedinFetchDescription: true,
     });
   });
 
@@ -164,6 +165,7 @@ describe('buildSearchRequestBody', () => {
       site_type: ['lever'],
       company_slug: 'acme',
       results_wanted: 100,
+      linkedin_fetch_description: true,
     });
   });
 
@@ -181,12 +183,12 @@ describe('buildSearchRequestBody', () => {
     }
   });
 
-  it('omits an absent source and company in every style instead of sending undefined keys', () => {
+  it('omits an absent company in every style instead of sending an undefined key', () => {
     expect(Object.keys(buildSearchRequestBody({ query: 'x' }, 'camel')).sort()).toEqual(
-      ['location', 'resultsWanted', 'searchTerm'],
+      ['linkedinFetchDescription', 'location', 'resultsWanted', 'searchTerm', 'siteType'],
     );
     expect(Object.keys(buildSearchRequestBody({ query: 'x' }, 'snake')).sort()).toEqual(
-      ['location', 'results_wanted', 'search_term'],
+      ['linkedin_fetch_description', 'location', 'results_wanted', 'search_term', 'site_type'],
     );
   });
 });
@@ -200,7 +202,7 @@ describe('searchJobs — wire contract', () => {
     const [path, body] = client.post.mock.calls[0];
     expect(path).toBe('/api/jobs/search');
     expect(Object.keys(body).sort()).toEqual(
-      ['companySlug', 'location', 'resultsWanted', 'searchTerm', 'siteType'].sort(),
+      ['companySlug', 'linkedinFetchDescription', 'location', 'resultsWanted', 'searchTerm', 'siteType'].sort(),
     );
     expect(body).toEqual({
       searchTerm: 'data scientist',
@@ -208,6 +210,7 @@ describe('searchJobs — wire contract', () => {
       siteType: ['lever'],
       companySlug: 'acme',
       resultsWanted: 30,
+      linkedinFetchDescription: true,
     });
     // The JSON that actually goes on the wire carries no snake_case keys.
     expect(JSON.stringify(body)).not.toMatch(/search_term|site_type|company_slug|results_wanted/);
@@ -256,16 +259,26 @@ describe('searchJobs — wire contract', () => {
   });
 });
 
-describe('getJobDetails — location contract', () => {
-  it('renders a city-less location as a string', async () => {
-    mockClient({ get: apiJob({ state: 'VA', country: 'United States' }) });
-    const details = await getJobDetails({ jobId: 'j1' });
-    expect(details.location).toBe('VA, United States');
+describe('searchJobs — page size', () => {
+  it('returns at most `limit` jobs and reports total as the page size', async () => {
+    mockClient({ post: { jobs: Array.from({ length: 148 }, (_, i) => apiJob({ city: `C${i}` })) } });
+    const result = await searchJobs({ query: 'x', limit: 20 });
+    expect(result.jobs).toHaveLength(20);
+    expect(result.total).toBe(20);
   });
 
-  it('renders a remote-only job location as null', async () => {
-    mockClient({ get: apiJob(null) });
-    const details = await getJobDetails({ jobId: 'j1' });
-    expect(details.location).toBeNull();
+  it('defaults the page to 20 when the caller sets no limit', async () => {
+    mockClient({ post: { jobs: Array.from({ length: 50 }, () => apiJob(null)) } });
+    const result = await searchJobs({ query: 'x' });
+    expect(result.jobs).toHaveLength(20);
+  });
+
+  it('reports the sources it actually searched', async () => {
+    const client = mockClient({ post: { jobs: [] } });
+    const result = await searchJobs({ query: 'x', source: 'linkedin' });
+    expect(result.sources_searched).toEqual(['linkedin']);
+    const dflt = await searchJobs({ query: 'x' });
+    expect(dflt.sources_searched).toEqual([...DEFAULT_SOURCE_IDS]);
+    expect(client.post).toHaveBeenCalledTimes(2);
   });
 });

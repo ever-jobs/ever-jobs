@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getJobDetails, postedTimeDetail, searchJobs } from '../src/tools';
+import { postedTimeDetail, searchJobs } from '../src/tools';
 
 jest.mock('axios', () => ({
   __esModule: true,
@@ -93,7 +93,7 @@ describe('postedTimeDetail (Spec 1696)', () => {
   });
 });
 
-describe('search_jobs / get_job_details carry the detail (Spec 1696)', () => {
+describe('search_jobs carries the detail (Spec 1696)', () => {
   it('search_jobs: detail keys right after date_posted, and a date-only job keeps its old shape', async () => {
     mockClient({ jobs: [DETAILED, DATE_ONLY] });
     const res = await searchJobs({ query: 'engineer' });
@@ -112,21 +112,5 @@ describe('search_jobs / get_job_details carry the detail (Spec 1696)', () => {
 
     expect(Object.keys(dateOnly)).toEqual(LEGACY_JOB_KEYS);
     expect(dateOnly.date_posted).toBe('2026-09-20');
-  });
-
-  it('get_job_details: carries the detail, and omits it for a date-only job', async () => {
-    mockClient(DETAILED);
-    expect(await getJobDetails({ jobId: 'li-1' })).toMatchObject({
-      date_posted: '2026-09-24',
-      date_posted_at: '2026-09-24T19:34:00.000Z',
-      date_posted_precision: 'minute',
-      date_posted_basis: 'relative',
-    });
-
-    mockClient(DATE_ONLY);
-    const plain = await getJobDetails({ jobId: 'lever-1' });
-    expect(plain).not.toHaveProperty('date_posted_at');
-    expect(plain).not.toHaveProperty('date_posted_precision');
-    expect(plain).not.toHaveProperty('date_posted_basis');
   });
 });

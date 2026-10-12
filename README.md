@@ -326,7 +326,6 @@ cd apps/mcp && npm start
 | Tool                  | Description                      |
 | --------------------- | -------------------------------- |
 | `search_jobs`         | Search 160+ sources with filters |
-| `get_job_details`     | Get full job descriptions        |
 | `list_sources`        | Browse sources by type           |
 | `search_remote_jobs`  | Convenience tool for remote jobs |
 | `get_salary_insights` | Salary market data for a role    |

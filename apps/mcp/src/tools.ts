@@ -67,9 +67,39 @@ export function readLocationFormat(
 function getClient(): AxiosInstance {
   return axios.create({
     baseURL: API_URL,
-    timeout: 60_000,
+    timeout: readRequestTimeoutMs(),
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+/** Default API request timeout, in ms. See {@link readRequestTimeoutMs}. */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 300_000;
+
+/** Env var overriding {@link readRequestTimeoutMs}. */
+export const MCP_REQUEST_TIMEOUT_ENV_VAR = 'EVER_JOBS_MCP_TIMEOUT_MS';
+
+/**
+ * How long an API request may take before axios gives up, in ms.
+ *
+ * The API's default fan-out is the slowest call this server makes: a full
+ * catalogue sweep across ~1,500 sources measured **126 s** for a single
+ * location and **125 s** across two on the 2026-10-12 homelab box, and a cold
+ * cache is slower still. The previous hardcoded `60_000` therefore failed
+ * every unscoped `search_jobs` with `MCP error -32001: Request timed out`, and
+ * `get_salary_insights` — which fans out internally with no source filter —
+ * could never succeed at all.
+ *
+ * The default is {@link DEFAULT_REQUEST_TIMEOUT_MS} (5 minutes), above the
+ * fan-out deadline the API itself enforces
+ * (`EVER_JOBS_FANOUT_DEADLINE_MS`, default 300 s). Override with
+ * `EVER_JOBS_MCP_TIMEOUT_MS`; a non-numeric or non-positive value falls back to
+ * the default rather than disabling the timeout.
+ */
+export function readRequestTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env[MCP_REQUEST_TIMEOUT_ENV_VAR]?.trim();
+  if (!raw) return DEFAULT_REQUEST_TIMEOUT_MS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_REQUEST_TIMEOUT_MS;
 }
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -79,7 +109,13 @@ export interface JobSearchParams {
   location?: string;
   /** Spec 1700 — several locations; each source is searched once per location. */
   locations?: string[];
+  /** A single source id. Unioned with `sources`. See {@link DEFAULT_SOURCE_IDS}. */
   source?: string;
+  /**
+   * Several source ids at once. Unioned with `source`. When neither is given,
+   * the search uses {@link DEFAULT_SOURCE_IDS} rather than the whole catalogue.
+   */
+  sources?: string[];
   company?: string;
   limit?: number;
   remoteOnly?: boolean;
@@ -89,6 +125,17 @@ export interface JobSearchParams {
   excludeKeywords?: string[];
   /** Spec 1700 — curated exclusion lists (e.g. `security_clearance`). */
   excludePresets?: string[];
+  /**
+   * Fetch full LinkedIn descriptions (the API's `linkedinFetchDescription`).
+   *
+   * Defaults to **true**. LinkedIn's listing pages carry a title, a company and
+   * a location but no body, so without this a `source: "linkedin"` search
+   * returns 0 descriptions per result — measured 0/20 on the 2026-10-12
+   * homelab box, against 3,077–7,537 characters with it on. Callers that only
+   * need the listing fields (or that cannot afford the per-job fetches) can
+   * pass `false`.
+   */
+  linkedinFetchDescription?: boolean;
   /**
    * Per-request crawl policy (Spec 1690), forwarded to the API unchanged as the
    * camelCase `crawl` object (e.g. `{ maxConcurrentPerHost: 1, minIntervalMs: 1000 }`).
@@ -206,6 +253,10 @@ export const MCP_MAX_LOCATION_LENGTH = 200;
 export const MCP_MAX_EXCLUSION_TERMS = 50;
 /** Longest accepted exclusion term (Spec 1700). */
 export const MCP_MAX_EXCLUSION_TERM_LENGTH = 100;
+/** Most source ids `sources` may carry; the catalogue is larger, so this only guards a runaway list. */
+export const MCP_MAX_SOURCES = 200;
+/** Longest accepted source id — every `Site` token is a short lowercase slug. */
+export const MCP_MAX_SOURCE_LENGTH = 64;
 
 /**
  * Posting-time detail (Spec 1696). Each key is present only when the API sent
@@ -246,22 +297,6 @@ export interface SearchResponse {
    * its previous shape.
    */
   excluded?: number;
-}
-
-export interface JobDetailsResponse extends PostedTimeDetail {
-  id: string;
-  title: string;
-  company: string;
-  location: string | null;
-  url: string;
-  description: string | null;
-  full_description: string | null;
-  date_posted: string | null;
-  is_remote: boolean;
-  source: string;
-  salary: string | null;
-  department: string | null;
-  application_url: string | null;
 }
 
 export interface SourceInfo {
@@ -470,6 +505,47 @@ const SOURCES: SourceInfo[] = [
   { name: 'EcoJobs', id: 'ecojobs', type: 'job_board', requires_company_slug: false, description: 'Environmental and conservation job board' },
 ];
 
+// ── Default source selection ────────────────────────────────────────────
+
+/**
+ * Source types searched by default. Everything that answers a query-driven
+ * listing without a per-company slug: general boards, remote-first boards and
+ * aggregators. `ats` and `company` are excluded on purpose — they are
+ * single-tenant career pages that return nothing without `company` /
+ * `companySlug`, so including them only adds fan-out time (see
+ * {@link DEFAULT_SOURCE_IDS}).
+ */
+export const DEFAULT_SOURCE_TYPES: readonly SourceInfo['type'][] = [
+  'job_board',
+  'remote',
+  'aggregator',
+];
+
+/**
+ * The sources a search uses when the caller names neither `source` nor
+ * `sources`: every {@link SOURCES} entry of a {@link DEFAULT_SOURCE_TYPES} type
+ * that needs no company slug. Derived from the table rather than hardcoded, so
+ * it cannot drift from the catalogue.
+ *
+ * Before this, omitting `source` sent no `siteType` at all and the API fanned
+ * out across its **whole** plugin set — 1,545 sources on the 2026-10-12
+ * homelab box — which answered an "engineering manager in Sydney" query with
+ * 18,399 jobs in a 44 MB body after 126 s. Most of those are single-tenant
+ * career pages that cannot answer a keyword search at all, so the fan-out was
+ * mostly time and bytes spent on rows nobody wanted.
+ *
+ * Measured on the same box, same query, `resultsWanted: 10`: this set answers
+ * in **60 s** with 148 jobs (138 carrying a description) — what the old
+ * behaviour cost for roughly six sources' worth of output.
+ *
+ * Callers wanting an explicit set pass `sources`; there is deliberately no
+ * "no filter" escape hatch, because the catalogue-wide fan-out is the failure
+ * mode this replaces.
+ */
+export const DEFAULT_SOURCE_IDS: readonly string[] = SOURCES.filter(
+  (s) => !s.requires_company_slug && DEFAULT_SOURCE_TYPES.includes(s.type),
+).map((s) => s.id);
+
 // ── Tool Implementations ───────────────────────────────────────────────
 
 /**
@@ -503,10 +579,17 @@ export async function searchJobs(params: JobSearchParams): Promise<SearchRespons
       ? jobs.filter((j) => j.is_remote)
       : jobs;
 
+    // `limit` is the tool's page size. `resultsWanted` is the API's PER-SOURCE
+    // cap, so a 105-source search returns limit × sources rows and the MCP
+    // layer used to hand every one of them back — an "engineering manager in
+    // Sydney" search produced a 44 MB body, which no agent can read. Capped
+    // here so `total` reports what the caller can actually see.
+    const page = filteredJobs.slice(0, Math.max(0, params.limit ?? 20));
+
     return {
-      total: filteredJobs.length,
-      jobs: filteredJobs,
-      sources_searched: params.source ? [params.source] : ['all'],
+      total: page.length,
+      jobs: page,
+      sources_searched: resolveSourceIds(params),
       query: params.query,
       ...(hasExclusions(params)
         ? { excluded: Number(data.exclusion_metrics?.excluded_count ?? 0) || 0 }
@@ -523,49 +606,6 @@ export async function searchJobs(params: JobSearchParams): Promise<SearchRespons
       };
     }
     throw new Error(`Search failed: ${err.message}`);
-  }
-}
-
-/**
- * Get detailed information about a specific job.
- */
-export async function getJobDetails(params: {
-  jobUrl?: string;
-  jobId?: string;
-}): Promise<JobDetailsResponse> {
-  if (!params.jobUrl && !params.jobId) {
-    throw new Error('Either job_url or job_id must be provided');
-  }
-
-  const client = getClient();
-
-  try {
-    const response = await client.get('/api/jobs/details', {
-      params: {
-        url: params.jobUrl,
-        id: params.jobId,
-      },
-    });
-
-    const job = response.data;
-    return {
-      id: job.id ?? '',
-      title: job.title ?? '',
-      company: job.companyName ?? job.company_name ?? '',
-      location: formatJobLocation(job.location, readLocationFormat()),
-      url: job.jobUrl ?? job.job_url ?? '',
-      description: truncateDescription(job.description),
-      full_description: job.description ?? null,
-      date_posted: job.datePosted ?? job.date_posted ?? null,
-      ...postedTimeDetail(job),
-      is_remote: job.isRemote ?? job.is_remote ?? false,
-      source: job.site ?? '',
-      salary: formatSalary(job.compensation),
-      department: job.department ?? null,
-      application_url: job.applicationUrl ?? job.application_url ?? job.jobUrl ?? null,
-    };
-  } catch (err: any) {
-    throw new Error(`Failed to get job details: ${err.message}`);
   }
 }
 
@@ -740,30 +780,41 @@ export function compareSources(): {
  * is spelled the same in every style, and its own keys are the camelCase ones
  * the API's `CrawlPolicyDto` declares. `locations` and the exclusion lists
  * (Spec 1700) are added, cleaned, only when non-empty, in the chosen style.
+ *
+ * `siteType` is never absent: `source` / `sources` name the sources, and a
+ * search that names none falls back to {@link DEFAULT_SOURCE_IDS} rather than
+ * fanning out over the whole catalogue.
  */
 export function buildSearchRequestBody(
   params: JobSearchParams,
   style: SearchRequestKeyStyle = readSearchRequestKeyStyle(),
 ): Record<string, unknown> {
-  const siteType = params.source ? [params.source] : undefined;
+  const siteType = resolveSourceIds(params);
   const resultsWanted = Math.min(params.limit ?? 20, 100);
   const location = params.location ?? '';
 
   const camel: Record<string, unknown> = {
     searchTerm: params.query,
     location,
-    ...(siteType ? { siteType } : {}),
+    siteType,
     ...(params.company ? { companySlug: params.company } : {}),
     resultsWanted,
   };
   const snake: Record<string, unknown> = {
     search_term: params.query,
     location,
-    ...(siteType ? { site_type: siteType } : {}),
+    site_type: siteType,
     ...(params.company ? { company_slug: params.company } : {}),
     results_wanted: resultsWanted,
   };
   const crawl = params.crawl ? { crawl: params.crawl } : {};
+
+  // Sent unless the caller explicitly opts out (`false`). A LinkedIn listing
+  // page carries no body, so without this the search returns titles with empty
+  // descriptions; see JobSearchParams.linkedinFetchDescription.
+  const linkedinFetchDescription = params.linkedinFetchDescription !== false;
+  camel.linkedinFetchDescription = linkedinFetchDescription;
+  snake.linkedin_fetch_description = linkedinFetchDescription;
 
   // Spec 1700 — added only when non-empty, so a plain search body stays
   // byte-identical. `locations` is one word, so both spellings agree.
@@ -817,6 +868,23 @@ function knownPresets(value: unknown): string[] | undefined {
     ?.map((p) => p.toLowerCase())
     .filter((p) => MCP_EXCLUSION_PRESETS.includes(p));
   return list && list.length > 0 ? [...new Set(list)] : undefined;
+}
+
+/**
+ * The `siteType` a search runs against: `source` ∪ `sources`, or
+ * {@link DEFAULT_SOURCE_IDS} when the caller names none. Duplicates and blanks
+ * are dropped and the order the caller gave is preserved, so the same request
+ * always produces the same body.
+ */
+export function resolveSourceIds(params: JobSearchParams): string[] {
+  const named = [
+    ...(params.source ? [params.source] : []),
+    ...cleanList(params.sources, MCP_MAX_SOURCES, MCP_MAX_SOURCE_LENGTH) ?? [],
+  ]
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const deduped = [...new Set(named)];
+  return deduped.length > 0 ? deduped : [...DEFAULT_SOURCE_IDS];
 }
 
 /** Did the search send any exclusion filter? */

@@ -47,26 +47,30 @@ Search for jobs across all sources.
 | `query`       | string  | ✅       | Job search query (e.g. "software engineer")        |
 | `location`    | string  | ❌       | Location filter (e.g. "San Francisco", "Remote")   |
 | `source`      | string  | ❌       | Specific source id (use `list_sources` to see all) |
+| `sources`     | string[] | ❌      | Several source ids at once; unioned with `source`  |
 | `company`     | string  | ❌       | Company slug for ATS sources (e.g. "stripe")       |
 | `limit`       | number  | ❌       | Max results (default: 20, max: 100)                |
 | `remote_only` | boolean | ❌       | Filter to remote positions only                    |
+| `linkedin_fetch_description` | boolean | ❌ | Fetch full LinkedIn descriptions (default: **true**). LinkedIn listing pages carry no body, so without this a LinkedIn search returns empty descriptions. Pass `false` to skip the per-job fetches |
 | `locations`   | string[] | ❌      | Several locations in one call (schema limit 10 items; the server searches the first `EVER_JOBS_SEARCH_MAX_LOCATIONS`, default 10). Each source runs once per location; same-source duplicates are removed; `location`, when also set, is searched first |
 | `exclude_title_terms` | string[] | ❌ | Drop jobs whose title contains any of these words or phrases (up to 50; literal, whole-word, trailing `*` = prefix, never a regex) |
 | `exclude_keywords` | string[] | ❌ | Drop jobs whose title or description contains any of these words or phrases (up to 50; same rules) |
 | `exclude_presets` | string[] | ❌ | Curated exclusion lists; `security_clearance` drops roles that require a security clearance or vetting |
 | `crawl`       | object  | ❌       | Per-request crawl policy (Spec 1690), camelCase    |
 
+Omitting both `source` and `sources` searches **the default set** — every
+job-board, remote-board and aggregator source that needs no company slug
+(`DEFAULT_SOURCE_IDS`, 105 sources on this checkout). It deliberately does *not*
+fan out over the whole plugin catalogue: `ats` and `company` sources are
+single-tenant career pages that cannot answer a keyword search without a slug, so
+including them costs minutes and returns rows nobody can use.
+
+`limit` is this tool's page size. The API's `resultsWanted` is a **per-source**
+cap, so a multi-source search returns `limit × sources` rows upstream; the MCP
+layer truncates to `limit` before responding.
+
 `crawl` is forwarded to the API unchanged as the `crawl` field (same key in every
 `EVER_JOBS_MCP_REQUEST_KEYS` style); see [`docs/CRAWL_POLICY.md`](../../docs/CRAWL_POLICY.md).
-
-### `get_job_details`
-
-Get detailed information about a specific job posting.
-
-| Parameter | Type   | Required | Description                 |
-| --------- | ------ | -------- | --------------------------- |
-| `job_url` | string | ❌       | Full URL of the job posting |
-| `job_id`  | string | ❌       | Ever Jobs internal job ID   |
 
 ### `list_sources`
 
@@ -122,7 +126,7 @@ Remote-only jobs: whether their `location` reads `Remote` depends on the API's
 `null` and `Remote - US` gives `United States`, with `is_remote` carrying the
 signal; `true` restores `Remote` / `Remote, United States`). See `.env.example`.
 
-Posting time: every job from `search_jobs`, `search_remote_jobs` and `get_job_details` carries
+Posting time: every job from `search_jobs` and `search_remote_jobs` carries
 `date_posted` (a `YYYY-MM-DD` date). When the source gives more (Spec 1696), three keys follow it:
 `date_posted_at` (ISO-8601 UTC instant; precision `exact`, `minute` or `hour` only),
 `date_posted_precision` (`exact | minute | hour | day | week | month | year`) and

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import {
+  DEFAULT_SOURCE_IDS,
   MCP_MAX_LOCATIONS,
   MCP_REQUEST_KEYS_ENV_VAR,
   buildSearchRequestBody,
@@ -38,13 +39,46 @@ afterEach(() => {
 
 describe('buildSearchRequestBody — Spec 1700', () => {
   it('adds nothing for a plain search', () => {
-    expect(buildSearchRequestBody({ query: 'x', location: 'Berlin' })).toEqual({
+    expect(buildSearchRequestBody({ query: 'x', location: 'Berlin', source: 'linkedin' })).toEqual({
       searchTerm: 'x',
       location: 'Berlin',
-      siteType: undefined,
-      companySlug: undefined,
+      siteType: ['linkedin'],
       resultsWanted: 20,
+      linkedinFetchDescription: true,
     });
+  });
+
+  it('falls back to the default source set when the caller names none', () => {
+    const body = buildSearchRequestBody({ query: 'x' });
+    expect(body.siteType).toEqual(DEFAULT_SOURCE_IDS);
+    expect(DEFAULT_SOURCE_IDS.length).toBeGreaterThan(1);
+    // Every default is a slugless board/remote/aggregator — the single-tenant
+    // ATS and company sources would answer nothing.
+    expect(DEFAULT_SOURCE_IDS).toContain('linkedin');
+    expect(DEFAULT_SOURCE_IDS).not.toContain('ashby');
+  });
+
+  it('unions source and sources, dropping duplicates and blanks', () => {
+    expect(
+      buildSearchRequestBody({ query: 'x', source: 'linkedin', sources: ['indeed', 'linkedin', '  '] })
+        .siteType,
+    ).toEqual(['linkedin', 'indeed']);
+  });
+
+  it('honours an explicit sources list over the default', () => {
+    expect(buildSearchRequestBody({ query: 'x', sources: ['glassdoor'] }).siteType).toEqual(['glassdoor']);
+  });
+
+  it('defaults linkedinFetchDescription to true and lets a caller opt out', () => {
+    expect(buildSearchRequestBody({ query: 'x' }).linkedinFetchDescription).toBe(true);
+    expect(buildSearchRequestBody({ query: 'x' }).linkedin_fetch_description).toBeUndefined();
+    expect(
+      buildSearchRequestBody({ query: 'x', linkedinFetchDescription: false }).linkedinFetchDescription,
+    ).toBe(false);
+    expect(
+      buildSearchRequestBody({ query: 'x', linkedinFetchDescription: false }, 'snake')
+        .linkedin_fetch_description,
+    ).toBe(false);
   });
 
   it.each(['camel', 'snake', 'both'] as const)('sends locations in the %s style', (style) => {
