@@ -16,6 +16,10 @@ export class LocationDto {
   streetAddress?: string | null;
   /** The site's postal/ZIP code when the source carries one. */
   postalCode?: string | null;
+  /** Verbatim source fields that have no DTO slot — ids, coordinates,
+   *  feed-specific flags. Informational only: never displayed, parsed,
+   *  typed, or fed to dedup/canonical-key. */
+  extras?: Record<string, unknown> | null;
 
   constructor(partial?: Partial<LocationDto>) {
     Object.assign(this, partial);

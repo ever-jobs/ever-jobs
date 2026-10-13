@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { Logger } from '@nestjs/common';
 import {
   CompensationInterval,
   DescriptionFormat,
@@ -7,14 +8,18 @@ import {
 } from '@ever-jobs/models';
 
 const mockGet = jest.fn();
+const mockSleep = jest.fn(() => Promise.resolve());
+const mockCreateHttpClient = jest.fn(() => ({
+  get: mockGet,
+  setHeaders: jest.fn(),
+}));
 jest.mock('@ever-jobs/common', () => {
   const actual = jest.requireActual('@ever-jobs/common');
   return {
     ...actual,
-    createHttpClient: jest.fn(() => ({
-      get: mockGet,
-      setHeaders: jest.fn(),
-    })),
+    sleep: () => mockSleep(),
+    createHttpClient: (...args: unknown[]) =>
+      mockCreateHttpClient(...(args as [])),
   };
 });
 
@@ -135,6 +140,8 @@ describe('AdpService', () => {
 
   beforeEach(() => {
     mockGet.mockReset();
+    mockSleep.mockClear();
+    mockCreateHttpClient.mockClear();
     service = new AdpService();
   });
 
@@ -313,6 +320,82 @@ describe('AdpService', () => {
     const res = await service.scrape(input());
 
     expect(res.jobs).toHaveLength(0);
+  });
+
+  // Spec 5163 — throttle recovery
+  describe('detail-fetch throttle recovery (spec 5163)', () => {
+    it('retries a rejected detail serially after a cooldown and fills the description', async () => {
+      let detailCalls = 0;
+      mockGet.mockImplementation((url: string) => {
+        const detailMatch = url.match(DETAIL_RE);
+        if (detailMatch) {
+          detailCalls += 1;
+          // 429 on the bulk pass; the serial recovery call succeeds.
+          if (detailCalls === 1) return Promise.reject(new Error('429'));
+          return Promise.resolve({
+            data: listing({
+              requisitionDescription: '<p>Recovered body</p>',
+            }),
+          });
+        }
+        if (LIST_RE.test(url)) {
+          return Promise.resolve({
+            data: { jobRequisitions: [listing()], meta: { totalNumber: 1 } },
+          });
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      });
+
+      const res = await service.scrape(input());
+
+      expect(res.jobs).toHaveLength(1);
+      expect(res.jobs[0].description).toBe('Recovered body');
+      expect(detailCalls).toBe(2);
+      expect(mockSleep).toHaveBeenCalled();
+    });
+
+    it('still emits the job and logs when recovery exhausts its rounds', async () => {
+      const warnSpy = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => {});
+      mockApi([listing()], { '9201050875412_1': new Error('429') });
+
+      const res = await service.scrape(input());
+
+      expect(res.jobs).toHaveLength(1);
+      expect(res.jobs[0].description).toBeNull();
+      // 1 bulk-pass attempt + ADP_DETAIL_RETRY_ROUNDS serial attempts
+      const detailCalls = mockGet.mock.calls.filter(([url]: [string]) =>
+        DETAIL_RE.test(url),
+      );
+      expect(detailCalls).toHaveLength(3);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('1 of 1 detail fetches failed'),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('still failing'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('skips the recovery pass entirely when no detail fails', async () => {
+      mockApi([listing()], { '9201050875412_1': listing() });
+
+      await service.scrape(input());
+
+      expect(mockSleep).not.toHaveBeenCalled();
+    });
+
+    it('builds the detail client with retries disabled', async () => {
+      mockApi([listing()], { '9201050875412_1': listing() });
+
+      await service.scrape(input());
+
+      expect(mockCreateHttpClient).toHaveBeenCalledTimes(2);
+      expect(mockCreateHttpClient).toHaveBeenCalledWith(
+        expect.objectContaining({ retries: 0 }),
+      );
+    });
   });
 });
 

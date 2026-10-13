@@ -1,15 +1,16 @@
 /**
  * Constants for the Factorial HRIS + ATS public career-board platform.
  *
- * Factorial (factorialhr.com) is an HRIS with an integrated ATS that hosts
+ * Factorial (factorial.com) is an HRIS with an integrated ATS that hosts
  * public career pages for each tenant. Every tenant career site is served from
- * its own sub-domain under the shared apex `factorialhr.com`, e.g.
- * `https://jobs-tendencys.factorialhr.com`. A small number of tenants use a
+ * its own sub-domain under the shared apex `factorial.com`, e.g.
+ * `https://jobs-tendencys.factorial.com`. A small number of tenants use a
  * custom domain, but the sub-domain form is the canonical entry point.
  *
  * ## Wire surface — server-rendered HTML only (no anonymous JSON API)
  *
  * Factorial's authenticated REST API (`api.factorialhr.com/api/v1/ats/…`)
+ * (the API apex is unchanged by the board-domain rebrand)
  * requires OAuth2 bearer credentials and is deliberately NOT used here.
  *
  * The tenant career site is a server-rendered Rails application. All job data
@@ -17,14 +18,14 @@
  * page itself at load time**. Data extraction therefore proceeds via HTML
  * parsing over two tiers:
  *
- *   Tier 1 — Career-page index (`GET https://{slug}.factorialhr.com/`):
+ *   Tier 1 — Career-page index (`GET https://{slug}.factorial.com/`):
  *
  *     The root page lists every open position grouped by office/location. Each
  *     job entry is a `<li>` element with a `data-controller='job-postings'`
  *     attribute that embeds the job URL, remote flag, location ID and team ID:
  *
  *       data-controller='job-postings'
- *       data-job-postings-url='https://{slug}.factorialhr.com/job_posting/{title-slug}-{id}'
+ *       data-job-postings-url='https://{slug}.factorial.com/job_posting/{title-slug}-{id}'
  *       data-is-remote='false'
  *       data-location-id='318886'
  *       data-team-id='95948'
@@ -53,27 +54,40 @@
  *     neither the index nor the detail page surfaces a machine-readable
  *     publish timestamp.
  *
- * URL patterns (verified 2026-06-03):
- *   Index page:   https://{slug}.factorialhr.com/
- *   Job detail:   https://{slug}.factorialhr.com/job_posting/{title-slug}-{id}
- *   Apply URL:    https://{slug}.factorialhr.com/apply/{title-slug}-{id}
- *   Sitemap:      https://{slug}.factorialhr.com/sitemap.xml
+ * URL patterns (verified 2026-10-10):
+ *   Index page:   https://{slug}.factorial.com/
+ *   Job detail:   https://{slug}.factorial.com/job_posting/{title-slug}-{id}
+ *   Apply URL:    https://{slug}.factorial.com/apply/{title-slug}-{id}
+ *   Sitemap:      https://{slug}.factorial.com/sitemap.xml
  *   Job ID:       last hyphen-separated numeric token in the detail URL path
  *                 (e.g. "ai-developer-304592" → id "304592")
  *
- * Verified live against `jobs-tendencys.factorialhr.com` on 2026-06-03
- * (HTTP 200, 22 jobs, fully shaped HTML with styledText description and
+ * Verified live against `jobs-tendencys.factorial.com` on 2026-10-10
+ * (`jobs-tendencys.factorialhr.com` 301-redirects to the canonical apex;
+ * HTTP 200, fully shaped HTML with styledText description and
  * office-grouped listing with data-* attributes).
  */
 
-/** Shared apex for every Factorial-hosted tenant career sub-domain. */
-export const FACTORIAL_APEX = 'factorialhr.com';
+/**
+ * Canonical apex for every Factorial-hosted tenant career sub-domain.
+ * Factorial rebranded its board domains from `factorialhr.com` to
+ * `factorial.com`; the old sub-domains 301 to the new apex.
+ */
+export const FACTORIAL_APEX = 'factorial.com';
+
+/** Legacy apex — kept as a fallback for tenants that lag the migration. */
+export const FACTORIAL_LEGACY_APEX = 'factorialhr.com';
 
 /**
- * Host template for Factorial-hosted tenants; `{slug}` is substituted at
- * runtime with the company slug (sub-domain label).
+ * Host templates for Factorial-hosted tenants, tried in order; `{slug}` is
+ * substituted at runtime with the company slug (sub-domain label). The
+ * canonical `factorial.com` host is attempted first, the legacy
+ * `factorialhr.com` sub-domain (which 301-redirects) last.
  */
-export const FACTORIAL_HOST_TEMPLATE = 'https://{slug}.factorialhr.com';
+export const FACTORIAL_HOST_TEMPLATES = [
+  'https://{slug}.factorial.com',
+  'https://{slug}.factorialhr.com',
+] as const;
 
 /** Path of the sitemap; contains all job-posting URLs + lastmod dates. */
 export const FACTORIAL_SITEMAP_PATH = '/sitemap.xml';

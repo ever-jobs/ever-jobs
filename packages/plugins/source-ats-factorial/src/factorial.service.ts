@@ -20,7 +20,7 @@ import {
   randomSleep,
 } from '@ever-jobs/common';
 import {
-  FACTORIAL_HOST_TEMPLATE,
+  FACTORIAL_HOST_TEMPLATES,
   FACTORIAL_SITEMAP_PATH,
   FACTORIAL_JOB_DETAIL_PREFIX,
   FACTORIAL_APPLY_PREFIX,
@@ -35,7 +35,9 @@ import { FactorialIndexJob, FactorialDetailJob } from './factorial.types';
  * Factorial HRIS + ATS public career-page scraper — generic, multi-tenant.
  *
  * Factorial hosts a public career site for every tenant at
- * `https://{slug}.factorialhr.com`. The site is a server-rendered Rails
+ * `https://{slug}.factorial.com` (legacy `{slug}.factorialhr.com` sub-domains
+ * 301 to the canonical apex and are kept as a fallback). The site is a
+ * server-rendered Rails
  * application; no anonymous JSON API is available. Job data is extracted from
  * two HTML surfaces:
  *
@@ -81,7 +83,6 @@ export class FactorialService implements IScraper {
       return new JobResponseDto([]);
     }
 
-    const host = FACTORIAL_HOST_TEMPLATE.replace('{slug}', encodeURIComponent(slug));
     const companyName = this.deriveCompanyName(slug);
     const resultsWanted = input.resultsWanted ?? FACTORIAL_DEFAULT_RESULTS;
 
@@ -97,25 +98,36 @@ export class FactorialService implements IScraper {
     try {
       this.logger.log(`Fetching Factorial career page for tenant: ${slug}`);
 
-      // Fetch index page and sitemap concurrently.
-      const [indexResult, sitemapResult] = await Promise.allSettled([
-        this.fetchText(client, host + '/'),
-        this.fetchText(client, host + FACTORIAL_SITEMAP_PATH),
-      ]);
+      // Try host templates in order — canonical apex first, the legacy
+      // (301-redirecting) apex last for tenants that lag the migration.
+      let host: string | null = null;
+      let indexHtml: string | null = null;
+      let lastReason = 'empty response';
+      for (const template of FACTORIAL_HOST_TEMPLATES) {
+        const candidate = template.replace('{slug}', encodeURIComponent(slug));
+        try {
+          const html = await this.fetchText(client, `${candidate}/`);
+          if (html) {
+            host = candidate;
+            indexHtml = html;
+            break;
+          }
+          lastReason = 'empty response';
+        } catch (err: any) {
+          lastReason = String(err?.message ?? err);
+        }
+      }
 
-      const indexHtml =
-        indexResult.status === 'fulfilled' ? indexResult.value : null;
-      const sitemapXml =
-        sitemapResult.status === 'fulfilled' ? sitemapResult.value : null;
-
-      if (!indexHtml) {
-        const reason =
-          indexResult.status === 'rejected'
-            ? String(indexResult.reason?.message ?? indexResult.reason)
-            : 'empty response';
-        this.logger.warn(`Factorial index page unavailable for ${slug}: ${reason}`);
+      if (!host || !indexHtml) {
+        this.logger.warn(`Factorial index page unavailable for ${slug}: ${lastReason}`);
         return new JobResponseDto([]);
       }
+
+      // Sitemap from the host that served the index.
+      const sitemapXml = await this.fetchText(
+        client,
+        host + FACTORIAL_SITEMAP_PATH,
+      ).catch(() => null);
 
       // Build date map from sitemap (url → lastmod).
       const dateMap = sitemapXml ? this.parseSitemap(sitemapXml) : new Map<string, string>();

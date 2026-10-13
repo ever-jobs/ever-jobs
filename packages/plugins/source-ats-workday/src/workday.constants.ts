@@ -172,6 +172,41 @@ export function workdaySearchText(searchTerm: string | null | undefined): string
   return typeof searchTerm === 'string' ? searchTerm.trim() : '';
 }
 
+/**
+ * The search endpoint's `facetParameter` for the board's "Job Category"
+ * drop-down is tenant-renamed: observed values include `jobFamilyGroup`
+ * ("Job Category"), `jobFamily` ("Job Family") and `Department_Extended`
+ * ("Department"). The category is not carried per-job in CXS payloads; it is
+ * recovered by paginating each facet value (`appliedFacets`) and recording
+ * which bucket returns each posting. A facet qualifies as the category facet
+ * when its `facetParameter` or `descriptor` carries a category word below
+ * and the parameter is not a known non-category field.
+ */
+export const WORKDAY_CATEGORY_FACET_PATTERN = /categor|famil|depart/i;
+
+/**
+ * Facet `facetParameter` values that are never the category facet, whatever
+ * their display label — both an explicit list of fields observed in CXS
+ * responses and a name guard for the location/type facet families tenants
+ * may rename.
+ */
+export const WORKDAY_NON_CATEGORY_FACET_PARAMETERS = new Set([
+  'workerSubType',
+  'timeType',
+  'locations',
+  'locationCountry',
+  'locationRegionStateProvince',
+  'jobReqId',
+  'remote',
+  'brands',
+  'company',
+]);
+export const WORKDAY_NON_CATEGORY_FACET_PATTERN =
+  /location|site|brand|compan|remote|subtype|timetype/i;
+
+/** Safety bound on the number of category buckets paginated per scrape. */
+export const WORKDAY_CATEGORY_FACET_CAP = 50;
+
 /** Default headers for Workday API requests */
 export const WORKDAY_HEADERS: Record<string, string> = {
   Accept: 'application/json',

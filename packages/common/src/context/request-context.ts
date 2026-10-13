@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+import type { RawCaptureSink } from '@ever-jobs/models';
 import type { ScrapeContext } from '../http/crawl/types';
 
 export interface RequestContext {
@@ -11,6 +12,11 @@ export interface RequestContext {
   requestId?: string;
   /** Per-scrape crawl-policy context (Spec 1690), set by `runWithScrapeContext`. */
   scrape?: ScrapeContext;
+  /**
+   * Spec 5161 — per-source HTTP capture sink. Present only while a scraper
+   * runs under `runWithRawCapture` (single-source `include_raw` requests).
+   */
+  rawCapture?: RawCaptureSink;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -41,4 +47,18 @@ export function runWithRequestContext<T>(patch: Partial<RequestContext>, fn: () 
 /** The whole context in scope, or `undefined` outside any. Treat it as read-only. */
 export function getRequestContext(): RequestContext | undefined {
   return storage.getStore();
+}
+
+/**
+ * Run `fn` with a raw-capture sink in scope (Spec 5161). The existing store is
+ * spread rather than replaced, so `requestId` survives the child context.
+ */
+export function runWithRawCapture<T>(sink: RawCaptureSink, fn: () => T): T {
+  const parent = storage.getStore() ?? { requestId: '' };
+  return storage.run({ ...parent, rawCapture: sink }, fn);
+}
+
+/** The capture sink in scope, or `undefined` when `include_raw` is off. */
+export function getRawCapture(): RawCaptureSink | undefined {
+  return storage.getStore()?.rawCapture;
 }

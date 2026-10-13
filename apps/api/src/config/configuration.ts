@@ -106,6 +106,12 @@ export default () => {
        */
       deadlineMs: resolveFanoutDeadlineMs(process.env),
       /**
+       * Server-side ceiling for the per-request `?deadline_ms` override
+       * (Spec 5164). `0`/unset = uncapped; when set, a request deadline of
+       * `0` (unbounded) or above this value is rejected 400.
+       */
+      deadlineMaxMs: parseInt(process.env.EVER_JOBS_SEARCH_DEADLINE_MAX_MS, 0),
+      /**
        * Spec 1720 / FR-12 — `EVER_JOBS_MAX_RESULTS_WANTED` (default 1000)
        * clamps `resultsWanted` per source; `EVER_JOBS_MAX_JOBS_PER_SEARCH`
        * (default 40000 since FR-13) stops starting sources once that many raw

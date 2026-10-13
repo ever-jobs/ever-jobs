@@ -130,12 +130,27 @@ describe('GemService — Spec 006 / T05 + T06', () => {
       // Remote-detection sanity check on the SRE row.
       const sre = result.jobs.find((j) => j.atsId === 'ext-1002');
       expect(sre?.isRemote).toBe(true);
-      expect(sre?.location?.city).toBeUndefined();
+      expect(sre?.location?.city).toBeNull();
 
       // Hybrid → not flagged as remote.
       const designer = result.jobs.find((j) => j.atsId === 'ext-1003');
       expect(designer?.isRemote).toBe(false);
       expect(designer?.department).toBe('Design');
+
+      // locations[] is filled from every mapped site (Spec 5173 — deliberate
+      // dedupKey change); location = first result. Unclaimed keys ride extras.
+      expect(first.location?.city).toBe('New York');
+      expect(first.locations?.[0]).toMatchObject({
+        city: 'New York',
+        state: 'NY',
+        country: 'US',
+        text: 'New York, NY',
+      });
+      expect(first.locations?.[0]?.extras).toMatchObject({ extId: 'loc-ny' });
+      expect(sre?.locations?.[0]).toMatchObject({
+        text: 'Remote — US',
+        country: 'US',
+      });
 
       // Verify the list request: the first POST carries both operations
       // in the canonical order (Theme first, List second), boardId =

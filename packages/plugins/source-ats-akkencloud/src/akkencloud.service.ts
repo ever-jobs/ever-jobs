@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   AKKENCLOUD_SHARED_HOST,
@@ -44,7 +45,7 @@ import {
   AkkenCloudJob,
   AkkenCloudJobLink,
   AkkenCloudJsonLd,
-  AkkenCloudJsonLdLocation,
+
 } from './akkencloud.types';
 
 /**
@@ -525,18 +526,12 @@ export class AkkenCloudService implements IScraper {
   ): { city: string | null; state: string | null; country: string | null } {
     const empty = { city: null, state: null, country: null };
     if (!jsonLd) return empty;
-    const raw = jsonLd.jobLocation;
-    const node: AkkenCloudJsonLdLocation | undefined = Array.isArray(raw) ? raw[0] : raw ?? undefined;
-    const address = node?.address;
-    if (!address || typeof address !== 'object') return empty;
-    const country =
-      typeof address.addressCountry === 'string'
-        ? address.addressCountry
-        : address.addressCountry?.name ?? null;
+    const dto = toLocationDto(jsonLd.jobLocation);
+    if (!dto) return empty;
     return {
-      city: this.cleanText(address.addressLocality),
-      state: this.cleanText(address.addressRegion),
-      country: this.cleanText(country),
+      city: dto.city ?? null,
+      state: dto.state ?? null,
+      country: dto.country ?? null,
     };
   }
 

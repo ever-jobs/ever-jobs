@@ -13,7 +13,7 @@
  * (`data-controller='job-postings'` elements) before the detail fetch.
  */
 export interface FactorialIndexJob {
-  /** Absolute URL of the job-detail page, e.g. `https://{slug}.factorialhr.com/job_posting/ai-developer-304592`. */
+  /** Absolute URL of the job-detail page, e.g. `https://{slug}.factorial.com/job_posting/ai-developer-304592`. */
   jobUrl: string;
 
   /**

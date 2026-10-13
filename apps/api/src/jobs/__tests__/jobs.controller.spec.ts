@@ -60,14 +60,25 @@ function makePassthroughAggregator() {
   };
 }
 
-function createController(opts: { jobs?: JobPostDto[]; cachedValue?: any; aggregator?: any } = {}) {
+function createController(
+  opts: {
+    jobs?: JobPostDto[];
+    cachedValue?: any;
+    aggregator?: any;
+    configValues?: Record<string, unknown>;
+  } = {},
+) {
   const jobsService = makeJobsService(opts.jobs ?? []);
   const analyticsService = makeAnalyticsService();
   const cacheService = makeCacheService(opts.cachedValue);
   const aggregator = opts.aggregator ?? makePassthroughAggregator();
   // Spec 5024 — ConfigService seam. Returning the caller's default keeps
-  // `store.persistSearch` at its `true` default for these cases.
-  const configService = { get: (_key: string, def?: unknown) => def };
+  // `store.persistSearch` at its `true` default for these cases. Spec 5164
+  // adds `configValues` for keys that need a non-default value in a test
+  // (e.g. `search.deadlineMaxMs`).
+  const configService = {
+    get: (key: string, def?: unknown) => opts.configValues?.[key] ?? def,
+  };
   const controller = new JobsController(
     jobsService as any,
     aggregator as any,
@@ -606,5 +617,235 @@ describe('JobsController', () => {
       expect(result.per_source).toHaveLength(5);
       expect(result.per_source_summary.truncated).toBe(0);
     });
-  });
+    describe('include_raw — Spec 5161', () => {
+      const entry = {
+        seq: 0,
+        attempt: 0,
+        method: 'GET',
+        url: 'https://acme.example.com/jobs',
+        status: 200,
+        elapsed_ms: 12,
+        body_bytes: 9,
+        truncated: false,
+        body: { jobs: [] },
+      };
+
+      it('passes captureRaw to the service and returns raw_by_source', async () => {
+        const { controller, jobsService } = createController({ jobs: [makeJob()] });
+        jobsService.searchJobsWithDiagnostics.mockResolvedValue({
+          jobs: [makeJob()],
+          perSource: [],
+          rawBySource: { linkedin: [entry] },
+        });
+
+        // include_raw is the 12th positional query param.
+        const result = (await controller.searchJobs(
+          new ScraperInputDto({ siteType: ['linkedin' as never] }),
+          undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+          undefined, undefined, undefined,
+          'true',
+        )) as any;
+
+        expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledWith(
+          expect.any(ScraperInputDto),
+          { captureRaw: true },
+        );
+        expect(result.raw_by_source).toEqual({ linkedin: [entry] });
+      });
+
+      it('skips the cache read when include_raw is set', async () => {
+        const { controller, cacheService } = createController({
+          jobs: [makeJob()],
+          cachedValue: [makeJob()],
+        });
+        await controller.searchJobs(
+          new ScraperInputDto({ siteType: ['linkedin' as never] }),
+          undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+          undefined, undefined, undefined,
+          'true',
+        );
+        expect(cacheService.get).not.toHaveBeenCalled();
+      });
+
+      it('omits raw_by_source entirely when the flag is absent', async () => {
+        const { controller } = createController({ jobs: [makeJob()] });
+        const result = (await controller.searchJobs(
+          new ScraperInputDto({ siteType: ['linkedin' as never] }),
+        )) as any;
+        expect('raw_by_source' in result).toBe(false);
+      });
+
+      it('returns no raw_by_source on a later request without the flag (cache round-trip)', async () => {
+        const jobs = [makeJob()];
+        const { controller, jobsService, cacheService } = createController({ jobs });
+        jobsService.searchJobsWithDiagnostics.mockResolvedValue({
+          jobs,
+          perSource: [],
+          rawBySource: { linkedin: [entry] },
+        });
+
+        // First request: capture on, writes the raw job list to cache.
+        await controller.searchJobs(
+          new ScraperInputDto({ siteType: ['linkedin' as never] }),
+          undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+          undefined, undefined, undefined,
+          'true',
+        );
+        const cachedWrite = cacheService.set.mock.calls[0][1];
+        expect(cachedWrite.jobs).toBe(jobs);
+        expect(cachedWrite.raw_by_source).toBeUndefined();
+
+        // Second request: flag off, cache hit — response carries no capture key.
+        cacheService.get.mockReturnValueOnce(cachedWrite);
+        const result = (await controller.searchJobs(
+          new ScraperInputDto({ siteType: ['linkedin' as never] }),
+        )) as any;
+        expect(result.cached).toBe(true);
+        expect('raw_by_source' in result).toBe(false);
+      });
+    });
+
+    describe('deadline_ms — Spec 5164', () => {
+      const input = () => new ScraperInputDto({ siteType: ['linkedin' as never] });
+      // deadline_ms is the 13th positional query param (after include_raw).
+      const search = (controller: JobsController, deadline?: string) =>
+        controller.searchJobs(
+          input(),
+          undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+          undefined, undefined, undefined, undefined,
+          deadline,
+        );
+
+      it('absent → service receives no override', async () => {
+        const { controller, jobsService } = createController({ jobs: [makeJob()] });
+        await search(controller, undefined);
+        expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledWith(
+          expect.any(ScraperInputDto),
+          { captureRaw: false, deadlineMs: undefined },
+        );
+      });
+
+      it('a present value overrides the config deadline', async () => {
+        const { controller, jobsService } = createController({ jobs: [makeJob()] });
+        await search(controller, '300000');
+        expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledWith(
+          expect.any(ScraperInputDto),
+          { captureRaw: false, deadlineMs: 300000 },
+        );
+      });
+
+      it('deadline_ms=0 is passed through, not folded into the default', async () => {
+        const { controller, jobsService } = createController({ jobs: [makeJob()] });
+        await search(controller, '0');
+        expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledWith(
+          expect.any(ScraperInputDto),
+          { captureRaw: false, deadlineMs: 0 },
+        );
+      });
+
+      it('deadline_ms=0 → 400 when the operator sets a ceiling', async () => {
+        const { controller } = createController({
+          jobs: [makeJob()],
+          configValues: { 'search.deadlineMaxMs': 240_000 },
+        });
+        await expect(search(controller, '0')).rejects.toThrow(/maximum/);
+      });
+
+      it('deadline_ms above the ceiling → 400 naming the max', async () => {
+        const { controller } = createController({
+          jobs: [makeJob()],
+          configValues: { 'search.deadlineMaxMs': 240_000 },
+        });
+        await expect(search(controller, '300000')).rejects.toThrow(/240000/);
+      });
+
+      it('deadline_ms within the ceiling is used as given', async () => {
+        const { controller, jobsService } = createController({
+          jobs: [makeJob()],
+          configValues: { 'search.deadlineMaxMs': 240_000 },
+        });
+        await search(controller, '240000');
+        expect(jobsService.searchJobsWithDiagnostics).toHaveBeenCalledWith(
+          expect.any(ScraperInputDto),
+          { captureRaw: false, deadlineMs: 240000 },
+        );
+      });
+
+      it('non-numeric and negative values → 400', async () => {
+        const { controller } = createController({ jobs: [makeJob()] });
+        await expect(search(controller, 'abc')).rejects.toThrow(/non-negative/);
+        await expect(search(controller, '-5')).rejects.toThrow(/non-negative/);
+      });
+
+      it('does not leak into cacheParams', async () => {
+        const { controller, cacheService } = createController({ jobs: [makeJob()] });
+        await search(controller, '300000');
+        const cacheKey = cacheService.set.mock.calls[0][0];
+        expect(cacheKey).not.toHaveProperty('deadline_ms');
+        expect(cacheKey).not.toHaveProperty('deadlineMs');
+      });
+
+      it('a cached result is still served to a deadline_ms request', async () => {
+        const cached = [makeJob()];
+        const { controller, jobsService, cacheService } = createController({
+          jobs: [makeJob()],
+          cachedValue: cached,
+        });
+        const result = (await search(controller, '300000')) as any;
+        expect(cacheService.get).toHaveBeenCalled();
+        expect(jobsService.searchJobsWithDiagnostics).not.toHaveBeenCalled();
+        expect(result.cached).toBe(true);
+      });
+
+      it('a failed single-source result is not written to cache', async () => {
+        const { controller, jobsService, cacheService } = createController({ jobs: [] });
+        jobsService.searchJobsWithDiagnostics.mockResolvedValue({
+          jobs: [],
+          perSource: [new SourceDiagnosticDto('adp', 0, 'timeout', 'deadline exceeded')],
+          rawBySource: {},
+        });
+        await search(controller, '300000');
+        expect(cacheService.set).not.toHaveBeenCalled();
+      });
+
+      it('a partial single-source result is not written to cache either', async () => {
+        const jobs = [makeJob()];
+        const { controller, jobsService, cacheService } = createController({ jobs });
+        jobsService.searchJobsWithDiagnostics.mockResolvedValue({
+          jobs,
+          perSource: [new SourceDiagnosticDto('adp', 1, 'partial', '30 postings then 403')],
+          rawBySource: {},
+        });
+        await search(controller, '300000');
+        expect(cacheService.set).not.toHaveBeenCalled();
+      });
+
+      it('an ok single-source result is still cached', async () => {
+        const jobs = [makeJob()];
+        const { controller, jobsService, cacheService } = createController({ jobs });
+        jobsService.searchJobsWithDiagnostics.mockResolvedValue({
+          jobs,
+          perSource: [new SourceDiagnosticDto('adp', 1, 'ok')],
+          rawBySource: {},
+        });
+        await search(controller, '300000');
+        expect(cacheService.set).toHaveBeenCalledWith(expect.any(Object), { jobs });
+      });
+
+      it('a multi-source search with a failing source still writes to cache', async () => {
+        const jobs = [makeJob()];
+        const { controller, jobsService, cacheService } = createController({ jobs });
+        jobsService.searchJobsWithDiagnostics.mockResolvedValue({
+          jobs,
+          perSource: [
+            new SourceDiagnosticDto('linkedin', 1, 'ok'),
+            new SourceDiagnosticDto('ashby', 0, 'fetch_error', 'boom'),
+          ],
+          rawBySource: {},
+        });
+        await search(controller, '300000');
+        expect(cacheService.set).toHaveBeenCalledWith(expect.any(Object), { jobs });
+      });
+    });
+   });
 });

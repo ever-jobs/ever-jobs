@@ -7,9 +7,13 @@
  * board endpoint, per-job detail endpoint, and the canonical
  * `https://www.tesla.com/careers/search/job/<slug>-<id>` URL pattern.
  *
- * **HTTP-only by design.** No `playwright` reference anywhere in this
- * file — Akamai bypass is a feature of the OPTIONAL companion plugin
- * `@ever-jobs/source-tesla-playwright` (Spec 013 / FR-13).
+ * **HTTP-first with a lazy browser fallback** (Spec 5167): when the plain
+ * board GET fails for any reason (4xx/5xx, non-JSON body, network error),
+ * the service retries the same endpoints through an in-page `fetch()`
+ * inside a lazily imported Chromium session. No `playwright` reference at
+ * module scope — a workspace without the dep still boots clean; the
+ * OPTIONAL `source-tesla-playwright` companion remains for operators who
+ * want browser-first.
  */
 
 /** Public Tesla origin used for both API + careers-portal URLs. */
@@ -39,10 +43,12 @@ export const TESLA_DEFAULT_RESULTS_WANTED = 100;
 
 /**
  * Per-job detail-fetch budget map (Spec 013 / Q-031 / FR-11).
- * `'detail-25'` is the default — caps follow-up GETs at 25 to honour
- * NFR-2 (`< 12 s` on the happy path). `'board'` skips detail entirely
- * (description stays null). `'detail-all'` exposes the full corpus
- * latency for operators who want every description.
+ * `'board'` skips detail fetches entirely (descriptions stay null).
+ * `'detail-25'` caps follow-ups at the first 25 listings.
+ * `'detail-all'` exposes the full corpus for operators who want every
+ * description — at catalogue scale that is one request per listing
+ * (~8k+ sequential GETs, tens of minutes, and likely to trip per-IP
+ * request-rate limits partway).
  */
 export const TESLA_DESCRIPTION_BUDGET: Record<string, number> = {
   board: 0,
@@ -50,8 +56,14 @@ export const TESLA_DESCRIPTION_BUDGET: Record<string, number> = {
   'detail-all': Number.POSITIVE_INFINITY,
 };
 
-/** Default budget key — matches `ScraperInputDto.descriptionDepth` default. */
-export const TESLA_DEFAULT_DESCRIPTION_DEPTH = 'detail-25';
+/**
+ * Default budget key. `'board'` rather than `'detail-all'`: the complete
+ * corpus costs ~8k+ sequential detail requests and would routinely blow
+ * latency and per-IP rate limits; `'detail-25'` yields an arbitrary
+ * partial set. Callers who want descriptions opt into `detail-all`
+ * explicitly (Spec 5167).
+ */
+export const TESLA_DEFAULT_DESCRIPTION_DEPTH = 'board';
 
 /**
  * Browser-shaped headers. Same UA the upstream Python launches
@@ -88,3 +100,38 @@ export const TESLA_AKAMAI_STATUS_CODES: ReadonlySet<number> = new Set([
  */
 export const TESLA_ERR_AKAMAI_CHALLENGE = 'ERR_TESLA_AKAMAI_CHALLENGE';
 export const TESLA_ERR_FETCH_FAILED = 'ERR_TESLA_FETCH_FAILED';
+
+/**
+ * Spec 5167 — browser-fallback constants.
+ *
+ * `TESLA_CAREERS_PAGE`: landing URL the fallback session navigates to before
+ * any in-page `fetch()` — loading the careers SPA is what lets the site's
+ * protection JS resolve and plant its cookies on the browser context.
+ */
+export const TESLA_CAREERS_PAGE = `${TESLA_BASE_URL}/careers/search/`;
+
+/**
+ * Chromium launch flags. `--disable-blink-features=AutomationControlled` is
+ * load-bearing for Akamai bypass — without it the gateway detects the
+ * headless browser via the `webdriver` property within a few hundred ms.
+ * The other two are belt-and-braces for sandboxed CI environments.
+ */
+export const TESLA_LAUNCH_ARGS: readonly string[] = [
+  '--disable-blink-features=AutomationControlled',
+  '--disable-dev-shm-usage',
+  '--no-sandbox',
+] as const;
+
+/** Settle time after the careers-page `goto` — the site's protection JS can take a few seconds to resolve. */
+export const TESLA_SETTLE_MS = 5_000;
+
+/** Careers-page navigation timeout (ms). */
+export const TESLA_GOTO_TIMEOUT_MS = 60_000;
+
+/** Gap between in-page board-fetch retries while the protection JS finishes (ms). */
+export const TESLA_BOARD_RETRY_MS = 4_000;
+
+/** Sentinel error codes for the browser-fallback path (Spec 5167). */
+export const TESLA_ERR_BROWSER_UNAVAILABLE = 'ERR_TESLA_BROWSER_UNAVAILABLE';
+export const TESLA_ERR_BROWSER_NAV = 'ERR_TESLA_BROWSER_NAV';
+export const TESLA_ERR_BROWSER_FETCH_FAILED = 'ERR_TESLA_BROWSER_FETCH_FAILED';

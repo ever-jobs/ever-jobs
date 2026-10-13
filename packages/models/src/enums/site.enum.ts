@@ -48,6 +48,7 @@ export enum Site {
   MONSTER = 'monster',
   CAREERBUILDER = 'careerbuilder',
   ICIMS = 'icims',
+  JIBE = 'jibe',
   TALEO = 'taleo',
   SUCCESSFACTORS = 'successfactors',
   JOBVITE = 'jobvite',
@@ -3593,6 +3594,33 @@ export enum Site {
 
   // Phase 1706: Spec 5152 — Source Company Plugin: Soundryx (soundryx.com) — static Astro careers index + detail pages
   SOUNDRYX = 'soundryx',
+
+  // Phase 1707: Spec 5153 — Source Company Plugin: XGS Energy (xgsenergy.com) — WordPress/Elementor accordion careers page
+  XGSENERGY = 'xgsenergy',
+
+  // Phase 1708: Spec 5154 — Source Company Plugin: Revoy (revoy.com) — Google-Docs-linked roles on a Webflow splash
+  REVOY = 'revoy',
+
+  // Phase 1709: Spec 5155 — Source Company Plugin: xLight (xlight.com) — Webflow CMS list linking out to LinkedIn postings
+  XLIGHT = 'xlight',
+
+  // Phase 1710: Spec 5156 — Source Company Plugin: Integrated Dynamics (int-dyn.com) — careers section on a one-page Webflow site
+  INT_DYN = 'int-dyn',
+
+  // Phase 1711: Spec 5157 — Source Company Plugin: Thoron (thoron.us) — jobs array embedded in the SPA bundle
+  THORON_US = 'thoron_us',
+
+  // Phase 1712: Spec 5158 — Source Company Plugin: Werco Manufacturing (wercomfg.com) — detail pages carry JobPosting JSON-LD
+  WERCOMFG = 'wercomfg',
+
+  // Phase 1713: Spec 5168 — Source Company Plugin: comma.ai (comma.ai) — jobs array in the careers page's SvelteKit node chunk
+  COMMA_AI = 'comma_ai',
+
+  // Phase 1714: Spec 5169 — Source Company Plugin: Nebula (buildnebula.com) — first-party /api/careers/listings JSON feed
+  BUILDNEBULA = 'buildnebula',
+
+  // Phase 1715: Spec 5170 — Source Company Plugin: Minerva Humanoids (minervahumanoids.com) — jobs in the window.__minervaContent data file
+  MINERVAHUMANOIDS = 'minervahumanoids',
 
   // Phase 1692: Spec 1692 — Source ATS Plugin: InHire (inhire.app) — public job-posts JSON API keyed by X-Tenant header
   INHIRE = 'inhire',

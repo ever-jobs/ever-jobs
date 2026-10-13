@@ -18,6 +18,7 @@ import {
   extractEmails,
   randomSleep,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   CONCLUDIS_HOST_TEMPLATE,
@@ -38,7 +39,6 @@ import {
   ConcludisListingRow,
   ConcludisListingResult,
   ConcludisJobPostingLd,
-  ConcludisPlace,
 } from './concludis.types';
 
 /**
@@ -483,17 +483,7 @@ export class ConcludisService implements IScraper {
    * Uses the first Place's `PostalAddress`. Returns null when absent.
    */
   private extractLocation(ld: ConcludisJobPostingLd | null): LocationDto | null {
-    if (!ld?.jobLocation) return null;
-    const place: ConcludisPlace | undefined = Array.isArray(ld.jobLocation)
-      ? ld.jobLocation[0]
-      : ld.jobLocation;
-    const address = place?.address;
-    if (!address) return null;
-    const city = address.addressLocality?.trim() || null;
-    const state = address.addressRegion?.trim() || null;
-    const country = address.addressCountry?.trim() || null;
-    if (!city && !state && !country) return null;
-    return new LocationDto({ city, state, country });
+    return toLocationDto(ld?.jobLocation);
   }
 
   /** Map schema.org employment type(s) to a single human-readable label. */

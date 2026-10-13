@@ -18,6 +18,7 @@ import {
   extractEmails,
   randomSleep,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   HRON_HOST,
@@ -285,15 +286,11 @@ export class HrOnService implements IScraper {
       detail.isRemote =
         typeof ld.jobLocationType === 'string' &&
         ld.jobLocationType.toUpperCase() === 'TELECOMMUTE';
-      const address = this.firstAddress(ld);
-      if (address) {
-        detail.city = this.cleanText(address.addressLocality);
-        detail.state = this.cleanText(address.addressRegion);
-        detail.country = this.cleanText(
-          typeof address.addressCountry === 'object'
-            ? address.addressCountry?.name
-            : address.addressCountry,
-        );
+      const mapped = toLocationDto(ld.jobLocation);
+      if (mapped) {
+        detail.city = mapped.city ?? null;
+        detail.state = mapped.state ?? null;
+        detail.country = mapped.country ?? null;
       }
       if (ld.description && ld.description.trim()) {
         detail.descriptionHtml = ld.description.trim();
@@ -536,14 +533,6 @@ export class HrOnService implements IScraper {
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ') || null
     );
-  }
-
-  /** Pull the first PostalAddress out of the JSON-LD jobLocation. */
-  private firstAddress(ld: HrOnJobPostingLd) {
-    const loc = ld.jobLocation;
-    if (!loc) return null;
-    const place = Array.isArray(loc) ? loc[0] : loc;
-    return place?.address ?? null;
   }
 
   /** Parse an ISO-8601 date into a `YYYY-MM-DD` string. Null when unparseable. */

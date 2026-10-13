@@ -8,19 +8,31 @@ import {
   ScraperInputDto,
   Site,
 } from '@ever-jobs/models';
-import { createHttpClient, parseLocationList } from '@ever-jobs/common';
+import {
+  attachRawCapture,
+  createHttpClient,
+  parseLocationList,
+} from '@ever-jobs/common';
 import {
   TESLA_AKAMAI_STATUS_CODES,
   TESLA_BASE_URL,
   TESLA_BOARD_PATH,
+  TESLA_BOARD_RETRY_MS,
+  TESLA_CAREERS_PAGE,
   TESLA_DEFAULT_DESCRIPTION_DEPTH,
   TESLA_DEFAULT_RESULTS_WANTED,
   TESLA_DESCRIPTION_BUDGET,
   TESLA_DETAIL_PATH_TEMPLATE,
   TESLA_ERR_AKAMAI_CHALLENGE,
+  TESLA_ERR_BROWSER_FETCH_FAILED,
+  TESLA_ERR_BROWSER_NAV,
+  TESLA_ERR_BROWSER_UNAVAILABLE,
   TESLA_ERR_FETCH_FAILED,
+  TESLA_GOTO_TIMEOUT_MS,
   TESLA_HEADERS,
+  TESLA_LAUNCH_ARGS,
   TESLA_PUBLIC_JOB_BASE,
+  TESLA_SETTLE_MS,
 } from './tesla.constants';
 import {
   TeslaBoardListing,
@@ -39,11 +51,11 @@ import {
  * population requires follow-up GETs to `/cua-api/careers/job/{id}`,
  * budgeted by `input.descriptionDepth` per Q-031 / FR-11:
  *
- *   - `'board'` (0 follow-ups) — descriptions stay null.
- *   - `'detail-25'` (default; 25 follow-ups) — first 25 jobs (by
+ *   - `'board'` (default; 0 follow-ups) — descriptions stay null.
+ *   - `'detail-25'` (25 follow-ups) — first 25 jobs (by
  *     board-emit order) get descriptions, remainder stay null.
  *   - `'detail-all'` (∞ follow-ups) — every job gets a description;
- *     opt-in only because it busts NFR-2's 12 s ceiling.
+ *     opt-in only because it is ~8k+ sequential requests (Spec 5167).
  *
  * Akamai handling (FR-12):
  *   - Board GET returning HTTP 403 / 503 → empty `JobResponseDto`
@@ -58,9 +70,14 @@ import {
  *     but still emits as a `JobPostDto`. We do not let one bad
  *     detail-page poison the whole catalogue.
  *
- * **HTTP-only by design.** Playwright support lives in the OPTIONAL
- * companion package `@ever-jobs/source-tesla-playwright`. No
- * `playwright` import in this file, period.
+ * **HTTP-first with a lazy browser fallback** (Spec 5167). When the plain
+ * board GET fails for any reason (4xx/5xx, non-JSON body, network error),
+ * `scrape()` re-runs the same flow through an in-page `fetch()` inside a
+ * lazily imported Chromium session — the browser carries real cookies/TLS,
+ * then the same cua-api JSON endpoints are consumed. `playwright` is
+ * imported lazily inside the fallback only (no module-scope import), so
+ * installs without it still boot clean; `source-tesla-playwright` remains
+ * for operators who want browser-first.
  */
 @SourcePlugin({
   site: Site.TESLA,
@@ -87,7 +104,9 @@ export class TeslaService implements IScraper {
 
     const board = await this.fetchBoard(client);
     if (board === null) {
-      return new JobResponseDto([]);
+      // Plain HTTP failed — retry the identical flow through a real
+      // browser so the site's cookie/TLS gating resolves first.
+      return this.scrapeViaBrowser(depthKey, resultsWanted, detailBudget);
     }
 
     const listings = (board.listings ?? []).slice(0, resultsWanted);
@@ -116,7 +135,7 @@ export class TeslaService implements IScraper {
 
   /**
    * Resolve `input.descriptionDepth` against the documented enum,
-   * defaulting to `'detail-25'` per Q-031 when undefined or invalid.
+   * defaulting to `'board'` per Spec 5167 when undefined or invalid.
    */
   private resolveDepth(raw: string | undefined): string {
     if (raw && raw in TESLA_DESCRIPTION_BUDGET) {
@@ -178,6 +197,242 @@ export class TeslaService implements IScraper {
       );
       return null;
     }
+  }
+
+  /**
+   * Spec 5167 — browser fallback. Runs the identical board+detail flow
+   * through an in-page `fetch()` inside a real Chromium session after the
+   * plain HTTP board GET failed. Emits `Site.TESLA` like the fast path so
+   * identity/dedup are indifferent to which path produced the jobs.
+   *
+   * Headless first, headed once (observed live: a headless session can be
+   * denied at the edge — "Access Denied", zero cookies — while a headed
+   * window loads the page and the in-page board fetch returns the full
+   * JSON). The fallback tries headless first — cheaper — and escalates to
+   * a headed window exactly once when the headless session still cannot
+   * read the board. A headed launch without a display throws instantly
+   * and degrades to the same empty DTO.
+   * Always resolves with a `JobResponseDto` — never throws.
+   */
+  private async scrapeViaBrowser(
+    depthKey: string,
+    resultsWanted: number,
+    detailBudget: number,
+  ): Promise<JobResponseDto> {
+    const playwrightModule = await this.loadPlaywright();
+    if (!playwrightModule) {
+      return new JobResponseDto([]);
+    }
+
+    for (const headless of [true, false]) {
+      const result = await this.browserAttempt(
+        playwrightModule,
+        headless,
+        depthKey,
+        resultsWanted,
+        detailBudget,
+      );
+      if (result !== null) {
+        return result;
+      }
+      if (headless) {
+        this.logger.debug(
+          'TeslaService: headless session could not read the board — retrying with a headed window',
+        );
+      }
+    }
+    this.logger.warn(
+      `TeslaService: ${TESLA_ERR_BROWSER_FETCH_FAILED} — browser fallback exhausted (headless + headed)`,
+    );
+    return new JobResponseDto([]);
+  }
+
+  /**
+   * One browser attempt: launch (headless or headed) → open the careers
+   * page → in-page board fetch → in-page detail fetches per budget.
+   * Returns `null` on ANY failure so the caller can escalate headless →
+   * headed; an empty `listings[]` returns an empty DTO (a genuinely empty
+   * board is a result, not a challenge).
+   */
+  private async browserAttempt(
+    playwrightModule: any,
+    headless: boolean,
+    depthKey: string,
+    resultsWanted: number,
+    detailBudget: number,
+  ): Promise<JobResponseDto | null> {
+    let browser: any = null;
+    try {
+      browser = await playwrightModule.chromium.launch({
+        headless,
+        args: [...TESLA_LAUNCH_ARGS],
+      });
+      const page = await browser.newPage();
+      attachRawCapture(page);
+
+      if (!(await this.openCareersPage(page))) {
+        return null;
+      }
+
+      // The site's protection JS can still be resolving after the settle —
+      // poll the board fetch a few times in the same page before giving
+      // this mode up for a relaunch.
+      let board: TeslaBoardResponse | null = null;
+      for (let i = 0; i < 3; i++) {
+        board = await this.fetchInPage<TeslaBoardResponse>(
+          page,
+          `${TESLA_BASE_URL}${TESLA_BOARD_PATH}`,
+        );
+        if (board && Array.isArray(board.listings)) break;
+        board = null;
+        if (i < 2) await this.sleep(TESLA_BOARD_RETRY_MS);
+      }
+      if (!board) {
+        return null;
+      }
+
+      const listings = (board.listings ?? []).slice(0, resultsWanted);
+      const lookup = board.lookup ?? {};
+      const detailFetchCount = Math.min(
+        listings.length,
+        Number.isFinite(detailBudget) ? detailBudget : listings.length,
+      );
+
+      const jobs: JobPostDto[] = [];
+      for (let i = 0; i < listings.length; i++) {
+        const listing = listings[i];
+        const description =
+          i < detailFetchCount
+            ? await this.fetchDetailInPage(page, listing.id)
+            : null;
+        jobs.push(this.toJobPost(listing, lookup, description));
+      }
+
+      this.logger.log(
+        `TeslaService: ${jobs.length} jobs via browser fallback (${headless ? 'headless' : 'headed'}, descriptionDepth=${depthKey}, detailFetched=${detailFetchCount}, resultsWanted=${resultsWanted})`,
+      );
+      return new JobResponseDto(jobs);
+    } catch (err: any) {
+      this.logger.debug(
+        `TeslaService: browser attempt (${headless ? 'headless' : 'headed'}) failed: ${err?.message ?? err}`,
+      );
+      return null;
+    } finally {
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (closeErr: any) {
+          this.logger.debug(
+            `TeslaService: browser close failed (non-fatal): ${closeErr?.message ?? closeErr}`,
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * Lazy-load `playwright`. Returns `null` (sentinel logged) when the dep
+   * is not installed — the Function-wrapped import keeps module load
+   * clean in workspaces without it.
+   */
+  private async loadPlaywright(): Promise<any | null> {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      return await Function(
+        'specifier',
+        'return import(specifier)',
+      )('playwright');
+    } catch (err: any) {
+      this.logger.warn(
+        `TeslaService: ${TESLA_ERR_BROWSER_UNAVAILABLE} — \`playwright\` not installed (${err?.message ?? err}). Run \`npm install playwright\` and \`npx playwright install chromium\` to enable the browser fallback.`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Navigate to the careers-search landing page and settle long enough
+   * for the site's protection JS to resolve its cookies. `true` on success.
+   */
+  private async openCareersPage(page: any): Promise<boolean> {
+    try {
+      await page.goto(TESLA_CAREERS_PAGE, {
+        // 'domcontentloaded', not 'networkidle' — the careers SPA keeps
+        // telemetry/asset connections open and networkidle never settles
+        // inside the timeout on a real (headed) page.
+        waitUntil: 'domcontentloaded',
+        timeout: TESLA_GOTO_TIMEOUT_MS,
+      });
+      await this.sleep(TESLA_SETTLE_MS);
+      return true;
+    } catch (err: any) {
+      this.logger.warn(
+        `TeslaService: ${TESLA_ERR_BROWSER_NAV} — careers-page navigation failed: ${err?.message ?? err}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Issue an in-page `fetch()` through the established browser session
+   * (browser-native cookies/TLS) and parse the response as JSON.
+   * Errors return `null`; the caller decides how to surface them.
+   */
+  private async fetchInPage<T>(page: any, url: string): Promise<T | null> {
+    try {
+      const json = await page.evaluate(async (u: string) => {
+        const r = await fetch(u, {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
+        if (!r.ok) {
+          return { __status: r.status };
+        }
+        const txt = await r.text();
+        try {
+          return JSON.parse(txt);
+        } catch {
+          return { __nonJson: txt.slice(0, 200) };
+        }
+      }, url);
+
+      if (json && typeof json === 'object' && '__status' in json) {
+        this.logger.debug(
+          `TeslaService: in-page fetch ${url} → HTTP ${(json as any).__status}`,
+        );
+        return null;
+      }
+      if (json && typeof json === 'object' && '__nonJson' in json) {
+        this.logger.debug(
+          `TeslaService: in-page fetch ${url} → non-JSON body (truncated): ${(json as any).__nonJson}`,
+        );
+        return null;
+      }
+      return json as T;
+    } catch (err: any) {
+      this.logger.debug(
+        `TeslaService: in-page fetch ${url} threw: ${err?.message ?? err}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Fetch one detail envelope in-page and compose its description.
+   * Failures swallow — the listing keeps `description: null`.
+   */
+  private async fetchDetailInPage(
+    page: any,
+    jobId: string,
+  ): Promise<string | null> {
+    const url = `${TESLA_BASE_URL}${TESLA_DETAIL_PATH_TEMPLATE.replace('{id}', jobId)}`;
+    const detail = await this.fetchInPage<TeslaJobDetail>(page, url);
+    if (!detail) return null;
+    return this.composeDescription(detail);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

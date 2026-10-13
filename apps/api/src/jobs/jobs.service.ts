@@ -7,12 +7,14 @@ import {
 } from '@ever-jobs/models';
 import {
   postProcessCompensation, postedSortKey, siteFromDomain, deriveSiteToken, resolveCompanyUrl,
+  createRawCaptureSink, drainRawCapture, runWithRawCapture, normalizeJobPost,
   resolveSearchLocations, clampMaxLocations, runWithHttpMemo, httpMemoMethodsFromEnv,
   runWithScrapeContext, readCrawlPolicyEnv, getEffectiveCrawlPolicy, crawlCallerProxiesAllowed,
   crawlCallerProxiesAllowedFor, resolveCallerOverrides,
   type CallerOverridesResolution, type CrawlPolicyEnvConfig,
   type CrawlPolicyOverride, type PluginCrawlPolicy, type ScrapeContext,
 } from '@ever-jobs/common';
+import type { RawCaptureSink, RawHttpEntry } from '@ever-jobs/models';
 import { ConfigService } from '@nestjs/config';
 import { PluginRegistry, CircuitBreakerInterceptor, CircuitBreakerService, IPluginMetadata } from '@ever-jobs/plugin';
 import { MetricsService } from '../metrics/metrics.service';
@@ -121,6 +123,8 @@ interface ScrapeOneOptions {
   callerCrawl?: CrawlPolicyOverride;
   /** Aborted when the search deadline abandons this source. */
   signal?: AbortSignal;
+  /** Spec 5161 — raw capture sink; when set the scrape runs under `runWithRawCapture`. */
+  sink?: RawCaptureSink;
 }
 
 /**
@@ -514,8 +518,19 @@ export class JobsService implements OnModuleInit {
     perSource: SourceDiagnosticDto[];
     /** Spec 1721 / FR-15 — did the fan-out run every selected source? */
     completeness: SearchCompleteness;
+    /** Spec 5161 — captured raw HTTP entries by site; `{}` unless `captureRaw`. */
+    rawBySource: Record<string, RawHttpEntry[]>;
     cancelled?: true;
   }> {
+    // Spec 5161 — `captureRaw` arrives as an options field, never a
+    // `ScraperInputDto` field: `input` is spread into the controller's
+    // `cacheParams` and into every plugin's `scraperInput`, so a field would
+    // leak into the cache key and reach plugins.
+    const captureRaw = options.captureRaw === true;
+    // Spec 5164 — a per-request deadline override arrives the same way
+    // (options, never a DTO field) so it stays out of `cacheParams` and out
+    // of every plugin's input.
+    const deadlineOverride = options.deadlineMs;
     // Spec 1720 — one keyword semantics for every entry point: omitted, null,
     // "" and whitespace-only all mean list mode and reach plugins as an absent
     // `searchTerm`, never as "undefined"/"null"/"   ".
@@ -637,12 +652,31 @@ export class JobsService implements OnModuleInit {
       reason: 'keyword_required',
     }));
 
+    // Spec 5161 — the single-source check must run BEFORE the zero-source
+    // early return, or a `include_raw` request resolving to no source would
+    // return an empty 200 instead of the documented 400.
+    if (captureRaw && selectedScrapers.length !== 1) {
+      throw new BadRequestException(
+        `include_raw requires exactly one source; got ${selectedScrapers.length}`,
+      );
+    }
+
+    // Spec 5164 — same gate as include_raw: a caller-supplied deadline bounds
+    // the fan-out's width as well as its duration, so it is accepted only for
+    // a single-source request.
+    if (deadlineOverride !== undefined && selectedScrapers.length !== 1) {
+      throw new BadRequestException(
+        `deadline_ms requires exactly one source; got ${selectedScrapers.length}`,
+      );
+    }
+
     if (selectedScrapers.length === 0) {
       this.logger.warn('No valid scrapers selected');
       return {
         jobs: [],
         perSource: keywordSkippedRows,
         completeness: buildSearchCompleteness(null, 0, [], keywordProblems),
+        rawBySource: {},
       };
     }
 
@@ -664,10 +698,12 @@ export class JobsService implements OnModuleInit {
     const concurrency = clampConcurrency(
       this.configService.get<number>('search.concurrency', DEFAULT_SEARCH_CONCURRENCY),
     );
-    const deadlineMs = this.configService.get<number>(
-      'search.deadlineMs',
-      DEFAULT_SEARCH_DEADLINE_MS,
-    );
+    const deadlineMs =
+      deadlineOverride ??
+      this.configService.get<number>(
+        'search.deadlineMs',
+        DEFAULT_SEARCH_DEADLINE_MS,
+      );
     const deadlineAt =
       deadlineMs > 0 ? Date.now() + deadlineMs : Number.POSITIVE_INFINITY;
 
@@ -715,6 +751,10 @@ export class JobsService implements OnModuleInit {
     const locationOutcomes: LocationOutcome[][] = multi
       ? new Array(selectedScrapers.length)
       : [];
+    // Spec 5161 — one capture sink per source, created by the worker right
+    // before dispatch (a deadline-skipped source never gets one, which is
+    // what keeps it out of `rawBySource` entirely).
+    const sinks: (RawCaptureSink | undefined)[] = new Array(selectedScrapers.length);
     let cursor = 0;
     // Calls not started because of the deadline — per source, or per
     // (source, location) call in multi-location mode.
@@ -835,6 +875,13 @@ export class JobsService implements OnModuleInit {
           continue;
         }
 
+        // Spec 5161 — sinks live in the worker, not inside `scrapeOne`: the
+        // deadline path and the rejected path both need the sink, and neither
+        // can see `scrapeOne`'s locals. A deadline-skipped source never gets
+        // a sink, which is what keeps it out of `rawBySource` entirely.
+        const sink = captureRaw ? createRawCaptureSink() : undefined;
+        sinks[index] = sink;
+
         // Spec 1700 — the unit of work is still one site; its locations run
         // sequentially inside it, so one search never opens concurrent
         // conversations with one source. The loop applies the same deadline
@@ -848,6 +895,7 @@ export class JobsService implements OnModuleInit {
             deadlineAt,
             intervalMs,
             callerCrawl,
+            sink,
           );
           locationOutcomes[index] = outcomes;
           let found = 0;
@@ -885,7 +933,7 @@ export class JobsService implements OnModuleInit {
           // a source that never settles would otherwise keep this worker (and
           // therefore the whole handler) pending indefinitely.
           const value = await withDeadline(
-            this.scrapeOne(site, scraper, input, { callerCrawl, signal: controller.signal }),
+            this.scrapeOne(site, scraper, input, { callerCrawl, signal: controller.signal, sink }),
             deadlineAt,
             site,
             () => {
@@ -921,8 +969,9 @@ export class JobsService implements OnModuleInit {
               `${selectedScrapers.length * searchLocations.length} (source, location) calls. ` +
               `Raise EVER_JOBS_FANOUT_DEADLINE_MS, or narrow siteType or locations.`
           : `Search deadline (${deadlineMs}ms) exceeded — skipped ${skipped} of ` +
-              `${selectedScrapers.length} sources. Raise EVER_JOBS_FANOUT_DEADLINE_MS ` +
-              `or narrow siteType to cover more of the catalogue.`,
+              `${selectedScrapers.length} sources. Raise EVER_JOBS_FANOUT_DEADLINE_MS, ` +
+              `pass ?deadline_ms on a single-source request, or narrow siteType ` +
+              `to cover more of the catalogue.`,
       );
     }
     if (aborted > 0) {
@@ -1008,6 +1057,14 @@ export class JobsService implements OnModuleInit {
       this.postProcessSalary(job, input);
     }
 
+    // Spec 5162 — one normalize pass over the aggregated results: trim edge
+    // whitespace/zero-width chars, collapse interior runs in display names,
+    // blank -> null. Runs AFTER postProcessSalary so the fields it writes
+    // (e.g. salarySource) get cleaned too.
+    for (let i = 0; i < allJobs.length; i++) {
+      allJobs[i] = normalizeJobPost(allJobs[i]);
+    }
+
     // Sort by site name then by posted time (most recent first). Spec 1696:
     // `postedSortKey` orders by `datePostedAt` when a source gives an instant,
     // else by `datePosted` (start of its day); an unparseable date sorts last
@@ -1018,6 +1075,20 @@ export class JobsService implements OnModuleInit {
 
       return postedSortKey(b) - postedSortKey(a);
     });
+
+    // Spec 5161 — drain, close, and snapshot each sink that ran. A timed-out
+    // scrape keeps writing to its sink after `withDeadline` rejects, and
+    // browser plugins often leave the final response's body read pending when
+    // they return — the bounded drain is what keeps that body.
+    const rawBySource: Record<string, RawHttpEntry[]> = {};
+    if (captureRaw) {
+      for (let index = 0; index < sinks.length; index++) {
+        const sink = sinks[index];
+        if (!sink) continue;
+        await drainRawCapture(sink);
+        rawBySource[selectedScrapers[index].site] = sink.entries.slice();
+      }
+    }
 
     // Surface `companyDomain` values that did not map to a registered Site token as
     // diagnostics when the request still had at least one valid explicit selector (Spec 5095).
@@ -1051,8 +1122,8 @@ export class JobsService implements OnModuleInit {
     // `cancelled` marks a PARTIAL result (sources were not started): callers
     // must not cache or persist it as if it were the answer to the request.
     return cancelledSkipped > 0
-      ? { jobs: allJobs, perSource, completeness, cancelled: true }
-      : { jobs: allJobs, perSource, completeness };
+      ? { jobs: allJobs, perSource, completeness, rawBySource, cancelled: true }
+      : { jobs: allJobs, perSource, completeness, rawBySource };
   }
 
   /**
@@ -1126,11 +1197,12 @@ export class JobsService implements OnModuleInit {
     deadlineAt: number,
     intervalMs: number,
     callerCrawl?: CrawlPolicyOverride,
+    sink?: RawCaptureSink,
   ): Promise<LocationOutcome[]> {
     // Optional call: test doubles of the registry often omit getMetadata.
     const pauseMs = locationPauseMs(intervalMs, this.registry.getMetadata?.(site)?.minRequestIntervalMs);
     const { result, stats } = await runWithHttpMemo(
-      () => this.runLocationLoop(site, scraper, input, locations, deadlineAt, pauseMs, callerCrawl),
+      () => this.runLocationLoop(site, scraper, input, locations, deadlineAt, pauseMs, callerCrawl, sink),
       { methods: httpMemoMethodsFromEnv() },
     );
     if (stats.hits > 0) {
@@ -1160,6 +1232,7 @@ export class JobsService implements OnModuleInit {
     deadlineAt: number,
     intervalMs: number,
     callerCrawl?: CrawlPolicyOverride,
+    sink?: RawCaptureSink,
   ): Promise<LocationOutcome[]> {
     const out: LocationOutcome[] = [];
     let refusal: LocationRefusal | undefined;
@@ -1197,7 +1270,7 @@ export class JobsService implements OnModuleInit {
       let deadlineAborted = false;
       try {
         const value = await withDeadline(
-          this.scrapeOne(site, scraper, perLocation, { callerCrawl, signal: controller.signal }),
+          this.scrapeOne(site, scraper, perLocation, { callerCrawl, signal: controller.signal, sink }),
           deadlineAt,
           site,
           () => {
@@ -1371,7 +1444,13 @@ export class JobsService implements OnModuleInit {
     // breaker counts it neither as a failure nor as a success.
     const dispatch = async (): Promise<JobResponseDto> => {
       try {
-        return await runWithScrapeContext(scrapeContext, () => scraper.scrape(scraperInput));
+        // Spec 5161 — the capture context wraps only the scrape call, inside
+        // the scrape context, so plugin HTTP + delegated scrapes inherit the sink.
+        const run = (): Promise<JobResponseDto> =>
+          options.sink
+            ? runWithRawCapture(options.sink, () => scraper.scrape(scraperInput))
+            : scraper.scrape(scraperInput);
+        return await runWithScrapeContext(scrapeContext, run);
       } catch (err) {
         throw signal?.aborted ? CircuitBreakerService.markNeutral(err) : err;
       }

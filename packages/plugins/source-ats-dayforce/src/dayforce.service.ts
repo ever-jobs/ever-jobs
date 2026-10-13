@@ -18,6 +18,7 @@ import {
   extractEmails,
   randomSleep,
   toDateOnly,
+  toLocationDtos,
 } from '@ever-jobs/common';
 import {
   DAYFORCE_HOST,
@@ -35,7 +36,6 @@ import {
 import {
   DayforceJobPosting,
   DayforceSearchResponse,
-  DayforcePostingLocation,
 } from './dayforce.types';
 
 /**
@@ -269,14 +269,15 @@ export class DayforceService implements IScraper {
     const department =
       posting.JobFunction ?? posting.jobFunction ?? posting.department ?? posting.Department ?? posting.category ?? null;
 
-    const location = this.extractLocation(posting);
+    const locations = this.extractLocations(posting);
+    const location = locations[0] ?? null;
     return new JobPostDto({
       id: `dayforce-${atsId}`,
       title,
       companyName: posting.CompanyName ?? posting.companyName ?? posting.ClientSiteName ?? companyName,
       jobUrl,
       location,
-      ...(location ? { locations: [location] } : {}),
+      ...(locations.length ? { locations } : {}),
       description,
       datePosted: this.parseDate(
         posting.postingStartTimestampUTC ?? posting.DatePosted ?? posting.datePosted ?? posting.LastUpdated,
@@ -363,27 +364,18 @@ export class DayforceService implements IScraper {
   }
 
   /** Dayforce returns a `postingLocations` array (geo) or flat fields (RESTful). */
-  private extractLocation(posting: DayforceJobPosting): LocationDto | null {
-    const locs = posting.postingLocations ?? posting.PostingLocations;
-    if (Array.isArray(locs) && locs.length > 0) {
-      const loc = this.locationFromObject(locs[0]);
-      if (loc) return loc;
-    }
+  private extractLocations(posting: DayforceJobPosting): LocationDto[] {
+    const mapped = toLocationDtos(posting, {
+      in: ['postingLocations', 'PostingLocations'],
+    });
+    if (mapped.length) return mapped;
     const city = posting.City ?? posting.city ?? null;
     const state = posting.State ?? posting.state ?? null;
     const country = posting.Country ?? posting.country ?? null;
     if (city || state || country) {
-      return new LocationDto({ city, state, country });
+      return toLocationDtos({ city, state, country });
     }
-    return null;
-  }
-
-  private locationFromObject(obj: DayforcePostingLocation): LocationDto | null {
-    const city = obj.city ?? obj.City ?? null;
-    const state = obj.state ?? obj.stateCode ?? obj.State ?? null;
-    const country = obj.country ?? obj.countryCode ?? obj.Country ?? null;
-    if (!city && !state && !country) return null;
-    return new LocationDto({ city, state, country });
+    return [];
   }
 
   /** Detect remote from telecommute percentage or an explicit remote flag. */

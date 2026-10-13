@@ -25,6 +25,7 @@ import {
   parseJobPostingLd,
   resolveCompanyUrl,
   toDateOnly,
+  attachRawCapture,
 } from '@ever-jobs/common';
 import {
   KULA_AI_BASE_URL,
@@ -264,6 +265,7 @@ export class KulaAiService implements IScraper {
         args: [...KULA_AI_LAUNCH_ARGS],
       });
       const page = await browser.newPage();
+      attachRawCapture(page);
       const listUrl = input.companyUrl?.startsWith(`${KULA_AI_BASE_URL}/${account}`)
         ? input.companyUrl
         : `${KULA_AI_BASE_URL}/${account}`;

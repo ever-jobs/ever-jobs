@@ -73,7 +73,19 @@ export function adpCareersUrl(host: string, cid: string, itemId: string): string
 }
 
 /** Bounded concurrency for per-requisition detail fetches. */
-export const ADP_DETAIL_CONCURRENCY = 5;
+export const ADP_DETAIL_CONCURRENCY = 4;
+
+/**
+ * Detail fetches run on a fail-fast client (`retries: 0`): when ADP's rate
+ * limiter trips mid-run, each bulk-pass rejection would otherwise fire up to
+ * 3 more calls into the same window. Recovery instead waits
+ * `ADP_DETAIL_RETRY_COOLDOWN_MS`, then retries the rejected indices serially
+ * with `ADP_DETAIL_RETRY_GAP_MS` between requests, for at most
+ * `ADP_DETAIL_RETRY_ROUNDS` rounds.
+ */
+export const ADP_DETAIL_RETRY_COOLDOWN_MS = 30_000;
+export const ADP_DETAIL_RETRY_GAP_MS = 300;
+export const ADP_DETAIL_RETRY_ROUNDS = 2;
 
 /** Default headers for ADP career site requests */
 export const ADP_HEADERS: Record<string, string> = {

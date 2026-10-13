@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   SNAPHUNT_HOST_TEMPLATE,
@@ -237,6 +238,7 @@ export class SnaphuntService implements IScraper {
       this.leadingTitle(ogTitle) ??
       this.leadingTitle(titleTag);
 
+    const mapped = toLocationDto(posting?.jobLocation);
     const address = this.firstAddress(posting?.jobLocation);
     const requirement = this.firstRequirement(posting?.applicantLocationRequirements);
     const companyName = this.organizationName(posting?.hiringOrganization);
@@ -246,7 +248,7 @@ export class SnaphuntService implements IScraper {
     // Remote roles often carry no physical jobLocation; fall back to the eligible
     // applicant-location requirement (a Country) for a country value.
     const country =
-      this.countryName(address?.addressCountry) ?? this.cleanText(requirement?.name);
+      mapped?.country ?? this.cleanText(requirement?.name);
 
     return {
       jobId: entry.jobId,
@@ -256,8 +258,8 @@ export class SnaphuntService implements IScraper {
       companyName: companyName ? this.decodeEntities(companyName) : null,
       descriptionHtml: descriptionHtml ? this.decodeEntities(descriptionHtml) : null,
       description: ogDescription ? this.decodeEntities(ogDescription) : null,
-      city: this.cleanText(address?.addressLocality),
-      state: this.cleanText(address?.addressRegion),
+      city: mapped?.city ?? null,
+      state: mapped?.state ?? null,
       country,
       department: this.cleanText(posting?.industry) ?? this.cleanText(posting?.occupationalCategory),
       employmentType: this.normaliseEmploymentType(posting?.employmentType),
@@ -493,12 +495,6 @@ export class SnaphuntService implements IScraper {
   }
 
   /** Resolve the country display value (a bare code/name, or an object with `name`). */
-  private countryName(country: SnaphuntPostalAddress['addressCountry']): string | null {
-    if (!country) return null;
-    if (typeof country === 'string') return this.cleanText(country);
-    return this.cleanText(country.name);
-  }
-
   /**
    * Normalise a schema.org `employmentType` (e.g. `FULL_TIME`, `PART_TIME`,
    * `CONTRACTOR`, or an array thereof) into a readable label

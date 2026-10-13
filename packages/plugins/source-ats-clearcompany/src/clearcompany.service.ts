@@ -26,8 +26,16 @@ import {
   CLEARCOMPANY_SHORTNAME_HEADER,
   CLEARCOMPANY_DEFAULT_RESULTS,
   CLEARCOMPANY_HEADERS,
+  CLEARCOMPANY_CAREERS_API_HOST,
+  CLEARCOMPANY_SITE_ID_RE,
 } from './clearcompany.constants';
-import { ClearCompanyJob, ClearCompanyJobsResponse } from './clearcompany.types';
+import {
+  ClearCompanyJob,
+  ClearCompanyJobsResponse,
+  ClearCompanySiteJob,
+  ClearCompanySiteJobsResponse,
+  ClearCompanySiteLocation,
+} from './clearcompany.types';
 
 /**
  * ClearCompany ATS careers scraper — generic, multi-tenant.
@@ -62,11 +70,12 @@ export class ClearCompanyService implements IScraper {
     }
 
     const slug = this.resolveSlug(companySlug, input.companyUrl);
-    if (!slug) {
-      this.logger.warn('Could not resolve a ClearCompany tenant slug from input');
+    const siteId = this.resolveSiteId(companySlug, input.companyUrl, input.siteNumber);
+    if (!slug && !siteId) {
+      this.logger.warn('Could not resolve a ClearCompany tenant slug or site id from input');
       return new JobResponseDto([]);
     }
-    const companyName = this.deriveCompanyName(slug);
+    const companyName = slug ? this.deriveCompanyName(slug) : '';
 
     const client = createHttpClient({
       proxies: input.proxies,
@@ -80,21 +89,86 @@ export class ClearCompanyService implements IScraper {
     const jobPosts: JobPostDto[] = [];
 
     try {
-      this.logger.log(`Fetching ClearCompany jobs for tenant: ${slug}`);
+      if (siteId) {
+        // Per-site (widget) feed — richer fields and the feed the tenant's
+        // embedded careers site actually renders. Falls back to the legacy
+        // API-ShortName feed when it errors or comes back empty and a slug
+        // is also known.
+        this.logger.log(`Fetching ClearCompany jobs for site id: ${siteId}`);
+        const siteJobs = await this.fetchSiteJobs(client, siteId);
+        this.collectSite(siteJobs, input.descriptionFormat, companyName, seen, jobPosts);
+        if (jobPosts.length === 0 && slug) {
+          this.logger.warn(`ClearCompany site feed empty for ${siteId}; falling back to slug feed`);
+          const jobs = await this.fetchJobs(client, slug);
+          this.collect(jobs, slug, companyName, input.descriptionFormat, seen, jobPosts);
+        }
+      } else {
+        this.logger.log(`Fetching ClearCompany jobs for tenant: ${slug}`);
 
-      // The feed returns every open role for the tenant in a single response.
-      const jobs = await this.fetchJobs(client, slug);
-      this.collect(jobs, slug, companyName, input.descriptionFormat, seen, jobPosts);
+        // The feed returns every open role for the tenant in a single response.
+        const jobs = await this.fetchJobs(client, slug as string);
+        this.collect(jobs, slug as string, companyName, input.descriptionFormat, seen, jobPosts);
+      }
 
       const trimmed = jobPosts.slice(0, resultsWanted);
-      this.logger.log(`ClearCompany total: ${trimmed.length} jobs for ${companyName}`);
+      this.logger.log(`ClearCompany total: ${trimmed.length} jobs for ${companyName || siteId}`);
       return new JobResponseDto(trimmed);
     } catch (err: any) {
-      this.logger.error(`ClearCompany scrape error for ${slug}: ${err.message}`);
+      this.logger.error(`ClearCompany scrape error for ${slug || siteId}: ${err.message}`);
       // Partial results WITH a reason: jobs.length > 0 plus a diagnostic is
       // inferred as 'partial' upstream, so a mid-scrape failure is no longer
       // indistinguishable from a complete board.
       return new JobResponseDto(jobPosts.slice(0, resultsWanted), classifyScrapeError(err));
+    }
+  }
+
+  /**
+   * Resolve a careers-site GUID (`siteId`) from input, in precedence order:
+   * `siteNumber` (the generic per-site override field), a GUID-shaped
+   * `companySlug`, or a `?siteId=` query param on `companyUrl` (the shape
+   * ClearCompany's embed snippet uses, e.g.
+   * `careers-content.clearcompany.com/js/v1/career-site.js?siteId={GUID}`).
+   */
+  private resolveSiteId(
+    companySlug: string | undefined,
+    companyUrl: string | undefined,
+    siteNumber: string | undefined,
+  ): string {
+    if (siteNumber && CLEARCOMPANY_SITE_ID_RE.test(siteNumber.trim())) {
+      return siteNumber.trim();
+    }
+    if (companySlug && CLEARCOMPANY_SITE_ID_RE.test(companySlug.trim())) {
+      return companySlug.trim();
+    }
+    if (companyUrl) {
+      try {
+        const u = new URL(companyUrl);
+        const siteId = u.searchParams.get('siteId');
+        if (siteId && CLEARCOMPANY_SITE_ID_RE.test(siteId)) return siteId;
+      } catch {
+        // Malformed URL — no site id recoverable.
+      }
+    }
+    return '';
+  }
+
+  /** Fetch the per-site job list from the careers-API widget feed. */
+  private async fetchSiteJobs(
+    client: ReturnType<typeof createHttpClient>,
+    siteId: string,
+  ): Promise<ClearCompanySiteJob[]> {
+    const url = `${CLEARCOMPANY_CAREERS_API_HOST}/v1/${encodeURIComponent(siteId)}`;
+    try {
+      const response = await client.get<ClearCompanySiteJobsResponse>(url);
+      const data = response.data;
+      return Array.isArray(data?.results) ? data.results : [];
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 400 || status === 404) {
+        this.logger.warn(`ClearCompany site "${siteId}" not found (HTTP ${status})`);
+        return [];
+      }
+      throw err;
     }
   }
 
@@ -144,6 +218,112 @@ export class ClearCompanyService implements IScraper {
         this.logger.warn(`Error processing ClearCompany job ${job?.Id ?? job?.id}: ${err.message}`);
       }
     }
+  }
+
+  /** Map widget-feed jobs → JobPostDto, de-duplicating by ATS id. */
+  private collectSite(
+    jobs: ClearCompanySiteJob[],
+    format: DescriptionFormat | undefined,
+    companyNameFallback: string,
+    seen: Set<string>,
+    out: JobPostDto[],
+  ): void {
+    for (const job of jobs) {
+      try {
+        const post = this.processSiteJob(job, companyNameFallback, format);
+        if (!post) continue;
+        const key = post.atsId as string;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(post);
+      } catch (err: any) {
+        this.logger.warn(`Error processing ClearCompany site job ${job?.id}: ${err.message}`);
+      }
+    }
+  }
+
+  private processSiteJob(
+    job: ClearCompanySiteJob,
+    companyNameFallback: string,
+    format?: DescriptionFormat,
+  ): JobPostDto | null {
+    const title = job.positionTitle;
+    if (!title) return null;
+
+    const atsId = String(job.id ?? '');
+    if (!atsId) return null;
+
+    // applyLink is absolute on the tenant host and ends in "/apply" — the
+    // job-detail page is the same path without the trailing segment.
+    const applyUrl = job.applyLink ?? null;
+    const jobUrl = applyUrl?.replace(/\/apply\/?$/, '') ?? '';
+
+    const rawDescription = job.description ?? null;
+    let description: string | null = null;
+    if (rawDescription) {
+      if (format === DescriptionFormat.HTML) {
+        description = rawDescription;
+      } else if (format === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(rawDescription) ?? rawDescription;
+      } else {
+        description = htmlToPlainText(rawDescription);
+      }
+    }
+
+    const locations = this.extractSiteLocations(job);
+    const department = job.departmentName ?? job.jobFunctionName ?? null;
+
+    return new JobPostDto({
+      id: `clearcompany-${atsId}`,
+      title,
+      companyName: job.brandName ?? companyNameFallback,
+      jobUrl,
+      location: locations[0] ?? null,
+      ...(locations.length ? { locations } : {}),
+      description,
+      datePosted: this.parseDate(job.postedDate ?? job.openDate),
+      isRemote: this.detectSiteRemote(job),
+      emails: extractEmails(description),
+      site: Site.CLEARCOMPANY,
+      atsId,
+      atsType: 'clearcompany',
+      department,
+      applyUrl,
+    });
+  }
+
+  /** Structured `locations[]` first; free-text `location`/`officeName` fallback. */
+  private extractSiteLocations(job: ClearCompanySiteJob): LocationDto[] {
+    const out: LocationDto[] = [];
+    for (const loc of job.locations ?? []) {
+      const dto = new LocationDto({
+        city: loc.city ?? undefined,
+        state: loc.subdivisionFullName ?? loc.subdivision ?? undefined,
+        country: loc.country ?? undefined,
+        postalCode: loc.postalCode ?? undefined,
+      });
+      out.push(dto);
+    }
+    if (out.length === 0) {
+      const freeText = job.location ?? job.officeName;
+      if (typeof freeText === 'string' && freeText.trim()) {
+        const parsed = parseLocationText(freeText).location;
+        if (parsed) out.push(parsed);
+      }
+    }
+    return out;
+  }
+
+  /** `isRemote` on any structured location, else the title/office text. */
+  private detectSiteRemote(job: ClearCompanySiteJob): boolean {
+    if ((job.locations ?? []).some((l) => l.isRemote)) return true;
+    const haystacks = [job.officeName, job.location, job.positionTitle];
+    for (const field of haystacks) {
+      if (typeof field !== 'string') continue;
+      const v = field.toLowerCase();
+      if (v.includes('remote') || v.includes('work from home') || v.includes('wfh')) return true;
+    }
+    return false;
   }
 
   private processJob(

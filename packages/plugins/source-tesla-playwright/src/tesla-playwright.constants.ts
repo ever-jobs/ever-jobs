@@ -42,8 +42,14 @@ export const TESLA_PLAYWRIGHT_DESCRIPTION_BUDGET: Record<string, number> = {
   'detail-all': Number.POSITIVE_INFINITY,
 };
 
-/** Default budget key — matches `ScraperInputDto.descriptionDepth` default. */
-export const TESLA_PLAYWRIGHT_DEFAULT_DESCRIPTION_DEPTH = 'detail-25';
+/**
+ * Default budget key (Spec 5167). `'board'` rather than `'detail-all'`:
+ * the complete corpus costs ~8k+ sequential detail requests and would
+ * routinely blow latency and per-IP rate limits; `'detail-25'` yields an
+ * arbitrary partial set. Callers who want descriptions opt into
+ * `detail-all` explicitly.
+ */
+export const TESLA_PLAYWRIGHT_DEFAULT_DESCRIPTION_DEPTH = 'board';
 
 /**
  * Chromium launch flags. `--disable-blink-features=AutomationControlled`

@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import * as cheerio from 'cheerio';
 import {
@@ -595,10 +596,11 @@ export class HReasilyService implements IScraper {
         country: parts.length > 1 ? parts[parts.length - 1] : null,
       };
     }
+    const mapped = toLocationDto(place);
     return {
-      city: this.cleanText(address.addressLocality),
-      state: this.cleanText(address.addressRegion),
-      country: this.resolveCountry(address.addressCountry),
+      city: mapped?.city ?? null,
+      state: mapped?.state ?? null,
+      country: mapped?.country ?? null,
     };
   }
 
@@ -629,15 +631,6 @@ export class HReasilyService implements IScraper {
     }
     const merged = this.extractLocation(job);
     return merged ? [merged] : [];
-  }
-
-  /** Resolve a country name from a string or a `{ name }` `Country` object. */
-  private resolveCountry(
-    country: string | { name?: string | null } | null | undefined,
-  ): string | null {
-    if (!country) return null;
-    if (typeof country === 'string') return this.cleanText(country);
-    return this.cleanText(country.name);
   }
 
   /** Resolve a single employment-type display label from a token or an array of tokens. */

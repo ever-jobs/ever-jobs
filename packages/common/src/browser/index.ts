@@ -1,5 +1,6 @@
 export {
   BrowserPool,
+  attachRawCapture,
   BROWSER_POOL_DEFAULT_USER_AGENT,
   isLegacyBrowserIdentity,
   redactBrowserIdentityKey,

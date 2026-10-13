@@ -44,7 +44,23 @@ export interface WorkdayJobDetail {
   } | null;
 }
 
+export interface WorkdayFacetValue {
+  descriptor?: string | null;
+  id?: string | null;
+  count?: number;
+  /** Present when the entry is itself a nested facet inside a facet group. */
+  facetParameter?: string | null;
+  values?: WorkdayFacetValue[] | null;
+}
+
+export interface WorkdayFacet {
+  facetParameter?: string | null;
+  descriptor?: string | null;
+  values?: WorkdayFacetValue[] | null;
+}
+
 export interface WorkdaySearchResponse {
   total?: number;
   jobPostings?: WorkdayJobListItem[];
+  facets?: WorkdayFacet[] | null;
 }

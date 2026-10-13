@@ -31,6 +31,24 @@ export const CLEARCOMPANY_JOB_PAGE_TEMPLATE = '/jobs/{slug}/{id}';
 export const CLEARCOMPANY_SHORTNAME_HEADER = 'API-ShortName';
 
 /**
+ * Newer careers-API host. Each embedded careers widget / portal site is
+ * addressable by a GUID "site id" and serves its own richer feed:
+ *
+ *   GET https://careers-api.clearcompany.com/v1/{siteId}
+ *     → { results: [...], totalCount, currentPageIndex, currentPageCount }
+ *
+ * This is the feed the tenant's embedded widget renders; the legacy
+ * careers-page feed can under-report relative to it (postings published only
+ * to the widget portal are absent from the API-ShortName feed — observed
+ * 127 vs 158 on a live tenant).
+ */
+export const CLEARCOMPANY_CAREERS_API_HOST = 'https://careers-api.clearcompany.com';
+
+/** GUID shape: a GUID-valued companySlug / siteNumber is a site id, not a slug. */
+export const CLEARCOMPANY_SITE_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
  * Default internal results cap. Mirrors the Eightfold adapter: the public DTO
  * default is 15, but when a caller omits `resultsWanted` entirely we ingest up
  * to 100 of the tenant's open roles.

@@ -3,6 +3,7 @@ import {
   CompensationInterval,
   getCompensationInterval,
 } from '@ever-jobs/models';
+import { toLocationDto } from './location-object';
 
 /**
  * Shared schema.org `JobPosting` JSON-LD extraction (Spec 5022).
@@ -197,10 +198,14 @@ function mapLocations(value: unknown): JobPostingLdLocation[] {
     if (!isObject(place)) continue;
     for (const address of asArray(place.address)) {
       if (!isObject(address)) continue;
-      const city = firstString(address.addressLocality);
-      const region = firstString(address.addressRegion);
-      const country = countryName(address.addressCountry);
-      const postalCode = firstString(address.postalCode);
+      const dto = toLocationDto(address, {
+        prefer: { country: 'addressCountry.name' },
+      });
+      if (!dto) continue;
+      const city = dto.city ?? null;
+      const region = dto.state ?? null;
+      const country = dto.country ? String(dto.country) : null;
+      const postalCode = dto.postalCode ?? null;
       if (!city && !region && !country && !postalCode) continue;
       const label =
         [city, region, country].filter((p): p is string => !!p).join(', ') ||
@@ -270,12 +275,6 @@ function applyUrl(action: unknown): string | null {
       return firstString(target.url) ?? firstString(target.urlTemplate);
     }
   }
-  return null;
-}
-
-function countryName(value: unknown): string | null {
-  if (typeof value === 'string') return value.trim() || null;
-  if (isObject(value)) return firstString(value.name);
   return null;
 }
 

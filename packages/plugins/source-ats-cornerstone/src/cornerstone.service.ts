@@ -19,6 +19,7 @@ import {
   parseLocationText,
   randomSleep,
   toDateOnly,
+  toLocationDtos,
 } from '@ever-jobs/common';
 import {
   CORNERSTONE_HOST_TEMPLATE,
@@ -39,7 +40,6 @@ import {
 import {
   CornerstoneBootstrap,
   CornerstoneRequisition,
-  CornerstoneLocation,
   CornerstoneSearchResponse,
 } from './cornerstone.types';
 
@@ -363,14 +363,12 @@ export class CornerstoneService implements IScraper {
 
   /** CSOD returns locations as an array of objects, a single object, or a string. */
   private extractLocations(requisition: CornerstoneRequisition): LocationDto[] {
-    const locs = requisition.locations;
-    if (Array.isArray(locs) && locs.length > 0) {
-      return locs
-        .filter((l): l is CornerstoneLocation => !!l)
-        .map((l) => this.locationFromObject(l));
-    }
+    const mapped = toLocationDtos(
+      requisition.locations ?? requisition.location,
+      { textKeys: ['displayName'], parseTextFallback: true },
+    );
+    if (mapped.length) return mapped;
     const single = requisition.location;
-    if (single && typeof single === 'object') return [this.locationFromObject(single)];
     const display =
       (typeof single === 'string' ? single : null) ?? requisition.displayLocation;
     if (typeof display === 'string' && display.trim()) {
@@ -378,22 +376,6 @@ export class CornerstoneService implements IScraper {
       if (parsed) return [parsed];
     }
     return [];
-  }
-
-  private locationFromObject(obj: CornerstoneLocation): LocationDto {
-    if (typeof obj.displayName === 'string' && obj.displayName.trim() && !obj.city) {
-      const parts = obj.displayName.split(',').map((p) => p.trim()).filter(Boolean);
-      return new LocationDto({
-        city: parts[0] ?? null,
-        state: parts[1] ?? null,
-        country: parts[2] ?? null,
-      });
-    }
-    return new LocationDto({
-      city: obj.city ?? null,
-      state: obj.state ?? obj.stateName ?? null,
-      country: obj.country ?? obj.countryName ?? obj.countryCode ?? null,
-    });
   }
 
   /** Detect remote/hybrid from explicit flags or the workplace type string. */

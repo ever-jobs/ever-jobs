@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   VIVAHR_HOST,
@@ -27,8 +28,6 @@ import {
 } from './vivahr.constants';
 import {
   VivaHRJobPosting,
-  VivaHRPlace,
-  VivaHRPostalAddress,
   VivaHRIdentifier,
 } from './vivahr.types';
 
@@ -328,16 +327,9 @@ export class VivaHRService implements IScraper {
       .trim();
   }
 
-  /** Build a LocationDto from the JSON-LD `jobLocation` PostalAddress. */
+  /** Build a LocationDto from the JSON-LD `jobLocation` Place. */
   private extractLocation(posting: VivaHRJobPosting): LocationDto | null {
-    const place = Array.isArray(posting.jobLocation) ? posting.jobLocation[0] : posting.jobLocation;
-    const address = (place as VivaHRPlace | undefined)?.address as VivaHRPostalAddress | undefined;
-    if (!address) return null;
-    const city = address.addressLocality?.trim() || null;
-    const state = address.addressRegion?.trim() || null;
-    const country = address.addressCountry?.trim() || null;
-    if (!city && !state && !country) return null;
-    return new LocationDto({ city, state, country });
+    return toLocationDto(posting.jobLocation);
   }
 
   /** Detect remote roles from `jobLocationType` (TELECOMMUTE) or the title. */

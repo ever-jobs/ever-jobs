@@ -10,6 +10,8 @@
  * the parser.
  */
 
+import { LocationDto } from '@ever-jobs/models';
+
 /**
  * The structured location embedded in a role. Recruitly roles carry a single structured
  * address rather than a free-text location line.
@@ -134,6 +136,9 @@ export interface RecruitlyJob {
   city?: string | null;
   state?: string | null;
   country?: string | null;
+
+  /** Full mapped location DTO (recovers postalCode, streetAddress, extras). */
+  locationDto?: LocationDto | null;
 
   /** Combined free-text location, used for remote detection. */
   locationText?: string | null;

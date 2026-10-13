@@ -1,0 +1,44 @@
+{
+  "stellenangebote": [
+    {
+      "refnr": "10000-1198337149-S",
+      "titel": "Softwareentwickler (m/w/d)",
+      "arbeitgeber": "Musterfirma GmbH",
+      "beruf": "Softwareentwickler/in",
+      "arbeitsort": {
+        "ort": "München",
+        "plz": "80331",
+        "region": "Bayern",
+        "land": "Deutschland",
+        "koordinaten": { "lat": 48.1372, "lon": 11.5755 }
+      },
+      "eintrittsdatum": "2026-11-01",
+      "aktuelleVeroeffentlichungsdatum": "2026-10-01",
+      "modifikationsTimestamp": "2026-10-01T10:00:00",
+      "uepiAnpiLogo": "",
+      "externeUrl": "https://www.arbeitsagentur.de/jobsuche/suche?id=10000-1198337149-S",
+      "homeOffice": false
+    },
+    {
+      "refnr": "10000-1198000000-S",
+      "titel": "Remote Projektmanager (m/w/d)",
+      "arbeitgeber": "Remote AG",
+      "beruf": "Projektmanager/in",
+      "arbeitsort": {
+        "ort": "Berlin",
+        "plz": "10115",
+        "region": "Berlin",
+        "land": "Deutschland",
+        "koordinaten": { "lat": 52.52, "lon": 13.405 }
+      },
+      "eintrittsdatum": "2026-10-15",
+      "aktuelleVeroeffentlichungsdatum": "2026-09-28",
+      "modifikationsTimestamp": "2026-09-28T09:00:00",
+      "uepiAnpiLogo": "",
+      "externeUrl": "https://www.arbeitsagentur.de/jobsuche/suche?id=10000-1198000000-S",
+      "homeOffice": true
+    }
+  ],
+  "maxErgebnisse": 2,
+  "page": 1
+}

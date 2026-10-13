@@ -203,7 +203,7 @@ describe('TeslaPlaywrightService (Spec 013 / T09 + T10 — opt-in lazy-Playwrigh
   });
 
   it('exports the descriptionDepth budget map matching the default source-tesla plugin', () => {
-    expect(TESLA_PLAYWRIGHT_DEFAULT_DESCRIPTION_DEPTH).toBe('detail-25');
+    expect(TESLA_PLAYWRIGHT_DEFAULT_DESCRIPTION_DEPTH).toBe('board');
     expect(TESLA_PLAYWRIGHT_DESCRIPTION_BUDGET.board).toBe(0);
     expect(TESLA_PLAYWRIGHT_DESCRIPTION_BUDGET['detail-25']).toBe(25);
     expect(TESLA_PLAYWRIGHT_DESCRIPTION_BUDGET['detail-all']).toBe(
@@ -254,6 +254,7 @@ describe('TeslaPlaywrightService (Spec 013 / T09 + T10 — opt-in lazy-Playwrigh
       const input: ScraperInputDto = {
         siteType: [Site.TESLA_PLAYWRIGHT],
         resultsWanted: 5,
+        descriptionDepth: 'detail-25',
       } as ScraperInputDto;
 
       const result = await service.scrape(input);
@@ -430,6 +431,7 @@ describe('TeslaPlaywrightService (Spec 013 / T09 + T10 — opt-in lazy-Playwrigh
       const input: ScraperInputDto = {
         siteType: [Site.TESLA_PLAYWRIGHT],
         resultsWanted: 2,
+        descriptionDepth: 'detail-25',
       } as ScraperInputDto;
 
       const result = await service.scrape(input);

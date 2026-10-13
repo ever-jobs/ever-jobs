@@ -29,7 +29,7 @@ describe('CornerstoneService locations', () => {
     const byName = service.extractLocations({
       locations: [{ displayName: 'Atlanta, GA, US' }],
     } as unknown as CornerstoneRequisition);
-    expect(byName[0]).toMatchObject({ city: 'Atlanta', state: 'GA', country: 'US' });
+    expect(byName[0]).toMatchObject({ city: 'Atlanta', state: 'GA', country: 'United States' });
 
     const byDisplay = service.extractLocations({
       displayLocation: 'Austin, TX, US',
@@ -37,5 +37,40 @@ describe('CornerstoneService locations', () => {
     expect(byDisplay).toHaveLength(1);
     expect(byDisplay[0].city).toBe('Austin');
     expect(byDisplay[0].state).toBe('TX');
+  });
+
+  it('parses a bare-string requisition.location through the mapper', () => {
+    const req = {
+      location: 'Denver, CO, US',
+    } as unknown as CornerstoneRequisition;
+    const locations = service.extractLocations(req);
+    expect(locations).toHaveLength(1);
+    expect(locations[0]).toMatchObject({
+      city: 'Denver',
+      state: 'CO',
+      country: 'United States',
+      text: 'Denver, CO, US',
+    });
+  });
+
+  it('claims displayName as text when it is the sole text source', () => {
+    const locations = service.extractLocations({
+      locations: [
+        {
+          displayName: 'Atlanta, GA, US',
+        },
+      ],
+    } as unknown as CornerstoneRequisition);
+    expect(locations[0].text).toBe('Atlanta, GA, US');
+    expect(locations[0].city).toBe('Atlanta');
+  });
+
+  it('falls back to displayLocation when locations/location map empty', () => {
+    const locations = service.extractLocations({
+      locations: [{ city: null }],
+      displayLocation: 'Austin, TX, US',
+    } as unknown as CornerstoneRequisition);
+    expect(locations).toHaveLength(1);
+    expect(locations[0].city).toBe('Austin');
   });
 });

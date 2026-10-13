@@ -19,6 +19,8 @@ import {
   parseLocationText,
   randomSleep,
   toDateOnly,
+  toLocationDto,
+  toLocationDtos,
 } from '@ever-jobs/common';
 import {
   PRESCREEN_HOST_TEMPLATE,
@@ -489,12 +491,12 @@ export class PrescreenService implements IScraper {
    */
   private extractLocation(job: PrescreenJob): LocationDto | null {
     const place = this.firstPlace(job.ld?.jobLocation);
-    const address = place?.address;
-    if (address && (address.addressLocality || address.addressRegion || address.addressCountry)) {
+    const mapped = toLocationDto(place);
+    if (mapped) {
       return new LocationDto({
-        city: address.addressLocality?.trim() || null,
-        state: address.addressRegion?.trim() || null,
-        country: address.addressCountry?.trim() || null,
+        city: mapped.city ?? null,
+        state: mapped.state ?? null,
+        country: mapped.country ?? null,
       });
     }
 
@@ -508,15 +510,13 @@ export class PrescreenService implements IScraper {
     const out: LocationDto[] = [];
     const jobLocation = job.ld?.jobLocation;
     const places = Array.isArray(jobLocation) ? jobLocation : jobLocation ? [jobLocation] : [];
-    for (const place of places) {
-      const address = place?.address;
-      if (!address || typeof address !== 'object') continue;
-      if (address.addressLocality || address.addressRegion || address.addressCountry) {
+    for (const dto of toLocationDtos(jobLocation)) {
+      if (dto.city || dto.state || dto.country) {
         out.push(
           new LocationDto({
-            city: address.addressLocality?.trim() || null,
-            state: address.addressRegion?.trim() || null,
-            country: address.addressCountry?.trim() || null,
+            city: dto.city ?? null,
+            state: dto.state ?? null,
+            country: dto.country ?? null,
           }),
         );
       }

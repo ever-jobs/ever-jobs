@@ -18,6 +18,7 @@ import {
   extractEmails,
   parseLocationText,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   BRASSRING_HOST,
@@ -37,8 +38,6 @@ import {
   BrassRingJob,
   BrassRingJobRaw,
   BrassRingJobPosting,
-  BrassRingJobLocation,
-  BrassRingPostalAddress,
   BrassRingMatchedJobsResponse,
 } from './brassring.types';
 
@@ -268,7 +267,7 @@ export class BrassRingService implements IScraper {
     const posting = this.findJobPosting(html);
     if (!posting) return job;
 
-    const address = this.firstAddress(posting.jobLocation);
+    const mapped = toLocationDto(posting.jobLocation);
     const descriptionHtml = this.cleanText(posting.description);
 
     return {
@@ -277,9 +276,9 @@ export class BrassRingService implements IScraper {
       companyName: this.organizationName(posting.hiringOrganization) ?? job.companyName,
       canonicalUrl: this.cleanText(posting.url) ?? job.canonicalUrl,
       descriptionHtml: descriptionHtml ? this.decodeEntities(descriptionHtml) : job.descriptionHtml,
-      city: this.cleanText(address?.addressLocality) ?? job.city,
-      state: this.cleanText(address?.addressRegion) ?? job.state,
-      country: this.countryName(address?.addressCountry) ?? job.country,
+      city: mapped?.city ?? job.city,
+      state: mapped?.state ?? job.state,
+      country: mapped?.country ?? job.country,
       department: this.cleanText(posting.industry) ?? job.department,
       employmentType: this.normaliseEmploymentType(posting.employmentType) ?? job.employmentType,
       datePosted: this.parseDate(posting.datePosted) ?? job.datePosted,
@@ -528,16 +527,6 @@ export class BrassRingService implements IScraper {
     return !!(title && BRASSRING_REMOTE_REGEX.test(title));
   }
 
-  /** Return the first `PostalAddress` from a `jobLocation` (object or array). */
-  private firstAddress(
-    jobLocation: BrassRingJobLocation | BrassRingJobLocation[] | null | undefined,
-  ): BrassRingPostalAddress | null {
-    if (!jobLocation) return null;
-    const first = Array.isArray(jobLocation) ? jobLocation[0] : jobLocation;
-    const address = first?.address;
-    return address && typeof address === 'object' ? address : null;
-  }
-
   /** Resolve the hiring-organisation display name (object `name` or bare string). */
   private organizationName(
     org: BrassRingJobPosting['hiringOrganization'],
@@ -545,13 +534,6 @@ export class BrassRingService implements IScraper {
     if (!org) return null;
     if (typeof org === 'string') return this.cleanText(org);
     return this.cleanText(org.name);
-  }
-
-  /** Resolve the country display value (a bare code/name, or an object with `name`). */
-  private countryName(country: BrassRingPostalAddress['addressCountry']): string | null {
-    if (!country) return null;
-    if (typeof country === 'string') return this.cleanText(country);
-    return this.cleanText(country.name);
   }
 
   /**

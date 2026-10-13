@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   WORKFORCE_ROOT_DOMAIN,
@@ -42,7 +43,6 @@ import {
   WorkforceJob,
   WorkforceJobRef,
   WorkforceJobPostingLd,
-  WorkforcePostalAddress,
 } from './workforce.types';
 
 /**
@@ -313,11 +313,10 @@ export class WorkforceService implements IScraper {
     const org = this.firstOf(ld?.hiringOrganization);
     const companyName = this.cleanText(org?.name);
 
-    const location = this.firstOf(ld?.jobLocation);
-    const address = location?.address ?? null;
-    const city = this.cleanText(address?.addressLocality);
-    const state = this.cleanText(address?.addressRegion);
-    const country = this.cleanText(this.countryName(address));
+    const mapped = toLocationDto(ld?.jobLocation);
+    const city = mapped?.city ?? null;
+    const state = mapped?.state ?? null;
+    const country = mapped?.country ?? null;
     const locationText = this.joinLocation(city, state, country);
 
     const descriptionHtml =
@@ -569,14 +568,6 @@ export class WorkforceService implements IScraper {
       .replace(/[_-]+/g, ' ')
       .toLowerCase()
       .replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-
-  /** Resolve a country name from a schema.org `addressCountry` (string or `{ name }` object). */
-  private countryName(address: WorkforcePostalAddress | null): string | null {
-    const c = address?.addressCountry;
-    if (typeof c === 'string') return c;
-    if (c && typeof c === 'object') return this.cleanText(c.name);
-    return null;
   }
 
   /** Return the first element of a possibly-array schema.org value, else the value itself. */

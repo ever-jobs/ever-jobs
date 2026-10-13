@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   PAGEUP_PLATFORM_HOST,
@@ -254,6 +255,7 @@ export class PageUpService implements IScraper {
       this.leadingTitle(ogTitle) ??
       this.leadingTitle(titleTag);
 
+    const mapped = toLocationDto(posting?.jobLocation);
     const address = this.firstAddress(posting?.jobLocation);
     const companyName = this.organizationName(posting?.hiringOrganization);
 
@@ -261,9 +263,9 @@ export class PageUpService implements IScraper {
 
     // JSON-LD address parts take precedence; else fall back to the labelled
     // "Location:" row (a free-text place we surface as the city slot).
-    const city = this.cleanText(address?.addressLocality) ?? this.decodeMaybe(labelLocation);
-    const state = this.cleanText(address?.addressRegion);
-    const country = this.countryName(address?.addressCountry);
+    const city = mapped?.city ?? this.decodeMaybe(labelLocation);
+    const state = mapped?.state ?? null;
+    const country = mapped?.country ?? null;
 
     const employmentType =
       this.normaliseEmploymentType(posting?.employmentType) ?? this.decodeMaybe(labelWorkType);
@@ -523,13 +525,6 @@ export class PageUpService implements IScraper {
     if (!org) return null;
     if (typeof org === 'string') return this.cleanText(org);
     return this.cleanText(org.name);
-  }
-
-  /** Resolve the country display value (a bare code/name, or an object with `name`). */
-  private countryName(country: PageUpPostalAddress['addressCountry']): string | null {
-    if (!country) return null;
-    if (typeof country === 'string') return this.cleanText(country);
-    return this.cleanText(country.name);
   }
 
   /**

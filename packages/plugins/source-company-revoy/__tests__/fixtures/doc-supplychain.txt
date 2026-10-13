@@ -1,0 +1,33 @@
+﻿Revoy — Lead Supply Chain Engineer
+
+
+Location: Troutdale, OR (on-site)
+Reports to: CTO
+Department: Operations / Engineering
+Type: Full-time
+About the Role
+Revoy is building a battery-electric converter dolly that instantly converts Class 8 tractor-trailer combinations into 96% electric power. We're moving from prototype to commercialization, and we're hiring our first dedicated Supply Chain Engineer to own the function end-to-end, from sourcing strategy and supplier development into series production.
+You'll inherit an existing BOM and active supplier pipeline (>100 suppliers already engaged across axles, brakes, suspension, thermal, HV components, connectors, and controls) and turn it into a disciplined, auditable, production-ready supply base. You'll work shoulder-to-shoulder with our mechanical, electrical, and firmware engineers, and you'll be directly responsible for BOM cost, manufacturability, and timeline.
+Some travel will be required to interface face to face with suppliers and contract manufacturers
+What You'll Own
+* Sourcing strategy for the full vehicle BOM. This includes everything: heavy-duty mechanical components (axles, suspension, air brakes, kingpin/fifth wheel, frame), HV electrical (battery pack/modules, inverters, motors, OBC, DC-DC, contactors, HV harness), LV electronics, thermal management (chillers, coolant loops, plates), and structural fabrication
+* Supplier qualification and development. You’ll be expected to produce RFQ packages, technical reviews, capacity assessments, on-site audits, PPAP/PSW execution
+* Should-cost models and negotiation for both legacy truck Tier 1s (Dana, Meritor/Cummins, Bendix/Knorr, Hendrickson, SAF-Holland, etc.) and EV-native suppliers (cell, pack, power electronics, traction motor)
+* Supply Chain Risk management, for example single vs. dual-source decisions, geographic risk, and tariff treatment sourcing implications, long lead-time forecasting
+* NPI execution, including  DFM/DFA loops with engineering, prototype-to-pilot-to-production transitions, ECO management with suppliers
+* Logistics and inventory for prototype builds today, scaling to pilot production fleet deployments
+* The cost roadmap from EVT through SOP and into volume
+Required Qualifications
+* 5+ years in supply chain, sourcing, or supplier quality engineering for complex hardware such as commercial vehicles, EVs, aerospace, heavy equipment, or industrial machinery
+* Engineering degree (Mechanical, Electrical, Manufacturing, Industrial) or equivalent hands-on experience. You can read a drawing, interpret a GD&T callout, understand a schematic, and push back on a supplier's technical claim
+* Direct experience taking a hardware product through NPI. APQP, PPAP, FMEA, control plans, first-article inspection
+* Demonstrated negotiation track record with real dollar outcomes you can speak to
+* EV powertrain sourcing for battery cells/modules/packs, traction inverters, motors, BMS, HV interconnect. We’d love for you to have existing relationships to hit the ground running
+Strongly Preferred
+* Class 8 / heavy commercial vehicle experience. You know the Tier 1 landscape, you understand FMVSS implications for trailers vs. tractors, you've worked with J1939, air brake systems, or heavy-duty drivetrain components
+* Experience with IATF 16949 or AS9100 quality systems, and an opinion on which parts of them are worth keeping at this stage of company maturity
+* Hands-on time on a shop floor or in a supplier facility
+* Track record taking a vehicle program from prototype through DV / PV and into production
+
+
+To apply: send a resume and a short note about a product you’ve shipped at scale to ian@revoy.com.

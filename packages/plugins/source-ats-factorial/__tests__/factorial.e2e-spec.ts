@@ -2,13 +2,14 @@
  * E2E test for the Factorial ATS scraper.
  *
  * No authentication required — Factorial tenant career pages are publicly
- * accessible at `https://{slug}.factorialhr.com`. Tests run against the known
+ * accessible at `https://{slug}.factorial.com` (legacy `factorialhr.com`
+ * sub-domains 301 to the canonical apex). Tests run against the known
  * tenant `jobs-tendencys` but tolerate upstream changes / WAF gating by
  * treating zero results as acceptable; shape assertions only run when jobs are
  * actually returned.
  *
- * Verified tenant (2026-06-03):
- *   https://jobs-tendencys.factorialhr.com  — 22 open positions
+ * Verified tenant (2026-10-10):
+ *   https://jobs-tendencys.factorial.com  — open positions listed
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { FactorialModule, FactorialService } from '@ever-jobs/source-ats-factorial';
@@ -45,7 +46,9 @@ describe('FactorialService (E2E)', () => {
       expect(job.atsType).toBe('factorial');
       expect(job.atsId).toBeDefined();
       expect(job.jobUrl).toBeDefined();
-      expect((job.jobUrl as string).includes('factorialhr.com')).toBe(true);
+      // Board domains rebrand (factorialhr.com → factorial.com) and tenants
+      // may use custom domains — assert the path shape, not the host.
+      expect(new URL(job.jobUrl as string).pathname.startsWith('/job_posting/')).toBe(true);
     }
   }, 60000);
 

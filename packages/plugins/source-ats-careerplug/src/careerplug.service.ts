@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   CAREERPLUG_HOST_TEMPLATE,
@@ -38,8 +39,7 @@ import {
   CareerPlugJobAnchor,
   CareerPlugJobPostingLd,
   CareerPlugListItem,
-  CareerPlugPlace,
-  CareerPlugPostalAddress,
+
 } from './careerplug.types';
 
 /**
@@ -361,14 +361,9 @@ export class CareerPlugService implements IScraper {
    * `applicationLocationRequirement` country, which we surface as the country.
    */
   private extractLocation(ld: CareerPlugJobPostingLd): LocationDto | null {
-    const address = this.firstAddress(ld.jobLocation);
-    if (address) {
-      const city = address.addressLocality?.trim() || null;
-      const state = address.addressRegion?.trim() || null;
-      const country = address.addressCountry?.trim() || null;
-      if (city || state || country) {
-        return new LocationDto({ city, state, country });
-      }
+    const mapped = toLocationDto(ld.jobLocation);
+    if (mapped) {
+      return mapped;
     }
 
     const requirement = Array.isArray(ld.applicationLocationRequirement)
@@ -380,15 +375,6 @@ export class CareerPlugService implements IScraper {
     }
 
     return null;
-  }
-
-  /** Pull the first PostalAddress out of a Place or array of Places. */
-  private firstAddress(
-    location: CareerPlugPlace | CareerPlugPlace[] | null | undefined,
-  ): CareerPlugPostalAddress | null {
-    if (!location) return null;
-    const place = Array.isArray(location) ? location[0] : location;
-    return place?.address ?? null;
   }
 
   /** Detect remote roles from `jobLocationType` or the title text. */

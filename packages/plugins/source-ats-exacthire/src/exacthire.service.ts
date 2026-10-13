@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDtos,
 } from '@ever-jobs/common';
 import {
   EXACTHIRE_HOST_TEMPLATE,
@@ -543,21 +544,9 @@ export class ExactHireService implements IScraper {
   ): Array<{ city: string | null; state: string | null; country: string | null }> {
     const loc = jsonLd?.jobLocation;
     if (!loc) return [];
-    const nodes = Array.isArray(loc) ? loc : [loc];
-    const out: Array<{ city: string | null; state: string | null; country: string | null }> = [];
-    for (const node of nodes) {
-      const addr: ExactHirePostalAddress | null | undefined = node?.address;
-      if (!addr || typeof addr !== 'object') continue;
-      let country: string | null = null;
-      if (typeof addr.addressCountry === 'string') country = this.cleanText(addr.addressCountry);
-      else if (addr.addressCountry && typeof addr.addressCountry === 'object') {
-        country = this.cleanText(addr.addressCountry.name ?? null);
-      }
-      const city = this.cleanText(addr.addressLocality ?? null);
-      const state = this.cleanText(addr.addressRegion ?? null);
-      if (city || state || country) out.push({ city, state, country });
-    }
-    return out;
+    return toLocationDtos(loc)
+      .filter((d) => d.city || d.state || d.country)
+      .map((d) => ({ city: d.city ?? null, state: d.state ?? null, country: d.country ?? null }));
   }
 
   /** Per-site LocationDto list — one per JSON-LD `jobLocation`, else the merged location. */

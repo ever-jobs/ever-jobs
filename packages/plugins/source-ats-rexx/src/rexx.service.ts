@@ -18,6 +18,7 @@ import {
   extractEmails,
   randomSleep,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   REXX_HOST_TEMPLATE,
@@ -40,8 +41,7 @@ import {
   RexxListingItem,
   RexxJobPostingLd,
   RexxJob,
-  RexxPlace,
-  RexxPostalAddress,
+
 } from './rexx.types';
 
 /**
@@ -481,27 +481,13 @@ export class RexxService implements IScraper {
    * falling back to the free-text locality chip from the listing card.
    */
   private extractLocation(job: RexxJob): LocationDto | null {
-    const address = this.firstAddress(job.ld?.jobLocation);
-    if (address) {
-      const city = address.addressLocality?.trim() || null;
-      const state = address.addressRegion?.trim() || null;
-      const country = address.addressCountry?.trim() || null;
-      if (city || state || country) {
-        return new LocationDto({ city, state, country });
-      }
+    const mapped = toLocationDto(job.ld?.jobLocation);
+    if (mapped) {
+      return mapped;
     }
     const raw = job.location?.trim();
     if (!raw) return null;
     return new LocationDto({ city: raw, state: null, country: null });
-  }
-
-  /** Pull the first PostalAddress out of a Place or array of Places. */
-  private firstAddress(
-    location: RexxPlace | RexxPlace[] | null | undefined,
-  ): RexxPostalAddress | null {
-    if (!location) return null;
-    const place = Array.isArray(location) ? location[0] : location;
-    return place?.address ?? null;
   }
 
   /**

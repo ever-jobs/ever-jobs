@@ -18,6 +18,7 @@ import {
   extractEmails,
   parseLocationText,
   toDateOnly,
+  toLocationDtos,
 } from '@ever-jobs/common';
 import {
   INRECRUITING_ROOT_DOMAIN,
@@ -500,21 +501,13 @@ export class InRecruitingService implements IScraper {
 
   /** Map every JSON-LD `jobLocation` Place to a structured location entry. */
   private locationEntries(ld: InRecruitingJsonLd | null): LocationEntry[] {
-    if (!ld?.jobLocation) return [];
-    const places = Array.isArray(ld.jobLocation) ? ld.jobLocation : [ld.jobLocation];
-    const out: LocationEntry[] = [];
-    for (const place of places) {
-      const address = place && typeof place === 'object' ? place.address : null;
-      if (!address || typeof address !== 'object') continue;
-      out.push({
-        city: this.cleanText(address.addressLocality),
-        state: this.cleanText(address.addressRegion),
-        country: this.cleanText(address.addressCountry),
-        streetAddress: this.cleanText(address.streetAddress),
-        postalCode: this.cleanText(address.postalCode),
-      });
-    }
-    return out;
+    return toLocationDtos(ld?.jobLocation).map((d) => ({
+      city: d.city ?? null,
+      state: d.state ?? null,
+      country: d.country ?? null,
+      streetAddress: d.streetAddress ?? null,
+      postalCode: d.postalCode ?? null,
+    }));
   }
 
   /** Build a single-line location string from a JSON-LD address, when present. */

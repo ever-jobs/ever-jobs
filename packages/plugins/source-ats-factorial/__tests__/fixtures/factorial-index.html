@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<body>
+<select id='location_filter'>
+  <option value='318886'>Monterrey</option>
+  <option value='999999'>Mexico City</option>
+</select>
+<select id='team_filter'>
+  <option value='95948'>Engineering</option>
+  <option value='77777'>Product</option>
+</select>
+<section>
+<div data-target='job-filters.officeGroup'>
+<h3>Monterrey</h3>
+<ul>
+<li class='job-offer-item' data-contract-type='indefinite'>
+<div data-controller='job-postings' data-is-remote='true' data-job-postings-url='https://acme.factorial.com/job_posting/senior-engineer-325521' data-location-id='318886' data-target='job-filters.job' data-team-id='95948' role='button'>
+<div class='font-bold'>Senior Engineer</div>
+</div>
+</li>
+<li class='job-offer-item' data-contract-type='temporary'>
+<div data-controller='job-postings' data-is-remote='false' data-job-postings-url='https://acme.factorial.com/job_posting/product-manager-312102' data-location-id='999999' data-target='job-filters.job' data-team-id='77777' role='button'>
+<div class='font-bold'>Product Manager</div>
+</div>
+</li>
+</ul>
+</div>
+</section>
+</body>
+</html>

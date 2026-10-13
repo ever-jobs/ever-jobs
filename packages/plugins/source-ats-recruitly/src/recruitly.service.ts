@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   RECRUITLY_ROOT_DOMAIN,
@@ -228,10 +229,12 @@ export class RecruitlyService implements IScraper {
     if (status && status.toUpperCase() !== RECRUITLY_OPEN_STATUS) return null;
 
     const url = this.deriveApplyUrl(item, atsId);
-    const location = item.location ?? null;
-    const city = this.cleanText(location?.cityName);
-    const state = this.cleanText(location?.regionName);
-    const country = this.cleanText(location?.countryName) ?? this.cleanText(location?.countryCode);
+    const mapped = toLocationDto(item.location, {
+      aliases: { state: ['regionName'] },
+    });
+    const city = this.cleanText(mapped?.city);
+    const state = this.cleanText(mapped?.state);
+    const country = this.cleanText(mapped?.country);
     const locationText = this.joinLocation(city, state, country);
     const employmentType = this.cleanText(item.employmentType) ?? this.cleanText(item.jobType);
     const title = this.cleanText(item.title);
@@ -246,6 +249,7 @@ export class RecruitlyService implements IScraper {
       city,
       state,
       country,
+      locationDto: mapped,
       locationText,
       descriptionHtml: this.cleanText(item.description),
       employmentType,
@@ -369,6 +373,7 @@ export class RecruitlyService implements IScraper {
    * nothing usable is present.
    */
   private extractLocation(job: RecruitlyJob): LocationDto | null {
+    if (job.locationDto) return job.locationDto;
     const city = job.city;
     const state = job.state;
     const country = job.country;

@@ -1,0 +1,84 @@
+{
+  "results": [
+    {
+      "id": "f7d63d30-1fd7-5234-2323-5a996ff4ea3a",
+      "userDefinedId": "3002",
+      "positionTitle": "GNC Engineer II (Hypersonics)",
+      "description": "<p>Guidance, navigation &amp; controls for hypersonic vehicles. Contact jobs@firefly.example.</p>",
+      "openDate": "2026-09-11T00:00:00",
+      "postedDate": "2026-09-12T00:00:00",
+      "departmentId": "dep-1",
+      "departmentName": "Aerospace Software Engineering",
+      "officeId": "off-1",
+      "officeName": "The Hive",
+      "jobFunctionName": "Engineering",
+      "location": "Cedar Park TX",
+      "locations": [
+        {
+          "city": "Cedar Park",
+          "subdivision": "TX",
+          "subdivisionFullName": "Texas",
+          "country": "US",
+          "postalCode": "78613",
+          "addressLine1": null,
+          "addressLine2": null,
+          "isRemote": false,
+          "isNationwide": false
+        },
+        {
+          "city": null,
+          "subdivision": null,
+          "subdivisionFullName": null,
+          "country": "US",
+          "postalCode": null,
+          "addressLine1": null,
+          "addressLine2": null,
+          "isRemote": true,
+          "isNationwide": true
+        }
+      ],
+      "brandName": "Firefly Aerospace",
+      "applyLink": "https://firefly.clearcompany.com/careers/jobs/f7d63d30-1fd7-5234-2323-5a996ff4ea3a/apply",
+      "canSelfSchedule": false,
+      "salaryRangeLow": "0",
+      "salaryRangeHigh": "0",
+      "salaryType": null,
+      "customFieldAnswers": []
+    },
+    {
+      "id": "a1b2c3d4-0000-1111-2222-333344445555",
+      "userDefinedId": "26-07-04",
+      "positionTitle": "Launch Technician II",
+      "description": "Pad operations at Wallops.",
+      "openDate": "2026-08-01T00:00:00",
+      "postedDate": null,
+      "departmentId": "dep-2",
+      "departmentName": null,
+      "officeId": "off-2",
+      "officeName": "Wallops VA",
+      "jobFunctionName": "Launch Operations",
+      "location": null,
+      "locations": [],
+      "brandName": "Firefly Aerospace",
+      "applyLink": "https://firefly.clearcompany.com/careers/jobs/a1b2c3d4-0000-1111-2222-333344445555/apply",
+      "canSelfSchedule": false,
+      "salaryRangeLow": "0",
+      "salaryRangeHigh": "0",
+      "salaryType": null,
+      "customFieldAnswers": []
+    },
+    {
+      "id": "c3d4e5f6-0000-1111-2222-333344445555",
+      "userDefinedId": null,
+      "positionTitle": null,
+      "description": "broken row",
+      "openDate": null,
+      "postedDate": null,
+      "brandName": "Firefly Aerospace",
+      "applyLink": null
+    }
+  ],
+  "totalCount": 2,
+  "currentPageIndex": 0,
+  "currentPageCount": 2
+}

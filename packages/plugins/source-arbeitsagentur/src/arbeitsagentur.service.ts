@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   ARBEITSAGENTUR_API_URL,
@@ -142,12 +143,9 @@ export class ArbeitsagenturService implements IScraper {
     }
 
     // Build location from arbeitsort
-    const arbeitsort = entry.arbeitsort;
-    const location = new LocationDto({
-      city: arbeitsort?.ort ?? null,
-      state: arbeitsort?.region ?? null,
-      country: arbeitsort?.land ?? null,
-    });
+    const location =
+      toLocationDto(entry.arbeitsort, { aliases: { state: ['region'] } }) ??
+      new LocationDto({});
 
     // Determine if remote from homeOffice flag
     const isRemote = entry.homeOffice ?? false;

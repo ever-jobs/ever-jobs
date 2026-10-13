@@ -30,6 +30,17 @@ export interface SearchRunOptions {
    * passes "the client has disconnected".
    */
   isCancelled?: () => boolean;
+  /**
+   * Spec 5161 — capture raw HTTP for the request's single source into
+   * `rawBySource`. Valid only when the request resolves to exactly one
+   * source; the service 400s otherwise.
+   */
+  captureRaw?: boolean;
+  /**
+   * Spec 5164 — per-request fan-out deadline override in ms (`0` disables the
+   * deadline for this call). Single-source requests only, like `captureRaw`.
+   */
+  deadlineMs?: number;
 }
 
 /**

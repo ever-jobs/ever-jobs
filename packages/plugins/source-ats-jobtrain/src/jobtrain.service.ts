@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   JOBTRAIN_HOST,
@@ -339,13 +340,7 @@ export class JobtrainService implements IScraper {
    * Returns null when no usable location part is present (never fabricated).
    */
   private extractLocation(posting: JobtrainJobPosting): LocationDto | null {
-    const address = posting.jobLocation?.address;
-    if (!address) return null;
-    const city = this.cleanText(address.addressLocality);
-    const state = this.cleanText(address.addressRegion);
-    const country = this.cleanText(address.addressCountry);
-    if (!city && !state && !country) return null;
-    return new LocationDto({ city, state, country });
+    return toLocationDto(posting.jobLocation);
   }
 
   /** Surface the hiring organisation's department, when the posting names one. */

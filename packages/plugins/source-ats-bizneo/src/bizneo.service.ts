@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   parseLocationText,
+  toLocationDtos,
 } from '@ever-jobs/common';
 import {
   BIZNEO_ROOT_DOMAIN,
@@ -631,10 +632,10 @@ export class BizneoService implements IScraper {
   private locationEntries(
     addresses: BizneoPostalAddress[] | null | undefined,
   ): Array<{ city: string | null; state: string | null; country: string | null }> {
-    return (addresses ?? []).map((a) => ({
-      city: this.cleanText(a.addressLocality),
-      state: this.cleanText(a.addressRegion),
-      country: this.countryName(a.addressCountry),
+    return toLocationDtos(addresses ?? []).map((d) => ({
+      city: d.city ?? null,
+      state: d.state ?? null,
+      country: d.country ?? null,
     }));
   }
 

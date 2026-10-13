@@ -158,6 +158,57 @@ describe('DayforceService', () => {
     expect(res.jobs[1].title).toBe('Technician');
   });
 
+  it('recovers geo-feed location keys the old hand-rolled map dropped', async () => {
+    mockGet.mockResolvedValue(csrfResponse());
+    mockPost.mockResolvedValue(
+      searchResponse([
+        makePosting({
+          postingLocations: [
+            {
+              cityName: 'Louisville',
+              stateCode: 'KY',
+              isoCountryCode: 'US',
+              formattedAddress: 'Louisville, KY, United States',
+              coordinates: { lat: 38.25, lng: -85.76 },
+              locationId: 'loc-42',
+              locationType: 'BRANCH',
+            },
+          ],
+        }),
+      ]),
+    );
+
+    const res = await service.scrape(input());
+    const loc = res.jobs[0].location;
+    expect(loc?.city).toBe('Louisville');
+    expect(loc?.state).toBe('KY');
+    expect(loc?.country).toBe('US');
+    expect(loc?.text).toBe('Louisville, KY, United States');
+    expect(loc?.extras?.locationId).toBe('loc-42');
+    expect(loc?.extras?.locationType).toBe('BRANCH');
+    expect((loc?.extras?.coordinates as { lat: number }).lat).toBe(38.25);
+    expect(res.jobs[0].locations).toHaveLength(1);
+  });
+
+  it('maps every postingLocations entry into locations[]', async () => {
+    mockGet.mockResolvedValue(csrfResponse());
+    mockPost.mockResolvedValue(
+      searchResponse([
+        makePosting({
+          postingLocations: [
+            { cityName: 'Louisville', stateCode: 'KY', isoCountryCode: 'US' },
+            { cityName: 'Denver', stateCode: 'CO', isoCountryCode: 'US' },
+          ],
+        }),
+      ]),
+    );
+
+    const res = await service.scrape(input());
+    expect(res.jobs[0].locations).toHaveLength(2);
+    expect(res.jobs[0].locations?.[1].city).toBe('Denver');
+    expect(res.jobs[0].location?.city).toBe('Louisville');
+  });
+
   it('returns a blocked diagnostic when the CSRF request is rejected with 403', async () => {
     mockGet.mockRejectedValue(
       new Error('Request failed with status code 403'),

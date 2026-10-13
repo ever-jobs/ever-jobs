@@ -8,6 +8,7 @@ import {
   StreamableFile,
   Optional,
   Inject,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiOperation,
@@ -29,6 +30,7 @@ import {
   type ILivenessChecker,
   type ILegitimacyChecker,
   type LegitimacyInput,
+  type RawHttpEntry,
   JOB_LIVENESS_REASON_FRESH_FETCH,
   JOB_LIVENESS_REASON_LISTED,
 } from '@ever-jobs/models';
@@ -216,6 +218,20 @@ export class JobsController {
     description: 'Cap on returned per_source rows (default 200). Non-positive means no cap.',
   })
   @ApiQuery({
+    name: 'include_raw',
+    required: false,
+    type: Boolean,
+    description:
+      'Raw HTTP capture for a single source (Spec 5161). Valid only when the request resolves to exactly one source; otherwise 400. Skips the cache read and adds `raw_by_source` to the response.',
+  })
+  @ApiQuery({
+    name: 'deadline_ms',
+    required: false,
+    type: Number,
+    description:
+      'Per-request fan-out wall-clock budget in ms (Spec 5164). Valid only when the request resolves to exactly one source; otherwise 400. `0` disables the deadline for this call. Replaces EVER_JOBS_SEARCH_DEADLINE_MS for this request only; capped by EVER_JOBS_SEARCH_DEADLINE_MAX_MS when the operator sets it (`0` or a value above the cap returns 400).',
+  })
+  @ApiQuery({
     name: 'liveness',
     required: false,
     type: Boolean,
@@ -256,6 +272,8 @@ export class JobsController {
     // directly), and inserting ahead of `res` silently shifts it.
     @Query('diagnostics') diagnosticsRaw?: string,
     @Query('diagnostics_limit') diagnosticsLimitRaw?: string,
+    @Query('include_raw') includeRawRaw?: string,
+    @Query('deadline_ms') deadlineMsRaw?: string,
   ) {
     // Spec 1720 — normalise the keyword BEFORE logging and the cache lookup,
     // so "", "   ", null and an omitted term are one request and one cache
@@ -320,6 +338,37 @@ export class JobsController {
       return 'off';
     };
 
+    // Spec 5161 — raw HTTP capture is a debugging aid for one source at a
+    // time; the service 400s when the selection resolves to anything else.
+    const includeRaw = parseBool(includeRawRaw);
+
+    // Spec 5164 — per-request deadline override. Deliberately not `parseNum`
+    // (which folds `0` into the default): `0` is meaningful here — it
+    // disables the deadline for this call, mirroring the config semantics.
+    // Non-numeric and negative input are rejected outright rather than
+    // silently rewritten.
+    let deadlineMs: number | undefined;
+    if (deadlineMsRaw !== undefined) {
+      const n = Number(deadlineMsRaw);
+      if (!Number.isFinite(n) || n < 0) {
+        throw new BadRequestException(
+          `deadline_ms must be a non-negative number of milliseconds; got "${deadlineMsRaw}"`,
+        );
+      }
+      deadlineMs = n;
+      // Operator ceiling: `0` means "infinite deadline", i.e. above any max,
+      // so it rejects alongside over-max values when a cap is configured.
+      const deadlineMax = this.configService.get<number>(
+        'search.deadlineMaxMs',
+        0,
+      );
+      if (deadlineMax > 0 && (deadlineMs === 0 || deadlineMs > deadlineMax)) {
+        throw new BadRequestException(
+          `deadline_ms exceeds the server maximum of ${deadlineMax}ms`,
+        );
+      }
+    }
+
     const dedup = parseBoolWithDefault(dedupRaw, true);
 
     // Spec 1714 FR-16 — taken BEFORE the cache lookup: a job whose plugin fetched
@@ -344,7 +393,10 @@ export class JobsController {
     }
 
     // ── Cache → fan-out → dedup (shared with NDJSON) ──
-    const { aggregated, perSource, fromCache } = await this.runSearch(input, dedup);
+    const { aggregated, perSource, fromCache, rawBySource } = await this.runSearch(input, dedup, {
+      captureRaw: includeRaw,
+      deadlineMs,
+    });
     const jobs = aggregated.jobs;
 
     // ── Output window (Spec 5025) ─────────
@@ -419,6 +471,7 @@ export class JobsController {
         dedup_metrics: aggregated.dedupMetrics,
         per_source: diagnostics.rows,
         per_source_summary: diagnostics.summary,
+        ...(includeRaw ? { raw_by_source: rawBySource } : {}),
         next_page: page < totalPages ? page + 1 : null,
         previous_page: page > 1 ? page - 1 : null,
         ...exclusionKeys,
@@ -438,6 +491,7 @@ export class JobsController {
       dedup_metrics: aggregated.dedupMetrics,
       per_source: diagnostics.rows,
       per_source_summary: diagnostics.summary,
+      ...(includeRaw ? { raw_by_source: rawBySource } : {}),
       ...exclusionKeys,
     };
   }
@@ -531,6 +585,8 @@ export class JobsController {
      * reported none, or a cache entry without one (served on the JSON path only).
      */
     completeness: SearchCompleteness | undefined;
+    /** Spec 5161 — captured raw HTTP entries by site; `{}` unless `hooks.captureRaw`. */
+    rawBySource: Record<string, RawHttpEntry[]>;
   }> {
     // ── Cache check (cache stores RAW fan-out — dedup runs per-request) ──
     // Spec 1721 / FR-19 — ONE entry holds the raw set and the completeness
@@ -545,7 +601,12 @@ export class JobsController {
       { endpoint: SEARCH_CACHE_ENDPOINT, careerLevels: undefined },
       readMaxSearchLocations(this.configService),
     );
-    const hit = readCachedSearch(await this.cacheService.get<unknown>(cacheParams));
+    // Spec 5161 — `captureRaw` skips the read: a hit ran no scrapers, so
+    // there would be nothing to capture. The write is unchanged — the entry
+    // stores only the `JobPostDto[]` fan-out, which never carries capture data.
+    const hit = hooks.captureRaw
+      ? null
+      : readCachedSearch(await this.cacheService.get<unknown>(cacheParams));
     let cached: JobPostDto[] | null = hit?.jobs ?? null;
     let completeness: SearchCompleteness | undefined = hit?.completeness;
     if (cached && options.requireCompleteness && !completeness) {
@@ -559,16 +620,14 @@ export class JobsController {
     // Per-source outcome breakdown (Spec 5082). Only meaningful on a fresh
     // fan-out — a cache hit ran no scrapers, so it stays empty.
     let perSource: SourceDiagnosticDto[] = [];
+    let rawBySource: Record<string, RawHttpEntry[]> = {};
 
     if (cached) {
       rawJobs = cached;
       fromCache = true;
       this.logger.log(`Cache hit — returning ${rawJobs.length} cached results`);
     } else {
-      const result =
-        hooks.onProgress || hooks.isCancelled
-          ? await this.jobsService.searchJobsWithDiagnostics(input, hooks)
-          : await this.jobsService.searchJobsWithDiagnostics(input);
+      const result = await this.jobsService.searchJobsWithDiagnostics(input, hooks);
       // Spec 1721 / FR-14 — sources were left unstarted because the caller
       // went away: a partial answer must never be cached (a retry would be
       // served the truncated set), deduped or persisted.
@@ -577,6 +636,7 @@ export class JobsController {
       }
       rawJobs = result.jobs;
       perSource = result.perSource;
+      rawBySource = result.rawBySource;
       if (isSearchCompleteness(result.completeness)) {
         completeness = result.completeness;
       } else {
@@ -587,8 +647,17 @@ export class JobsController {
       // Spec 1721 / FR-20 — nor is an incomplete crawl: a retry within the TTL
       // must get a fresh chance at the sources the bound left out.
       const cacheMaxJobs = this.configService.get<number>('cache.maxJobs', DEFAULT_CACHE_MAX_JOBS);
+      // Spec 5164 — a failed single-source result must not poison the cache:
+      // a deadline-abandoned scrape caches `[]` for the full TTL and every
+      // repeat call returns it instead of re-scraping. Single-source only —
+      // on a fan-out at least one failure is normal (e.g. browser_unavailable
+      // on browser-less deployments), so a wide rule would disable caching.
+      const failedSingleSource =
+        perSource.length === 1 && !['ok', 'empty'].includes(perSource[0].reason);
       if (completeness?.complete === false) {
         this.logger.log(`Not caching an incomplete crawl (${completeness.stopReason})`);
+      } else if (failedSingleSource) {
+        this.logger.log(`Not caching a failed single-source result (${perSource[0].reason})`);
       } else if (isCacheableJobCount(rawJobs.length, cacheMaxJobs)) {
         await this.cacheService.set(cacheParams, toCachedSearch(rawJobs, completeness));
       } else {
@@ -623,7 +692,7 @@ export class JobsController {
     this.logger.log(
       `Returning ${aggregated.jobs.length} jobs (raw=${aggregated.rawCount}, deduped=${aggregated.deduped}, cached=${fromCache})`,
     );
-    return { aggregated, perSource, fromCache, completeness };
+    return { aggregated, perSource, fromCache, completeness, rawBySource };
   }
 
   // ── NDJSON streaming (Spec 1721) ──

@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   CEZANNE_ROOT_DOMAIN,
@@ -38,7 +39,7 @@ import {
   CezanneJob,
   CezanneJobAnchor,
   CezanneJsonLd,
-  CezannePostalAddress,
+
 } from './cezanne.types';
 
 /**
@@ -523,26 +524,10 @@ export class CezanneService implements IScraper {
   private locationFromJsonLd(
     ld: CezanneJsonLd,
   ): { city: string | null; state: string | null; country: string | null; text: string | null } {
-    const raw = ld?.jobLocation;
-    const places = Array.isArray(raw) ? raw : raw ? [raw] : [];
-    for (const place of places) {
-      const address: CezannePostalAddress | null | undefined = place?.address;
-      if (!address) continue;
-      const city = this.cleanText(address.addressLocality);
-      const state = this.cleanText(address.addressRegion);
-      const country = this.countryName(address.addressCountry);
-      if (city || state || country) {
-        return { city, state, country, text: this.joinLocation(city, state, country) };
-      }
-    }
-    return { city: null, state: null, country: null, text: null };
-  }
-
-  /** Read a schema.org `addressCountry` (a string or a nested `{ name }`). */
-  private countryName(value: string | { name?: string | null } | null | undefined): string | null {
-    if (typeof value === 'string') return this.cleanText(value);
-    if (value && typeof value === 'object') return this.cleanText(value.name);
-    return null;
+    const dto = toLocationDto(ld?.jobLocation);
+    if (!dto) return { city: null, state: null, country: null, text: null };
+    const { city = null, state = null, country = null } = dto;
+    return { city, state, country, text: this.joinLocation(city, state, country) };
   }
 
   /** Join the structured location parts into a single free-text line (for remote tests). */

@@ -1,0 +1,43 @@
+{
+  "data": [
+    {
+      "id": "hire-abc123",
+      "uniqueId": 44121,
+      "reference": "JB-3842",
+      "title": "Senior Platform Engineer",
+      "status": "OPEN",
+      "jobType": "Permanent",
+      "remoteWorking": false,
+      "companyName": "Acme Hiring",
+      "location": {
+        "addressLine": "1 Threadneedle Street",
+        "cityName": "London",
+        "regionName": "Greater London",
+        "postCode": "EC2R 8AH",
+        "countryCode": "GB",
+        "countryName": "United Kingdom",
+        "latitude": 51.5136,
+        "longitude": -0.089
+      },
+      "postedOn": "05/09/2026",
+      "description": "<p>Build the platform.</p>"
+    },
+    {
+      "id": "hire-def456",
+      "uniqueId": 44122,
+      "reference": "JB-3843",
+      "title": "Data Analyst",
+      "status": "OPEN",
+      "employmentType": "Contract",
+      "remoteWorking": true,
+      "companyName": "Acme Hiring",
+      "location": {
+        "cityName": "Manchester",
+        "regionName": "Greater Manchester",
+        "countryCode": "GB"
+      },
+      "postedOn": "01/09/2026",
+      "description": "<p>Analyse the data.</p>"
+    }
+  ]
+}

@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   OTYS_HOST_TEMPLATE,
@@ -34,7 +35,7 @@ import {
   OTYS_TITLE_TAG_REGEX,
   OTYS_REMOTE_REGEX,
 } from './otys.constants';
-import { OtysJob, OtysJobLink, OtysJobPostingLd, OtysJobLocationLd } from './otys.types';
+import { OtysJob, OtysJobLink, OtysJobPostingLd } from './otys.types';
 
 /**
  * OTYS (otys.com, Netherlands) recruitment-site careers scraper — generic, multi-tenant.
@@ -246,16 +247,16 @@ export class OtysService implements IScraper {
 
     const ld = this.findJobPosting(html);
     if (ld) {
-      const address = this.firstAddress(ld.jobLocation);
+      const mapped = toLocationDto(ld.jobLocation);
       base.title = this.cleanText(ld.title) ?? base.title;
       base.description = this.cleanText(ld.description) ?? base.description;
       base.datePosted = this.parseDate(ld.datePosted);
       base.employmentType = this.normaliseEmploymentType(this.firstString(ld.employmentType));
       base.department = this.cleanText(ld.industry);
       base.companyName = this.cleanText(ld.hiringOrganization?.name) ?? base.companyName;
-      base.city = this.cleanText(address?.addressLocality);
-      base.state = this.cleanText(address?.addressRegion);
-      base.country = this.cleanText(this.countryName(address?.addressCountry));
+      base.city = mapped?.city ?? null;
+      base.state = mapped?.state ?? null;
+      base.country = mapped?.country ?? null;
       base.url = this.cleanText(ld.url) ?? base.url;
       base.isRemote = this.detectRemote(base.title, base.city, ld.jobLocationType, base.description);
       return base;
@@ -368,24 +369,6 @@ export class OtysService implements IScraper {
     if (typeof type === 'string') return type.toLowerCase() === 'jobposting';
     if (Array.isArray(type)) return type.some((t) => typeof t === 'string' && t.toLowerCase() === 'jobposting');
     return false;
-  }
-
-  /** First `jobLocation` entry (handles a single object or an array). */
-  private firstAddress(
-    location: OtysJobPostingLd['jobLocation'],
-  ): OtysJobLocationLd['address'] | null {
-    if (!location) return null;
-    const entry = Array.isArray(location) ? location[0] : location;
-    return entry?.address ?? null;
-  }
-
-  /** Resolve a schema.org `addressCountry` (string or `{ name }`) to a string. */
-  private countryName(
-    country: string | { name?: string | null } | null | undefined,
-  ): string | null {
-    if (typeof country === 'string') return country;
-    if (country && typeof country === 'object') return country.name ?? null;
-    return null;
   }
 
   /** First string from a `string | string[]` JSON-LD value. */

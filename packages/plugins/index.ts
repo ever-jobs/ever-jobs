@@ -32,6 +32,7 @@ import { GreenhouseModule } from './source-ats-greenhouse';
 import { HiringThingModule } from './source-ats-hiringthing';
 import { HomerunModule } from './source-ats-homerun';
 import { IcimsModule } from './source-ats-icims';
+import { JibeModule } from './source-ats-jibe';
 import { ISmartRecruitModule } from './source-ats-ismartrecruit';
 import { JazzHRModule } from './source-ats-jazzhr';
 import { JobScoreModule } from './source-ats-jobscore';
@@ -1871,6 +1872,15 @@ import { ZennoAstronauticsModule } from './source-company-zennoastronautics';
 import { ThermwoodModule } from './source-company-thermwood';
 import { LabsActorModule } from './source-company-labs_actor';
 import { SoundryxModule } from './source-company-soundryx';
+import { XgsEnergyModule } from './source-company-xgsenergy';
+import { RevoyModule } from './source-company-revoy';
+import { XlightModule } from './source-company-xlight';
+import { IntDynModule } from './source-company-int-dyn';
+import { ThoronUsModule } from './source-company-thoron_us';
+import { WercoMfgModule } from './source-company-wercomfg';
+import { CommaAiModule } from './source-company-comma_ai';
+import { BuildnebulaModule } from './source-company-buildnebula';
+import { MinervaHumanoidsModule } from './source-company-minervahumanoids';
 import { InhireModule } from './source-ats-inhire';
 import { JobsByLevelModule } from './source-jobsbylevel';
 import { SimplifyJobsModule } from './source-simplifyjobs';
@@ -1985,6 +1995,7 @@ export const ALL_SOURCE_MODULES = [
   HiringThingModule,
   HomerunModule,
   IcimsModule,
+  JibeModule,
   ISmartRecruitModule,
   JazzHRModule,
   JobScoreModule,
@@ -3822,6 +3833,15 @@ export const ALL_SOURCE_MODULES = [
   ThermwoodModule,
   LabsActorModule,
   SoundryxModule,
+  XgsEnergyModule,
+  RevoyModule,
+  XlightModule,
+  IntDynModule,
+  ThoronUsModule,
+  WercoMfgModule,
+  CommaAiModule,
+  BuildnebulaModule,
+  MinervaHumanoidsModule,
   InhireModule,
   JobsByLevelModule,
   SimplifyJobsModule,

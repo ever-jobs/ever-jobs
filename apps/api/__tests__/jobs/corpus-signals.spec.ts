@@ -28,7 +28,12 @@ function makeJobsServiceStub(corpus: () => JobPostDto[]): JobsServiceStub & {
     searchJobs: async () => corpus(),
     searchJobsWithDiagnostics: async () => {
       stub.diagnosticsCalls += 1;
-      return { jobs: corpus(), perSource: [], completeness: { ...COMPLETE_SEARCH } };
+      return {
+        jobs: corpus(),
+        perSource: [],
+        completeness: { ...COMPLETE_SEARCH },
+        rawBySource: {},
+      };
     },
   };
   return stub;

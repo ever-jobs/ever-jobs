@@ -27,6 +27,7 @@ import {
   TESLA_BOARD_PATH,
   TESLA_DEFAULT_DESCRIPTION_DEPTH,
   TESLA_DESCRIPTION_BUDGET,
+  TESLA_DETAIL_PATH_TEMPLATE,
   TESLA_HEADERS,
   TeslaBoardResponse,
   TeslaJobDetail,
@@ -113,6 +114,16 @@ describe('TeslaService (Spec 013 / T07 + T08 — pure-HTTP board + detail)', () 
   beforeEach(() => {
     mockGet.mockReset();
     mockSetHeaders.mockReset();
+    // Spec 5167: pin the browser-fallback loader off for the HTTP-path tests —
+    // `playwright` is installed in the workspace and would otherwise launch a
+    // real Chromium on every board-failure case.
+    jest
+      .spyOn(TeslaService.prototype as any, 'loadPlaywright')
+      .mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   // ────────────── T07 carry-over: registration + smoke ──────────────
@@ -131,8 +142,8 @@ describe('TeslaService (Spec 013 / T07 + T08 — pure-HTTP board + detail)', () 
     expect(Site.TESLA).toBe('tesla');
   });
 
-  it('exports the documented descriptionDepth budget map (board=0, detail-25=25, detail-all=Infinity)', () => {
-    expect(TESLA_DEFAULT_DESCRIPTION_DEPTH).toBe('detail-25');
+  it('exports the documented descriptionDepth budget map (default=board, detail-25=25, detail-all=Infinity)', () => {
+    expect(TESLA_DEFAULT_DESCRIPTION_DEPTH).toBe('board');
     expect(TESLA_DESCRIPTION_BUDGET.board).toBe(0);
     expect(TESLA_DESCRIPTION_BUDGET['detail-25']).toBe(25);
     expect(TESLA_DESCRIPTION_BUDGET['detail-all']).toBe(
@@ -220,6 +231,7 @@ describe('TeslaService (Spec 013 / T07 + T08 — pure-HTTP board + detail)', () 
       const input: ScraperInputDto = {
         siteType: [Site.TESLA],
         resultsWanted: 5,
+        descriptionDepth: 'detail-25',
       } as ScraperInputDto;
 
       const result = await service.scrape(input);
@@ -361,6 +373,7 @@ describe('TeslaService (Spec 013 / T07 + T08 — pure-HTTP board + detail)', () 
       const input: ScraperInputDto = {
         siteType: [Site.TESLA],
         resultsWanted: 2,
+        descriptionDepth: 'detail-25',
       } as ScraperInputDto;
 
       const result = await service.scrape(input);
@@ -425,5 +438,195 @@ describe('TeslaService (Spec 013 / T07 + T08 — pure-HTTP board + detail)', () 
       // department resolves normally even when location does not.
       expect(noLocRow?.department).toBe('Engineering');
     });
+  });
+});
+
+/**
+ * Spec 5167 — browser fallback. When the plain-HTTP board GET fails, scrape()
+ * retries through a lazily loaded headless Chromium session and issues the
+ * same cua-api fetches in-page.
+ *
+ * Cases:
+ *   1. HTTP 403 + playwright unavailable ⇒ empty DTO, never throws.
+ *   2. HTTP 403 + nav failure ⇒ empty DTO, browser closed.
+ *   3. HTTP 403 + in-page board ⇒ jobs emitted with `site === Site.TESLA`
+ *      (identical identity to the fast path); browser closed.
+ *   4. detail-25 depth ⇒ in-page detail fetches honoured per the budget
+ *      (explicit depth; the default is now 'board' per Spec 5167).
+ *   5. HTTP success ⇒ fallback never touched (loadPlaywright not called).
+ */
+describe('TeslaService browser fallback (Spec 5167)', () => {
+  const akamai403 = () => ({
+    message: 'Request failed with status 403',
+    response: { status: 403 },
+  });
+
+  const fakePage = {};
+  const fakeBrowser = {
+    newPage: jest.fn(async () => fakePage),
+    close: jest.fn(async () => undefined),
+  };
+  const fakePlaywright = {
+    chromium: { launch: jest.fn(async () => fakeBrowser) },
+  };
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockSetHeaders.mockReset();
+    fakeBrowser.newPage.mockClear();
+    fakeBrowser.close.mockClear();
+    fakePlaywright.chromium.launch.mockClear();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('returns empty JobResponseDto when playwright is unavailable', async () => {
+    mockGet.mockRejectedValueOnce(akamai403());
+    jest
+      .spyOn(TeslaService.prototype as any, 'loadPlaywright')
+      .mockResolvedValue(null);
+
+    const service = new TeslaService();
+    const result = await service.scrape({
+      siteType: [Site.TESLA],
+    } as ScraperInputDto);
+
+    expect(result).toBeInstanceOf(JobResponseDto);
+    expect(result.jobs).toEqual([]);
+  });
+
+  it('returns empty JobResponseDto when careers-page navigation fails, and closes the browser', async () => {
+    mockGet.mockRejectedValueOnce(akamai403());
+    jest
+      .spyOn(TeslaService.prototype as any, 'loadPlaywright')
+      .mockResolvedValue(fakePlaywright);
+    jest
+      .spyOn(TeslaService.prototype as any, 'openCareersPage')
+      .mockResolvedValue(false);
+
+    const service = new TeslaService();
+    const result = await service.scrape({
+      siteType: [Site.TESLA],
+    } as ScraperInputDto);
+
+    expect(result.jobs).toEqual([]);
+    expect(fakeBrowser.close).toHaveBeenCalled();
+  });
+
+  it('emits jobs with site=Site.TESLA via the in-page board fetch after an Akamai 403', async () => {
+    mockGet.mockRejectedValueOnce(akamai403());
+    jest
+      .spyOn(TeslaService.prototype as any, 'loadPlaywright')
+      .mockResolvedValue(fakePlaywright);
+    jest
+      .spyOn(TeslaService.prototype as any, 'openCareersPage')
+      .mockResolvedValue(true);
+    const fetchInPage = jest
+      .spyOn(TeslaService.prototype as any, 'fetchInPage')
+      .mockResolvedValue(BOARD_FIXTURE);
+
+    const service = new TeslaService();
+    const result = await service.scrape({
+      siteType: [Site.TESLA],
+      descriptionDepth: 'board',
+      resultsWanted: 2,
+    } as ScraperInputDto);
+
+    expect(result.jobs).toHaveLength(2);
+    expect(result.jobs.every((j) => j.site === Site.TESLA)).toBe(true);
+    expect(fetchInPage).toHaveBeenCalledWith(
+      fakePage,
+      `${TESLA_BASE_URL}${TESLA_BOARD_PATH}`,
+    );
+    // depth=board ⇒ no detail fetches.
+    expect(fetchInPage).toHaveBeenCalledTimes(1);
+    expect(fakeBrowser.close).toHaveBeenCalled();
+  });
+
+  it('escalates to a headed window when the headless session is still blocked', async () => {
+    mockGet.mockRejectedValueOnce(akamai403());
+    jest
+      .spyOn(TeslaService.prototype as any, 'loadPlaywright')
+      .mockResolvedValue(fakePlaywright);
+    jest
+      .spyOn(TeslaService.prototype as any, 'openCareersPage')
+      .mockResolvedValue(true);
+    jest
+      .spyOn(TeslaService.prototype as any, 'fetchInPage')
+      // headless attempt: all 3 in-page board polls still challenged
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      // headed attempt: unblocked on the first try
+      .mockResolvedValue(BOARD_FIXTURE);
+
+    const service = new TeslaService();
+    const result = await service.scrape({
+      siteType: [Site.TESLA],
+      descriptionDepth: 'board',
+      resultsWanted: 2,
+    } as ScraperInputDto);
+
+    expect(result.jobs).toHaveLength(2);
+    expect(fakePlaywright.chromium.launch).toHaveBeenCalledTimes(2);
+    const launchCalls = fakePlaywright.chromium.launch.mock.calls as any[];
+    expect(launchCalls[0][0].headless).toBe(true);
+    expect(launchCalls[1][0].headless).toBe(false);
+    expect(fakeBrowser.close).toHaveBeenCalledTimes(2);
+  });
+
+  it('honours the detail budget with in-page detail fetches', async () => {
+    mockGet.mockRejectedValueOnce(akamai403());
+    jest
+      .spyOn(TeslaService.prototype as any, 'loadPlaywright')
+      .mockResolvedValue(fakePlaywright);
+    jest
+      .spyOn(TeslaService.prototype as any, 'openCareersPage')
+      .mockResolvedValue(true);
+    const fetchInPage = jest
+      .spyOn(TeslaService.prototype as any, 'fetchInPage')
+      .mockImplementation(async (...args: unknown[]) => {
+        const url = args[1] as string;
+        if (url.includes(TESLA_BOARD_PATH)) return BOARD_FIXTURE;
+        if (url.includes('/200001')) return DETAIL_200001;
+        if (url.includes('/200002')) return DETAIL_200002;
+        return null;
+      });
+
+    const service = new TeslaService();
+    const result = await service.scrape({
+      siteType: [Site.TESLA],
+      descriptionDepth: 'detail-25',
+      resultsWanted: 2,
+    } as ScraperInputDto);
+
+    expect(result.jobs).toHaveLength(2);
+    expect(fetchInPage).toHaveBeenCalledTimes(3);
+    expect(fetchInPage).toHaveBeenCalledWith(
+      fakePage,
+      `${TESLA_BASE_URL}${TESLA_DETAIL_PATH_TEMPLATE.replace('{id}', '200001')}`,
+    );
+    expect(result.jobs[0].description).not.toBeNull();
+    expect(result.jobs[0].description).toContain('Tesla');
+  });
+
+  it('does not touch the fallback when the HTTP board GET succeeds', async () => {
+    mockGet.mockResolvedValueOnce({ data: BOARD_FIXTURE });
+    const loadPlaywright = jest
+      .spyOn(TeslaService.prototype as any, 'loadPlaywright')
+      .mockResolvedValue(fakePlaywright);
+
+    const service = new TeslaService();
+    const result = await service.scrape({
+      siteType: [Site.TESLA],
+      descriptionDepth: 'board',
+      resultsWanted: 2,
+    } as ScraperInputDto);
+
+    expect(result.jobs).toHaveLength(2);
+    expect(loadPlaywright).not.toHaveBeenCalled();
+    expect(fakePlaywright.chromium.launch).not.toHaveBeenCalled();
   });
 });

@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   PEOPLESTRONG_ROOT_DOMAIN,
@@ -392,11 +393,7 @@ export class PeopleStrongService implements IScraper {
       : typeof type === 'string' && type.toLowerCase() === 'jobposting';
     if (!isJobPosting) return null;
 
-    const loc = Array.isArray(ld.jobLocation) ? ld.jobLocation[0] : ld.jobLocation;
-    const address = loc?.address ?? null;
-    const country = address?.addressCountry;
-    const countryName =
-      typeof country === 'string' ? country : this.cleanText(country?.name);
+    const mapped = toLocationDto(ld.jobLocation);
 
     const idVal =
       ld.identifier && typeof ld.identifier === 'object'
@@ -406,9 +403,9 @@ export class PeopleStrongService implements IScraper {
     return {
       id: idVal ?? null,
       title: ld.title ?? null,
-      city: address?.addressLocality ?? null,
-      state: address?.addressRegion ?? null,
-      country: countryName ?? null,
+      city: mapped?.city ?? null,
+      state: mapped?.state ?? null,
+      country: mapped?.country ?? null,
       description: ld.description ?? null,
       postedDate: ld.datePosted ?? null,
       employmentType: Array.isArray(ld.employmentType)

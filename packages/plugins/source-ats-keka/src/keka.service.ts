@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   KEKA_HOST_TEMPLATE,
@@ -333,6 +334,7 @@ export class KekaService implements IScraper {
       this.leadingTitle(ogTitle) ??
       this.leadingTitle(titleTag);
 
+    const mapped = toLocationDto(posting?.jobLocation);
     const address = this.firstAddress(posting?.jobLocation);
     const companyName = this.organizationName(posting?.hiringOrganization);
     const descriptionHtml = this.cleanText(posting?.description);
@@ -343,9 +345,9 @@ export class KekaService implements IScraper {
       companyName: companyName ? this.decodeEntities(companyName) : null,
       descriptionHtml: descriptionHtml ? this.decodeEntities(descriptionHtml) : null,
       description: ogDescription ? this.decodeEntities(ogDescription) : null,
-      city: this.cleanText(address?.addressLocality),
-      state: this.cleanText(address?.addressRegion),
-      country: this.countryName(address?.addressCountry),
+      city: mapped?.city ?? null,
+      state: mapped?.state ?? null,
+      country: mapped?.country ?? null,
       department: this.cleanText(posting?.industry),
       employmentType: this.normaliseEmploymentType(posting?.employmentType),
       datePosted: this.parseDate(posting?.datePosted),
@@ -549,13 +551,6 @@ export class KekaService implements IScraper {
     if (!org) return null;
     if (typeof org === 'string') return this.cleanText(org);
     return this.cleanText(org.name);
-  }
-
-  /** Resolve the country display value (a bare code/name, or an object with `name`). */
-  private countryName(country: KekaPostalAddress['addressCountry']): string | null {
-    if (!country) return null;
-    if (typeof country === 'string') return this.cleanText(country);
-    return this.cleanText(country.name);
   }
 
   /**

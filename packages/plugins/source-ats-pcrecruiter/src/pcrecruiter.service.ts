@@ -19,6 +19,7 @@ import {
   parseLocationText,
   randomSleep,
   toDateOnly,
+  toLocationDto,
 } from '@ever-jobs/common';
 import {
   PCRECRUITER_BOARD_BASE,
@@ -473,12 +474,13 @@ export class PCRecruiterService implements IScraper {
     for (const place of places) {
       const addr = place?.address;
       if (!addr || typeof addr !== 'object') continue;
+      const d = toLocationDto(place);
       out.push({
-        city: this.clean(addr.addressLocality),
-        state: this.clean(addr.addressRegion),
-        postalCode: this.clean(addr.postalCode),
-        streetAddress: this.clean(addr.streetAddress),
-        country: this.clean(addr.addressCountry),
+        city: d?.city ?? null,
+        state: d?.state ?? null,
+        postalCode: d?.postalCode ?? null,
+        streetAddress: d?.streetAddress ?? null,
+        country: d?.country ?? null,
       });
     }
     return out;

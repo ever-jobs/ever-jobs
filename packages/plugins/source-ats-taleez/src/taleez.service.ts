@@ -17,6 +17,7 @@ import {
   markdownConverter,
   extractEmails,
   toDateOnly,
+  toLocationDtos,
 } from '@ever-jobs/common';
 import {
   TALEEZ_BASE,
@@ -38,8 +39,6 @@ import {
   TaleezJob,
   TaleezJobLink,
   TaleezJobPostingLd,
-  TaleezPlace,
-  TaleezPostalAddress,
 } from './taleez.types';
 
 /**
@@ -540,23 +539,9 @@ export class TaleezService implements IScraper {
     const empty = { city: null, state: null, country: null };
     const loc = ld?.jobLocation;
     if (!loc) return empty;
-    const places: TaleezPlace[] = Array.isArray(loc) ? loc : [loc];
-    for (const place of places) {
-      const addr: TaleezPostalAddress | null | undefined = place?.address;
-      if (!addr) continue;
-      const city = this.cleanText(addr.addressLocality);
-      const state = this.cleanText(addr.addressRegion);
-      const country = this.cleanText(this.countryName(addr.addressCountry));
-      if (city || state || country) return { city, state, country };
-    }
-    return empty;
-  }
-
-  /** Normalise an `addressCountry` (string or `{ name }`) to a string. */
-  private countryName(value: TaleezPostalAddress['addressCountry']): string | null {
-    if (!value) return null;
-    if (typeof value === 'string') return value;
-    return this.cleanText(value.name);
+    const dto = toLocationDtos(loc).find((d) => d.city || d.state || d.country);
+    if (!dto) return empty;
+    return { city: dto.city ?? null, state: dto.state ?? null, country: dto.country ?? null };
   }
 
   /** Detect remote roles from the title, location, or `jobLocationType`. */
