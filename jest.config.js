@@ -2011,9 +2011,26 @@ module.exports = {
       tsconfig: 'tsconfig.base.json',
       diagnostics: false,
     }],
+    // https-proxy-agent v9+ / socks-proxy-agent v10+ and their agent-base v9 /
+    // proxy-agent-negotiate dependencies are ESM-only too. axios's own nested
+    // CJS copies (node_modules/axios/node_modules/...) stay ignored below.
+    '[/\\\\]node_modules[/\\\\](https-proxy-agent|socks-proxy-agent|agent-base|proxy-agent-negotiate)[/\\\\].+\\.js$': ['ts-jest', {
+      tsconfig: 'tsconfig.base.json',
+      diagnostics: false,
+    }],
+    // NestJS 12 packages are ESM-only. Jest's own module loader cannot
+    // require() them even on Node 26 (checked on 26.10.0 with jest 30.5.2:
+    // "Must use import to load ES Module"; with --experimental-vm-modules it
+    // fails differently), so compile them to CommonJS. graphql-ws
+    // (`type: module`, pulled in by @nestjs/graphql 14) is covered in case a
+    // path resolves to its ESM `.js` build rather than its `.cjs` one.
+    '[/\\\\]node_modules[/\\\\](@nestjs|graphql-ws)[/\\\\].+\\.js$': ['@swc/jest', {
+      jsc: { parser: { syntax: 'ecmascript' }, target: 'es2021', keepClassNames: true },
+      module: { type: 'commonjs' },
+    }],
   },
   transformIgnorePatterns: [
-    'node_modules[/\\\\](?!(uuid)[/\\\\])',
+    'node_modules[/\\\\](?!(uuid|https-proxy-agent|socks-proxy-agent|agent-base|proxy-agent-negotiate|@nestjs|graphql-ws)[/\\\\])',
   ],
   // E2E tests hit live APIs — give each test generous timeout
   testTimeout: 120_000,

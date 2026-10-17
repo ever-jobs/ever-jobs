@@ -14,6 +14,9 @@ const REPO_ROOT = path.join(__dirname, '..', '..');
 const CONFIG_PATH = path.join(REPO_ROOT, 'jest.config.js');
 const TS_KEY = '^.+\\.tsx?$';
 const UUID_KEY = '[/\\\\]node_modules[/\\\\]uuid[/\\\\].+\\.js$';
+const PROXY_AGENTS_KEY =
+  '[/\\\\]node_modules[/\\\\](https-proxy-agent|socks-proxy-agent|agent-base|proxy-agent-negotiate)[/\\\\].+\\.js$';
+const NESTJS_KEY = '[/\\\\]node_modules[/\\\\](@nestjs|graphql-ws)[/\\\\].+\\.js$';
 
 type TransformEntry = [string, Record<string, unknown>];
 
@@ -78,11 +81,54 @@ describe('jest.config.js transformer switch (Spec 1689)', () => {
     const uuid = ['ts-jest', { tsconfig: 'tsconfig.base.json', diagnostics: false }];
     expect((swc.transform as Record<string, unknown>)[UUID_KEY]).toEqual(uuid);
     expect((typed.transform as Record<string, unknown>)[UUID_KEY]).toEqual(uuid);
+    expect((swc.transform as Record<string, unknown>)[PROXY_AGENTS_KEY]).toEqual(uuid);
+    expect((typed.transform as Record<string, unknown>)[PROXY_AGENTS_KEY]).toEqual(uuid);
+    expect((typed.transform as Record<string, unknown>)[NESTJS_KEY]).toEqual(
+      (swc.transform as Record<string, unknown>)[NESTJS_KEY],
+    );
+    expect(typed.transformIgnorePatterns).toEqual(swc.transformIgnorePatterns);
     expect(typed.moduleNameMapper).toEqual(swc.moduleNameMapper);
     expect(typed.testMatch).toEqual(swc.testMatch);
     expect(typed.roots).toEqual(swc.roots);
     expect(typed.maxWorkers).toBe(swc.maxWorkers);
     expect(typed.testTimeout).toBe(swc.testTimeout);
+  });
+
+  // NestJS 12, uuid and the proxy agents ship ESM-only `.js`; Jest's loader
+  // needs them compiled to CommonJS (still true on Node 26 with jest 30.5).
+  it('compiles the ESM-only NestJS 12 packages to CommonJS with swc', () => {
+    const [name, options] = (loadConfig(undefined).transform as Record<string, TransformEntry>)[NESTJS_KEY];
+    expect(name).toBe('@swc/jest');
+    expect(options).toMatchObject({
+      jsc: { parser: { syntax: 'ecmascript' }, keepClassNames: true },
+      module: { type: 'commonjs' },
+    });
+  });
+
+  it('lets exactly the ESM-only packages through transformIgnorePatterns', () => {
+    const patterns = (loadConfig(undefined).transformIgnorePatterns ?? []).map((p) => new RegExp(p));
+    const ignored = (file: string) => patterns.some((re) => re.test(file));
+    for (const file of [
+      '/repo/node_modules/uuid/dist-node/index.js',
+      '/repo/node_modules/@nestjs/common/index.js',
+      '/repo/node_modules/@nestjs/graphql/node_modules/graphql-ws/dist/index.js',
+      '/repo/node_modules/https-proxy-agent/dist/index.js',
+      '/repo/node_modules/socks-proxy-agent/dist/index.js',
+      '/repo/node_modules/agent-base/dist/index.js',
+      '/repo/node_modules/proxy-agent-negotiate/dist/index.js',
+      'C:\\repo\\node_modules\\@nestjs\\core\\index.js',
+    ]) {
+      expect([file, ignored(file)]).toEqual([file, false]);
+    }
+    for (const file of [
+      '/repo/node_modules/express/index.js',
+      // axios keeps its own CommonJS https-proxy-agent v5 / agent-base v6.
+      '/repo/node_modules/axios/node_modules/https-proxy-agent/dist/index.js',
+      '/repo/node_modules/axios/node_modules/agent-base/dist/index.js',
+      '/repo/node_modules/@nestjs/graphql/node_modules/ws/index.js',
+    ]) {
+      expect([file, ignored(file)]).toEqual([file, true]);
+    }
   });
 });
 

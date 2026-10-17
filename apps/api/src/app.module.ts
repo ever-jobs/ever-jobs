@@ -73,9 +73,11 @@ const ACTIVE_STORE_PROVIDERS = resolveStoreProviders(ACTIVE_STORE.id);
         // Apollo Server 5 removed the bundled GraphQL Playground (the old
         // `playground: true` pulled the deprecated, unmaintained
         // `@apollo/server-plugin-landing-page-graphql-playground`). @nestjs/apollo
-        // v13 serves the modern Apollo Sandbox landing page by default, so no
-        // explicit landing-page plugin is configured here — adding one throws
-        // "Only one plugin can implement renderLandingPage" at startup.
+        // v14 picks the landing page itself: GraphiQL outside production
+        // (NODE_ENV !== 'production'), none in production. (v13 still served
+        // GraphQL Playground there.) No explicit landing-page plugin is
+        // configured here — adding one throws "Only one plugin can implement
+        // renderLandingPage" at startup.
         path: config.get<string>('graphql.path', 'graphql'),
         introspection: true,
         // Disable GraphQL module entirely if env var is set

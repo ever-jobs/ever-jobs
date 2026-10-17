@@ -126,7 +126,7 @@ beforeEach(() => {
         url: String(cfg.url),
         method: String(cfg.method ?? 'get').toUpperCase(),
         params: cfg.params as Record<string, unknown> | undefined,
-        userAgent: (cfg.headers as AxiosHeaders).get('user-agent')?.toString(),
+        userAgent: (cfg.headers as InstanceType<typeof AxiosHeaders>).get('user-agent')?.toString(),
         at: Date.now(),
         callerMinIntervalMs: caller?.minIntervalMs,
       });

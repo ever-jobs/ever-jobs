@@ -135,7 +135,7 @@ export function wireTail(src: WiringSources, batch: WireDescriptor[]): WiringSou
       tsconfig = splice(
         tsconfig,
         at,
-        `      "@ever-jobs/${pkg}": ["packages/plugins/${pkg}/src/index.ts"],\n`,
+        `      "@ever-jobs/${pkg}": ["./packages/plugins/${pkg}/src/index.ts"],\n`,
       );
     }
 

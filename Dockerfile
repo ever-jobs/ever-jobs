@@ -1,10 +1,10 @@
 # ── Build stage ────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
 # Native-build toolchain for `better-sqlite3` (and any other node-gyp deps).
-# Alpine's node:20-alpine image ships without python3 / make / g++, so npm ci
+# Alpine's node:26-alpine image ships without python3 / make / g++, so npm ci
 # fails when node-gyp tries to compile native modules. The toolchain only
 # lives in the builder stage — the runtime stage copies prebuilt
 # node_modules and stays slim.
@@ -13,15 +13,17 @@ RUN apk add --no-cache python3 make g++ libc-dev openssl
 # Build native modules against the headers ALREADY IN THIS IMAGE instead of
 # downloading them.
 #
-# `better-sqlite3` publishes no prebuilt binary for musl, so `prebuild-install`
-# always misses and falls back to `node-gyp rebuild`. node-gyp then fetches
-# https://unofficial-builds.nodejs.org/download/release/v20.20.2/node-v20.20.2-headers.tar.gz,
+# `better-sqlite3` 13 ships a `linuxmusl-x64` prebuild, but `npm ci` still runs
+# npm's implicit `node-gyp rebuild` for it (its `binding.gyp` then compiles
+# nothing when the host has a prebuild). node-gyp still configures, needs
+# python3 and the headers, and without a nodedir it fetches
+# https://unofficial-builds.nodejs.org/download/release/v<version>/node-v<version>-headers.tar.gz,
 # and that host is reached from an ARC runner pod with unreliable egress — it
 # ETIMEDOUTs intermittently and fails the whole image build. It cost two
 # re-runs on 2026-08-01 alone (03:26 and 17:17); a plain re-run "fixed" it both
 # times, which is exactly what makes it easy to keep dismissing as noise.
 #
-# node:20-alpine already ships the complete header set at
+# node:<major>-alpine already ships the complete header set at
 # /usr/local/include/node (node.h, common.gypi, config.gypi), so pointing
 # node-gyp at it removes the download entirely — the build no longer depends on
 # reaching an external host at all.
@@ -54,7 +56,7 @@ RUN DATABASE_URL=postgresql://placeholder@localhost:5432/placeholder \
 RUN npx nest build
 
 # ── Runtime stage ──────────────────────────
-FROM node:20-alpine AS runtime
+FROM node:26-alpine AS runtime
 
 WORKDIR /app
 

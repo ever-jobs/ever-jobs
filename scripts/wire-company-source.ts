@@ -93,7 +93,7 @@ function main(): void {
     const alias = `"@ever-jobs/source-company-${d.slug}":`;
     if (tsSrc.includes(alias)) continue;
     const line =
-      `      "@ever-jobs/source-company-${d.slug}": ["packages/plugins/source-company-${d.slug}/src/index.ts"],\n`;
+      `      "@ever-jobs/source-company-${d.slug}": ["./packages/plugins/source-company-${d.slug}/src/index.ts"],\n`;
     // Anchor: the first existing source-company path alias line.
     const anchorMatch = tsSrc.match(/ {6}"@ever-jobs\/source-company-[^\n]+\n/);
     if (!anchorMatch) throw new Error('tsconfig source-company anchor not found');

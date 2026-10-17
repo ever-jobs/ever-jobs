@@ -32,6 +32,7 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { searchJobs, getJobDetails, listSources, searchRemoteJobs, getSalaryInsights, compareSources, JobSearchParams, CRAWL_POLICY_INPUT_SCHEMA, normalizeMcpCrawl } from './tools';
+import { listenOrExit } from './listen';
 
 const SERVER_NAME = 'ever-jobs';
 const SERVER_VERSION = '0.1.0';
@@ -472,7 +473,7 @@ async function startHttp(): Promise<void> {
   app.delete('/mcp', notAllowed);
 
   const port = Number(process.env.PORT ?? 3002);
-  app.listen(port, () => {
+  listenOrExit(app, port, () => {
     console.error(`Ever Jobs MCP Server v${SERVER_VERSION} started (HTTP/streamable mode) on :${port}`);
   });
 }

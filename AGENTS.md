@@ -192,7 +192,7 @@ plugin invisible):
 
 1. `packages/models/src/enums/site.enum.ts` — add the `Site.<KEY>` value.
 2. `packages/plugins/index.ts` — append to `ALL_SOURCE_MODULES`.
-3. `tsconfig.base.json` `paths` — `@ever-jobs/<plugin-id>: ["packages/plugins/<plugin-id>/src/index.ts"]`.
+3. `tsconfig.base.json` `paths` — `@ever-jobs/<plugin-id>: ["./packages/plugins/<plugin-id>/src/index.ts"]` (the leading `./` is required: there is no `baseUrl`).
 4. `jest.config.js` `moduleNameMapper` — mirror the path alias.
 
 For **feature plugins** (e.g. `dedup-hybrid`, `merge-default`, `store-postgres`,

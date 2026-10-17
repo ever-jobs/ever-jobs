@@ -514,7 +514,7 @@ export class RipplingService implements IScraper {
   private wireCountry(loc: RipplingLocation): string | null {
     const code = loc.countryCode ?? loc.country;
     return (
-      (code ? regionNameFromCode(code) ?? undefined : undefined) ??
+      (code ? regionNameFromCode(code) : undefined) ??
       loc.country?.trim() ??
       null
     );

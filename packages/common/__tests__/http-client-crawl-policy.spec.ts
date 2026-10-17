@@ -87,7 +87,7 @@ function attach(client: HttpClient, respond: (config: InternalAxiosRequestConfig
   let inFlight = 0;
   let maxInFlight = 0;
   client.getAxiosInstance().defaults.adapter = async (config: InternalAxiosRequestConfig) => {
-    const headers = config.headers as AxiosHeaders;
+    const headers = config.headers as InstanceType<typeof AxiosHeaders>;
     const index = sent.length;
     sent.push({
       url: String(config.url),

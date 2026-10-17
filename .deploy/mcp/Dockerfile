@@ -2,7 +2,7 @@
 # The MCP (apps/mcp) is a self-contained Node app (no @ever-jobs/* imports) that calls the Ever
 # Jobs REST API over HTTP, so it builds independently of the Nx monorepo.
 # ── Build ──────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 # apps/mcp/tsconfig.json extends ../../tsconfig.base.json — provide it at the repo-root path.
 COPY tsconfig.base.json ./tsconfig.base.json
@@ -14,7 +14,7 @@ COPY apps/mcp/src ./src
 RUN npm run build
 
 # ── Runtime ────────────────────────────────────────────
-FROM node:20-alpine AS runtime
+FROM node:26-alpine AS runtime
 WORKDIR /app/apps/mcp
 RUN apk add --no-cache curl
 COPY --from=builder /app/apps/mcp/node_modules ./node_modules

@@ -114,7 +114,7 @@ Add to three files:
 | ---------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `packages/models/src/enums/site.enum.ts` | `MYSOURCE = 'mysource'` to the `Site` enum                                                    |
 | `packages/plugins/index.ts`              | Import `MySourceModule` and add to `ALL_SOURCE_MODULES`                                       |
-| `tsconfig.base.json`                     | Path alias: `"@ever-jobs/source-mysource": ["packages/plugins/source-mysource/src/index.ts"]` |
+| `tsconfig.base.json`                     | Path alias: `"@ever-jobs/source-mysource": ["./packages/plugins/source-mysource/src/index.ts"]` |
 | `jest.config.js`                         | `moduleNameMapper` entry matching the tsconfig path                                           |
 
 ## Key Components

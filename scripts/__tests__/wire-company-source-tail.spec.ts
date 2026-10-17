@@ -40,10 +40,10 @@ const SOURCES: WiringSources = {
     '{',
     '  "compilerOptions": {',
     '    "paths": {',
-    '      "@ever-jobs/models": ["packages/models/src/index.ts"],',
-    '      "@ever-jobs/source-company-abbvie": ["packages/plugins/source-company-abbvie/src/index.ts"],',
-    '      "@ever-jobs/source-company-soundryx": ["packages/plugins/source-company-soundryx/src/index.ts"],',
-    '      "@ever-jobs/source-tesla": ["packages/plugins/source-tesla/src/index.ts"]',
+    '      "@ever-jobs/models": ["./packages/models/src/index.ts"],',
+    '      "@ever-jobs/source-company-abbvie": ["./packages/plugins/source-company-abbvie/src/index.ts"],',
+    '      "@ever-jobs/source-company-soundryx": ["./packages/plugins/source-company-soundryx/src/index.ts"],',
+    '      "@ever-jobs/source-tesla": ["./packages/plugins/source-tesla/src/index.ts"]',
     '    }',
     '  }',
     '}',
@@ -102,7 +102,7 @@ describe('wireTail', () => {
   it('appends path aliases and jest mappers after the last company entry', () => {
     const ts = lines(out.tsconfig);
     const tesla = ts.findIndex((x) => x.includes('source-tesla'));
-    expect(ts[tesla - 1]).toBe('      "@ever-jobs/source-company-3m": ["packages/plugins/source-company-3m/src/index.ts"],');
+    expect(ts[tesla - 1]).toBe('      "@ever-jobs/source-company-3m": ["./packages/plugins/source-company-3m/src/index.ts"],');
     expect(ts[tesla - 2]).toContain('source-company-salesforce');
     expect(ts[tesla - 3]).toContain('source-company-soundryx');
     expect(() => JSON.parse(out.tsconfig)).not.toThrow();

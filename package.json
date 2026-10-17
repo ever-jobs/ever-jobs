@@ -4,6 +4,9 @@
   "private": true,
   "description": "Ever Jobs — NestJS monorepo for multi-source job scraping",
   "license": "MIT",
+  "engines": {
+    "node": ">=26.0.0"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -40,76 +43,81 @@
     "@apollo/server": "^5.5.1",
     "@as-integrations/express5": "^1.1.2",
     "@keyv/redis": "^5.1.6",
-    "@nestjs/apollo": "^13.4.2",
-    "@nestjs/cache-manager": "^3.1.3",
-    "@nestjs/common": "^11.1.28",
-    "@nestjs/config": "^4.0.4",
-    "@nestjs/core": "^11.1.28",
-    "@nestjs/graphql": "^13.4.2",
-    "@nestjs/platform-express": "^11.1.28",
-    "@nestjs/swagger": "^11.4.5",
-    "@nestjs/throttler": "^6.5.0",
-    "@prisma/client": "^6.5.0",
-    "@scalar/nestjs-api-reference": "^1.2.9",
-    "axios": "^1.16.0",
-    "better-sqlite3": "^12.9.0",
+    "@nestjs/apollo": "^14.0.2",
+    "@nestjs/cache-manager": "^12.0.0",
+    "@nestjs/common": "^12.1.0",
+    "@nestjs/config": "^12.0.1",
+    "@nestjs/core": "^12.1.0",
+    "@nestjs/graphql": "^14.0.2",
+    "@nestjs/platform-express": "^12.1.0",
+    "@nestjs/swagger": "^12.0.2",
+    "@nestjs/throttler": "^6.7.1",
+    "@prisma/client": "^6.19.3",
+    "@scalar/nestjs-api-reference": "^1.2.23",
+    "axios": "^1.20.0",
+    "better-sqlite3": "^13.0.3",
     "cache-manager": "^7.2.9",
     "cacheable": "^2.5.0",
-    "cheerio": "^1.0.0",
+    "cheerio": "^1.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
-    "dotenv": "^17.2.4",
-    "drizzle-orm": "^0.45.2",
-    "exa-js": "^2.16.0",
-    "graphql": "^16.9.0",
-    "https-proxy-agent": "^7.0.0",
+    "dotenv": "^18.0.4",
+    "drizzle-orm": "^0.45.3",
+    "exa-js": "^2.23.0",
+    "graphql": "^16.14.2",
+    "https-proxy-agent": "^9.1.0",
     "keyv": "^5.6.0",
-    "nest-commander": "^3.20.1",
-    "playwright": "^1.58.2",
-    "prom-client": "^15.1.0",
-    "reflect-metadata": "^0.2.0",
+    "nest-commander": "^3.21.0",
+    "playwright": "^1.63.0",
+    "prom-client": "^15.1.3",
+    "reflect-metadata": "^0.2.2",
     "robots-parser": "^3.0.1",
-    "rxjs": "^7.8.0",
-    "socks-proxy-agent": "^8.0.0",
-    "tldts": "^7.4.11",
+    "rxjs": "^7.8.2",
+    "socks-proxy-agent": "^10.1.0",
+    "tldts": "^7.4.16",
     "tough-cookie": "^6.0.2",
-    "turndown": "^7.2.0",
-    "unpdf": "^1.6.2",
-    "uuid": "^13.0.0",
-    "zod": "^3.23.0"
+    "turndown": "^7.2.4",
+    "unpdf": "^1.8.1",
+    "uuid": "^14.0.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.24",
-    "@nestjs/schematics": "^11.1.0",
-    "@nestjs/testing": "^11.1.28",
+    "@nestjs/cli": "^12.0.7",
+    "@nestjs/schematics": "^12.0.5",
+    "@nestjs/testing": "^12.1.0",
     "@swc/core": "^1.16.2",
     "@swc/jest": "^0.2.39",
-    "@types/better-sqlite3": "^7.6.13",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/node": "^20.14.0",
-    "@types/supertest": "^6.0.3",
-    "@types/turndown": "^5.0.5",
-    "@types/uuid": "^10.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.65.0",
-    "@typescript-eslint/parser": "^8.65.0",
-    "eslint": "^10.8.0",
-    "jest": "^30.2.0",
-    "nx": "^19.0.0",
-    "prisma": "^6.5.0",
-    "supertest": "^7.2.2",
-    "testcontainers": "^12.0.4",
-    "ts-jest": "^29.4.12",
-    "ts-loader": "^9.5.4",
-    "ts-node": "^10.9.0",
+    "@types/node": "^26.6.3",
+    "@types/supertest": "^7.2.1",
+    "@types/turndown": "^5.0.6",
+    "@types/uuid": "^11.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.70.1",
+    "@typescript-eslint/parser": "^8.70.1",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "eslint": "^10.11.0",
+    "fork-ts-checker-webpack-plugin": "^9.1.0",
+    "jest": "^30.5.2",
+    "nx": "^23.2.1",
+    "prisma": "^6.19.3",
+    "supertest": "^7.3.0",
+    "testcontainers": "^12.1.0",
+    "ts-jest": "^29.4.14",
+    "ts-loader": "^9.6.2",
+    "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.5.0"
+    "tsconfig-paths-webpack-plugin": "^4.2.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "webpack": "^5.111.1",
+    "webpack-node-externals": "^3.0.0"
   },
   "overrides": {
     "lodash": "4.18.1",
-    "multer": "2.2.0",
-    "qs": "6.15.2",
-    "webpack": "5.106.2",
+    "multer": "2.4.0",
+    "qs": "6.16.0",
+    "webpack": "$webpack",
     "request": {
       "form-data": "2.5.6"
     },
@@ -117,32 +125,33 @@
       "tmp": "0.2.7"
     },
     "openai": {
-      "ws": "8.21.0"
+      "ws": "8.22.0"
     },
     "@nestjs/graphql": {
-      "ws": "8.21.0"
+      "ws": "8.22.0"
     },
     "nx": {
-      "minimatch": "10.2.5"
+      "minimatch": "10.2.6",
+      "smol-toml": "1.9.0"
     },
     "@angular-devkit/core": {
-      "picomatch": "4.0.4"
+      "picomatch": "4.0.7"
     },
     "testcontainers": {
-      "undici": "6.27.0"
+      "undici": "8.11.2"
     },
     "archiver": "^8.0.0",
     "babel-plugin-istanbul": "^8.0.0",
     "glob": "^13.0.6",
     "test-exclude": "^8.0.0",
     "minimatch@^10.0.0": {
-      "brace-expansion": "^5.0.8"
+      "brace-expansion": "^5.0.12"
     },
     "express": {
-      "body-parser": "1.20.5"
+      "body-parser": "1.20.8"
     },
     "@nestjs/platform-express": {
-      "body-parser": "1.20.5"
+      "body-parser": "1.20.8"
     },
     "dockerode": {
       "uuid": "11.1.1"
@@ -150,21 +159,21 @@
     "@apollo/server": {
       "uuid": "11.1.1"
     },
-    "fast-uri": "^3.1.4",
+    "fast-uri": "^3.1.8",
     "@nestjs/swagger": {
-      "js-yaml": "^4.3.0"
+      "js-yaml": "^4.3.2"
     },
     "cosmiconfig": {
-      "js-yaml": "^4.3.0"
+      "js-yaml": "^4.3.2"
     },
     "@istanbuljs/load-nyc-config": {
-      "js-yaml": "^3.15.0"
+      "js-yaml": "^3.15.2"
     },
     "@yarnpkg/parsers@3.0.0-rc.46": {
-      "js-yaml": "^3.15.0"
+      "js-yaml": "^3.15.2"
     },
     "front-matter": {
-      "js-yaml": "^3.15.0"
+      "js-yaml": "^3.15.2"
     }
   }
 }

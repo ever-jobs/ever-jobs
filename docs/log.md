@@ -5,6 +5,188 @@
 
 ---
 
+## 2026-09-27 — Dependency majors on Node 26 (replaces dependabot PR #95): NestJS 12 family, TypeScript 7 with TypeScript 6 side by side, nx 23, zod 4, uuid 14, better-sqlite3 13, express 5 in apps/mcp
+
+**Why:** dependabot's `npm-major` group (#95) cannot merge. Its `npm ci` fails with ERESOLVE,
+because `@apollo/server` 5 accepts no graphql 17. This change replaces it on current develop. On
+the owner's direction it also moves the runtime to Node 26 and takes the latest version of every
+dependency that works, including packages #95 did not list. Each package held back names its
+blocker below.
+
+**Runtime:** Node 26 everywhere: both stages of the API `Dockerfile` and of the MCP image's
+`.deploy/mcp/Dockerfile` (`node:26-alpine`), every `node-version` in `ci.yml` (including the build
+matrix), `engines.node` `>=26.0.0`, `@types/node` ^26.6.3 (root
+and `apps/mcp`), README and DEPLOYMENT.md. NestJS 12, uuid 14 and the proxy agents ship as ES
+modules only. The compiled CommonJS API loads them through `require(esm)`, which Node 26 enables by
+default.
+
+**Taken** (range, and what the lockfile resolves):
+
+- The NestJS 12 family: `common`, `core`, `platform-express` and `testing` ^12.1.0, `config`
+  ^12.0.1, `cache-manager` ^12.0.0, `swagger` ^12.0.2, `graphql` and `apollo` ^14.0.2, `cli`
+  ^12.0.7 and `schematics` ^12.0.5. It needs two companion bumps that #95 lacked:
+  `@nestjs/throttler` ^6.7.1 and `nest-commander` ^3.21.0.
+- TypeScript 7.0.2, installed side by side with TypeScript 6 as the TypeScript team documents for
+  7.0. `@typescript/native` is `typescript@^7.0.2`: `npx tsc` runs it, so do the two CI type-check
+  steps and the `apps/mcp` build. TypeScript 7.0 ships no JavaScript compiler API, so `typescript`
+  is an alias of `@typescript/typescript6` ^6.0.2. webpack's ts-loader, ts-jest, ts-node,
+  typescript-eslint and `@nestjs/cli` load TypeScript 6 through it, and `npx tsc6` runs it
+  directly.
+- `nx` ^23.2.1, `jest` ^30.5.2, `ts-jest` ^29.4.14, `eslint` ^10.11.0, `@typescript-eslint/*`
+  ^8.70.1.
+- `zod` ^4.6.5 (root and `apps/mcp`), `uuid` ^14.0.2, `@types/uuid` ^11.0.0 (a deprecated stub,
+  kept), `dotenv` ^18.0.4, `https-proxy-agent` ^9.1.0, `socks-proxy-agent` ^10.1.0,
+  `better-sqlite3` ^13.0.3, `@types/better-sqlite3` ^9.6.0 and `@types/supertest` ^7.2.1.
+- Every other direct dependency is at its latest minor or patch: `axios` 1.20.0, `playwright`
+  1.63.0, `exa-js` 2.23.0, `@scalar/nestjs-api-reference` 1.2.23, `unpdf` 1.8.1, `tldts` 7.4.16,
+  `drizzle-orm` 0.45.3, `testcontainers` 12.1.0 and `supertest` 7.3.0, among others. After the
+  change, `npm outdated` lists only the held-back packages, plus `@types/uuid` 11.0.0, which it
+  shows as newer than the 10.0.0 it reports as latest.
+- In `apps/mcp`: `express` ^5.2.1, `@types/express` ^5.0.6, `@modelcontextprotocol/sdk` ^1.30.1
+  and `axios` ^1.20.0.
+
+**Required changes:**
+
+- **Build toolchain.** `@nestjs/cli` 12 turns the webpack toolchain into optional peers, and
+  `nest-cli.json` builds with webpack. So `webpack` ^5.111.1, `webpack-node-externals`,
+  `tsconfig-paths-webpack-plugin` and `fork-ts-checker-webpack-plugin` are now direct
+  devDependencies. The `webpack` override now points at that dependency (`$webpack`) instead of
+  pinning 5.106.2.
+- **`tsconfig.base.json`.** TypeScript 7 removes `baseUrl` and `moduleResolution: node`, so
+  resolution is `bundler` and every `paths` entry starts with `./`. `types` lists `node` and `jest`.
+  `lib` adds `es2022.array`, because `@types/node` 26 no longer declares `Array.prototype.at`. The
+  two wiring scripts (`scripts/wire-company-source*.ts`), their spec, `AGENTS.md` and
+  `docs/PLUGIN_ARCHITECTURE.md` now write the `./` form. `apps/mcp/tsconfig.json` sets `types` to
+  `node`: the MCP image installs only `apps/mcp`'s dependencies, and without that setting its `tsc`
+  failed with TS2688 (no `jest` type definitions), reproduced by a local copy of the image's build
+  steps.
+- **Type fixes, no runtime change.** Three specs name the `AxiosHeaders` type as
+  `InstanceType<typeof AxiosHeaders>`. `rippling.service.ts` drops a `?? undefined` that
+  TypeScript 6 and 7 reject as always nullish (TS2871).
+- **Jest.** `jest.config.js` compiles `node_modules/@nestjs/**` and `graphql-ws` to CommonJS with
+  swc. It also widens the uuid ts-jest rule to the proxy agents and their `agent-base` and
+  `proxy-agent-negotiate` dependencies. Jest's module loader still cannot `require()` those ESM
+  files on Node 26: checked on 26.10.0 with jest 30.5.2, it fails with "Must use import to load ES
+  Module". `jest-transformer.spec.ts` pins both rules for both transformer modes. The new
+  `http-client-proxy-agent.spec.ts` checks that the egress guard's `lookup` still reaches both
+  proxy agents.
+- **zod.** `canonical-job.schema.ts` imports `zod/v3`, the complete Zod 3 API that zod 4 ships.
+  Validation, issue codes and messages, and the inferred types are unchanged.
+- **MCP HTTP mode.** Express 5 hands a listen failure to the `app.listen` callback instead of
+  crashing. `listenOrExit` (`apps/mcp/src/listen.ts`) keeps "port in use" fatal, with `Fatal
+  error:` and exit code 1. `listen.spec.ts` tests this, and so did a run of the compiled server on
+  an occupied port. The bump also removes the nested express 4 subtree whose `array-flatten` and
+  `utils-merge` were missing from the lockfile, so the MCP server starts again.
+- **Overrides.** Nothing was removed. Each pin is raised to its latest, so that none pins below
+  what a new package requires or below a security fix: `multer` 2.4.0, `qs` 6.16.0, `ws` 8.22.0,
+  `minimatch` 10.2.6, `picomatch` 4.0.7, `undici` 8.11.2 for testcontainers (which wants ^8.9.0),
+  and `body-parser` 1.20.8 under express and `@nestjs/platform-express`. The old pin, 1.20.5, sat
+  below 1.20.6, the fix for GHSA-v422-hmwv-36x6. The floors of the `js-yaml` (^4.3.2, ^3.15.2),
+  `fast-uri` (^3.1.8) and `brace-expansion` (^5.0.12) overrides now start at their fixed
+  releases. One entry was added: `nx` pins `smol-toml` to exactly 1.6.1 (GHSA-7w5x-hrqm-74c2),
+  so the `nx` override now also sets `smol-toml` 1.9.0. nx reads TOML only for `bunfig.toml` and
+  its AI-agent setup; neither runs here. `npm audit fix` (without `--force`) then moved `hono`,
+  `fast-uri`, `brace-expansion` and `@istanbuljs`' `js-yaml` to their fixed releases inside their
+  existing ranges. `npm audit` now reports only the Prisma 6 finding listed under Held back.
+- **Comments.** The `app.module.ts` comment now says that v14 serves GraphiQL outside production;
+  v13 served GraphQL Playground there, not Apollo Sandbox. The Dockerfile comment now says that
+  better-sqlite3 13 ships a musl prebuild, but `npm ci` still runs npm's implicit `node-gyp rebuild`
+  for it. So the builder's toolchain and `npm_config_nodedir` stay.
+
+**Behaviour:** the public contract was compared byte for byte in two ways: against the develop
+baseline (Node 20), and against develop's own build booted on Node 26 under the same conditions.
+The contract covers:
+
+- Swagger JSON and YAML, GraphQL introspection and SDL, the route list and the metric names.
+- All 46 REST and GraphQL probes, in development and production mode: status, header names and
+  bodies of the validation 400 envelopes, malformed JSON, 404, CSV, NDJSON and paginated search,
+  the query-parser cases, the CORS preflight and the 503.
+- The MCP `tools/list`, all 16 stdio exchanges and `tool_manifest.json`.
+
+All of it is identical. There are three differences, and none is in an API route's data:
+
+- `/docs` (Scalar, `@scalar/nestjs-api-reference` 1.2.11 → 1.2.23) loads the Scalar bundle as an
+  ES module from the same CDN, and escapes `<` and `>` in the embedded OpenAPI document as
+  `\u003c` and `\u003e`. The document it embeds is the same.
+- `GET /graphql` as HTML, in development only, serves GraphiQL instead of GraphQL Playground (the
+  `@nestjs/apollo` 14 default). Production serves no landing page in either version (verified).
+  Keeping Playground would need `@apollo/server-plugin-landing-page-graphql-playground`, which is
+  deprecated and peers `@apollo/server` ^4 (ERESOLVE against 5.5.1).
+- MCP streamable-HTTP (SSE) responses gain `Cache-Control: no-cache, no-transform` (was
+  `no-cache`) and `X-Accel-Buffering: no`, from `@modelcontextprotocol/sdk` 1.30. Both headers stop
+  proxies from buffering the stream. The bodies are identical. The MCP's development-mode error
+  page for malformed JSON differs only in the file paths and line numbers of its stack trace.
+
+Node 26 on its own changed nothing: develop's build on Node 26 matches the Node 20 baseline except
+for file paths in a development-mode stack trace. The compiled CLI fails with the same
+`UnknownDependenciesException` signature as on develop. That failure is pre-existing: `CliModule`
+cannot resolve `PluginRegistry`.
+
+**Verified on Node 26.10.0 / npm 11.19.1 (Windows):**
+
+- `npm ci` from the regenerated lockfile (v3): exit 0, 1050 packages. Every check below ran on
+  that install.
+- Both type-checks (TypeScript 7), `nest build` for the API and the CLI, and the `apps/mcp` build:
+  all pass. `npm run build` (nx) passes with `NX_PLUGIN_NO_TIMEOUTS=true` on this saturated host
+  (see Notes).
+- The compiled MCP server, started in HTTP mode on a port that is already in use, prints `Fatal
+  error: ... EADDRINUSE` and exits with code 1.
+- `test:core`: 124 suites passed and 1 skipped; 4495 tests passed and 4 pending (gated on
+  `RUN_PG_TESTS`). Every baseline test passes, plus 7 new tests.
+- `test:scripts`: 20/20 suites, 321/321 tests.
+- The CI feature-plugin set: 18/18 suites, with 586 tests passed and 85 pending (the gated
+  Postgres and store-memory blocks).
+- `apps/mcp`: 7/7 suites, 82/82 tests.
+- The CI `test-fast` health suite: 2/2 tests.
+- `test:typed` (ts-jest on TypeScript 6) on a subset of 14 suites, including the two new ones: 405/405
+  tests.
+- `lint:docs`: passes.
+- OFFLINE-SOURCES-PLACEHOLDER
+
+The Docker images were not built locally, because Docker Desktop is not running on this
+workstation. The CI `Docker Build` job builds the API image and boots it. The MCP image's build
+steps were reproduced on Windows with Node 26: `npm install` of `apps/mcp` alone, `tsc`, and a
+boot. Its `tools/list` and stdio exchanges match the worktree build byte for byte.
+
+**Notes:**
+
+- nx 23 loads its plugins in isolated workers with fixed 10 s and 30 s handshake timeouts, and
+  nx 19 did not isolate plugins. On a host at 100% CPU, `npm run build` failed on those timeouts
+  twice. `nx show projects` either failed on them or did not finish within 200 s, with Node 24.14
+  and Node 26 alike. With `NX_PLUGIN_NO_TIMEOUTS=true` the same build passed, and its output was
+  byte-identical to the `nest build` steps. CI does not use nx: it calls `nest build` directly.
+- `npm ls` reports two peer mismatches that have no fix upstream. The first is
+  `@golevelup/nestjs-discovery` 7.0.3, the latest (via nest-commander 3.21), which peers NestJS
+  ^11. The second is the optional `chokidar` ^5 peer of the `@angular-devkit/core` copies under
+  the schematics packages; that peer is used only by schematics' watch mode. `npm ci` passes with
+  both.
+- npm 11 lists 13 dependencies whose install scripts are not yet in an `allowScripts` field. It
+  still runs them: the policy only warns unless `strict-allow-scripts` is set.
+
+**Held back:**
+
+- `graphql` 17.0.2. `@apollo/server` 5.5.1, the latest, peers `graphql` ^16.11.0: this is the
+  ERESOLVE that broke #95. graphql stays on 16.14.2, the latest 16.x.
+- `prisma` and `@prisma/client` 7.10.0; the `latest` tag now points at 8.0.0-rc.17, a release
+  candidate. Prisma 7 removes `new PrismaClient({ datasourceUrl })`, which
+  `store-bootstrap.factory.ts` uses. It also removes the schema's datasource `url`, and requires a
+  driver adapter (`@prisma/adapter-pg`) and a `prisma.config.ts` for migrate. The store's
+  `DATABASE_URL` parameters would need a compatibility shim and a real-Postgres verification. That
+  migration belongs in its own PR. Both packages stay on 6.19.3, the latest 6.x. This hold keeps
+  one `npm audit` finding open: `@prisma/config` 6.x pins `deepmerge-ts` 7.1.5
+  (GHSA-ggr8-5vv4-36mx, fixed in 8.0.0). The CLI loads it when it reads its config: generate and
+  migrate. The API never loads it.
+
+**Files:** `package.json`, `package-lock.json`, `apps/mcp/{package.json,tsconfig.json}`, `Dockerfile`,
+`.deploy/mcp/Dockerfile`, `.github/workflows/ci.yml`, `tsconfig.base.json`, `jest.config.js`,
+`apps/mcp/src/{index.ts,listen.ts}`, `apps/mcp/__tests__/listen.spec.ts`,
+`packages/common/__tests__/http-client-proxy-agent.spec.ts`,
+`packages/models/src/schemas/canonical-job.schema.ts`,
+`packages/plugins/source-ats-rippling/src/rippling.service.ts`, three specs (`AxiosHeaders` type),
+`scripts/wire-company-source{,-tail}.ts`, `scripts/__tests__/{jest-transformer,wire-company-source-tail}.spec.ts`,
+`apps/api/src/app.module.ts` (comment), `README.md`, `AGENTS.md`, `docs/DEPLOYMENT.md`,
+`docs/PLUGIN_ARCHITECTURE.md`, this log.
+
 ## 2026-09-26 — Spec 1723 — merge: Specs 1720-1724 (with develop's Specs 1690-1713) into Spec 1730
 
 - The aggregator runs dedup, the Spec 1700 exclusions, dedup keys, then career-level classification and the `careerLevels` filter: a job must pass both filters. `AggregateRawOptions` still requires the `careerLevels` key, so every call site passes it next to `exclusions` (REST/NDJSON `runSearch`, GraphQL).

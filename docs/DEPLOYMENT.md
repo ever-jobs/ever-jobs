@@ -34,6 +34,18 @@ This mounts your source code for hot-reload and enables debug logging.
 
 ## Development (Local)
 
+Requires Node.js 26, the version the Docker image (`node:26-alpine`) and CI use. `package.json`
+declares it as `engines.node` (`>=26.0.0`). NestJS 12, uuid, https-proxy-agent and
+socks-proxy-agent ship as ES modules only, and the compiled CommonJS API loads them through
+`require(esm)`, which Node 26 enables by default.
+
+TypeScript runs side by side, as the TypeScript team documents for 7.0: `npx tsc` is
+TypeScript 7 (the native compiler, installed as `@typescript/native`). CI runs it for the
+type-check steps, and `apps/mcp` builds with it. TypeScript 7.0 has no JavaScript compiler
+API, so `typescript` is an alias of `@typescript/typescript6`: webpack's ts-loader, ts-jest,
+ts-node, typescript-eslint and the codemods load TypeScript 6 through it (`npx tsc6` runs it
+directly).
+
 ```bash
 npm install
 npm run start:dev

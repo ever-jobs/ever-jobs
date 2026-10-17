@@ -3,8 +3,8 @@
 > A modular, extensible NestJS monorepo for aggregating job postings from multiple job boards.
 
 ![visitors](https://visitor-badge.laobi.icu/badge?page_id=ever-co.ever-jobs)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
-[![NestJS](https://img.shields.io/badge/NestJS-10.x-e0234e.svg)](https://nestjs.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7.x-blue.svg)](https://www.typescriptlang.org/)
+[![NestJS](https://img.shields.io/badge/NestJS-12.x-e0234e.svg)](https://nestjs.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ## ⭐️ Overview
@@ -227,7 +227,9 @@ Direct integrations with major tech companies' career APIs.
 
 ### Prerequisites
 
-- **Node.js** ≥ 18.x
+- **Node.js** 26 (`engines.node` is `>=26.0.0`; the Docker image `node:26-alpine` and CI run
+  Node 26). NestJS 12 and several other dependencies ship as ES modules only; the CommonJS build
+  loads them through `require(esm)`, which Node 26 enables by default.
 - **npm** ≥ 9.x
 
 ### Installation

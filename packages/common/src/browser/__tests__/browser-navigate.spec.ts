@@ -352,7 +352,7 @@ describe('BrowserPool.navigate (Spec 1690)', () => {
       expect((err as Error).message).not.toContain('secret');
       expect(page.goto.mock.calls.map((c) => c[0])).toEqual(['https://shop.example.com/jobs']);
       expect(fetched.map((c) => c.url)).toEqual(['https://shop.example.com/robots.txt']);
-      expect((fetched[0].headers as AxiosHeaders).get('User-Agent')).toBe(EVER_JOBS_DEFAULT_USER_AGENT);
+      expect((fetched[0].headers as InstanceType<typeof AxiosHeaders>).get('User-Agent')).toBe(EVER_JOBS_DEFAULT_USER_AGENT);
       // robots.txt fetch + the allowed navigation each took a slot of the host's bucket.
       expect(acquire.mock.calls.map((c) => c[0])).toEqual(['host:shop.example.com', 'host:shop.example.com']);
     });

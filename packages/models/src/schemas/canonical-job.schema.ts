@@ -1,4 +1,7 @@
-import { z } from 'zod';
+// zod 4 ships the complete Zod 3 API at `zod/v3` (kept there permanently).
+// These boundary schemas stay on it so their validation, issue codes and
+// messages and inferred types do not change with the zod 4 upgrade.
+import { z } from 'zod/v3';
 import { Site } from '../enums/site.enum';
 
 /**
