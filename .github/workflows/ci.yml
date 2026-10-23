@@ -40,7 +40,7 @@ jobs:
           cache: npm
 
       - name: Configure Registry
-        uses: ever-co/ever-gauzy/.github/actions/configure-registry@aa4ee19926fabcf820aa1294385a76aec6bdb548
+        uses: ever-co/ever-gauzy/.github/actions/configure-registry@b8dfc31a33078b1ffa3660517bf90565b6bb1842
         with:
           verdaccio-registry: ${{ vars.VERDACCIO_REGISTRY }}
           verdaccio-token: ${{ secrets.VERDACCIO_TOKEN }}
@@ -84,7 +84,7 @@ jobs:
           cache: npm
 
       - name: Configure Registry
-        uses: ever-co/ever-gauzy/.github/actions/configure-registry@aa4ee19926fabcf820aa1294385a76aec6bdb548
+        uses: ever-co/ever-gauzy/.github/actions/configure-registry@b8dfc31a33078b1ffa3660517bf90565b6bb1842
         with:
           verdaccio-registry: ${{ vars.VERDACCIO_REGISTRY }}
           verdaccio-token: ${{ secrets.VERDACCIO_TOKEN }}
@@ -136,7 +136,7 @@ jobs:
           cache: npm
 
       - name: Configure Registry
-        uses: ever-co/ever-gauzy/.github/actions/configure-registry@aa4ee19926fabcf820aa1294385a76aec6bdb548
+        uses: ever-co/ever-gauzy/.github/actions/configure-registry@b8dfc31a33078b1ffa3660517bf90565b6bb1842
         with:
           verdaccio-registry: ${{ vars.VERDACCIO_REGISTRY }}
           verdaccio-token: ${{ secrets.VERDACCIO_TOKEN }}
@@ -185,7 +185,7 @@ jobs:
           cache: npm
 
       - name: Configure Registry
-        uses: ever-co/ever-gauzy/.github/actions/configure-registry@aa4ee19926fabcf820aa1294385a76aec6bdb548
+        uses: ever-co/ever-gauzy/.github/actions/configure-registry@b8dfc31a33078b1ffa3660517bf90565b6bb1842
         with:
           verdaccio-registry: ${{ vars.VERDACCIO_REGISTRY }}
           verdaccio-token: ${{ secrets.VERDACCIO_TOKEN }}
@@ -222,7 +222,7 @@ jobs:
           cache: npm
 
       - name: Configure Registry
-        uses: ever-co/ever-gauzy/.github/actions/configure-registry@aa4ee19926fabcf820aa1294385a76aec6bdb548
+        uses: ever-co/ever-gauzy/.github/actions/configure-registry@b8dfc31a33078b1ffa3660517bf90565b6bb1842
         with:
           verdaccio-registry: ${{ vars.VERDACCIO_REGISTRY }}
           verdaccio-token: ${{ secrets.VERDACCIO_TOKEN }}
@@ -289,7 +289,7 @@ jobs:
           cache: npm
 
       - name: Configure Registry
-        uses: ever-co/ever-gauzy/.github/actions/configure-registry@aa4ee19926fabcf820aa1294385a76aec6bdb548
+        uses: ever-co/ever-gauzy/.github/actions/configure-registry@b8dfc31a33078b1ffa3660517bf90565b6bb1842
         with:
           verdaccio-registry: ${{ vars.VERDACCIO_REGISTRY }}
           verdaccio-token: ${{ secrets.VERDACCIO_TOKEN }}
@@ -330,7 +330,7 @@ jobs:
           cache: npm
 
       - name: Configure Registry
-        uses: ever-co/ever-gauzy/.github/actions/configure-registry@aa4ee19926fabcf820aa1294385a76aec6bdb548
+        uses: ever-co/ever-gauzy/.github/actions/configure-registry@b8dfc31a33078b1ffa3660517bf90565b6bb1842
         with:
           verdaccio-registry: ${{ vars.VERDACCIO_REGISTRY }}
           verdaccio-token: ${{ secrets.VERDACCIO_TOKEN }}
@@ -384,7 +384,7 @@ jobs:
           cache: npm
 
       - name: Configure Registry
-        uses: ever-co/ever-gauzy/.github/actions/configure-registry@aa4ee19926fabcf820aa1294385a76aec6bdb548
+        uses: ever-co/ever-gauzy/.github/actions/configure-registry@b8dfc31a33078b1ffa3660517bf90565b6bb1842
         with:
           verdaccio-registry: ${{ vars.VERDACCIO_REGISTRY }}
           verdaccio-token: ${{ secrets.VERDACCIO_TOKEN }}
