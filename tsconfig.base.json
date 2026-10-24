@@ -10,7 +10,7 @@
     "importHelpers": true,
     "target": "ES2021",
     "module": "commonjs",
-    "lib": ["es2021"],
+    "lib": ["es2021", "es2022.array", "es2022.string"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
