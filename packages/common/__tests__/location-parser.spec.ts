@@ -801,7 +801,10 @@ describe('parser throughput (Spec 1689)', () => {
     const ms = bestOf3Ms(() => {
       for (const label of labels) parseLocationList([label]);
     });
-    expect(ms).toBeLessThan(1500);
+    // Shared CI runners are often CPU-starved (steps run 4-5x slower than on a dev machine), so a
+    // wall-clock budget there is 3x the local one; a real regression (e.g. per-call regex compile)
+    // still blows through it.
+    expect(ms).toBeLessThan(process.env.CI ? 4500 : 1500);
   });
 
   it('handles a posting with 2,000 sites without quadratic blow-up and keeps dedup semantics', () => {
