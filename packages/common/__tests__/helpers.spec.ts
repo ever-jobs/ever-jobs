@@ -379,6 +379,20 @@ describe('parseSalaryCurrency (Spec 012 / T01)', () => {
     expect(result.confidence).toBe('country');
   });
 
+  it('finds a stand-alone ISO code after one buried inside a longer word', () => {
+    // "EUROPEAN" contains `EUR` but is not a code; the real `EUR` after it
+    // must still be detected (it used to fall through to the USD default).
+    const result = parseSalaryCurrency('European remote role. Salary: EUR 70.000 - 90.000');
+    expect(result).toEqual({ code: 'EUR', symbol: null, confidence: 'iso' });
+  });
+
+  it('extractSalary keeps the EUR range when a longer word precedes the code', () => {
+    const result = extractSalary('European remote role. Salary: EUR 70.000 - 90.000');
+    expect(result.currency).toBe('EUR');
+    expect(result.minAmount).toBe(70000);
+    expect(result.maxAmount).toBe(90000);
+  });
+
   // ─── Spec 014 / T01 — `$` symbol promotion (Q-027 / FR-1) ─────────
   //
   // Before T01, `$` was implicit USD via the FR-7 default branch.
