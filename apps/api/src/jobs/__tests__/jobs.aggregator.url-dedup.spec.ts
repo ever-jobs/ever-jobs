@@ -5,14 +5,20 @@ import { DEDUP_BY_URL_ENV, JobsAggregator } from '../jobs.aggregator';
 
 /** Spec 1754 — canonical-URL skip pass in the aggregator (default off). */
 
-function job(id: string, jobUrl: string, title = 'Backend Engineer'): JobPostDto {
+function job(
+  id: string,
+  jobUrl: string,
+  overrides: Partial<JobPostDto> & { city?: string } = {},
+): JobPostDto {
+  const { city = 'Austin', ...rest } = overrides;
   return new JobPostDto({
     id,
     site: Site.LINKEDIN,
-    title,
+    title: 'Backend Engineer',
     companyName: id.startsWith('z') ? 'Zeta Ltd' : 'Acme Corp',
     jobUrl,
-    location: new LocationDto({ city: 'Austin', state: 'TX' }),
+    location: new LocationDto({ city, state: 'TX' }),
+    ...rest,
   });
 }
 
@@ -28,7 +34,7 @@ describe('JobsAggregator — url dedup (Spec 1754)', () => {
 
   const raw = () => [
     job('a1', 'https://Example.com/jobs/1?utm_source=feed'),
-    job('z2', 'https://example.com/jobs/1?utm_medium=mail'),
+    job('a2', 'https://example.com/jobs/1?utm_medium=mail'),
     job('z3', 'https://example.com/jobs/3'),
   ];
 
@@ -61,5 +67,46 @@ describe('JobsAggregator — url dedup (Spec 1754)', () => {
     expect(result.urlDuplicatesSkipped).toBe(1);
     expect(result.jobs.map((j) => j.id)).toEqual(['a1', 'z3']);
     for (const out of result.jobs) expect(out.dedupKey).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('keeps the same title in two cities that share one listing URL', async () => {
+    const shared = 'https://example.com/careers';
+    const result = await new JobsAggregator(jobsService).aggregateRaw(
+      [job('a1', shared, { city: 'Austin' }), job('a2', shared, { city: 'Berlin' }), job('a3', `${shared}?utm_source=x`, { city: 'Austin' })],
+      { ...opts, dedupByUrl: true },
+    );
+    expect(result.jobs.map((j) => j.id)).toEqual(['a1', 'a2']);
+    expect(result.urlDuplicatesSkipped).toBe(1);
+  });
+
+  it('keeps the same title at two companies that share one listing URL', async () => {
+    const shared = 'https://example.com/careers';
+    const result = await new JobsAggregator(jobsService).aggregateRaw(
+      [job('a1', shared), job('z2', shared)],
+      { ...opts, dedupByUrl: true },
+    );
+    expect(result.jobs).toHaveLength(2);
+    expect(result.urlDuplicatesSkipped).toBeUndefined();
+  });
+
+  it('never hides a duplicate the exclusion filter matches', async () => {
+    // a1 is clean, a2 (same link) mentions the excluded term in its description.
+    const rows = [
+      job('a1', 'https://example.com/jobs/1', { description: 'Great team.' }),
+      job('a2', 'https://example.com/jobs/1?utm_source=x', { description: 'Requires an active clearance.' }),
+    ];
+    const withSkip = await new JobsAggregator(jobsService).aggregateRaw(rows, {
+      ...opts,
+      dedupByUrl: true,
+      exclusions: { keywords: ['clearance'] },
+    });
+    const without = await new JobsAggregator(jobsService).aggregateRaw(rows, {
+      ...opts,
+      exclusions: { keywords: ['clearance'] },
+    });
+    // Same outcome as without the URL pass: the matching row is excluded, nothing is lost silently.
+    expect(withSkip.jobs.map((j) => j.id)).toEqual(without.jobs.map((j) => j.id));
+    expect(withSkip.exclusionMetrics?.excludedRawCount).toBe(without.exclusionMetrics?.excludedRawCount);
+    expect(withSkip.urlDuplicatesSkipped).toBeUndefined();
   });
 });

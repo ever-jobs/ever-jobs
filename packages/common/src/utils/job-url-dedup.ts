@@ -9,8 +9,9 @@
  * 🛑 Deliberately conservative. Only parameters that are pure click/campaign
  * tracking are removed, and the fragment is kept (some boards route on it, so
  * `#/jobs/1` and `#/jobs/2` are different postings). A duplicate additionally
- * needs the same title: several plugins fall back to one shared listing URL for
- * every posting, and that must never collapse different roles into one.
+ * needs the same role (see `roleKey`): several plugins fall back to one shared
+ * listing URL for every posting, and that must never collapse different roles
+ * into one.
  */
 
 /** Longest URL considered; longer input has no canonical form. */
@@ -103,25 +104,49 @@ function titleKey(title: string | null | undefined): string {
   return typeof title === 'string' ? title.trim().replace(/\s+/g, ' ').toLowerCase() : '';
 }
 
+export interface DropDuplicateJobUrlsOptions<T> {
+  /**
+   * What must match, besides the URL, for two postings to be the same role.
+   * Default: the normalised title. Return `undefined` to keep the posting
+   * (its role cannot be told apart). The aggregator passes the engine's
+   * company + title + location key, so one listing URL shared by the same
+   * title in two cities keeps both.
+   */
+  readonly roleKey?: (job: T) => string | undefined;
+  /** Return true to keep a posting whatever its URL (it is never skipped nor remembered). */
+  readonly keep?: (job: T) => boolean;
+}
+
+/** Postings checked between event-loop yields. */
+const URL_DEDUP_YIELD_EVERY = 500;
+
 /**
  * Keep the first posting for each canonical URL and skip the rest (first seen
- * wins). A posting without a usable `jobUrl` is always kept. Pure: the input is
- * not modified and nothing is logged; the caller reports `skipped`.
+ * wins). A posting without a usable `jobUrl` is always kept. The input is not
+ * modified and nothing is logged; the caller reports `skipped`. Yields to the
+ * event loop every {@link URL_DEDUP_YIELD_EVERY} postings so a large fan-out
+ * does not stall other requests.
  */
-export function dropDuplicateJobUrls<T extends JobUrlLike>(
+export async function dropDuplicateJobUrls<T extends JobUrlLike>(
   jobs: ReadonlyArray<T>,
-): JobUrlDedupResult<T> {
+  options: DropDuplicateJobUrlsOptions<T> = {},
+): Promise<JobUrlDedupResult<T>> {
+  const roleKey = options.roleKey ?? ((job: T) => titleKey(job.title));
   const firstSeen = new Map<string, number>();
   const kept: T[] = [];
   const skipped: JobUrlSkip[] = [];
   for (let index = 0; index < jobs.length; index++) {
+    if (index > 0 && index % URL_DEDUP_YIELD_EVERY === 0) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
     const job = jobs[index];
-    const canonicalUrl = canonicalJobUrl(job.jobUrl);
-    if (canonicalUrl === null) {
+    const canonicalUrl = options.keep?.(job) ? null : canonicalJobUrl(job.jobUrl);
+    const role = canonicalUrl === null ? undefined : roleKey(job);
+    if (canonicalUrl === null || role === undefined) {
       kept.push(job);
       continue;
     }
-    const key = `${canonicalUrl}\u0000${titleKey(job.title)}`;
+    const key = `${canonicalUrl}\u0000${role}`;
     const firstIndex = firstSeen.get(key);
     if (firstIndex === undefined) {
       firstSeen.set(key, index);

@@ -483,7 +483,27 @@ export class JobsAggregator {
     const originalCount = rawJobs.length;
     let urlDuplicatesSkipped = 0;
     if (this.urlDedupEnabled(options)) {
-      const pass = dropDuplicateJobUrls(rawJobs);
+      // A posting the caller's exclusion filter matches is never skipped as a
+      // duplicate: it stays in the list so the filter (and, with dedup, the
+      // "any member matches" cluster rule) sees it exactly as without this pass.
+      let compiled: CompiledJobExclusions | undefined;
+      try {
+        const spec = options.exclusions;
+        compiled =
+          spec === undefined
+            ? undefined
+            : spec instanceof CompiledJobExclusions
+              ? spec
+              : compileJobExclusions(spec);
+      } catch {
+        compiled = undefined; // aggregateRawUnkeyed reports the failure
+      }
+      const exclusionSpec = compiled?.active ? compiled : undefined;
+      const pass = await dropDuplicateJobUrls(rawJobs, {
+        // Same role = the dedup engine's company + title + location key.
+        roleKey: (job) => dedupKeyForJob(job),
+        keep: exclusionSpec ? (job) => matchJobExclusion(job, exclusionSpec) !== null : undefined,
+      });
       urlDuplicatesSkipped = pass.skipped.length;
       if (urlDuplicatesSkipped > 0) {
         for (const skip of pass.skipped.slice(0, MAX_URL_SKIP_LOG_LINES)) {

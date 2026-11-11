@@ -11,9 +11,13 @@ skips an exact repeat of the same link, and nothing logs why a repeat was droppe
 - `canonicalJobUrl(url)`: absolute http(s) only; lower-case host, default port dropped; `utm_*`,
   `gclid`, `fbclid`, `msclkid`, `gh_src`, `lever-source` and similar pure-tracking parameters removed;
   remaining parameters sorted; path, other parameters and fragment untouched.
-- `dropDuplicateJobUrls(jobs)`: first seen wins; a posting is a duplicate only when canonical URL
-  **and** normalised title match (plugins that fall back to one shared listing URL must not lose
-  distinct roles). Postings without a usable `jobUrl` are always kept.
+- `dropDuplicateJobUrls(jobs, { roleKey, keep })` (async, yields to the event loop every 500
+  postings): first seen wins; a posting is a duplicate only when canonical URL **and** role key match
+  (default: normalised title; the aggregator passes the engine's company + title + location key, so
+  one shared listing URL never merges different cities or companies). Postings without a usable
+  `jobUrl` or role key are always kept. `keep` exempts postings from skipping; the aggregator uses it
+  for postings the caller's exclusion filter matches, so the skip pass can never hide a match from
+  the filter (or from its "any cluster member matches" rule).
 - `JobsAggregator`: runs the pass before the dedup engine when `AggregateOptions.dedupByUrl` is true
   or `EVER_JOBS_DEDUP_BY_URL` is truthy. Default off. Logs the reason `duplicate_canonical_url`
   (first 20 per call at debug, a count at log level) and returns `urlDuplicatesSkipped`.
