@@ -125,6 +125,17 @@ wait. SIGINT (Ctrl-C) is not drained.
 
 See [`.env.example`](../.env.example) for all configurable options.
 
+### Canonical job-URL de-duplication (optional; Spec 1754)
+
+`EVER_JOBS_DEDUP_BY_URL=true` (also `1`, `yes`, `on`; unset = off) makes a search skip a posting
+when an earlier posting of the same search has the same canonical URL **and** the same company,
+title and location. The canonical URL lower-cases the host, drops a default port and removes
+tracking-only parameters (`utm_*`, `gclid`, `fbclid`, `gh_src`, …); path case, trailing slash,
+`http` vs `https` and `www.` are not normalised. First seen wins, each skip is logged with the
+reason `duplicate_canonical_url`, and the count is returned as `urlDuplicatesSkipped` (absent
+when zero). A posting matched by an exclusion filter is never skipped. The pass keeps nothing
+across runs and yields to the event loop every 500 postings.
+
 ## Workday-backed company sources (Specs 1736 / 1737)
 
 55 company plugins (53 large US employers, Spec 1736, plus the Workday-backed
