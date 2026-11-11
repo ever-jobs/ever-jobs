@@ -29,6 +29,8 @@ import {
   clusterKeyForJob,
   compileJobExclusions,
   dedupKeyForJob,
+  dropDuplicateJobUrls,
+  JOB_URL_DUPLICATE_REASON,
   matchJobExclusion,
   YieldBudget,
 } from '@ever-jobs/common';
@@ -47,6 +49,15 @@ export interface AggregateOptions {
    * supported way for legacy clients to opt out of dedup.
    */
   readonly dedup?: boolean;
+
+  /**
+   * Before dedup, skip postings whose canonical `jobUrl` (tracking parameters
+   * removed, host lower-cased) and title match an earlier posting in the same
+   * call; the first one seen wins (Spec 1754). Default: off, or
+   * `EVER_JOBS_DEDUP_BY_URL=true`. Skips are counted in
+   * {@link AggregateResult.urlDuplicatesSkipped}.
+   */
+  readonly dedupByUrl?: boolean;
 
   /**
    * Persist post-dedup canonical records (and their source observations)
@@ -131,6 +142,12 @@ export type AggregateRawOptions = AggregateOptions & {
  */
 const CAREER_LEVEL_CHUNK = 16;
 
+/** Switch for the canonical-URL skip pass (Spec 1754); off unless truthy. */
+export const DEDUP_BY_URL_ENV = 'EVER_JOBS_DEDUP_BY_URL';
+
+/** Per-posting skip lines logged per call; the rest are only counted. */
+const MAX_URL_SKIP_LOG_LINES = 20;
+
 /**
  * Envelope returned by the aggregator. The shape is intentionally additive:
  * `jobs` is always populated (raw or deduped) so existing controller code
@@ -145,6 +162,11 @@ export interface AggregateResult {
   readonly outputCount: number;
   /** `true` iff the dedup engine actually ran. */
   readonly deduped: boolean;
+  /**
+   * Postings skipped as exact canonical-URL duplicates before dedup (Spec 1754).
+   * Present only when at least one was skipped; `rawCount` still counts them.
+   */
+  readonly urlDuplicatesSkipped?: number;
   /** Populated only when {@link deduped} is `true`. */
   readonly dedupMetrics?: DedupMetrics;
   /**
@@ -458,11 +480,40 @@ export class JobsAggregator {
     rawJobs: JobPostDto[],
     options: AggregateOptions = {},
   ): Promise<AggregateResult> {
-    const result = await this.aggregateRawUnkeyed(rawJobs, options);
+    const originalCount = rawJobs.length;
+    let urlDuplicatesSkipped = 0;
+    if (this.urlDedupEnabled(options)) {
+      const pass = dropDuplicateJobUrls(rawJobs);
+      urlDuplicatesSkipped = pass.skipped.length;
+      if (urlDuplicatesSkipped > 0) {
+        for (const skip of pass.skipped.slice(0, MAX_URL_SKIP_LOG_LINES)) {
+          this.logger.debug(
+            `skipped posting #${skip.index}: ${skip.reason} (first seen at #${skip.firstIndex}) ${skip.canonicalUrl}`,
+          );
+        }
+        this.logger.log(
+          `url dedup: skipped ${urlDuplicatesSkipped} of ${originalCount} postings (${JOB_URL_DUPLICATE_REASON})`,
+        );
+        rawJobs = pass.jobs;
+      }
+    }
+    const aggregated = await this.aggregateRawUnkeyed(rawJobs, options);
+    // `rawCount` stays the fan-out size; the skipped postings are reported apart.
+    const result: AggregateResult =
+      urlDuplicatesSkipped > 0
+        ? { ...aggregated, rawCount: originalCount, urlDuplicatesSkipped }
+        : aggregated;
     // Spec 1721 / contract C9 — every returned job carries its stable
     // cross-source key, whichever path produced the list.
     await stampDedupKeys(result.jobs);
     return result;
+  }
+
+  /** Per-call option first, then `EVER_JOBS_DEDUP_BY_URL`; off by default (Spec 1754). */
+  private urlDedupEnabled(options: AggregateOptions): boolean {
+    if (options.dedupByUrl !== undefined) return options.dedupByUrl;
+    const raw = process.env[DEDUP_BY_URL_ENV];
+    return raw !== undefined && ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase());
   }
 
   private async aggregateRawUnkeyed(
