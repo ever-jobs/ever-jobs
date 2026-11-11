@@ -59,6 +59,19 @@ describe('MetricsService — sources_total Gauge (Spec 1760)', () => {
     expect(text).toContain('# TYPE ever_jobs_sources_total gauge');
   });
 
+  it('keeps the last good count when the source starts throwing', async () => {
+    const service = new MetricsService();
+    let fail = false;
+    service.bindSourceCountSource(() => {
+      if (fail) throw new Error('registry gone');
+      return 42;
+    });
+    expect(line(await service.getMetrics())).toBe('ever_jobs_sources_total 42');
+
+    fail = true;
+    expect(line(await service.getMetrics())).toBe('ever_jobs_sources_total 42');
+  });
+
   it('ignores a negative or non-finite count', async () => {
     const service = new MetricsService();
     let count = 5;
