@@ -178,12 +178,19 @@ import { ClojurejobsModule } from '@ever-jobs/source-clojurejobs';
 // Phase 26: Sustainability & niche expansion
 import { EcojobsModule } from '@ever-jobs/source-ecojobs';
 import { AnalyticsModule } from '@ever-jobs/analytics';
+import { PluginModule } from '@ever-jobs/plugin';
+import { AppConfigModule } from '../../api/src/config/config.module';
+import { MetricsModule } from '../../api/src/metrics/metrics.module';
 import { JobsService } from '../../api/src/jobs/jobs.service';
 import { SearchCommand } from './commands/search.command';
 import { CompareCommand } from './commands/compare.command';
 
 @Module({
   imports: [
+    // JobsService dependencies: PluginRegistry, ConfigService, MetricsService
+    AppConfigModule,
+    MetricsModule,
+    PluginModule,
     // Search-based sources
     LinkedInModule,
     IndeedModule,
