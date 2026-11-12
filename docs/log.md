@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-10-24 — Dockerfile comment: better-sqlite3 has a musl prebuild for Node 26
+
+**Change:** The builder-stage comment in `Dockerfile` said `better-sqlite3` publishes no musl prebuild, so `prebuild-install` always misses and `node-gyp` always compiles. That is no longer true: 12.11.1 ships `node-v147-linuxmusl-x64` (Node 26), and the dev, stage and prod pods load the module. The comment now calls `node-gyp rebuild` the fallback when no prebuild matches; the toolchain and `npm_config_nodedir` stay for that fallback. Comment only, no build change. Raised by Greptile on PR #116.
+
+**Files:** `Dockerfile`, `docs/log.md`.
+
+---
+
 ## 2026-10-23 — Node 26.12.1 runtime (security release)
 
 **Change:** Node.js security release 26.12.1 (2026-10-21), fleet-wide sweep. Both stages of `Dockerfile` (the `ghcr.io/ever-jobs/ever-jobs` API image) and of `.deploy/mcp/Dockerfile` move from `node:20-alpine` to `node:26.12.1-alpine`; every CI `node-version` (seven `20.x` and the build matrix `[20.x]`) becomes `26.12.1`. The `Dockerfile` comments that named `node:20-alpine` and the v20.20.2 headers URL now name 26.12.1. No dependency, `engines` or `@types/node` change: the `@types/node` caret ranges (`^20.14.0`, `^20.0.0`) keep the type definitions on Node 20 while the runtime moves to 26 (moving the types belongs to the dependency-majors refresh, PR #114). `better-sqlite3` 12.11.1 ships a `node-v147-linuxmusl-x64` prebuild for Node 26, and the `npm_config_nodedir` fallback stays. The salvaged dependency-majors branch (PR #114) is unaffected and still needs its own refresh. Nothing removed.

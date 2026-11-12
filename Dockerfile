@@ -13,8 +13,10 @@ RUN apk add --no-cache python3 make g++ libc-dev openssl
 # Build native modules against the headers ALREADY IN THIS IMAGE instead of
 # downloading them.
 #
-# `better-sqlite3` publishes no prebuilt binary for musl, so `prebuild-install`
-# always misses and falls back to `node-gyp rebuild`. node-gyp then fetches
+# `better-sqlite3` 12.11.1 publishes a musl prebuild for Node 26 (ABI 147,
+# `node-v147-linuxmusl-x64`), which `prebuild-install` downloads from GitHub.
+# When no prebuild matches (another version, or that download fails), it falls
+# back to `node-gyp rebuild`, and node-gyp then fetches
 # https://unofficial-builds.nodejs.org/download/release/v26.12.1/node-v26.12.1-headers.tar.gz,
 # and that host is reached from an ARC runner pod with unreliable egress — it
 # ETIMEDOUTs intermittently and fails the whole image build. It cost two
