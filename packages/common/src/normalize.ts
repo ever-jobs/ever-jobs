@@ -96,14 +96,26 @@ function stripCompanyNoise(base: string, suffixes: ReadonlyArray<RegExp>): strin
  */
 export function normalizeCompany(input: string | null | undefined): string {
   if (!input) return '';
+  const first = stripCompanyNoise(baseNormalize(input), COMPANY_SUFFIXES);
+  if (first) return first;
+  // Nothing left: fall back one tier at a time — legal forms only, then no
+  // stripping — so a name made only of suffix words keeps an identity of its
+  // own. Removing punctuation can expose a suffix word that was hidden by it
+  // ("S.A. Inc" → "s a inc" → "s a"), so settle on a fixed point: the result
+  // is then stable when normalised again (`normalize(normalize(x)) === normalize(x)`).
+  // Every pass only removes text, so the loop ends; the cap is a safeguard.
   const base = baseNormalize(input);
-  // Fall back one tier at a time — all suffixes, legal forms only, none — so
-  // a name made only of suffix words still keeps an identity of its own.
-  return (
-    stripCompanyNoise(base, COMPANY_SUFFIXES) ||
-    stripCompanyNoise(base, COMPANY_LEGAL_SUFFIXES) ||
-    stripCompanyNoise(base, [])
-  );
+  let result =
+    stripCompanyNoise(base, COMPANY_LEGAL_SUFFIXES) || stripCompanyNoise(base, []);
+  for (let i = 0; i < 8 && result; i++) {
+    const next =
+      stripCompanyNoise(result, COMPANY_SUFFIXES) ||
+      stripCompanyNoise(result, COMPANY_LEGAL_SUFFIXES) ||
+      stripCompanyNoise(result, []);
+    if (next === result) break;
+    result = next;
+  }
+  return result;
 }
 
 /* ────────────────────────────────────────────────────────────────────── *

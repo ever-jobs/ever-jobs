@@ -79,6 +79,16 @@ describe('normalizeCompany (Spec 003 / T04)', () => {
       }
     });
 
+    it('settles on a fixed point when punctuation hid a suffix word', () => {
+      // "S.A. Inc" → "s a inc" on the first fallback; a second pass would drop
+      // "inc" again, so the result must already be "s a".
+      expect(normalizeCompany('S.A. Inc')).toBe('s a');
+      for (const input of ['S.A. Inc', 'S.A. Inc.', 'Inc. Co.', 'Co. Inc', 'Labs S.A.']) {
+        const once = normalizeCompany(input);
+        expect([input, normalizeCompany(once)]).toEqual([input, once]);
+      }
+    });
+
     it('still strips suffixes whenever a name remains (old results unchanged)', () => {
       expect(normalizeCompany('Acme Systems Group Inc.')).toBe('acme');
       expect(normalizeCompany('Globex Labs')).toBe('globex');
