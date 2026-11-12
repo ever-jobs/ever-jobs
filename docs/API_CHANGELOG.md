@@ -1,5 +1,11 @@
 # API Changelog
 
+### [Unreleased] - 2026-11-12
+
+#### Changed
+
+- **`dedupKey` and the engine's `canonicalJobId` change once for postings whose company name is made only of legal-form or descriptor words** (e.g. `Systems Group`, `Labs`, `Holdings, Ltd.`). Before, the company part of the key was empty and shared by every such employer; now the key carries the name, so two unrelated employers no longer collapse into one. With a persistent store bound, the next run writes a new canonical record for those postings instead of updating the old one. Names that keep a core word (`Acme Systems Group Inc.` → `acme`) keep their keys.
+
 ### [Unreleased] - 2026-10-08 (Spec 1753)
 
 SIGTERM used to cut every open request: no shutdown hooks ran, and the image's `node` (PID 1, no init process) ignored the signal, so each rollout waited out the pod's grace period and was SIGKILLed with list-mode NDJSON crawls still streaming. The API now drains. Deployment guide: [`DEPLOYMENT.md`](./DEPLOYMENT.md#graceful-shutdown-spec-1753).

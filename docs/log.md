@@ -9,7 +9,7 @@
 
 **Change:** `normalizeCompany` (`packages/common/src/normalize.ts`) strips legal-form and descriptor suffixes (`Inc`, `GmbH`, `Group`, `Labs`, `Systems`, …). A name made only of such words (`Systems Group`, `Labs`, `Holdings, Ltd.`) normalised to `''`, so every such company shared one canonical-key company part and two unrelated employers posting the same title in the same place were merged by the hash stage of the dedup engine. When nothing is left after stripping, the name now falls back one tier at a time — legal forms only, then no suffix stripping at all — so it keeps an identity of its own. Names that keep a core word are unchanged (`Acme Systems Group Inc.` → `acme`); punctuation-only input still gives `''`. The fallback settles on a fixed point (stripping punctuation can expose a suffix word, e.g. `S.A. Inc` → `s a inc` → `s a`), so normalising a result again never changes it. No pre-existing non-empty result changes. Canonical keys (and `dedupKey`) of postings from suffix-only company names change once, from an empty company part to the name.
 
-**Files:** `packages/common/src/normalize.ts`, `packages/common/__tests__/normalize.spec.ts`, `docs/log.md`.
+**Files:** `packages/common/src/normalize.ts`, `packages/common/__tests__/normalize.spec.ts`, `docs/API_CHANGELOG.md` (one-time key change noted), `docs/log.md`.
 
 **Validation:** reasoned by hand against the new cases; the test suite could not be run in this session (no shell access).
 
