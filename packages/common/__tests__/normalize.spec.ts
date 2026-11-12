@@ -50,6 +50,46 @@ describe('normalizeCompany (Spec 003 / T04)', () => {
       expect(twice).toBe(once);
     }
   });
+
+  // A name made only of suffix words used to normalise to '' — every such
+  // company then shared one canonical-key bucket and same-titled postings from
+  // unrelated employers merged.
+  describe('names made only of suffix words keep an identity', () => {
+    it.each<[string, string]>([
+      ['Systems Group', 'systems group'],
+      ['Labs', 'labs'],
+      ['Solutions & Services', 'solutions services'],
+      ['Group Inc.', 'group'],
+      ['Holdings, Ltd.', 'holdings'],
+      ['Technologies Corp', 'technologies'],
+      ['Co', 'co'],
+    ])('normalizeCompany(%j) === %j', (input, expected) => {
+      expect(normalizeCompany(input)).toBe(expected);
+    });
+
+    it('keeps different suffix-only companies apart', () => {
+      expect(normalizeCompany('Labs')).not.toBe(normalizeCompany('Studios'));
+      expect(normalizeCompany('Systems Group')).not.toBe(normalizeCompany('Holdings'));
+    });
+
+    it('is idempotent on them', () => {
+      for (const input of ['Systems Group', 'Group Inc.', 'Solutions & Services', 'Co']) {
+        const once = normalizeCompany(input);
+        expect(normalizeCompany(once)).toBe(once);
+      }
+    });
+
+    it('still strips suffixes whenever a name remains (old results unchanged)', () => {
+      expect(normalizeCompany('Acme Systems Group Inc.')).toBe('acme');
+      expect(normalizeCompany('Globex Labs')).toBe('globex');
+      expect(normalizeCompany('Initech Technologies GmbH')).toBe('initech');
+    });
+
+    it('still returns an empty string for punctuation-only input', () => {
+      expect(normalizeCompany('...')).toBe('');
+      expect(normalizeCompany('  ,  ')).toBe('');
+    });
+  });
 });
 
 describe('normalizeTitle (Spec 003 / T04)', () => {

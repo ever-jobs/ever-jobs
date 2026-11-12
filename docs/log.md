@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-11-12 — Fix: a company named only of suffix words keeps its own dedup identity
+
+**Change:** `normalizeCompany` (`packages/common/src/normalize.ts`) strips legal-form and descriptor suffixes (`Inc`, `GmbH`, `Group`, `Labs`, `Systems`, …). A name made only of such words (`Systems Group`, `Labs`, `Holdings, Ltd.`) normalised to `''`, so every such company shared one canonical-key company part and two unrelated employers posting the same title in the same place were merged by the hash stage of the dedup engine. When nothing is left after stripping, the name now falls back one tier at a time — legal forms only, then no suffix stripping at all — so it keeps an identity of its own. Names that keep a core word are unchanged (`Acme Systems Group Inc.` → `acme`); punctuation-only input still gives `''`. The fix is idempotent, and no pre-existing non-empty result changes. Canonical keys (and `dedupKey`) of postings from suffix-only company names change once, from an empty company part to the name.
+
+**Files:** `packages/common/src/normalize.ts`, `packages/common/__tests__/normalize.spec.ts`, `docs/log.md`.
+
+**Validation:** reasoned by hand against the new cases; the test suite could not be run in this session (no shell access).
+
 ## 2026-10-23 — Node 26.12.1 runtime (security release)
 
 **Change:** Node.js security release 26.12.1 (2026-10-21), fleet-wide sweep. Both stages of `Dockerfile` (the `ghcr.io/ever-jobs/ever-jobs` API image) and of `.deploy/mcp/Dockerfile` move from `node:20-alpine` to `node:26.12.1-alpine`; every CI `node-version` (seven `20.x` and the build matrix `[20.x]`) becomes `26.12.1`. The `Dockerfile` comments that named `node:20-alpine` and the v20.20.2 headers URL now name 26.12.1. No dependency, `engines` or `@types/node` change: the `@types/node` caret ranges (`^20.14.0`, `^20.0.0`) keep the type definitions on Node 20 while the runtime moves to 26 (moving the types belongs to the dependency-majors refresh, PR #114). `better-sqlite3` 12.11.1 ships a `node-v147-linuxmusl-x64` prebuild for Node 26, and the `npm_config_nodedir` fallback stays. The salvaged dependency-majors branch (PR #114) is unaffected and still needs its own refresh. Nothing removed.
