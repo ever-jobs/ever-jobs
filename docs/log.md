@@ -7,7 +7,7 @@
 
 ## 2026-11-11 — Spec 1754 — canonical job-URL skip pass (default off)
 
-**Change:** New `canonicalJobUrl` and `dropDuplicateJobUrls` (`@ever-jobs/common`, `utils/job-url-dedup.ts`): tracking parameters (`utm_*`, click ids) are removed, the host is lower-cased, the remaining parameters are sorted; the first posting per canonical URL + title wins. `JobsAggregator` runs it ahead of the dedup engine when `AggregateOptions.dedupByUrl` or `EVER_JOBS_DEDUP_BY_URL=true` (off by default), logs the `duplicate_canonical_url` reason and reports `AggregateResult.urlDuplicatesSkipped`. Nothing removed.
+**Change:** New `canonicalJobUrl` and `dropDuplicateJobUrls` (`@ever-jobs/common`, `utils/job-url-dedup.ts`): tracking parameters (`utm_*`, click ids) are removed, the host is lower-cased, the remaining parameters are sorted; the first posting per canonical URL and the same company, title, location and employment class wins. `JobsAggregator` runs it only when the dedup engine does not (`dedup=false` or no engine bound), when `AggregateOptions.dedupByUrl` or `EVER_JOBS_DEDUP_BY_URL=true` (off by default), logs the `duplicate_canonical_url` reason and reports `AggregateResult.urlDuplicatesSkipped`. Nothing removed.
 
 **Files:** `packages/common/src/utils/{job-url-dedup,index}.ts`, `apps/api/src/jobs/jobs.aggregator.ts`, tests `packages/common/__tests__/job-url-dedup.spec.ts`, `apps/api/src/jobs/__tests__/jobs.aggregator.url-dedup.spec.ts`, `.specify/specs/1754-canonical-job-url-dedup/{spec,plan,tasks}.md`, `docs/index.md`.
 

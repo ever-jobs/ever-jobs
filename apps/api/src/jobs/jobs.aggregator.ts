@@ -51,9 +51,11 @@ export interface AggregateOptions {
   readonly dedup?: boolean;
 
   /**
-   * Before dedup, skip postings whose canonical `jobUrl` (tracking parameters
-   * removed, host lower-cased) and title match an earlier posting in the same
-   * call; the first one seen wins (Spec 1754). Default: off, or
+   * Skip postings whose canonical `jobUrl` (tracking parameters removed, host
+   * lower-cased) and company, title, location and employment class match an
+   * earlier posting in the same call; the first one seen wins (Spec 1754). Runs
+   * only when the dedup engine does not (`dedup=false` or no engine bound).
+   * Default: off, or
    * `EVER_JOBS_DEDUP_BY_URL=true`. Skips are counted in
    * {@link AggregateResult.urlDuplicatesSkipped}.
    */
@@ -482,7 +484,11 @@ export class JobsAggregator {
   ): Promise<AggregateResult> {
     const originalCount = rawJobs.length;
     let urlDuplicatesSkipped = 0;
-    if (this.urlDedupEnabled(options)) {
+    // With the dedup engine running, the pass would merge nothing the engine does
+    // not (its key is the engine's hash key) but would drop the skipped postings'
+    // source observations from the persisted record, so it runs only without it.
+    const engineWillRun = (options.dedup ?? true) && !!this.dedupEngine;
+    if (!engineWillRun && this.urlDedupEnabled(options)) {
       // A posting the caller's exclusion filter matches is never skipped as a
       // duplicate: it stays in the list so the filter (and, with dedup, the
       // "any member matches" cluster rule) sees it exactly as without this pass.
@@ -500,8 +506,8 @@ export class JobsAggregator {
       }
       const exclusionSpec = compiled?.active ? compiled : undefined;
       const pass = await dropDuplicateJobUrls(rawJobs, {
-        // Same role = the dedup engine's company + title + location key.
-        roleKey: (job) => dedupKeyForJob(job),
+        // Same role = company + title + location + employment class.
+        roleKey: (job) => clusterKeyForJob(job),
         keep: exclusionSpec ? (job) => matchJobExclusion(job, exclusionSpec) !== null : undefined,
       });
       urlDuplicatesSkipped = pass.skipped.length;

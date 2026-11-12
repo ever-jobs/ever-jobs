@@ -129,7 +129,8 @@ See [`.env.example`](../.env.example) for all configurable options.
 
 `EVER_JOBS_DEDUP_BY_URL=true` (also `1`, `yes`, `on`; unset = off) makes a search skip a posting
 when an earlier posting of the same search has the same canonical URL **and** the same company,
-title and location. The canonical URL lower-cases the host, drops a default port and removes
+title, location and employment class; only when the dedup engine does not run (`dedup=false` or
+no engine bound). The canonical URL lower-cases the host, drops a default port and removes
 tracking-only parameters (`utm_*`, `gclid`, `fbclid`, `gh_src`, …); path case, trailing slash,
 `http` vs `https` and `www.` are not normalised. First seen wins, each skip is logged with the
 reason `duplicate_canonical_url`, and the count is returned as `urlDuplicatesSkipped` (absent
