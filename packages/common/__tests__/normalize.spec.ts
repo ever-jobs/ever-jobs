@@ -83,7 +83,19 @@ describe('normalizeCompany (Spec 003 / T04)', () => {
       // "S.A. Inc" → "s a inc" on the first fallback; a second pass would drop
       // "inc" again, so the result must already be "s a".
       expect(normalizeCompany('S.A. Inc')).toBe('s a');
-      for (const input of ['S.A. Inc', 'S.A. Inc.', 'Inc. Co.', 'Co. Inc', 'Labs S.A.']) {
+      // both legal-form tiers return '' for "L.L.C. Inc."; the cleaned text
+      // "l l c inc" must settle on "l l c", which is stable when normalised again
+      expect(normalizeCompany('L.L.C. Inc.')).toBe('l l c');
+      expect(normalizeCompany('l l c')).toBe('l l c');
+      for (const input of [
+        'S.A. Inc',
+        'S.A. Inc.',
+        'L.L.C. Inc.',
+        'P.L.C. Ltd',
+        'Inc. Co.',
+        'Co. Inc',
+        'Labs S.A.',
+      ]) {
         const once = normalizeCompany(input);
         expect([input, normalizeCompany(once)]).toEqual([input, once]);
       }
