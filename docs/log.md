@@ -13,6 +13,14 @@
 
 **Validation:** reasoned by hand against the new cases; the test suite could not be run in this session (no shell access).
 
+## 2026-11-11 — Spec 1754 — canonical job-URL skip pass (default off)
+
+**Change:** New `canonicalJobUrl` and `dropDuplicateJobUrls` (`@ever-jobs/common`, `utils/job-url-dedup.ts`): tracking parameters (`utm_*`, click ids) are removed, the host is lower-cased, the remaining parameters are sorted; the first posting per canonical URL and the same company, title, location and employment class wins. `JobsAggregator` runs it only when the dedup engine does not (`dedup=false` or no engine bound), when `AggregateOptions.dedupByUrl` or `EVER_JOBS_DEDUP_BY_URL=true` (off by default), logs the `duplicate_canonical_url` reason and reports `AggregateResult.urlDuplicatesSkipped`. Nothing removed.
+
+**Files:** `packages/common/src/utils/{job-url-dedup,index}.ts`, `apps/api/src/jobs/jobs.aggregator.ts`, tests `packages/common/__tests__/job-url-dedup.spec.ts`, `apps/api/src/jobs/__tests__/jobs.aggregator.url-dedup.spec.ts`, `.specify/specs/1754-canonical-job-url-dedup/{spec,plan,tasks}.md`, `docs/index.md`.
+
+**Validation:** tests written but not run in the authoring session (no shell access); CI must run them.
+
 ## 2026-10-23 — Node 26.12.1 runtime (security release)
 
 **Change:** Node.js security release 26.12.1 (2026-10-21), fleet-wide sweep. Both stages of `Dockerfile` (the `ghcr.io/ever-jobs/ever-jobs` API image) and of `.deploy/mcp/Dockerfile` move from `node:20-alpine` to `node:26.12.1-alpine`; every CI `node-version` (seven `20.x` and the build matrix `[20.x]`) becomes `26.12.1`. The `Dockerfile` comments that named `node:20-alpine` and the v20.20.2 headers URL now name 26.12.1. No dependency, `engines` or `@types/node` change: the `@types/node` caret ranges (`^20.14.0`, `^20.0.0`) keep the type definitions on Node 20 while the runtime moves to 26 (moving the types belongs to the dependency-majors refresh, PR #114). `better-sqlite3` 12.11.1 ships a `node-v147-linuxmusl-x64` prebuild for Node 26, and the `npm_config_nodedir` fallback stays. The salvaged dependency-majors branch (PR #114) is unaffected and still needs its own refresh. Nothing removed.
