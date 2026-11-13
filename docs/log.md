@@ -5,17 +5,15 @@
 
 ---
 
-## 2026-11-13 — Fix: `Retry-After` parsing honours fractional seconds and is bounded
+## 2026-11-13 — Fix: `Retry-After` parsing honours fractional seconds and is bounded; Internshala live e2e no longer asserts the board's ranking
 
-**Change:** `parseRetryAfter` (`packages/common/src/http/http-client.ts`) accepted only whole digits as seconds and sent everything else to `Date.parse`, whose legacy fallback is lenient. A server that answers `Retry-After: 90.5` was therefore not understood (the wait fell back to our own back-off instead of the 90 s asked for), and number-like text such as `1.5` could be read as a calendar date in the past. It also returned `Infinity` for a very long digit string and years for a far-future date, which reached the give-up log line and the limiter as-is. Now: decimal seconds are read and rounded up to the next millisecond; only text that carries a clock time (`12:00:30`) is treated as an HTTP-date; the result is at most `MAX_PARSED_RETRY_AFTER_MS` (30 days; every such value is already above `maxRetryAfterMs`, so no give-up/cap decision changes). Whole seconds, HTTP-dates, empty and unparseable values keep their old result.
+**Retry-After.** `parseRetryAfter` (`packages/common/src/http/http-client.ts`) accepted only whole digits as seconds and sent everything else to `Date.parse`, whose legacy fallback is lenient. A server that answers `Retry-After: 90.5` was therefore not understood (the wait fell back to our own back-off instead of the 90 s asked for), and number-like text such as `1.5` could be read as a calendar date in the past. It also returned `Infinity` for a very long digit string and years for a far-future date, which reached the give-up log line and the limiter as-is. Now: decimal seconds are read and rounded up to the next millisecond; only text that carries a clock time (`12:00:30`) is treated as an HTTP-date; the result is at most `MAX_PARSED_RETRY_AFTER_MS` (30 days, a fixed constant; it changes no give-up/cap decision unless `maxRetryAfterMs` is configured above 30 days, and the limiter already caps any cool-down at `EVER_JOBS_CRAWL_MAX_COOLDOWN_MS`). Whole seconds, HTTP-dates, empty and unparseable values keep their old result. `docs/CRAWL_POLICY.md` §11 states the accepted forms.
 
-**Files:** `packages/common/src/http/http-client.ts`, `packages/common/__tests__/http-client-crawl-policy.spec.ts`, `docs/log.md`.
+**Files:** `packages/common/src/http/http-client.ts`, `packages/common/__tests__/http-client-crawl-policy.spec.ts`, `docs/CRAWL_POLICY.md`, `docs/log.md`.
 
-**Validation:** reasoned by hand against the new and existing cases; the test suite could not be run in this session (no shell access); CI must run it.
+**Validation:** `http-client-crawl-policy.spec.ts` (313 tests) and the `packages/common` suite pass; 4 of the 5 new tests fail against the previous `http-client.ts`.
 
-## 2026-11-13 — Internshala live e2e no longer asserts the board's ranking
-
-The live test "should encode a multi-word keyword for an internship-only search" required the top 3 results for "data science" to mention "data", which is the board's relevance ordering, not our code, and it failed CI. The live test now keeps only shape checks (at most 3 results, `/internship/detail/` URLs, or diagnostics when the board is unreachable). The encoding itself is asserted exactly in a new parser unit test: `searchTerm: 'data science', jobType: internship` plans to `https://internshala.com/internships/keywords-data%20science/` (and `page-2/`). The first live test (python keyword) is unchanged. No source change.
+**Internshala.** The live test "should encode a multi-word keyword for an internship-only search" required the top 3 results for "data science" to mention "data", which is the board's relevance ordering, not our code, and it failed CI. The live test now keeps only shape checks (at most 3 results, `/internship/detail/` URLs, or diagnostics when the board is unreachable). The encoding itself is asserted exactly in a new parser unit test: `searchTerm: 'data science', jobType: internship` plans to `https://internshala.com/internships/keywords-data%20science/` (and `page-2/`). The first live test (python keyword) is unchanged. No source change.
 
 **Files:** `packages/plugins/source-internshala/__tests__/{internshala.e2e-spec,internshala.parser.spec}.ts`, `docs/log.md`.
 
