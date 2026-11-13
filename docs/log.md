@@ -5,7 +5,9 @@
 
 ---
 
-## 2026-11-13 — Fix: `Retry-After` parsing honours fractional seconds and is bounded; Internshala live e2e no longer asserts the board's ranking
+## 2026-11-13 — CI doc: blocking and non-blocking jobs; `Retry-After` parsing honours fractional seconds and is bounded; Internshala live e2e no longer asserts the board's ranking
+
+**CI: live scraper e2e shards no longer block.** The live scraper e2e matrix already had `fail-fast: false` and a job-level `continue-on-error: true`, but the in-cluster runner (`ci-builds`, which runs the workflow with `act`) ignores a job-level `continue-on-error`, so a failing live shard turned the `ci-builds/ci.yml` status red. The test step "Run source scraper e2e tests" now also carries `continue-on-error: true`, the same pattern as `Test (E2E - Live APIs)`. New `docs/CI.md` lists which `ci.yml` jobs fail a run (docs lint, build and type-check, health and smoke, Core, feature plugins, Docker, and in-cluster the mocked scraper unit shards) and which only report (live API e2e, live-site scraper e2e shards), and why live third-party boards cannot gate a pull request. Files: `.github/workflows/ci.yml`, `docs/CI.md`, `docs/index.md`, `docs/log.md`.
 
 **Retry-After.** `parseRetryAfter` (`packages/common/src/http/http-client.ts`) accepted only whole digits as seconds and sent everything else to `Date.parse`, whose legacy fallback is lenient. A server that answers `Retry-After: 90.5` was therefore not understood (the wait fell back to our own back-off instead of the 90 s asked for), and number-like text such as `1.5` could be read as a calendar date in the past. It also returned `Infinity` for a very long digit string and years for a far-future date, which reached the give-up log line and the limiter as-is. Now: decimal seconds are read and rounded up to the next millisecond; only text that carries a clock time (`12:00:30`) is treated as an HTTP-date; the result is at most `MAX_PARSED_RETRY_AFTER_MS` (30 days, a fixed constant; it changes no give-up/cap decision unless `maxRetryAfterMs` is configured above 30 days, and the limiter already caps any cool-down at `EVER_JOBS_CRAWL_MAX_COOLDOWN_MS`). Whole seconds, HTTP-dates, empty and unparseable values keep their old result. `docs/CRAWL_POLICY.md` §11 states the accepted forms.
 
@@ -17,7 +19,7 @@
 
 **Files:** `packages/plugins/source-internshala/__tests__/{internshala.e2e-spec,internshala.parser.spec}.ts`, `docs/log.md`.
 
-**Validation:** not run in the authoring session (no shell access); CI must run the new unit test.
+**Validation:** not run in the authoring session (no shell access); CI must run the new unit test. The CI page was read against `.github/workflows/ci.yml`; docs lint was not run locally, and the log header was checked by hand against the duplicate and ordering rules of `scripts/docs-lint.ts` (one `2026-11-13` entry).
 
 ## 2026-11-12 — Fix: a company named only of suffix words keeps its own dedup identity
 
@@ -34,6 +36,14 @@
 **Files:** `packages/common/src/utils/{job-url-dedup,index}.ts`, `apps/api/src/jobs/jobs.aggregator.ts`, tests `packages/common/__tests__/job-url-dedup.spec.ts`, `apps/api/src/jobs/__tests__/jobs.aggregator.url-dedup.spec.ts`, `.specify/specs/1754-canonical-job-url-dedup/{spec,plan,tasks}.md`, `docs/index.md`.
 
 **Validation:** tests written but not run in the authoring session (no shell access); CI must run them.
+
+## 2026-11-11 — Spec 1760 — `ever_jobs_sources_total` reports the registered sources
+
+**Change:** `MetricsService.onModuleInit` set `ever_jobs_sources_total` to the literal `160`, so `/metrics` never matched the registry. The gauge now has a `collect` callback fed by `MetricsService.bindSourceCountSource`; `MetricsCircuitBreakerBridge` binds `PluginRegistry.size` at bootstrap (with or without a circuit breaker). Unbound it reads `0`; a throwing source or a negative / non-finite count leaves `/metrics` up and the last good value in place. HELP text now reads "Number of registered job sources (source plugins)". Nothing removed.
+
+**Files:** `apps/api/src/metrics/metrics.service.ts`, `apps/api/src/jobs/metrics-circuit-breaker.bridge.ts`, tests `apps/api/src/metrics/__tests__/metrics.service.spec.ts`, `apps/api/src/jobs/__tests__/metrics-circuit-breaker.bridge.spec.ts` (new); `.specify/specs/1760-sources-total-metric/{spec,plan,tasks}.md`, `docs/{index,log}.md`.
+
+**Validation:** written without a shell, so the new specs were not run here; CI on the pull request is the first run.
 
 ## 2026-10-23 — Node 26.12.1 runtime (security release)
 

@@ -9,6 +9,7 @@ import {
   CIRCUIT_BREAKER_TOKEN,
   ICircuitBreakerService,
 } from '@ever-jobs/models';
+import { PluginRegistry } from '@ever-jobs/plugin';
 import { MetricsService } from '../metrics/metrics.service';
 
 /**
@@ -45,9 +46,16 @@ export class MetricsCircuitBreakerBridge implements OnApplicationBootstrap {
     @Optional()
     @Inject(CIRCUIT_BREAKER_TOKEN)
     private readonly breaker?: ICircuitBreakerService,
+    @Optional() private readonly registry?: PluginRegistry,
   ) {}
 
   onApplicationBootstrap(): void {
+    // `ever_jobs_sources_total` follows the plugin registry; it does not
+    // depend on the breaker, so bind it before the breaker's early return.
+    if (this.registry) {
+      const registry = this.registry;
+      this.metrics.bindSourceCountSource(() => registry.size);
+    }
     if (!this.breaker) {
       this.logger.warn(
         'No circuit-breaker bound under CIRCUIT_BREAKER_TOKEN; ' +

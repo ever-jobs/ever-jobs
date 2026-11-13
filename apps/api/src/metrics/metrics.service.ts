@@ -62,6 +62,9 @@ export class MetricsService implements OnModuleInit {
    */
   private circuitBreakerSource?: CircuitBreakerHealthSource;
 
+  /** Returns the number of registered sources; see {@link bindSourceCountSource}. */
+  private sourceCountSource?: () => number;
+
   constructor() {
     this.registry = new Registry();
 
@@ -121,10 +124,29 @@ export class MetricsService implements OnModuleInit {
     });
 
     // System Metrics
+    // The value is read from the plugin registry on every scrape (see
+    // `bindSourceCountSource`), so it follows the sources that are really
+    // registered. It was a hardcoded 160 before, which drifted as soon as a
+    // plugin was added or removed. Without a bound source it reads 0.
     this.totalSources = new Gauge({
       name: 'ever_jobs_sources_total',
-      help: 'Total number of supported job sources',
+      help: 'Number of registered job sources (source plugins)',
       registers: [this.registry],
+      collect: () => {
+        if (!this.sourceCountSource) return;
+        try {
+          const count = this.sourceCountSource();
+          if (Number.isFinite(count) && count >= 0) {
+            this.totalSources.set(count);
+          }
+        } catch (err) {
+          // Same rule as the circuit-state gauge: a throw in `collect`
+          // would turn every `/metrics` scrape into an error.
+          this.logger.warn(
+            `sourceCountSource threw during collect: ${(err as Error)?.message ?? err}`,
+          );
+        }
+      },
     });
 
     // Spec 005 / T06 — per-site circuit-breaker state.
@@ -169,8 +191,18 @@ export class MetricsService implements OnModuleInit {
   }
 
   onModuleInit() {
-    // Initial value for total sources
-    this.totalSources.set(160);
+    // Nothing to seed: `ever_jobs_sources_total` is filled on each scrape
+    // from the source bound with `bindSourceCountSource`.
+  }
+
+  /**
+   * Wire the live count of registered sources into {@link totalSources}.
+   * Called by `MetricsCircuitBreakerBridge` (which already owns the
+   * `JobsModule` boundary) at application bootstrap. Calling it again
+   * replaces the previous source.
+   */
+  bindSourceCountSource(source: () => number): void {
+    this.sourceCountSource = source;
   }
 
   /**
