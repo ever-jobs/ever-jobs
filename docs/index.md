@@ -39,6 +39,7 @@
 | [`DEPLOYMENT.md`](./DEPLOYMENT.md)                       | Docker / deployment; Workday-backed company sources: enabled by default, optional emergency switch (kill-switch list), per-board bounds and the fan-out deadline names, keying Workday postings on `id` (Spec 1736). |
 | [`UPGRADE_GUIDE.md`](./UPGRADE_GUIDE.md)                 | Version-to-version upgrade path. |
 | [`CLI.md`](./CLI.md)                                     | CLI command reference.           |
+| [`CI.md`](./CI.md)                                       | CI: which jobs block a run and which (live-site e2e) only report, and why. |
 | [`CRAWL_POLICY.md`](./CRAWL_POLICY.md)                   | Crawl policy operator guide: identity, per-host pacing, proxies, back-off, robots.txt, egress guard, every `EVER_JOBS_CRAWL_*` variable (Spec 1690); site-owner caller lock, builtin host policies (`*.softy.pro`), idle gap, server-error cool-down, fleet size and the Softy section (Specs 1714, 1715); redirect pacing, per-host caller timeouts, what `legacy` restores and the pre-1715 Softy recipe (review round 2). |
 
 ## 3. Roadmap & Product
