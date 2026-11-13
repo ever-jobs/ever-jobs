@@ -5,21 +5,15 @@
 
 ---
 
-## 2026-11-13 — CI doc: blocking and non-blocking jobs
+## 2026-11-13 — CI doc: blocking and non-blocking jobs; Internshala live e2e no longer asserts the board's ranking
 
-New `docs/CI.md` lists which `ci.yml` jobs fail a run (docs lint, build and type-check, health and smoke, Core, feature plugins, Docker) and which only report (live API e2e, live-site scraper e2e shards), and why live third-party boards cannot gate a pull request. In the checked-out `develop` the live scraper e2e matrix already has `fail-fast: false` and `continue-on-error: true`, so no workflow change was needed. The page also notes that the mocked scraper unit shards are marked `continue-on-error: true` too. No workflow change.
+**CI doc.** New `docs/CI.md` lists which `ci.yml` jobs fail a run (docs lint, build and type-check, health and smoke, Core, feature plugins, Docker) and which only report (live API e2e, live-site scraper e2e shards), and why live third-party boards cannot gate a pull request. In the checked-out `develop` the live scraper e2e matrix already has `fail-fast: false` and `continue-on-error: true`, so no workflow change was needed. The page also notes that the mocked scraper unit shards are marked `continue-on-error: true` too. No workflow change. Files: `docs/CI.md`, `docs/index.md`, `docs/log.md`.
 
-**Files:** `docs/CI.md`, `docs/index.md`, `docs/log.md`.
-
-**Validation:** read against `.github/workflows/ci.yml`; docs lint not run (no shell access).
-
-## 2026-11-13 — Internshala live e2e no longer asserts the board's ranking
-
-The live test "should encode a multi-word keyword for an internship-only search" required the top 3 results for "data science" to mention "data", which is the board's relevance ordering, not our code, and it failed CI. The live test now keeps only shape checks (at most 3 results, `/internship/detail/` URLs, or diagnostics when the board is unreachable). The encoding itself is asserted exactly in a new parser unit test: `searchTerm: 'data science', jobType: internship` plans to `https://internshala.com/internships/keywords-data%20science/` (and `page-2/`). The first live test (python keyword) is unchanged. No source change.
+**Internshala.** The live test "should encode a multi-word keyword for an internship-only search" required the top 3 results for "data science" to mention "data", which is the board's relevance ordering, not our code, and it failed CI. The live test now keeps only shape checks (at most 3 results, `/internship/detail/` URLs, or diagnostics when the board is unreachable). The encoding itself is asserted exactly in a new parser unit test: `searchTerm: 'data science', jobType: internship` plans to `https://internshala.com/internships/keywords-data%20science/` (and `page-2/`). The first live test (python keyword) is unchanged. No source change.
 
 **Files:** `packages/plugins/source-internshala/__tests__/{internshala.e2e-spec,internshala.parser.spec}.ts`, `docs/log.md`.
 
-**Validation:** not run in the authoring session (no shell access); CI must run the new unit test.
+**Validation:** not run in the authoring session (no shell access); CI must run the new unit test. The CI page was read against `.github/workflows/ci.yml`; docs lint was not run locally, and the log header was checked by hand against the duplicate and ordering rules of `scripts/docs-lint.ts` (one `2026-11-13` entry).
 
 ## 2026-11-12 — Fix: a company named only of suffix words keeps its own dedup identity
 
