@@ -29,6 +29,14 @@ The live test "should encode a multi-word keyword for an internship-only search"
 
 **Validation:** tests written but not run in the authoring session (no shell access); CI must run them.
 
+## 2026-11-11 — Spec 1760 — `ever_jobs_sources_total` reports the registered sources
+
+**Change:** `MetricsService.onModuleInit` set `ever_jobs_sources_total` to the literal `160`, so `/metrics` never matched the registry. The gauge now has a `collect` callback fed by `MetricsService.bindSourceCountSource`; `MetricsCircuitBreakerBridge` binds `PluginRegistry.size` at bootstrap (with or without a circuit breaker). Unbound it reads `0`; a throwing source or a negative / non-finite count leaves `/metrics` up and the last good value in place. HELP text now reads "Number of registered job sources (source plugins)". Nothing removed.
+
+**Files:** `apps/api/src/metrics/metrics.service.ts`, `apps/api/src/jobs/metrics-circuit-breaker.bridge.ts`, tests `apps/api/src/metrics/__tests__/metrics.service.spec.ts`, `apps/api/src/jobs/__tests__/metrics-circuit-breaker.bridge.spec.ts` (new); `.specify/specs/1760-sources-total-metric/{spec,plan,tasks}.md`, `docs/{index,log}.md`.
+
+**Validation:** written without a shell, so the new specs were not run here; CI on the pull request is the first run.
+
 ## 2026-10-23 — Node 26.12.1 runtime (security release)
 
 **Change:** Node.js security release 26.12.1 (2026-10-21), fleet-wide sweep. Both stages of `Dockerfile` (the `ghcr.io/ever-jobs/ever-jobs` API image) and of `.deploy/mcp/Dockerfile` move from `node:20-alpine` to `node:26.12.1-alpine`; every CI `node-version` (seven `20.x` and the build matrix `[20.x]`) becomes `26.12.1`. The `Dockerfile` comments that named `node:20-alpine` and the v20.20.2 headers URL now name 26.12.1. No dependency, `engines` or `@types/node` change: the `@types/node` caret ranges (`^20.14.0`, `^20.0.0`) keep the type definitions on Node 20 while the runtime moves to 26 (moving the types belongs to the dependency-majors refresh, PR #114). `better-sqlite3` 12.11.1 ships a `node-v147-linuxmusl-x64` prebuild for Node 26, and the `npm_config_nodedir` fallback stays. The salvaged dependency-majors branch (PR #114) is unaffected and still needs its own refresh. Nothing removed.
