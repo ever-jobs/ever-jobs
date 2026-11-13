@@ -67,13 +67,14 @@ describe('InternshalaService (E2E)', () => {
     const response = await service.scrape(input);
 
     expect(response.jobs.length > 0 || response.diagnostics !== undefined).toBe(true);
+    expect(response.jobs.length).toBeLessThanOrEqual(3);
     if (response.jobs.length > 0) {
       for (const job of response.jobs) {
         expect(job.jobUrl).toContain('/internship/detail/');
       }
-      // The listing is ordered by relevance over the whole posting, so the top
-      // cards may name the keyword only in their responsibilities snippet.
-      expect(response.jobs.some((j) => mentions(j, 'data', true))).toBe(true);
+      // Which postings the board ranks first is the board's call, so the content
+      // is not asserted here. The exact URL built for this search is covered by
+      // the parser unit spec ('plans an internship-only multi-word search…').
     }
   }, 90_000);
 });
