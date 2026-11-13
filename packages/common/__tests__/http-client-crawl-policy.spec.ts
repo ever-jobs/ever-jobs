@@ -1956,7 +1956,10 @@ describe('helpers', () => {
       expect(parseRetryAfter('0', now)).toBe(0);
       expect(parseRetryAfter(' 3600 ', now)).toBe(3_600_000);
       expect(parseRetryAfter('Thu, 24 Sep 2026 13:00:00 GMT', now)).toBe(3_600_000);
-      expect(parseRetryAfter('Thu Sep 24 12:00:30 2026', now)).toBeGreaterThanOrEqual(0);
+      // asctime carries no zone, so `Date.parse` reads it as local time: anchor `now` the same way
+      // and assert the exact wait (a bare `>= 0` would also pass for a wrongly parsed "retry now").
+      const localNow = new Date(2026, 8, 24, 12, 0, 0).getTime();
+      expect(parseRetryAfter('Thu Sep 24 12:00:30 2026', localNow)).toBe(30_000);
       expect(parseRetryAfter('soon', now)).toBeNull();
       expect(parseRetryAfter('', now)).toBeNull();
     });
