@@ -98,6 +98,18 @@ describe('Spec 1706 / T1 — listing URLs and the robots.txt guard', () => {
     );
   });
 
+  it('plans an internship-only multi-word search to the exact keyword listing URL', () => {
+    const plan = planSearch({ searchTerm: 'data science', jobType: JobType.INTERNSHIP }, DEFAULT_OPTIONS);
+    expect(plan.kinds).toEqual(['internship']);
+    expect(plan.strategy).toBe('keyword');
+    expect(plan.query).toEqual({ term: 'data science', city: null, remote: false });
+    const urls = plan.kinds.map((kind) => buildListingUrl(kind, plan.query, plan.strategy, 1));
+    expect(urls).toEqual(['https://internshala.com/internships/keywords-data%20science/']);
+    expect(buildListingUrl('internship', plan.query, plan.strategy, 2)).toBe(
+      'https://internshala.com/internships/keywords-data%20science/page-2/',
+    );
+  });
+
   it('strips robots-unsafe characters from the term before encoding', () => {
     const term = cleanSearchTerm('c++, rust?');
     expect(term).toBe('c++ rust');

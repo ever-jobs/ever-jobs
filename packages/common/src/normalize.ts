@@ -39,7 +39,7 @@ function baseNormalize(input: string): string {
  * Suffixes that legally identify a company but never affect identity.
  * Order matters — multi-word suffixes must be removed first.
  */
-const COMPANY_SUFFIXES: ReadonlyArray<RegExp> = [
+const COMPANY_LEGAL_SUFFIXES: ReadonlyArray<RegExp> = [
   /\b(?:gesellschaft mit beschr[aä]nkter haftung)\b/g,
   /\b(?:public limited company)\b/g,
   /\b(?:limited liability company)\b/g,
@@ -51,10 +51,34 @@ const COMPANY_SUFFIXES: ReadonlyArray<RegExp> = [
   /\b(?:p\.?l\.?c\.?)\b/g,
   /\b(?:gmbh|ag|kg|s\.?a\.?|s\.?l\.?|s\.?r\.?l\.?|sas|oy|ab|bv|nv)\b/g,
   /\b(?:pty\.?|pte\.?|inc\.?)\b/g,
+];
+
+/** Generic descriptor words that follow a company's own name ("Acme Labs"). */
+const COMPANY_DESCRIPTOR_SUFFIXES: ReadonlyArray<RegExp> = [
   /\b(?:holdings?|group|technologies|technology|systems?|solutions?|services?|labs?|studios?)\b/g,
 ];
 
+const COMPANY_SUFFIXES: ReadonlyArray<RegExp> = [
+  ...COMPANY_LEGAL_SUFFIXES,
+  ...COMPANY_DESCRIPTOR_SUFFIXES,
+];
+
 const PUNCT_RE = /[.,;:!?'`"‘’“”()\[\]{}<>]/g;
+
+/** Strip `suffixes`, the ampersand / "and" forms and punctuation from a base-normalised name. */
+function stripCompanyNoise(base: string, suffixes: ReadonlyArray<RegExp>): string {
+  let s = base;
+  // Strip suffixes BEFORE punctuation: patterns like `l\.?l\.?c\.?` rely on
+  // the dots still being there.
+  for (const re of suffixes) {
+    s = s.replace(re, ' ');
+  }
+  // Remove ampersand & "and" word forms — "Smith & Sons" === "Smith and Sons".
+  s = s.replace(/\s+(?:&|and)\s+/g, ' ');
+  // Now drop leftover punctuation.
+  s = s.replace(PUNCT_RE, ' ');
+  return s.replace(MULTI_WS_RE, ' ').trim();
+}
 
 /**
  * Canonicalise a company name.
@@ -65,20 +89,33 @@ const PUNCT_RE = /[.,;:!?'`"‘’“”()\[\]{}<>]/g;
  *   "Some Co., Ltd."    → "some"
  *   "Müller GmbH"       → "muller"
  *   "OpenAI, L.L.C."    → "openai"
+ *   "Systems Group"     → "systems group"  (nothing is left once the
+ *                          descriptor words go, so they are kept: a name
+ *                          made only of suffix words must not normalise to
+ *                          '' and key every such company to one bucket)
  */
 export function normalizeCompany(input: string | null | undefined): string {
   if (!input) return '';
-  let s = baseNormalize(input);
-  // Strip suffixes BEFORE punctuation: patterns like `l\.?l\.?c\.?` rely on
-  // the dots still being there.
-  for (const re of COMPANY_SUFFIXES) {
-    s = s.replace(re, ' ');
+  const first = stripCompanyNoise(baseNormalize(input), COMPANY_SUFFIXES);
+  if (first) return first;
+  // Nothing left: fall back one tier at a time — legal forms only, then no
+  // stripping — so a name made only of suffix words keeps an identity of its
+  // own. Removing punctuation can expose a suffix word that was hidden by it
+  // ("S.A. Inc" → "s a inc" → "s a"), so settle on a fixed point: the result
+  // is then stable when normalised again (`normalize(normalize(x)) === normalize(x)`).
+  // Every pass only removes text, so the loop ends; the cap is a safeguard.
+  const base = baseNormalize(input);
+  let result =
+    stripCompanyNoise(base, COMPANY_LEGAL_SUFFIXES) || stripCompanyNoise(base, []);
+  for (let i = 0; i < 8 && result; i++) {
+    const next =
+      stripCompanyNoise(result, COMPANY_SUFFIXES) ||
+      stripCompanyNoise(result, COMPANY_LEGAL_SUFFIXES) ||
+      stripCompanyNoise(result, []);
+    if (next === result) break;
+    result = next;
   }
-  // Remove ampersand & "and" word forms — "Smith & Sons" === "Smith and Sons".
-  s = s.replace(/\s+(?:&|and)\s+/g, ' ');
-  // Now drop leftover punctuation.
-  s = s.replace(PUNCT_RE, ' ');
-  return s.replace(MULTI_WS_RE, ' ').trim();
+  return result;
 }
 
 /* ────────────────────────────────────────────────────────────────────── *

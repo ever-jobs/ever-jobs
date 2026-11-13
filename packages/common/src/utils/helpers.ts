@@ -244,12 +244,13 @@ function matchIsoCode(text: string): string | null {
     // `\b...\b` won't anchor against punctuation like `'EUR.'`, so we
     // lean on a manual char-class check on the surrounding chars
     // instead. `RegExp` is overkill for an 8-element exact-match set.
-    const idx = upper.indexOf(code);
-    if (idx === -1) continue;
-    const before = idx === 0 ? '' : upper[idx - 1];
-    const after = idx + code.length >= upper.length ? '' : upper[idx + code.length];
-    if (isWordChar(before) || isWordChar(after)) continue;
-    return code;
+    // Check EVERY occurrence: a first hit inside a longer word ("EUROPEAN")
+    // must not hide a later stand-alone code ("EUR 70,000").
+    for (let idx = upper.indexOf(code); idx !== -1; idx = upper.indexOf(code, idx + 1)) {
+      const before = idx === 0 ? '' : upper[idx - 1];
+      const after = idx + code.length >= upper.length ? '' : upper[idx + code.length];
+      if (!isWordChar(before) && !isWordChar(after)) return code;
+    }
   }
   return null;
 }
