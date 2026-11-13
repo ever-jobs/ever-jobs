@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-11-13 — Internshala live e2e no longer asserts the board's ranking
+
+The live test "should encode a multi-word keyword for an internship-only search" required the top 3 results for "data science" to mention "data", which is the board's relevance ordering, not our code, and it failed CI. The live test now keeps only shape checks (at most 3 results, `/internship/detail/` URLs, or diagnostics when the board is unreachable). The encoding itself is asserted exactly in a new parser unit test: `searchTerm: 'data science', jobType: internship` plans to `https://internshala.com/internships/keywords-data%20science/` (and `page-2/`). The first live test (python keyword) is unchanged. No source change.
+
+**Files:** `packages/plugins/source-internshala/__tests__/{internshala.e2e-spec,internshala.parser.spec}.ts`, `docs/log.md`.
+
+**Validation:** not run in the authoring session (no shell access); CI must run the new unit test.
+
 ## 2026-11-11 — Spec 1754 — canonical job-URL skip pass (default off)
 
 **Change:** New `canonicalJobUrl` and `dropDuplicateJobUrls` (`@ever-jobs/common`, `utils/job-url-dedup.ts`): tracking parameters (`utm_*`, click ids) are removed, the host is lower-cased, the remaining parameters are sorted; the first posting per canonical URL and the same company, title, location and employment class wins. `JobsAggregator` runs it only when the dedup engine does not (`dedup=false` or no engine bound), when `AggregateOptions.dedupByUrl` or `EVER_JOBS_DEDUP_BY_URL=true` (off by default), logs the `duplicate_canonical_url` reason and reports `AggregateResult.urlDuplicatesSkipped`. Nothing removed.
