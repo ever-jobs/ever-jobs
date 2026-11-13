@@ -5,9 +5,15 @@
 
 ---
 
-## 2026-11-13 — CI doc: blocking and non-blocking jobs; Internshala live e2e no longer asserts the board's ranking
+## 2026-11-13 — CI doc: blocking and non-blocking jobs; `Retry-After` parsing honours fractional seconds and is bounded; Internshala live e2e no longer asserts the board's ranking
 
 **CI: live scraper e2e shards no longer block.** The live scraper e2e matrix already had `fail-fast: false` and a job-level `continue-on-error: true`, but the in-cluster runner (`ci-builds`, which runs the workflow with `act`) ignores a job-level `continue-on-error`, so a failing live shard turned the `ci-builds/ci.yml` status red. The test step "Run source scraper e2e tests" now also carries `continue-on-error: true`, the same pattern as `Test (E2E - Live APIs)`. New `docs/CI.md` lists which `ci.yml` jobs fail a run (docs lint, build and type-check, health and smoke, Core, feature plugins, Docker, and in-cluster the mocked scraper unit shards) and which only report (live API e2e, live-site scraper e2e shards), and why live third-party boards cannot gate a pull request. Files: `.github/workflows/ci.yml`, `docs/CI.md`, `docs/index.md`, `docs/log.md`.
+
+**Retry-After.** `parseRetryAfter` (`packages/common/src/http/http-client.ts`) accepted only whole digits as seconds and sent everything else to `Date.parse`, whose legacy fallback is lenient. A server that answers `Retry-After: 90.5` was therefore not understood (the wait fell back to our own back-off instead of the 90 s asked for), and number-like text such as `1.5` could be read as a calendar date in the past. It also returned `Infinity` for a very long digit string and years for a far-future date, which reached the give-up log line and the limiter as-is. Now: decimal seconds are read and rounded up to the next millisecond; only text that carries a clock time (`12:00:30`) is treated as an HTTP-date; the result is at most `MAX_PARSED_RETRY_AFTER_MS` (30 days, a fixed constant; it changes no give-up/cap decision unless `maxRetryAfterMs` is configured above 30 days, and the limiter already caps any cool-down at `EVER_JOBS_CRAWL_MAX_COOLDOWN_MS`). Whole seconds, HTTP-dates, empty and unparseable values keep their old result. `docs/CRAWL_POLICY.md` §11 states the accepted forms.
+
+**Files:** `packages/common/src/http/http-client.ts`, `packages/common/__tests__/http-client-crawl-policy.spec.ts`, `docs/CRAWL_POLICY.md`, `docs/log.md`.
+
+**Validation:** `http-client-crawl-policy.spec.ts` (313 tests) and the `packages/common` suite pass; 4 of the 5 new tests fail against the previous `http-client.ts`.
 
 **Internshala.** The live test "should encode a multi-word keyword for an internship-only search" required the top 3 results for "data science" to mention "data", which is the board's relevance ordering, not our code, and it failed CI. The live test now keeps only shape checks (at most 3 results, `/internship/detail/` URLs, or diagnostics when the board is unreachable). The encoding itself is asserted exactly in a new parser unit test: `searchTerm: 'data science', jobType: internship` plans to `https://internshala.com/internships/keywords-data%20science/` (and `page-2/`). The first live test (python keyword) is unchanged. No source change.
 

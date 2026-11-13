@@ -914,6 +914,11 @@ A response whose status is in `retryStatuses` (or a network error, when
 When `respectRetryAfter` and the response carries `Retry-After` (seconds or an
 HTTP-date):
 
+- Seconds may be whole or decimal (`90.5`); a decimal is rounded up to the next
+  millisecond. Only text with a clock time (`12:00:30`) is read as an HTTP-date;
+  anything else (`-5`, `1,5`, `5s`) counts as no `Retry-After`. A value is never
+  read as more than 30 days (`MAX_PARSED_RETRY_AFTER_MS`).
+
 - **≤ `maxRetryAfterMs`** → wait `max(back-off, Retry-After)`: never earlier than asked.
 - **> `maxRetryAfterMs`**, `retryAfterOverMax: give-up` (default) → no retry; the whole
   bucket cools down for the full `Retry-After` (capped at

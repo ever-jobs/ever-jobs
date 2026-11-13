@@ -889,8 +889,26 @@ function serverErrorCooldownOf(policy: Partial<Pick<CrawlPolicy, 'serverErrorCoo
 }
 
 /**
+ * Upper bound on a parsed `Retry-After` (30 days). A server value is untrusted:
+ * a 400-digit number would otherwise become `Infinity` ms and a far-future date
+ * years of it. Any value above `maxRetryAfterMs` is handled the same way, so the
+ * bound changes no decision; it only keeps the logged / reported wait finite.
+ */
+export const MAX_PARSED_RETRY_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Delta-seconds: digits, optionally with a fraction some servers send (`1.5`). */
+const DELTA_SECONDS = /^\d+(?:\.\d+)?$/;
+/** An HTTP-date always carries a clock time (`12:00:30`). */
+const CLOCK_TIME = /\d{1,2}:\d{2}/;
+
+/**
  * `Retry-After` as milliseconds: delta-seconds or an HTTP-date (relative to
- * `now`). Null when absent or unparseable; an already-past date is 0.
+ * `now`). Null when absent or unparseable; an already-past date is 0. The result
+ * is at most `MAX_PARSED_RETRY_AFTER_MS`.
+ *
+ * Only a clock-time-bearing text is handed to `Date.parse`: its legacy fallback
+ * reads strings like `1.5` or `12` as calendar dates in the past (→ 0, "retry
+ * now"), which is the opposite of a polite answer to a throttle.
  */
 export function parseRetryAfter(value: unknown, now: number = Date.now()): number | null {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -899,11 +917,16 @@ export function parseRetryAfter(value: unknown, now: number = Date.now()): numbe
   const text = String(raw).trim();
   if (!text) return null;
 
-  if (/^\d+$/.test(text)) return Number(text) * 1000;
+  if (DELTA_SECONDS.test(text)) {
+    // toPrecision(12) drops float noise (1.1 * 1000 = 1100.0000000000002) before rounding up.
+    const ms = Math.ceil(Number((Number(text) * 1000).toPrecision(12)));
+    return Number.isFinite(ms) ? Math.min(ms, MAX_PARSED_RETRY_AFTER_MS) : MAX_PARSED_RETRY_AFTER_MS;
+  }
 
+  if (!CLOCK_TIME.test(text)) return null;
   const date = Date.parse(text);
   if (Number.isNaN(date)) return null;
-  return Math.max(0, date - now);
+  return Math.min(Math.max(0, date - now), MAX_PARSED_RETRY_AFTER_MS);
 }
 
 /**

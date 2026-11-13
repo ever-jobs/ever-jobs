@@ -5,6 +5,7 @@ import { MAX_CRAWL_RETRIES, ScraperInputDto, classifyScrapeError } from '@ever-j
 
 import {
   HttpClient,
+  MAX_PARSED_RETRY_AFTER_MS,
   MIN_RETRY_DELAY_MS,
   SERVER_ERROR_STATUSES,
   clientOptionsFromScraperInput,
@@ -1924,6 +1925,49 @@ describe('helpers', () => {
     expect(parseRetryAfter('Wed, 21 Oct 2015 07:28:00 GMT', now)).toBe(0);
     expect(parseRetryAfter('soon', now)).toBeNull();
     expect(parseRetryAfter(undefined, now)).toBeNull();
+  });
+
+  describe('parseRetryAfter on odd server values', () => {
+    const now = Date.parse('2026-09-24T12:00:00Z');
+
+    it('reads fractional delta-seconds, rounding up (never asks for less than the server did)', () => {
+      expect(parseRetryAfter('1.5', now)).toBe(1500);
+      expect(parseRetryAfter('90.5', now)).toBe(90_500);
+      expect(parseRetryAfter('0.0001', now)).toBe(1);
+      expect(parseRetryAfter('120.0', now)).toBe(120_000);
+      expect(parseRetryAfter('1.1', now)).toBe(1100);
+      expect(parseRetryAfter(2.5, now)).toBe(2500);
+    });
+
+    it('does not read a bare number-like string as a calendar date', () => {
+      for (const text of ['-5', '+30', '1e3', '12', '1,5', '30 seconds', '5s', '.5', '1.']) {
+        // '12' is whole seconds, the rest are not valid Retry-After values at all.
+        expect(parseRetryAfter(text, now)).toBe(text === '12' ? 12_000 : null);
+      }
+    });
+
+    it('bounds a huge or infinite value at MAX_PARSED_RETRY_AFTER_MS', () => {
+      expect(parseRetryAfter('9'.repeat(400), now)).toBe(MAX_PARSED_RETRY_AFTER_MS);
+      expect(parseRetryAfter('99999999999', now)).toBe(MAX_PARSED_RETRY_AFTER_MS);
+      expect(parseRetryAfter('Fri, 31 Dec 9999 23:59:59 GMT', now)).toBe(MAX_PARSED_RETRY_AFTER_MS);
+    });
+
+    it('keeps the old result for values inside the bound', () => {
+      expect(parseRetryAfter('0', now)).toBe(0);
+      expect(parseRetryAfter(' 3600 ', now)).toBe(3_600_000);
+      expect(parseRetryAfter('Thu, 24 Sep 2026 13:00:00 GMT', now)).toBe(3_600_000);
+      // asctime carries no zone, so `Date.parse` reads it as local time: anchor `now` the same way
+      // and assert the exact wait (a bare `>= 0` would also pass for a wrongly parsed "retry now").
+      const localNow = new Date(2026, 8, 24, 12, 0, 0).getTime();
+      expect(parseRetryAfter('Thu Sep 24 12:00:30 2026', localNow)).toBe(30_000);
+      expect(parseRetryAfter('soon', now)).toBeNull();
+      expect(parseRetryAfter('', now)).toBeNull();
+    });
+
+    it('a huge Retry-After still means give-up with a finite wait', () => {
+      const decision = retryDecision(POLITE_CRAWL_POLICY, 0, parseRetryAfter('9'.repeat(400), now), () => 0, 429);
+      expect(decision).toEqual({ giveUpAfterMs: MAX_PARSED_RETRY_AFTER_MS });
+    });
   });
 
   it('isRetryableNetworkError', () => {
