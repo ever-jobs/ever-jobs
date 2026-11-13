@@ -13,6 +13,14 @@ The live test "should encode a multi-word keyword for an internship-only search"
 
 **Validation:** not run in the authoring session (no shell access); CI must run the new unit test.
 
+## 2026-11-12 — Fix: a company named only of suffix words keeps its own dedup identity
+
+**Change:** `normalizeCompany` (`packages/common/src/normalize.ts`) strips legal-form and descriptor suffixes (`Inc`, `GmbH`, `Group`, `Labs`, `Systems`, …). A name made only of such words (`Systems Group`, `Labs`, `Holdings, Ltd.`) normalised to `''`, so every such company shared one canonical-key company part and two unrelated employers posting the same title in the same place were merged by the hash stage of the dedup engine. When nothing is left after stripping, the name now falls back one tier at a time — legal forms only, then no suffix stripping at all — so it keeps an identity of its own. Names that keep a core word are unchanged (`Acme Systems Group Inc.` → `acme`); punctuation-only input still gives `''`. The fallback settles on a fixed point (stripping punctuation can expose a suffix word, e.g. `S.A. Inc` → `s a inc` → `s a`), so normalising a result again never changes it. No pre-existing non-empty result changes. Canonical keys (and `dedupKey`) of postings from suffix-only company names change once, from an empty company part to the name.
+
+**Files:** `packages/common/src/normalize.ts`, `packages/common/__tests__/normalize.spec.ts`, `docs/API_CHANGELOG.md` (one-time key change noted), `docs/log.md`.
+
+**Validation:** reasoned by hand against the new cases; the test suite could not be run in this session (no shell access).
+
 ## 2026-11-11 — Spec 1754 — canonical job-URL skip pass (default off)
 
 **Change:** New `canonicalJobUrl` and `dropDuplicateJobUrls` (`@ever-jobs/common`, `utils/job-url-dedup.ts`): tracking parameters (`utm_*`, click ids) are removed, the host is lower-cased, the remaining parameters are sorted; the first posting per canonical URL and the same company, title, location and employment class wins. `JobsAggregator` runs it only when the dedup engine does not (`dedup=false` or no engine bound), when `AggregateOptions.dedupByUrl` or `EVER_JOBS_DEDUP_BY_URL=true` (off by default), logs the `duplicate_canonical_url` reason and reports `AggregateResult.urlDuplicatesSkipped`. Nothing removed.
